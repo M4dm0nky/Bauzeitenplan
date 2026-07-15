@@ -1,0 +1,187 @@
+/* ── Struktur ─────────────────────────────────────────────────────────────────
+   Nur Geometrie und Verhalten. Alles Gestalterische kommt aus der Theme-Ebene.
+   Die Gewerk-Farben (--gw-*) sind Identität und in allen Themes identisch.     */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --gw-buehne:   #eb6834;
+  --gw-rigging:  #1baf7a;
+  --gw-licht:    #eda100;
+  --gw-ton:      #e87ba4;
+  --gw-video:    #2a78d6;
+  --gw-pyro:     #e34948;
+  --gw-catering: #4a3aa7;
+  --gw-sanitaer: #008300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    --gw-buehne:   #d95926;
+    --gw-rigging:  #199e70;
+    --gw-licht:    #c98500;
+    --gw-ton:      #d55181;
+    --gw-video:    #3987e5;
+    --gw-pyro:     #e66767;
+    --gw-catering: #9085e9;
+    --gw-sanitaer: #008300;
+  }
+}
+:root[data-theme="dark"] {
+  --gw-buehne:   #d95926; --gw-rigging: #199e70; --gw-licht: #c98500;
+  --gw-ton:      #d55181; --gw-video:   #3987e5; --gw-pyro:  #e66767;
+  --gw-catering: #9085e9; --gw-sanitaer:#008300;
+}
+
+body { margin: 0; }
+
+.app { display: flex; flex-direction: column; height: 100vh; min-height: 0; }
+
+/* ── Gantt-Rahmen ─────────────────────────────────────────────────────────── */
+.bz { position: relative; flex: 1; min-height: 0; display: flex; }
+.bz-scroll { flex: 1; overflow: auto; overscroll-behavior-x: contain; min-height: 0; }
+.bz-grid {
+  display: grid;
+  grid-template-columns: var(--side-w) max-content;
+  grid-template-rows: auto 1fr;
+  align-items: start;
+  width: max-content;
+  min-width: 100%;
+}
+
+.bz-corner { position: sticky; top: 0; left: 0; z-index: 5; grid-area: 1/1; height: 100%; }
+.bz-axis   { position: sticky; top: 0; z-index: 3; grid-area: 1/2; }
+/* über dem Canvas: Pfeile zu Vorgängen links außerhalb des Sichtfelds haben
+   negative x-Werte und würden sonst quer über die Gewerk-Namen laufen */
+.bz-side   { position: sticky; left: 0; z-index: 4; grid-area: 2/1; }
+.bz-canvas { position: relative; grid-area: 2/2; }
+
+/* ── Achse ────────────────────────────────────────────────────────────────── */
+.bz-axis-major, .bz-axis-minor { position: relative; height: 22px; }
+/* KEIN overflow:hidden hier — das macht die Ebene selbst zum Scroll-Container
+   und das sticky unten klebte dann am Canvas-Rand statt am Bildschirmrand. */
+.bz-axis-phase { position: relative; height: 17px; }
+.bz-ph { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; }
+/* sticky hält den Phasennamen im Blick, solange ein Rest der Phase sichtbar ist;
+   der umschließende Block begrenzt ihn automatisch auf die eigene Phase.
+   left misst ab dem Rand des SCROLLBEREICHS — dort klebt aber die Gewerk-Spalte
+   und würde das Label verdecken, also erst hinter ihr andocken. */
+.bz-ph-t { position: sticky; left: var(--side-w); white-space: nowrap; }
+
+.bz-corner-cap { display: flex; align-items: center; height: 100%; }
+.bz-t { position: absolute; top: 0; height: 100%; display: flex; align-items: center; white-space: nowrap; pointer-events: none; }
+.bz-t-major > span { padding: 0 8px; }
+.bz-t-minor { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; }
+.bz-t-minor > span { padding-left: 4px; line-height: 1; }
+
+/* ── Seitenspalte ─────────────────────────────────────────────────────────── */
+.bz-lab { display: flex; align-items: center; gap: 7px; padding: 0 10px 0 8px; overflow: hidden; }
+.bz-lab-task { padding-left: 30px; }
+.bz-lab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.bz-lab-meta { flex: none; font-variant-numeric: tabular-nums; }
+.bz-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--gw); }
+
+.bz-tw {
+  flex: none; width: 16px; height: 16px; padding: 0; border: 0; background: none;
+  cursor: pointer; display: grid; place-items: center; color: inherit;
+}
+.bz-tw-i {
+  width: 0; height: 0; border-left: 4.5px solid currentColor;
+  border-top: 3.5px solid transparent; border-bottom: 3.5px solid transparent;
+  transform: rotate(90deg); transition: transform .15s ease;
+}
+.bz-lab-group.is-collapsed .bz-tw-i { transform: rotate(0deg); }
+
+/* ── Spuren & Balken ──────────────────────────────────────────────────────── */
+.bz-rows { position: relative; z-index: 1; }
+.bz-track { position: relative; }
+
+.bz-bar {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  height: var(--bar-h); background: var(--gw);
+  display: flex; align-items: center; overflow: hidden;
+  cursor: pointer; outline: none;
+}
+.bz-bar-t {
+  position: relative; z-index: 1; padding: 0 7px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+/* Zu schmal für Text im Balken → Beschriftung rechts daneben */
+.bz-bar.is-narrow { overflow: visible; }
+.bz-bar.is-narrow .bz-bar-t { position: absolute; left: 100%; padding-left: 6px; }
+/* Balken links aus dem Bild gescrollt → Beschriftung weg (siehe updateLabels) */
+.bz-bar.lab-hide .bz-bar-t { display: none; }
+.bz-prog { position: absolute; inset: 0 auto 0 0; z-index: 0; }
+
+/* Puffer als Geisterspur hinter dem Balken */
+.bz-slack { position: absolute; top: 50%; transform: translateY(-50%); height: var(--bar-h); pointer-events: none; }
+
+/* Sammelbalken der Gruppe */
+.bz-sum { position: absolute; top: 50%; transform: translateY(-50%); height: 7px; background: var(--gw); }
+.bz-sum-cap { position: absolute; top: 0; width: 0; height: 0; }
+.bz-sum-cap-l { left: 0; }
+.bz-sum-cap-r { right: 0; }
+.bz-mini { position: absolute; top: 50%; transform: translateY(-50%); height: 13px; pointer-events: none; }
+
+/* Meilenstein */
+.bz-ms { position: absolute; top: 50%; height: 0; display: flex; align-items: center; cursor: pointer; }
+.bz-ms-d {
+  flex: none; width: 11px; height: 11px; margin-left: -5.5px;
+  background: var(--gw, currentColor); transform: rotate(45deg);
+}
+.bz-ms-t { white-space: nowrap; padding-left: 9px; pointer-events: none; }
+
+/* ── Jetzt-Linie ──────────────────────────────────────────────────────────── */
+.bz-now { position: absolute; top: 0; bottom: 0; width: 2px; z-index: 4; pointer-events: none; }
+/* sticky statt absolute: beim Scrollen durch die Gewerke bliebe die Fahne sonst
+   oben liegen und man verlöre die Marke, auf die es gerade ankommt.
+   width:max-content ist dabei Pflicht — sticky steht im normalen Fluss und
+   würde sonst auf die 2px Breite der Linie zusammenschnurren. */
+.bz-now-flag {
+  position: sticky; top: 0; left: 0; width: max-content;
+  transform: translateX(-50%); white-space: nowrap;
+}
+
+/* ── Bänder ───────────────────────────────────────────────────────────────── */
+.bz-bands { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.bz-phase, .bz-we { position: absolute; top: 0; bottom: 0; }
+.bz-phase-t { position: sticky; left: 8px; display: inline-block; padding: 3px 0 0 2px; }
+
+/* ── Abhängigkeitspfeile ──────────────────────────────────────────────────── */
+/* overflow:hidden schneidet Pfade zu Vorgängen außerhalb des Zeitraums ab */
+.bz-deps { position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+.bz-dep { fill: none; }
+
+/* ── Tooltip ──────────────────────────────────────────────────────────────── */
+.bz-tip {
+  position: absolute; top: 0; left: 0; z-index: 30; pointer-events: none;
+  opacity: 0; transition: opacity .12s ease; max-width: 290px;
+}
+.bz-tip.is-on { opacity: 1; }
+.bz-tip-h { display: flex; align-items: center; gap: 6px; }
+.bz-tip-dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
+.bz-tip-dl dt { margin: 0; }
+.bz-tip-dl dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* ── Minimap ──────────────────────────────────────────────────────────────── */
+.bz-mini-map { flex: none; }
+.bz-mini-strip { position: relative; cursor: grab; touch-action: none; }
+.bz-mini-strip:active { cursor: grabbing; }
+.bz-mini-lane { position: relative; height: 4px; margin-bottom: 1px; }
+.bz-mini-b { position: absolute; top: 0; height: 100%; background: var(--gw); border-radius: 1px; }
+.bz-mini-now { position: absolute; top: 0; bottom: 0; width: 1px; }
+.bz-mini-win { position: absolute; top: 0; bottom: 0; pointer-events: none; }
+
+/* ── Kopf & Bedienung ─────────────────────────────────────────────────────── */
+.hd { flex: none; }
+.hd-row { display: flex; align-items: center; gap: 14px; }
+.kpis { display: flex; }
+.kpi-v { font-variant-numeric: tabular-nums; }
+.seg { display: flex; }
+.seg button, .btn { cursor: pointer; font: inherit; }
+.legend { display: flex; flex-wrap: wrap; }
+.legend-i { display: flex; align-items: center; gap: 5px; }
+.legend-i .bz-dot { width: 8px; height: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

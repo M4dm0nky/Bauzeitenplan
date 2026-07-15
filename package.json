@@ -1,0 +1,15 @@
+{
+  "name": "bauzeitenplan",
+  "private": true,
+  "description": "Gantt-Ablaufplan für die Veranstaltungsbranche",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run.mjs",
+    "verify": "node tools/verify-browser.mjs",
+    "prototypes": "node tools/build-prototypes.mjs",
+    "start": "python3 -m http.server 8080"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.1"
+  }
+}

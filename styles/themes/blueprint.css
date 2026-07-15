@@ -1,0 +1,232 @@
+/* ── BLUEPRINT ────────────────────────────────────────────────────────────────
+   Bauplan auf Millimeterpapier. Dünne Konstruktionslinien, Tuschelinien-Optik,
+   alles rastert auf ein sichtbares Gitter. Technisch, fachlich, ruhig.       */
+
+:root {
+  --paper:   #eef4fb;
+  --sheet:   #f7fafd;
+  --ink:     #17324d;
+  --ink-2:   #46647f;
+  --ink-3:   #7f97ac;
+  --line:    #c3d6e8;
+  --line-2:  #a9c3dc;
+  --cyan:    #0d6f9e;
+  --crit:    #c02f2f;
+  --now:     #d1341f;
+  --mm:      rgba(120,160,195,.30);
+  --mm-5:    rgba(96,140,180,.46);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    --paper: #0e1a26; --sheet: #12212f; --ink: #d7e6f3; --ink-2: #92adc4;
+    --ink-3: #64809a; --line: #23415a; --line-2: #2e5170; --cyan: #4fa8d8;
+    --crit: #ff6b5e; --now: #ff6b4a; --mm: rgba(80,130,175,.28); --mm-5: rgba(110,165,210,.4);
+  }
+}
+/* Der Theme-Umschalter des Betrachters muss die OS-Wahl in beide
+   Richtungen schlagen — die Media-Query allein reicht dafür nicht. */
+:root[data-theme="dark"] {
+    --paper: #0e1a26; --sheet: #12212f; --ink: #d7e6f3; --ink-2: #92adc4;
+    --ink-3: #64809a; --line: #23415a; --line-2: #2e5170; --cyan: #4fa8d8;
+    --crit: #ff6b5e; --now: #ff6b4a; --mm: rgba(80,130,175,.28); --mm-5: rgba(110,165,210,.4);
+}
+
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 12px/1.45 'SF Mono', Menlo, 'DejaVu Sans Mono', monospace;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Millimeterpapier: 5er-Raster fein, 25er kräftig */
+.app {
+  background-image:
+    repeating-linear-gradient(to right,  var(--mm) 0 1px, transparent 1px 25px),
+    repeating-linear-gradient(to bottom, var(--mm) 0 1px, transparent 1px 25px),
+    repeating-linear-gradient(to right,  var(--mm-5) 0 1px, transparent 1px 125px),
+    repeating-linear-gradient(to bottom, var(--mm-5) 0 1px, transparent 1px 125px);
+}
+
+/* ── Kopf ─────────────────────────────────────────────────────────────────── */
+.hd { background: var(--sheet); border-bottom: 1.5px solid var(--line-2); }
+.hd-top { padding: 14px 18px 12px; align-items: flex-start; justify-content: space-between; }
+.hd-kicker {
+  font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--cyan);
+  border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-bottom: 7px; display: inline-block;
+}
+.hd-title {
+  margin: 0; font-size: 21px; font-weight: 500; letter-spacing: -.01em;
+  font-family: 'Avenir Next Condensed', 'Gill Sans', 'Futura', sans-serif;
+}
+.hd-sub { color: var(--ink-3); font-size: 10.5px; margin-top: 3px; }
+
+.kpis { gap: 0; border: 1px solid var(--line-2); background: var(--paper); }
+.kpi { padding: 7px 14px; border-right: 1px solid var(--line); text-align: right; min-width: 74px; }
+.kpi:last-child { border-right: 0; }
+.kpi-v { font-size: 17px; font-weight: 500; line-height: 1.1; }
+.kpi-k { font-size: 8.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); margin-top: 2px; }
+.kpi:last-child .kpi-v { color: var(--crit); }
+
+.hd-bar { padding: 0 18px 12px; gap: 10px; flex-wrap: wrap; }
+.seg { border: 1px solid var(--line-2); background: var(--paper); }
+.seg button {
+  border: 0; border-right: 1px solid var(--line); background: none; color: var(--ink-2);
+  padding: 4px 11px; font-size: 10px; letter-spacing: .05em; text-transform: uppercase;
+}
+.seg button:last-child { border-right: 0; }
+.seg button:hover { background: var(--sheet); color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--cyan); color: #fff; }
+.seg-icon button { padding: 4px 9px; font-size: 12px; }
+.btn {
+  border: 1px solid var(--line-2); background: var(--paper); color: var(--ink-2);
+  padding: 4px 11px; font-size: 10px; letter-spacing: .05em; text-transform: uppercase;
+}
+.btn:hover { background: var(--sheet); color: var(--ink); border-color: var(--cyan); }
+
+.legend { gap: 4px 13px; margin-left: auto; font-size: 9.5px; color: var(--ink-2); }
+
+/* ── Achse ────────────────────────────────────────────────────────────────── */
+.bz-corner { background: var(--sheet); border-right: 1.5px solid var(--line-2); border-bottom: 1.5px solid var(--line-2); }
+.bz-axis { background: var(--sheet); border-bottom: 1.5px solid var(--line-2); }
+.bz-axis-major { border-bottom: 1px solid var(--line); height: 20px; }
+.bz-t-major {
+  font-size: 9.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--cyan);
+  border-left: 1px solid var(--line-2);
+}
+.bz-t-minor { font-size: 9.5px; color: var(--ink-2); border-left: 1px solid var(--line); }
+.bz-t-minor.is-we { color: var(--ink-3); }
+.bz-t-s { font-size: 7.5px; color: var(--ink-3); letter-spacing: .06em; }
+
+/* ── Seitenspalte ─────────────────────────────────────────────────────────── */
+.bz-side { background: var(--sheet); border-right: 1.5px solid var(--line-2); }
+.bz-lab { border-bottom: 1px solid var(--line); font-size: 11px; }
+.bz-lab-group {
+  background: var(--paper); border-bottom: 1px solid var(--line-2);
+  border-left: 3px solid var(--gw);
+  font-family: 'Avenir Next Condensed', 'Gill Sans', sans-serif;
+  letter-spacing: .04em; text-transform: uppercase; font-size: 11px; font-weight: 500;
+}
+.bz-lab-task { color: var(--ink-2); font-size: 10.5px; }
+.bz-lab-task::before {
+  content: ''; position: absolute; left: 18px; width: 7px; height: 1px; background: var(--line-2);
+}
+.bz-lab-task { position: relative; }
+.bz-lab-meta { font-size: 9px; color: var(--ink-3); }
+.bz-lab-projekt { background: var(--paper); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--cyan); }
+.bz-crit-tag {
+  flex: none; font-size: 7.5px; letter-spacing: .1em; padding: 1px 3px;
+  border: 1px solid var(--crit); color: var(--crit);
+}
+
+/* ── Spuren ───────────────────────────────────────────────────────────────── */
+.bz-canvas { background: var(--sheet); }
+.bz-track { border-bottom: 1px solid var(--line); }
+.bz-track-group { border-bottom: 1px solid var(--line-2); background: color-mix(in srgb, var(--paper) 60%, transparent); }
+.bz-track-projekt { background: color-mix(in srgb, var(--paper) 60%, transparent); }
+
+/* Millimeterpapier UNTER den Balken — sonst deckt der Canvas es zu und der
+   ganze Entwurfsgedanke bleibt auf die Ränder beschränkt.
+   Zeitraster als Gradient obendrauf: beliebig breit, kostet nichts. */
+.bz-rows {
+  background-image:
+    repeating-linear-gradient(to right, var(--line) 0 1px, transparent 1px var(--grid-day)),
+    repeating-linear-gradient(to right,  var(--mm) 0 1px, transparent 1px 25px),
+    repeating-linear-gradient(to bottom, var(--mm) 0 1px, transparent 1px 25px);
+}
+.has-hour-grid .bz-rows {
+  background-image:
+    repeating-linear-gradient(to right, var(--line) 0 1px, transparent 1px var(--grid-day)),
+    repeating-linear-gradient(to right, color-mix(in srgb, var(--line) 45%, transparent) 0 1px, transparent 1px var(--grid-hour)),
+    repeating-linear-gradient(to right,  var(--mm) 0 1px, transparent 1px 25px),
+    repeating-linear-gradient(to bottom, var(--mm) 0 1px, transparent 1px 25px);
+}
+.bz-side { background-image: repeating-linear-gradient(to bottom, var(--mm) 0 1px, transparent 1px 25px); }
+
+/* ── Balken: Tuschelinie mit Schraffur-Fläche ─────────────────────────────── */
+.bz-bar {
+  background: color-mix(in srgb, var(--gw) 26%, var(--sheet));
+  border: 1.25px solid var(--gw);
+  border-radius: 1px;
+}
+.bz-bar-t { font-size: 9.5px; color: var(--ink); letter-spacing: .01em; }
+.bz-bar.is-narrow .bz-bar-t { color: var(--ink-2); }
+.bz-prog { background: var(--gw); opacity: .55; }
+.bz-st-fertig { border-style: solid; opacity: .82; }
+.bz-st-geplant { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--gw) 24%, var(--sheet)) 0 4px, transparent 4px 8px); }
+.bz-bar:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.bz-bar.is-crit { border-width: 1.75px; border-color: var(--crit); box-shadow: 0 0 0 2px color-mix(in srgb, var(--crit) 14%, transparent); }
+
+.bz-slack {
+  border: 1px dashed var(--line-2); border-left: 0; border-radius: 0 1px 1px 0;
+  background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--line) 40%, transparent) 0 3px, transparent 3px 6px);
+}
+
+.bz-sum { height: 5px; background: var(--gw); border-radius: 0; }
+.bz-sum-cap-l, .bz-sum-cap-r { border-top: 5px solid var(--gw); }
+.bz-sum-cap-l { border-left: 5px solid transparent; top: 5px; }
+.bz-sum-cap-r { border-right: 5px solid transparent; top: 5px; }
+.bz-mini { background: color-mix(in srgb, var(--gw) 30%, var(--sheet)); border: 1px solid var(--gw); border-radius: 1px; height: 11px; }
+
+.bz-ms-d { background: var(--gw); border: 1.25px solid var(--ink); width: 10px; height: 10px; }
+.bz-ms.is-crit .bz-ms-d { border-color: var(--crit); }
+.bz-ms-t { font-size: 9px; color: var(--ink-2); letter-spacing: .04em; }
+.bz-ms-projekt .bz-ms-d { background: var(--cyan); border-color: var(--ink); width: 13px; height: 13px; margin-left: -6.5px; }
+.bz-ms-projekt .bz-ms-t { color: var(--cyan); text-transform: uppercase; letter-spacing: .1em; font-size: 9px; }
+
+/* ── Jetzt-Linie ──────────────────────────────────────────────────────────── */
+.bz-now { width: 1px; background: var(--now); }
+.bz-now::before {
+  content: ''; position: absolute; inset: 0 auto 0 0; width: 1px;
+  background: repeating-linear-gradient(to bottom, var(--now) 0 4px, transparent 4px 8px);
+}
+.bz-now-flag {
+  background: var(--now); color: #fff; font-size: 7.5px; letter-spacing: .12em;
+  padding: 2px 5px; font-weight: 500;
+}
+
+/* ── Bänder ───────────────────────────────────────────────────────────────── */
+.bz-we { background: color-mix(in srgb, var(--line) 20%, transparent); }
+.bz-phase { border-left: 1px dashed var(--line-2); }
+.bz-phase-aufbau { background: color-mix(in srgb, var(--cyan) 5%, transparent); }
+.bz-phase-show { background: color-mix(in srgb, var(--gw-licht) 8%, transparent); }
+.bz-axis-phase { border-bottom: 1px solid var(--line); background: var(--paper); }
+.bz-ph { border-left: 1px solid var(--line-2); }
+.bz-ph-t { font-size: 8px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3); padding: 0 7px; }
+.bz-ph-aufbau { background: color-mix(in srgb, var(--cyan) 10%, transparent); }
+.bz-ph-aufbau .bz-ph-t { color: var(--cyan); }
+.bz-ph-show { background: color-mix(in srgb, var(--gw-licht) 18%, transparent); }
+.bz-corner-cap { font-size: 8px; letter-spacing: .13em; text-transform: uppercase; color: var(--ink-3); padding-left: 8px; }
+
+/* ── Pfeile ───────────────────────────────────────────────────────────────── */
+.bz-dep { stroke: var(--ink-3); stroke-width: 1; opacity: .6; }
+.bz-dep.is-crit { stroke: var(--crit); stroke-width: 1.4; opacity: .95; }
+.bz-ah path { fill: var(--ink-3); }
+.bz-ah-c path { fill: var(--crit); }
+
+/* ── Tooltip ──────────────────────────────────────────────────────────────── */
+.bz-tip {
+  background: var(--sheet); border: 1.5px solid var(--ink); padding: 9px 11px;
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--ink) 12%, transparent); font-size: 10px;
+}
+.bz-tip-g { font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.bz-tip-t {
+  font-family: 'Avenir Next Condensed', 'Gill Sans', sans-serif; font-size: 13px;
+  margin: 3px 0 7px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
+}
+.bz-tip-dl dt { color: var(--ink-3); font-size: 9px; letter-spacing: .05em; text-transform: uppercase; }
+.bz-tip-dl dd { color: var(--ink); font-size: 10px; }
+
+/* ── Fuß ──────────────────────────────────────────────────────────────────── */
+.ft { flex: none; background: var(--sheet); border-top: 1.5px solid var(--line-2); padding: 8px 18px 9px; }
+.ft-mini { margin-bottom: 7px; }
+.bz-mini-strip { border: 1px solid var(--line-2); padding: 3px 0; background: var(--paper); }
+.bz-mini-win { background: color-mix(in srgb, var(--cyan) 16%, transparent); border-left: 1.5px solid var(--cyan); border-right: 1.5px solid var(--cyan); }
+.bz-mini-now { background: var(--now); }
+.ft-keys { display: flex; gap: 16px; flex-wrap: wrap; font-size: 9px; color: var(--ink-3); }
+kbd {
+  font: inherit; border: 1px solid var(--line-2); background: var(--paper);
+  padding: 0 3px; margin-right: 2px; color: var(--ink-2);
+}
+.ft-crit { margin-left: auto; display: flex; align-items: center; gap: 5px; color: var(--crit); }
+.ft-crit i { width: 14px; height: 0; border-top: 1.75px solid var(--crit); display: block; }

@@ -1,0 +1,93 @@
+<title>{{TITLE}}</title>
+<style>
+{{BASE_CSS}}
+{{THEME_CSS}}
+</style>
+
+<div class="app" data-variant="{{KEY}}">
+  <header class="hd">
+    <div class="hd-row hd-top">
+      <div class="hd-id">
+        <div class="hd-kicker">Bauzeitenplan · Entwurf «{{NAME}}»</div>
+        <h1 class="hd-title">Nordlicht Festival 2026</h1>
+        <div class="hd-sub">Messegelände Hannover · Freigelände Nord</div>
+      </div>
+      <div class="kpis" id="kpis"></div>
+    </div>
+    <div class="hd-row hd-bar">
+      <div class="seg" role="group" aria-label="Zoomstufe">
+        <button data-z="monate">Monate</button>
+        <button data-z="wochen">Wochen</button>
+        <button data-z="tage">Tage</button>
+        <button data-z="stunden">Stunden</button>
+      </div>
+      <div class="seg seg-icon" role="group" aria-label="Zoom">
+        <button id="zout" aria-label="Herauszoomen">−</button>
+        <button id="zin" aria-label="Hineinzoomen">+</button>
+      </div>
+      <button class="btn" id="now">Heute</button>
+      <button class="btn" id="fold">Alle zuklappen</button>
+      <div class="legend" id="legend"></div>
+    </div>
+  </header>
+
+  <div class="bz" id="bz" tabindex="-1"></div>
+
+  <footer class="ft">
+    <div class="ft-mini" id="mini"></div>
+    <div class="ft-keys">
+      <span><kbd>⌘</kbd>+Rad zoomt am Cursor</span>
+      <span><kbd>⇧</kbd>+Rad scrollt seitwärts</span>
+      <span><kbd>←</kbd><kbd>→</kbd> blättern</span>
+      <span><kbd>H</kbd> springt zu heute</span>
+      <span class="ft-crit"><i></i> kritischer Pfad — kein Puffer</span>
+    </div>
+  </footer>
+</div>
+
+<script type="module">
+{{JS}}
+
+const root = document.getElementById('bz');
+const g = createGantt(root, {{OPTS}});
+
+// ── Zoom-Segmente ───────────────────────────────────────────────────────────
+const segs = [...document.querySelectorAll('[data-z]')];
+const syncSeg = () => segs.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.z === g.zoomName)));
+segs.forEach(b => b.onclick = () => { g.setZoomPreset(b.dataset.z); syncSeg(); });
+document.getElementById('zin').onclick = () => { g.zoomIn(); syncSeg(); };
+document.getElementById('zout').onclick = () => { g.zoomOut(); syncSeg(); };
+document.getElementById('now').onclick = () => g.goToNow();
+root.addEventListener('wheel', () => requestAnimationFrame(syncSeg), { passive: true });
+root.addEventListener('keyup', syncSeg);
+syncSeg();
+
+let folded = false;
+const foldBtn = document.getElementById('fold');
+foldBtn.onclick = () => {
+  folded = !folded;
+  folded ? g.collapseAll() : g.expandAll();
+  foldBtn.textContent = folded ? 'Alle aufklappen' : 'Alle zuklappen';
+};
+
+// ── Minimap ─────────────────────────────────────────────────────────────────
+if (g.minimapNode) document.getElementById('mini').append(g.minimapNode);
+
+// ── Kennzahlen ──────────────────────────────────────────────────────────────
+const s = g.stats();
+const kpis = [
+  ['Gewerke', s.gewerke],
+  ['Vorgänge', s.total],
+  ['läuft gerade', s.run],
+  ['Crew im Einsatz', s.crew],
+  ['kritisch', s.crit],
+];
+document.getElementById('kpis').innerHTML = kpis
+  .map(([k, v]) => '<div class="kpi"><div class="kpi-v">' + v + '</div><div class="kpi-k">' + k + '</div></div>')
+  .join('');
+
+// ── Legende: Identität nie über Farbe allein ────────────────────────────────
+document.getElementById('legend').innerHTML = GEWERKE
+  .map(x => '<span class="legend-i"><span class="bz-dot" style="--gw:var(--gw-' + x.id + ')"></span>' + x.name + '</span>')
+  .join('');
+</script>

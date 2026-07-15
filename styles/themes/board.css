@@ -1,0 +1,175 @@
+/* ── BOARD ────────────────────────────────────────────────────────────────────
+   Für den Monitor in der Produktionsleitung und den A0-Ausdruck an der Wand.
+   Kräftige Flächen wie Gaffa-Tape auf Weiß, große Typo, aus 5 m lesbar.      */
+
+:root {
+  --bg:      #ffffff;
+  --panel:   #ffffff;
+  --panel2:  #f4f4f2;
+  --line:    #dededa;
+  --line-2:  #111111;
+  --ink:     #111111;
+  --ink-2:   #4a4a46;
+  --ink-3:   #86867f;
+  --crit:    #d0021b;
+  --now:     #d0021b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    --bg: #0b0b0b; --panel: #141414; --panel2: #1e1e1e; --line: #333330;
+    --line-2: #f4f4f2; --ink: #f6f6f4; --ink-2: #b8b8b2; --ink-3: #7d7d76;
+    --crit: #ff4d3d; --now: #ff4d3d;
+  }
+}
+/* Der Theme-Umschalter des Betrachters muss die OS-Wahl in beide
+   Richtungen schlagen — die Media-Query allein reicht dafür nicht. */
+:root[data-theme="dark"] {
+    --bg: #0b0b0b; --panel: #141414; --panel2: #1e1e1e; --line: #333330;
+    --line-2: #f4f4f2; --ink: #f6f6f4; --ink-2: #b8b8b2; --ink-3: #7d7d76;
+    --crit: #ff4d3d; --now: #ff4d3d;
+}
+
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.4 'Futura', 'Avenir Next', 'Gill Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Kopf: schwarzer Block, Plakat-Anmutung ───────────────────────────────── */
+.hd { background: var(--ink); color: var(--bg); }
+.hd-top { padding: 16px 22px 14px; align-items: flex-start; justify-content: space-between; }
+.hd-kicker { font-size: 10px; letter-spacing: .22em; text-transform: uppercase; opacity: .6; margin-bottom: 7px; font-weight: 600; }
+.hd-title { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -.028em; line-height: .95; text-transform: uppercase; }
+.hd-sub { font-size: 12px; margin-top: 6px; opacity: .55; letter-spacing: .02em; }
+
+.kpis { gap: 3px; }
+.kpi { background: rgba(255,255,255,.1); padding: 8px 14px; text-align: right; min-width: 82px; }
+.kpi-v { font-size: 26px; font-weight: 700; line-height: 1; letter-spacing: -.02em; }
+.kpi-k { font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; opacity: .55; margin-top: 3px; font-weight: 600; }
+.kpi:last-child { background: var(--crit); }
+
+.hd-bar { padding: 0 22px 14px; gap: 8px; flex-wrap: wrap; }
+.seg { gap: 3px; }
+.seg button {
+  border: 0; background: rgba(255,255,255,.1); color: rgba(255,255,255,.75);
+  padding: 6px 15px; font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+}
+.seg button:hover { background: rgba(255,255,255,.2); color: #fff; }
+.seg button[aria-pressed="true"] { background: var(--bg); color: var(--ink); }
+.seg-icon button { padding: 6px 13px; font-size: 14px; line-height: 1; }
+.btn {
+  border: 2px solid rgba(255,255,255,.3); background: none; color: rgba(255,255,255,.8);
+  padding: 5px 14px; font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+}
+.btn:hover { border-color: #fff; color: #fff; }
+
+.legend { gap: 6px 16px; margin-left: auto; font-size: 11px; font-weight: 600; color: rgba(255,255,255,.7); }
+.legend-i .bz-dot { width: 11px; height: 11px; border-radius: 0; }
+
+/* ── Achse ────────────────────────────────────────────────────────────────── */
+.bz-corner { background: var(--panel); border-right: 3px solid var(--line-2); border-bottom: 3px solid var(--line-2); }
+.bz-axis { background: var(--panel); border-bottom: 3px solid var(--line-2); }
+.bz-axis-major { height: 26px; background: var(--panel2); }
+.bz-axis-minor { height: 24px; }
+.bz-t-major { font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--ink); border-left: 2px solid var(--line-2); }
+.bz-t-minor { font-size: 12px; font-weight: 700; color: var(--ink); border-left: 1px solid var(--line); }
+.bz-t-minor.is-we { color: var(--ink-3); background: var(--panel2); }
+.bz-t-s { font-size: 9px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em; }
+
+/* ── Seitenspalte ─────────────────────────────────────────────────────────── */
+.bz-side { background: var(--panel); border-right: 3px solid var(--line-2); }
+.bz-lab { border-bottom: 1px solid var(--line); font-size: 13px; }
+.bz-lab-group {
+  background: var(--gw); color: #fff; border-bottom: 2px solid var(--line-2);
+  font-weight: 700; text-transform: uppercase; letter-spacing: .05em; font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.25);
+}
+.bz-lab-group .bz-dot { display: none; }
+.bz-lab-group .bz-tw { color: #fff; }
+.bz-lab-task { color: var(--ink-2); font-size: 12.5px; font-weight: 500; }
+.bz-lab-meta { font-size: 11px; font-weight: 700; color: var(--ink-3); }
+.bz-lab-group .bz-lab-meta { color: rgba(255,255,255,.8); }
+.bz-lab-projekt { background: var(--ink); color: var(--bg); font-weight: 700; text-transform: uppercase; letter-spacing: .12em; font-size: 11px; }
+.bz-crit-tag { flex: none; font-size: 9px; font-weight: 700; letter-spacing: .08em; padding: 2px 5px; background: var(--crit); color: #fff; }
+
+/* ── Spuren ───────────────────────────────────────────────────────────────── */
+.bz-canvas { background: var(--panel); }
+.bz-track { border-bottom: 1px solid var(--line); }
+.bz-track-group { background: color-mix(in srgb, var(--gw) 8%, var(--panel)); border-bottom: 2px solid var(--line-2); }
+.bz-track-projekt { background: var(--panel2); }
+.bz-rows { background-image: repeating-linear-gradient(to right, var(--line) 0 1px, transparent 1px var(--grid-day)); }
+.has-hour-grid .bz-rows {
+  background-image:
+    repeating-linear-gradient(to right, var(--line) 0 2px, transparent 2px var(--grid-day)),
+    repeating-linear-gradient(to right, color-mix(in srgb, var(--line) 50%, transparent) 0 1px, transparent 1px var(--grid-hour));
+}
+
+/* ── Balken: Gaffa-Tape ───────────────────────────────────────────────────── */
+.bz-bar {
+  background: var(--gw); border-radius: 0;
+  box-shadow: 0 0 0 2px var(--panel), 2px 2px 0 0 rgba(0,0,0,.16);
+}
+.bz-bar-t { font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.3); letter-spacing: .01em; }
+.bz-bar.is-narrow .bz-bar-t { color: var(--ink); text-shadow: none; }
+.bz-prog { background: rgba(0,0,0,.22); }
+.bz-st-fertig { opacity: .32; }
+.bz-st-geplant { background: repeating-linear-gradient(135deg, var(--gw) 0 7px, color-mix(in srgb, var(--gw) 45%, #fff) 7px 14px); }
+.bz-bar:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.bz-bar.is-crit { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--crit), 2px 2px 0 4px rgba(0,0,0,.12); }
+
+.bz-slack { background: repeating-linear-gradient(45deg, var(--line) 0 4px, transparent 4px 9px); }
+
+.bz-sum { height: 11px; background: var(--gw); }
+.bz-sum-cap-l, .bz-sum-cap-r { border-top: 8px solid var(--gw); top: 11px; }
+.bz-sum-cap-l { border-left: 8px solid transparent; }
+.bz-sum-cap-r { border-right: 8px solid transparent; }
+.bz-mini { background: var(--gw); height: 18px; box-shadow: 0 0 0 2px var(--panel); }
+
+.bz-ms-d { width: 16px; height: 16px; margin-left: -8px; box-shadow: 0 0 0 2px var(--panel); }
+.bz-ms.is-crit .bz-ms-d { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--crit); }
+.bz-ms-t { font-size: 12px; font-weight: 700; color: var(--ink); padding-left: 13px; }
+.bz-ms-projekt .bz-ms-d { background: var(--ink); width: 20px; height: 20px; margin-left: -10px; }
+.bz-ms-projekt .bz-ms-t { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+
+/* ── Jetzt-Linie ──────────────────────────────────────────────────────────── */
+.bz-now { width: 3px; background: var(--now); }
+.bz-now-flag { background: var(--now); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .12em; padding: 4px 9px; }
+
+/* ── Bänder ───────────────────────────────────────────────────────────────── */
+.bz-we { background: var(--panel2); }
+.bz-phase { border-left: 2px solid var(--line); }
+.bz-phase-show { background: color-mix(in srgb, var(--gw-licht) 12%, transparent); }
+.bz-axis-phase { border-bottom: 2px solid var(--line-2); background: var(--ink); }
+.bz-ph { border-left: 2px solid rgba(255,255,255,.25); }
+.bz-ph-t { font-size: 9px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: rgba(255,255,255,.65); padding: 0 10px; }
+.bz-ph-aufbau { background: rgba(255,255,255,.14); }
+.bz-ph-aufbau .bz-ph-t { color: #fff; }
+.bz-ph-show { background: var(--gw-licht); }
+.bz-ph-show .bz-ph-t { color: var(--ink); }
+.bz-corner-cap { font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); padding-left: 10px; }
+
+/* ── Pfeile ───────────────────────────────────────────────────────────────── */
+.bz-dep { stroke: var(--ink-3); stroke-width: 1.5; opacity: .5; }
+.bz-dep.is-crit { stroke: var(--crit); stroke-width: 2.5; opacity: 1; }
+.bz-ah path { fill: var(--ink-3); }
+.bz-ah-c path { fill: var(--crit); }
+
+/* ── Tooltip ──────────────────────────────────────────────────────────────── */
+.bz-tip { background: var(--ink); color: var(--bg); padding: 12px 15px; box-shadow: 5px 5px 0 rgba(0,0,0,.18); font-size: 12px; }
+.bz-tip-g { font-size: 9.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
+.bz-tip-t { font-size: 17px; font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; margin: 4px 0 9px; padding-bottom: 8px; border-bottom: 2px solid rgba(255,255,255,.2); line-height: 1.15; }
+.bz-tip-dl dt { opacity: .55; font-size: 11px; font-weight: 600; }
+.bz-tip-dl dd { font-size: 12px; font-weight: 700; }
+
+/* ── Fuß ──────────────────────────────────────────────────────────────────── */
+.ft { flex: none; background: var(--panel2); border-top: 3px solid var(--line-2); padding: 9px 22px 10px; }
+.ft-mini { margin-bottom: 8px; }
+.bz-mini-strip { background: var(--panel); border: 2px solid var(--line-2); padding: 4px 0; }
+.bz-mini-win { background: rgba(0,0,0,.09); border-left: 3px solid var(--ink); border-right: 3px solid var(--ink); }
+.bz-mini-now { background: var(--now); width: 2px; }
+.ft-keys { display: flex; gap: 18px; flex-wrap: wrap; font-size: 10.5px; font-weight: 600; color: var(--ink-3); }
+kbd { font: inherit; font-size: 10px; border: 1.5px solid var(--ink-3); background: var(--panel); padding: 0 4px; margin-right: 2px; color: var(--ink-2); }
+.ft-crit { margin-left: auto; display: flex; align-items: center; gap: 7px; color: var(--crit); font-weight: 700; }
+.ft-crit i { width: 18px; height: 4px; background: var(--crit); display: block; }

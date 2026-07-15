@@ -1,0 +1,58 @@
+// ── Design-Prototypen bauen ───────────────────────────────────────────────────
+// Erzeugt aus derselben Engine vier EIGENSTÄNDIGE HTML-Dateien, eine je Theme.
+// Nur dafür gedacht, die Entwürfe als Artifact zu teilen (strikte CSP: keine
+// externen Ressourcen, alles muss inline sein). Die echte App unter index.html
+// braucht KEINEN Build — sie lädt ES-Module und CSS direkt.
+//
+//   node tools/build-prototypes.mjs   →  tools/out/<theme>.html
+//
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, '..');
+const read = (...p) => readFileSync(join(root, ...p), 'utf8');
+
+// ES-Module zu einem inline-Skript zusammenziehen: Importe zwischen den eigenen
+// Modulen fallen weg, die Reihenfolge unten macht den Rest.
+const strip = (code) =>
+  code
+    .replace(/^import\s+[\s\S]*?from\s+'\.\/[^']+';\s*$/gm, '')
+    .replace(/^export\s+\{[^}]*\}\s+from\s+'\.\/[^']+';\s*$/gm, '')
+    .replace(/^export\s+\{[^}]*\};\s*$/gm, '')
+    .replace(/^export\s+(const|function|class|let)\s/gm, '$1 ');
+
+const JS = ['data.js', 'schedule.js', 'timeaxis.js', 'gantt.js']
+  .map((f) => strip(read('js', f))).join('\n');
+
+// Zeilenmaße je Theme: Board will Plakat-Format, Console dichte Datenaufstellung.
+// console steht zuerst — das ist die gewählte Variante.
+export const VARIANTS = [
+  { key: 'console',   name: 'Console',   title: 'Bauzeitenplan — Console',
+    opts: { rowH: 24, groupH: 28, barH: 12, sideW: 228, initialZoom: 'tage' } },
+  { key: 'blueprint', name: 'Blueprint', title: 'Bauzeitenplan — Blueprint',
+    opts: { rowH: 26, groupH: 32, barH: 13, sideW: 236, initialZoom: 'tage' } },
+  { key: 'studio',    name: 'Studio',    title: 'Bauzeitenplan — Studio',
+    opts: { rowH: 34, groupH: 44, barH: 20, sideW: 254, initialZoom: 'tage' } },
+  { key: 'board',     name: 'Board',     title: 'Bauzeitenplan — Board',
+    opts: { rowH: 40, groupH: 50, barH: 28, sideW: 268, initialZoom: 'tage' } },
+];
+
+const shell = read('tools', 'prototype-shell.html');
+const base = read('styles', 'base.css');
+mkdirSync(join(here, 'out'), { recursive: true });
+
+for (const v of VARIANTS) {
+  const html = shell
+    .replaceAll('{{TITLE}}', v.title)
+    .replaceAll('{{NAME}}', v.name)
+    .replaceAll('{{KEY}}', v.key)
+    .replace('{{BASE_CSS}}', base)
+    .replace('{{THEME_CSS}}', read('styles', 'themes', v.key + '.css'))
+    .replace('{{JS}}', JS)
+    .replace('{{OPTS}}', JSON.stringify(v.opts));
+  writeFileSync(join(here, 'out', v.key + '.html'), html);
+  console.log('  ✓ ' + v.key.padEnd(10) + (html.length / 1024).toFixed(0).padStart(4) + ' kB  → tools/out/' + v.key + '.html');
+}
+console.log('\n' + VARIANTS.length + ' Prototypen gebaut.');

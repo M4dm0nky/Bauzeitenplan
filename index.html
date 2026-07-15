@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bauzeitenplan</title>
+
+<script>
+  // Service Worker: hält die ES-Module dauerhaft aktuell (Begründung in sw.js).
+  // Ohne ihn nimmt der Browser die Untermodule aus dem Cache und Änderungen
+  // kommen nach einem Deploy nicht an. Pfad relativ → trägt auch unter
+  // /Bauzeitenplan/ auf GitHub Pages.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+    var _swReloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (_swReloaded) return; _swReloaded = true; location.reload();
+    });
+  }
+</script>
+
+<!-- Struktur (Geometrie + Verhalten) und Gestaltung sind getrennt.
+     Der Theme-Link unten ist der einzige Umschaltpunkt: styles/themes/ enthält
+     vier fertige Ebenen (console = aktiv, dazu blueprint, studio, board).
+     Siehe docs/themes.md, wenn der Umschalter kommt. -->
+<link rel="stylesheet" href="styles/base.css?v=1">
+<link rel="stylesheet" href="styles/themes/console.css?v=1" id="theme-css" data-theme-name="console">
+</head>
+<body>
+
+<div class="app">
+  <header class="hd">
+    <div class="hd-row hd-top">
+      <div class="hd-id">
+        <div class="hd-kicker">Bauzeitenplan</div>
+        <h1 class="hd-title" id="proj-name">—</h1>
+        <div class="hd-sub" id="proj-venue"></div>
+      </div>
+      <div class="kpis" id="kpis"></div>
+    </div>
+    <div class="hd-row hd-bar">
+      <div class="seg" role="group" aria-label="Zoomstufe">
+        <button data-z="monate">Monate</button>
+        <button data-z="wochen">Wochen</button>
+        <button data-z="tage">Tage</button>
+        <button data-z="stunden">Stunden</button>
+      </div>
+      <div class="seg seg-icon" role="group" aria-label="Zoom">
+        <button id="zout" aria-label="Herauszoomen">−</button>
+        <button id="zin" aria-label="Hineinzoomen">+</button>
+      </div>
+      <button class="btn" id="now">Heute</button>
+      <button class="btn" id="fold">Alle zuklappen</button>
+      <div class="legend" id="legend"></div>
+    </div>
+  </header>
+
+  <div class="bz" id="bz" tabindex="-1"></div>
+
+  <footer class="ft">
+    <div class="ft-mini" id="mini"></div>
+    <div class="ft-keys">
+      <span><kbd>⌘</kbd>+Rad zoomt am Cursor</span>
+      <span><kbd>⇧</kbd>+Rad scrollt seitwärts</span>
+      <span><kbd>←</kbd><kbd>→</kbd> blättern</span>
+      <span><kbd>H</kbd> springt zu heute</span>
+      <span class="ft-crit"><i></i> kritischer Pfad — kein Puffer</span>
+    </div>
+  </footer>
+</div>
+
+<script type="module" src="js/app.js?v=1"></script>
+</body>
+</html>
