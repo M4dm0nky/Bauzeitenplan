@@ -112,6 +112,7 @@ console.log(`
     1. CHANGELOG.md füllen — der Testlauf verlangt einen Abschnitt für ${neu}
     2. node tests/run.mjs
     3. git commit && git push
+    3b. git tag -a v${neu} -m "…" && git push origin v${neu}
     4. Alle offenen Tabs laden sich beim nächsten Aufruf selbst neu (sw.js hat
        sich geändert). Beim Aufbau mit dem Plan auf dem Monitor: kurz springt
        der Live-Modus.

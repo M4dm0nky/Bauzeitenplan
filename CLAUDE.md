@@ -67,6 +67,15 @@ Betroffen: `js/version.js` (Quelle) · `package.json` · `index.html` (alle `?v=
 die Automatik. Rückschritte und Nicht-SemVer lehnt der Befehl ab — eine Version
 zurückzudrehen bricht den Cache-Schutz.
 
+Nach dem Push ein **annotierter** Tag (`-a`, nicht leichtgewichtig — ein Tag
+ohne Autor und Datum ist ein Zettel ohne Absender):
+
+```bash
+git tag -a v0.2.0 -m "…" && git push origin v0.2.0
+```
+
+Tags sind schwer zurückzunehmen — **erst nach Rückfrage setzen.**
+
 `node tests/run.mjs` prüft, dass alle Stellen übereinstimmen und dass der
 Changelog einen Abschnitt für die aktuelle Version hat. Das ist der Unterschied
 zu Crewplaner: dort verlangt CLAUDE.md, in fünf Dateien von Hand hochzuzählen
