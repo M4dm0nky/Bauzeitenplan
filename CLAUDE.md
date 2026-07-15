@@ -12,6 +12,7 @@ node tests/run.mjs              # 192 Unit-Tests + statische Prüfungen
 node tools/verify-browser.mjs   # Darstellung: App + 4 Prototypen
 node tools/verify-edit.mjs      # Bearbeiten: anlegen, tippen, Undo, Panel, Menü
 node tools/verify-live.mjs      # Live-Modus mit gestellter Uhr
+node tools/verify-amk.mjs       # AMK-Plan importieren
 ```
 
 Beides muss grün sein, bevor etwas als fertig gilt. `verify-browser.mjs` braucht
@@ -104,6 +105,19 @@ etwas automatisch um, sähe der Plan immer nach Plan aus — und das Signal wär
 **`reorderGewerk` darf `slot` nicht anfassen.** Farbe gehört dem Gewerk, nicht
 seiner Position; sonst färbt sich beim Sortieren der halbe Plan um. Ein Test
 prüft das.
+
+**Was der erste Start braucht, gehört auf Modulebene — nicht in `mount()`.**
+`mount()` läuft erst, wenn ein Projekt offen ist. Der Import hing dort und war
+beim allerersten Start tot: der Dialog bot ihn an, der Knopf tat nichts, ohne
+Fehlermeldung. Wer die App frisch öffnet, konnte nichts importieren.
+
+**Der AMK-Plan ist quellentreu** (`tools/make-amk.mjs`). Was im PDF steht, steht
+dort; was geschätzt ist, trägt `estimated: true` und eine gestrichelte Kante; wo
+das Gewerk im Original leer war, sagt es die Notiz. Nur DREI Verknüpfungen —
+die eine, die wörtlich im PDF steht («Leitern runter → sobald Backline und Set
+weg»), plus die Kopplung der aufgeteilten «Rigging/Set»-Zeile. **Keine
+Abhängigkeiten dazuerfinden**: ein erfundenes Netz erzeugt rote Konflikte, die
+mit der Wirklichkeit nichts zu tun haben. `tests/amk.test.mjs` hält das fest.
 
 ## Aus Crewplaner gelernt — gilt ab Phase 1
 

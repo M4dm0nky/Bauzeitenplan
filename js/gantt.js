@@ -271,6 +271,7 @@ export function createGantt(root, opts = {}) {
           if (gewerkTexture(r.g.slot)) b.dataset.tex = '1';
           b.classList.toggle('is-crit', s.critical);
           b.classList.toggle('is-conflict', CONFLICTS.has(t.id));
+          b.classList.toggle('is-estimated', !!t.estimated);
           b.dataset.from = toMin(t.start); b.dataset.to = toMin(t.end);
           b.tabIndex = 0;
           if (t.progress > 0 && t.progress < 100) {
@@ -824,11 +825,23 @@ export function createGantt(root, opts = {}) {
   // jedem Tastendruck an den Anfang zurück.
   function refresh() {
     const keepLeft = scroller.scrollLeft, keepTop = scroller.scrollTop;
+    const vorher = S && S.project.id;
     syncState();
     rebuild();
     layout();
-    scroller.scrollLeft = keepLeft;
-    scroller.scrollTop = keepTop;
+    if (S.project.id !== vorher) {
+      // PROJEKTWECHSEL. Der Scrollstand darf NICHT erhalten bleiben: T0 ist ein
+      // anderes Datum, dieselbe Pixelzahl bedeutet also einen ganz anderen
+      // Zeitpunkt. Vorher landete man Wochen daneben — nur 6 von 35 Balken im
+      // Bild, mitten in der Planungsphase.
+      collapsed.clear();
+      selected = null;
+      if (O.onSelect) O.onSelect(null);
+      centerOn(initialFocus());
+    } else {
+      scroller.scrollLeft = keepLeft;
+      scroller.scrollTop = keepTop;
+    }
     renderAxis(true);
     updateLabels();
     // Der Neuaufbau wirft das DOM weg — Auswahl und Live-Marken müssen zurück,

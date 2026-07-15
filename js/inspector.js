@@ -165,6 +165,17 @@ export function createInspector(root, { store, onError, onClose } = {}) {
       root.append(field('Ende', en));
     }
 
+    if (!t.milestone) {
+      // Zum Abhaken, sobald die echte Zahl feststeht.
+      const eW = el('label', 'ins-check');
+      const eC = el('input');
+      eC.type = 'checkbox';
+      eC.checked = !!t.estimated;
+      eC.onchange = () => send({ type: 'setTaskField', id: t.id, field: 'estimated', value: eC.checked });
+      eW.append(eC, el('span', null, 'Dauer geschätzt'));
+      root.append(eW);
+    }
+
     // Meilenstein
     const msWrap = el('label', 'ins-check');
     const ms = el('input');

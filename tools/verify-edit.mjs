@@ -284,6 +284,40 @@ await check('Escape verwirft', async () => {
   return n === 'Umbenannt' ? true : 'Name wurde doch geändert: ' + n;
 });
 
+console.log('\nPROJEKTWECHSEL');
+await check('zweites Projekt mit ganz anderem Zeitraum anlegen', async () => {
+  await page.locator('#new-proj').click();
+  await page.waitForTimeout(400);
+  await page.fill('.dlg-f:first-child input', 'Weit weg 2027');
+  await page.fill('.dlg-f:nth-child(3) input', '2027-03-15T06:00');
+  await page.locator('.dlg-t[data-k="festival"]').click();
+  await page.locator('.dlg-act .btn-p').click();
+  await page.waitForTimeout(900);
+  return (await page.locator('#proj-name').textContent()) === 'Weit weg 2027' ? true : 'nicht gewechselt';
+});
+await check('nach dem Wechsel steht die Ansicht beim AUFBAU, nicht irgendwo', async () => {
+  // Pixel bedeuten nach einem Projektwechsel einen anderen Zeitpunkt: T0 ist
+  // ein anderes Datum. Wer scrollLeft einfach behält, landet Wochen daneben.
+  await page.locator('#proj-menu').click();
+  await page.waitForTimeout(400);
+  await page.locator('.dlg-open', { hasText: 'Testprojekt Halle 7' }).click();
+  await page.waitForTimeout(1000);
+  const vis = await page.locator('.bz-bar').evaluateAll((ns, w) =>
+    ns.filter((n) => { const r = n.getBoundingClientRect(); return r.width > 0 && r.right > 240 && r.left < w; }).length, 1600);
+  const all = await page.locator('.bz-bar').count();
+  return vis >= 10 ? true : `nur ${vis} von ${all} Balken im Bild — die Ansicht steht nicht beim Aufbau`;
+});
+await check('nach dem Wechsel zeigt das Panel nichts Altes mehr', async () => {
+  // Die Auswahl gehört zum alten Projekt und muss weg.
+  return (await page.locator('#ins').isHidden()) ? true : 'Panel zeigt noch die alte Auswahl';
+});
+await check('das gewechselte Projekt ist danach das aktive', async () => {
+  await page.reload();
+  await page.waitForTimeout(900);
+  const n = await page.locator('#proj-name').textContent();
+  return n === 'Testprojekt Halle 7' ? true : 'nach Reload: ' + n;
+});
+
 console.log('\nEXPORT');
 await check('Export lädt eine JSON-Datei herunter', async () => {
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), page.locator('#export').click()]);

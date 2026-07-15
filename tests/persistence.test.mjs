@@ -24,7 +24,7 @@ const fakeStorage = () => {
 const plan = (name = 'Test') => ({
   project: { id: 'p1', name, venue: 'Halle', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin' },
   gewerke: [{ id: 'g1', name: 'Bühne', sort: 0, slot: 0 }],
-  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '' }],
+  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false }],
   deps: [],
 });
 
@@ -171,11 +171,24 @@ test('Import vergibt eine neue id, wenn gewünscht', () => {
   assert.notEqual(r.plan.project.id, 'p1');
 });
 
+test('geschätzte Dauer überlebt Export und Import', () => {
+  // Sonst wüsste nach einem Import niemand mehr, welche Zahl geraten ist.
+  const raw = plan();
+  raw.tasks[0].estimated = true;
+  const back = deserialize(serialize(raw));
+  assert.equal(back.plan.tasks[0].estimated, true);
+});
+
 console.log('\nMigration');
 test('Plan ohne Schema-Version wird als Version 1 gelesen', () => {
   const raw = plan();
   const m = migrate({ ...raw });
   assert.equal(m.project.name, 'Test');
+});
+test('Vorgang ohne estimated-Feld gilt als nicht geschätzt', () => {
+  const raw = plan();
+  delete raw.tasks[0].estimated;
+  assert.equal(migrate(raw).tasks[0].estimated, false);
 });
 test('Gewerk ohne Farbplatz bekommt einen', () => {
   const raw = plan();

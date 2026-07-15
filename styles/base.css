@@ -319,3 +319,11 @@ body { margin: 0; }
 .bz.is-live .bz-lab.is-late .bz-lab-name::after { content: ' ⚠'; }
 .bz-lab-edit { width: 100%; font: inherit; border: 0; padding: 0; background: none; color: inherit; }
 .bz-lab.is-sel, .bz-bar.is-sel, .bz-ms.is-sel .bz-ms-d { outline: 2px solid var(--sel, currentColor); outline-offset: 1px; }
+
+/* Dauer geschätzt: die rechte Kante ist offen, weil das Ende nicht feststeht.
+   Nur die Kante — der Balken selbst muss seine Gewerk-Farbe behalten. */
+.bz-bar.is-estimated::before {
+  content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: 3px; z-index: 3;
+  background: repeating-linear-gradient(to bottom,
+    currentColor 0 2px, transparent 2px 4px);
+}

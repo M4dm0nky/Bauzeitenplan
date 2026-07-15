@@ -45,6 +45,10 @@ export function migrate(plan) {
     t.status ??= 'geplant';
     t.crew ??= null;
     t.notes ??= '';
+    // Dauer geschätzt, nicht aus der Quelle. Muss sichtbar sein — sonst weiß in
+    // drei Wochen niemand mehr, welcher Balken eine Zahl aus dem Plan ist und
+    // welcher eine Annahme.
+    t.estimated = !!t.estimated;
   }
   for (const d of p.deps) {
     d.type ??= 'FS';

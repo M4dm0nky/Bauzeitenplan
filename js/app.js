@@ -55,7 +55,7 @@ function open(plan) {
 function mount() {
   gantt = createGantt($('bz'), {
     store, rowH: 24, groupH: 28, barH: 12, sideW: 228, initialZoom: 'tage',
-    onSelect: (sel) => inspector.show(sel),
+    onSelect: (sel) => { inspector.show(sel); $('ins').hidden = !sel || view !== 'gantt'; },
     onContext: showContext,
     onError: (msg) => toast(msg, 'bad'),
     onTick: () => refreshLive(),
@@ -110,8 +110,6 @@ function mount() {
   // ── Projekt ──
   $('proj-menu').onclick = () => showProjectDialog({});
   $('export').onclick = doExport;
-  $('import').onclick = () => $('import-file').click();
-  $('import-file').onchange = doImport;
   $('add-gewerk').onclick = addGewerk;
   $('resolve').onclick = () => {
     const cmd = resolveConflictsCmd(store.state);
@@ -340,6 +338,7 @@ async function doImport(e) {
   const r = deserialize(await f.text(), { newId: true });
   if (r.ok === false) return toast(r.error, 'bad', 8000);
   open(r.plan);
+  $('dlg').hidden = true;      // sonst bleibt der Anlege-Dialog über allem liegen
   toast('«' + r.plan.project.name + '» importiert');
 }
 
@@ -453,5 +452,12 @@ function toast(msg, kind = 'ok', ms = 4000) {
 $('undo').onclick = () => store && store.undo();
 $('redo').onclick = () => store && store.redo();
 $('new-proj').onclick = () => showProjectDialog({});
+
+// Import MUSS auf Modulebene verdrahtet sein, nicht in mount(): mount() läuft
+// erst, wenn ein Projekt offen ist. Beim allerersten Start gibt es keins — der
+// Dialog bot «JSON importieren» an, aber der Knopf war tot. Wer die App frisch
+// öffnet oder seinen Speicher geleert hat, konnte nichts importieren.
+$('import').onclick = () => $('import-file').click();
+$('import-file').onchange = doImport;
 
 boot();

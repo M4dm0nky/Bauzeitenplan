@@ -290,3 +290,7 @@ kbd { font: inherit; border: 1px solid var(--rule-2); background: var(--panel2);
 .live-bar .live-dot { background: var(--live-run); }
 .live-bar.is-late { color: var(--crit); }
 .live-bar.is-late .live-dot { background: var(--crit); }
+
+.bz-bar.is-estimated { color: var(--panel2); }
+.bz-bar.is-estimated.bz-st-geplant { color: var(--gw); }
+.ins-check input { accent-color: var(--accent); }

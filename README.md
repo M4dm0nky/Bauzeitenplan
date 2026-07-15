@@ -57,6 +57,10 @@ rechnet die Dauer zurück.
 den Verknüpfungen. **Rechtsklick** öffnet das Menü (umbenennen, duplizieren,
 sortieren, löschen). **Doppelklick** auf einen Namen benennt an Ort und Stelle um.
 
+**Geschätzte Dauern** haben eine gestrichelte rechte Kante — das Ende steht
+nicht fest. Im Panel gibt es dazu ein Häkchen «Dauer geschätzt» zum Abhaken,
+sobald die echte Zahl da ist.
+
 **Konflikte:** Verletzt ein Vorgang eine Abhängigkeit, wird er rot markiert und
 sagt im Klartext, woran es liegt. «Konflikte auflösen» schiebt alles auf den
 frühestmöglichen Termin — ein `⌘Z` nimmt das komplett zurück. Es verschiebt sich
@@ -69,6 +73,8 @@ node tests/run.mjs            # 192 Unit-Tests + statische Prüfungen, ohne Brow
 node tools/verify-browser.mjs # Darstellung: App + 4 Theme-Prototypen im Browser
 node tools/verify-edit.mjs    # Bearbeiten: anlegen, tippen, Undo, Konflikte, Panel, Menü
 node tools/verify-live.mjs    # Live-Modus mit gestellter Uhr (page.clock)
+node tools/verify-amk.mjs     # AMK-Plan importieren und prüfen
+node tools/make-amk.mjs       # amk-singleshow.json aus den PDF-Daten neu bauen
 
 # gegen die veröffentlichte Seite statt lokal:
 node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
