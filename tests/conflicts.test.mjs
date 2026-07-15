@@ -1,5 +1,6 @@
 import { findConflicts, resolveConflictsCmd, parseDuration, fmtDuration } from '../js/conflicts.js';
 import { createStore } from '../js/store.js';
+import { computeSchedule } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -115,6 +116,23 @@ test('Ring wirft nicht, sondern liefert eine Meldung', () => {
   assert.match(r[0].message, /Ring/i);
 });
 
+test('vorab gerechneter Terminplan liefert dasselbe Ergebnis', () => {
+  // Der Gantt reicht seine Rechnung weiter, statt sie zu wiederholen. Beide
+  // Wege müssen deckungsgleich sein, sonst zeigt die Tabelle etwas anderes
+  // als der Gantt.
+  const s = seed(
+    [T('a', 'g1', 'A', '2026-07-13T08:00', '2026-07-13T12:00'),
+     T('b', 'g2', 'B', '2026-07-13T10:00', '2026-07-13T14:00')],
+    [{ id: 'd1', from: 'a', to: 'b', type: 'FS', lag: 0 }]);
+  const ohne = findConflicts(s);
+  const mit = findConflicts(s, computeSchedule(s.tasks, s.deps));
+  assert.deepEqual(mit, ohne);
+});
+test('ohne vorab rechnet findConflicts weiterhin selbst', () => {
+  const s = seed([T('a', 'g1', 'A', '2026-07-13T08:00', '2026-07-13T12:00')], []);
+  assert.deepEqual(findConflicts(s), []);
+});
+
 console.log('\nKonflikte auflösen');
 test('Auflösen liefert einen Sammelbefehl', () => {
   const s = seed(
@@ -181,6 +199,35 @@ console.log('\nDauer-Kurzform (Tabelleneingabe)');
 test('Stunden', () => { assert.equal(parseDuration('4h'), 240); });
 test('Stunden mit Komma', () => { assert.equal(parseDuration('1,5h'), 90); });
 test('Stunden mit Punkt', () => { assert.equal(parseDuration('1.5h'), 90); });
+test('führende Null darf fehlen: «.5h» ist eine halbe Stunde', () => {
+  // Regression: die Regex verlangte eine Ziffer VOR dem Punkt und las «.5h»
+  // als «5h» — ein stiller Faktor 10. Genau die Sorte Fehler, die man erst
+  // bemerkt, wenn der Plan nicht aufgeht.
+  assert.equal(parseDuration('.5h'), 30);
+});
+test('führende Null darf auch beim Komma fehlen', () => {
+  assert.equal(parseDuration(',5h'), 30);
+});
+test('führende Null bei Tagen', () => {
+  assert.equal(parseDuration('.5t'), 720);
+});
+test('ein einzelner Punkt ist keine Zahl', () => {
+  assert.equal(parseDuration('.h'), null);
+});
+test('mehrfach dieselbe Einheit wird nicht heimlich summiert', () => {
+  // «4h 4h» ist ein Vertipper, keine Angabe von 8 Stunden.
+  assert.equal(parseDuration('4h 4h'), null);
+});
+test('doppelte Einheit ist Unfug', () => {
+  assert.equal(parseDuration('4hh'), null);
+});
+test('absurde Dauern werden abgelehnt', () => {
+  // «99999t» sind 273 Jahre — das ist ein Vertipper, kein Vorgang.
+  assert.equal(parseDuration('99999t'), null);
+});
+test('ein Jahr ist gerade noch erlaubt', () => {
+  assert.equal(parseDuration('365t'), 365 * 1440);
+});
 test('Minuten', () => { assert.equal(parseDuration('90m'), 90); });
 test('Tage', () => { assert.equal(parseDuration('2t'), 2880); });
 test('Tage englisch', () => { assert.equal(parseDuration('2d'), 2880); });

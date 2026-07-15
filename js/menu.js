@@ -2,12 +2,7 @@
 // Generisch, an der Maus. Muster aus dem Crewplaner (js/dropdown.js):
 // position:fixed, damit kein Elternteil mit overflow:hidden es abschneidet.
 
-const el = (tag, cls, txt) => {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (txt != null) n.textContent = txt;
-  return n;
-};
+import { el } from './dom.js';
 
 let open = null;
 
@@ -47,7 +42,8 @@ export function openMenu(x, y, items) {
   if (first) first.focus();
 }
 
-export function closeMenu() {
+// Nicht exportiert — nur dieses Modul schließt sein eigenes Menü.
+function closeMenu() {
   if (!open) return;
   open.remove();
   open = null;

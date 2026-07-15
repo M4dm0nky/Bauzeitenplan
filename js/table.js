@@ -9,18 +9,7 @@
 import { parseDuration, fmtDuration, local } from './conflicts.js';
 import { toMin, toDate } from './schedule.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
-
-const el = (tag, cls, txt) => {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (txt != null) n.textContent = txt;
-  return n;
-};
-
-// <input type="datetime-local"> will «2026-07-13T08:00» — genau unser Format.
-const toInput = (iso) => String(iso || '').slice(0, 16);
-
-const STATUS = [['geplant', 'geplant'], ['laeuft', 'läuft'], ['fertig', 'fertig']];
+import { el, toInput, STATUS } from './dom.js';
 
 export function createTable(root, { store, onConflicts } = {}) {
   root.classList.add('tb');

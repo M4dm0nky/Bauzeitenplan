@@ -21,14 +21,6 @@ export const gewerkVar = (slot) => 'var(--gw-' + (((slot % HUES) + HUES) % HUES)
 /** Ab dem 9. Platz zusätzlich Schraffur. */
 export const gewerkTexture = (slot) => Math.floor((slot % MAX_SLOTS) / HUES) > 0;
 
-/** Attribute für einen Knoten, der die Gewerk-Identität trägt. */
-export function applyGewerk(node, slot) {
-  node.style.setProperty('--gw', gewerkVar(slot));
-  if (gewerkTexture(slot)) node.dataset.tex = '1';
-  else delete node.dataset.tex;
-  return node;
-}
-
 /**
  * Reicht die Palette noch? Ab 17 Gewerken trägt Farbe die Identität nicht mehr —
  * dann muss die Beschriftung sie allein tragen, und das ist eine Warnung wert.

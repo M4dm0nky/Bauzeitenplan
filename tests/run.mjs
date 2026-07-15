@@ -92,6 +92,45 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
   return bad.length ? bad.join(' | ') : true;
 });
 
+// \b taugt hier NICHT: «$» ist kein Wortzeichen, also matcht \b\$ nie — die
+// Prüfung meldete jeden $-Import fälschlich als ungenutzt. JS-Bezeichner dürfen
+// $ und _ enthalten, die Grenze muss das abbilden.
+const kommtVor = (text, sym) =>
+  new RegExp('(?<![\\w$])' + sym.replace(/[$]/g, '\\$') + '(?![\\w$])').test(text);
+
+check('kein Modul importiert etwas, das es nicht benutzt', () => {
+  const bad = [];
+  for (const f of JS_FILES) {
+    const src = js(f);
+    for (const m of src.matchAll(/^import\s+\{([^}]*)\}\s+from\s+'\.\/[^']+';/gm)) {
+      const nachImport = src.slice(m.index + m[0].length);
+      for (const sym of m[1].split(',').map((x) => x.trim()).filter(Boolean)) {
+        if (!kommtVor(nachImport, sym)) bad.push(f + ' → ' + sym);
+      }
+    }
+  }
+  return bad.length ? bad.join(', ') : true;
+});
+
+check('kein Export, den niemand importiert', () => {
+  // Toter Code sammelt sich sonst still an: applyGewerk lag monatelang ungenutzt
+  // herum und wurde trotzdem in jeden Prototyp gebündelt.
+  const bad = [];
+  const alle = [...JS_FILES.map((f) => js(f)),
+    ...readdirSync(join(root, 'tests')).map((f) => readFileSync(join(root, 'tests', f), 'utf8')),
+    ...readdirSync(join(root, 'tools')).filter((f) => f.endsWith('.mjs'))
+      .map((f) => readFileSync(join(root, 'tools', f), 'utf8'))];
+  for (const f of JS_FILES) {
+    const src = js(f);
+    for (const m of src.matchAll(/^export\s+(?:const|function)\s+([A-Za-z_$][\w$]*)/gm)) {
+      const sym = m[1];
+      const woanders = alle.some((other) => other !== src && kommtVor(other, sym));
+      if (!woanders) bad.push(f + ' → ' + sym);
+    }
+  }
+  return bad.length ? bad.join(', ') : true;
+});
+
 check('alle in index.html verdrahteten IDs kommen in app.js vor', () => {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   const app = js('app.js');

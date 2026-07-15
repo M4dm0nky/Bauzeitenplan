@@ -10,12 +10,19 @@ import { computeSchedule, toMin, toDate } from './schedule.js';
 const EPS = 1;
 
 /**
+ * @param {object} state
+ * @param {Map=} vorab  bereits gerechneter Terminplan. Ohne ihn rechnet die
+ *   Funktion selbst — dann läuft die CPM aber doppelt, wenn der Aufrufer sie
+ *   ohnehin schon hat. Bei 500 Vorgängen sind das 3,4 ms je Durchgang.
+ *   Bewusst KEIN Cache in computeSchedule: der müsste auf Objekt-Identität
+ *   schlüsseln, und wer Vorgänge in dieselbe Array-Instanz schiebt (Tests,
+ *   tools/make-amk.mjs), bekäme still ein veraltetes Ergebnis.
  * @returns {{taskId, shortByMin, es, byDepId, message}[]}
  */
-export function findConflicts(state) {
-  let sched;
+export function findConflicts(state, vorab) {
+  let sched = vorab;
   try {
-    sched = computeSchedule(state.tasks, state.deps);
+    if (!sched) sched = computeSchedule(state.tasks, state.deps);
   } catch (e) {
     // Ein Ring bricht die Rechnung. Der Store lässt keinen zu, aber importiertes
     // JSON kann einen enthalten — dann eine Meldung statt eines Absturzes.
@@ -97,25 +104,39 @@ export const local = (d) =>
 // «4h», «1,5h», «90m», «2t», «1t 4h». Eine blanke Zahl sind Stunden — das ist
 // die häufigste Eingabe. Unsinn liefert null; lieber nachfragen als raten.
 
+// Ein Vorgang über einem Jahr ist ein Vertipper, kein Vorgang.
+const MAX_DUR = 365 * 1440;
+
 export function parseDuration(str) {
   if (str == null) return null;
   const s = String(str).trim().toLowerCase().replace(',', '.');
   if (!s) return null;
-  if (/^\d+(\.\d+)?$/.test(s)) return Math.round(parseFloat(s) * 60);   // blanke Zahl = Stunden
 
-  const re = /(\d+(?:\.\d+)?)\s*(t|d|h|m)/g;
-  let total = 0, found = false, m;
-  while ((m = re.exec(s)) !== null) {
-    const n = parseFloat(m[1]);
-    const unit = m[2];
-    total += unit === 't' || unit === 'd' ? n * 1440 : unit === 'h' ? n * 60 : n;
-    found = true;
+  // Zahl OHNE Einheit = Stunden. Das ist die häufigste Eingabe.
+  // \d*\.?\d+ statt \d+(\.\d+)? — «.5» muss eine halbe Stunde sein.
+  // Vorher las die Regex «.5h» als «5h»: ein stiller Faktor 10.
+  if (/^\d*\.?\d+$/.test(s)) return clampDur(parseFloat(s) * 60);
+
+  // Sonst: Folge aus Zahl+Einheit, durch Leerzeichen getrennt. Der Anker ^…$
+  // ist wesentlich — ohne ihn schluckte der Parser «4hh» und «4h 4h» klaglos.
+  const m = s.match(/^(\d*\.?\d+)\s*([tdhm])(?:\s+(\d*\.?\d+)\s*([tdhm]))?$/);
+  if (!m) return null;
+
+  const einheit = { t: 1440, d: 1440, h: 60, m: 1 };
+  let total = parseFloat(m[1]) * einheit[m[2]];
+  if (m[3]) {
+    // Zwei Angaben nur, wenn die zweite feiner ist als die erste: «1t 4h» ja,
+    // «4h 4h» nein — das ist ein Vertipper, keine Summe.
+    if (einheit[m[4]] >= einheit[m[2]]) return null;
+    total += parseFloat(m[3]) * einheit[m[4]];
   }
-  if (!found) return null;
-  // Nur Ziffern/Einheiten/Leerzeichen dürfen vorkommen — «bald 4h» ist Unsinn.
-  if (/[^\d.\st dhm]/.test(s)) return null;
-  const r = Math.round(total);
-  return r >= 0 ? r : null;
+  return clampDur(total);
+}
+
+function clampDur(min) {
+  const r = Math.round(min);
+  if (!Number.isFinite(r) || r < 0 || r > MAX_DUR) return null;
+  return r;
 }
 
 export function fmtDuration(min) {

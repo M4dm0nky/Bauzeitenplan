@@ -11,7 +11,7 @@ export const ZOOM = {
   tage:    { px: 0.25, label: 'Tage'    },  //  360 px/Tag → ~3,6 Tage: die Aufbauwoche
   stunden: { px: 1.5,  label: 'Stunden' },  //   90 px/Std → ~14 Std: der Load-In-Tag
 };
-export const ZOOM_MIN = 0.008, ZOOM_MAX = 4.0;
+const ZOOM_MIN = 0.008, ZOOM_MAX = 4.0;
 
 export const clampZoom = (px) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, px));
 

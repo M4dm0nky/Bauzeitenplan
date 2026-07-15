@@ -14,8 +14,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const read = (...p) => readFileSync(join(root, ...p), 'utf8');
 
+// Die Reihenfolge ist die Bauanleitung: Abhängigkeit vor Verwender. Diese Liste
+// gibt es genau EINMAL — sie dreimal zu pflegen wäre selbst eine Fehlerquelle.
+const FILES = ['dom.js', 'schedule.js', 'timeaxis.js', 'palette.js', 'conflicts.js',
+               'live.js', 'store.js', 'templates.js', 'gantt.js'];
+
 // ES-Module zu einem inline-Skript zusammenziehen: Importe zwischen den eigenen
-// Modulen fallen weg, die Reihenfolge unten macht den Rest.
+// Modulen fallen weg, die Reihenfolge oben macht den Rest.
 const strip = (code) =>
   code
     .replace(/^import\s+[\s\S]*?from\s+'\.\/[^']+';\s*$/gm, '')
@@ -23,8 +28,7 @@ const strip = (code) =>
     .replace(/^export\s+\{[^}]*\};\s*$/gm, '')
     .replace(/^export\s+(const|function|class|let)\s/gm, '$1 ');
 
-const JS = ['schedule.js', 'timeaxis.js', 'palette.js', 'conflicts.js', 'store.js', 'templates.js', 'gantt.js']
-  .map((f) => strip(read('js', f))).join('\n');
+const JS = FILES.map((f) => strip(read('js', f))).join('\n');
 
 // Zeilenmaße je Theme: Board will Plakat-Format, Console dichte Datenaufstellung.
 // console steht zuerst — das ist die gewählte Variante.
@@ -44,7 +48,7 @@ export const VARIANTS = [
 // und die Seite bleibt leer. Also hier prüfen, nicht erst im Browser.
 {
   const dup = new Map();
-  for (const f of ['schedule.js', 'timeaxis.js', 'palette.js', 'conflicts.js', 'store.js', 'templates.js', 'gantt.js']) {
+  for (const f of FILES) {
     for (const m of read('js', f).matchAll(/^(?:export\s+)?(?:const|function|class|let)\s+([A-Za-z_$][\w$]*)/gm)) {
       const prev = dup.get(m[1]);
       if (prev && prev !== f) {
@@ -54,6 +58,25 @@ export const VARIANTS = [
       }
       dup.set(m[1], f);
     }
+  }
+}
+
+// Der Build prüfte bisher nur auf DOPPELTE Namen. Fehlende fielen durch: als
+// gantt.js anfing, `el` aus dom.js zu importieren, war es im Bündel schlicht
+// undefiniert — der Prototyp blieb leer, ohne dass hier etwas aufgefallen wäre.
+{
+  const gebuendelt = new Set(FILES);
+  const fehlen = new Set();
+  for (const f of FILES) {
+    for (const m of read('js', f).matchAll(/^import\s+\{[^}]*\}\s+from\s+'\.\/([^']+)'/gm)) {
+      if (!gebuendelt.has(m[1])) fehlen.add(`${f} braucht ${m[1]}`);
+    }
+  }
+  if (fehlen.size) {
+    console.error('\n  ✗ Nicht gebündelte Abhängigkeit — der Prototyp bliebe leer:');
+    for (const x of fehlen) console.error('    ' + x);
+    console.error('    → in die JS-Liste aufnehmen (Reihenfolge: Abhängigkeit zuerst).\n');
+    process.exit(1);
   }
 }
 

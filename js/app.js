@@ -8,20 +8,13 @@ import { createRepo, serialize, deserialize } from './persistence.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
-import { findConflicts, resolveConflictsCmd, local } from './conflicts.js';
+import { resolveConflictsCmd, local } from './conflicts.js';
 import { slotsExhausted, MAX_SLOTS } from './palette.js';
 import { createInspector } from './inspector.js';
 import { openMenu } from './menu.js';
 import { liveStats } from './live.js';
 import { toMin, toDate } from './schedule.js';
-
-const $ = (id) => document.getElementById(id);
-const el = (tag, cls, txt) => {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (txt != null) n.textContent = txt;
-  return n;
-};
+import { $, el, escapeHtml } from './dom.js';
 
 const repo = createRepo(window.localStorage);
 let store = null, gantt = null, table = null, inspector = null, view = 'gantt';
@@ -55,7 +48,7 @@ function open(plan) {
 function mount() {
   gantt = createGantt($('bz'), {
     store, rowH: 24, groupH: 28, barH: 12, sideW: 228, initialZoom: 'tage',
-    onSelect: (sel) => { inspector.show(sel); $('ins').hidden = !sel || view !== 'gantt'; },
+    onSelect: (sel) => { inspector.show(sel); syncPanel(); },
     onContext: showContext,
     onError: (msg) => toast(msg, 'bad'),
     onTick: () => refreshLive(),
@@ -64,7 +57,7 @@ function mount() {
   inspector = createInspector($('ins'), {
     store,
     onError: (msg) => toast(msg, 'bad'),
-    onClose: () => gantt.select(null),
+    onClose: () => { gantt.select(null); syncPanel(); },
   });
   if (gantt.minimapNode) $('mini').append(gantt.minimapNode);
 
@@ -81,6 +74,7 @@ function mount() {
     scheduleSave();
     if (view === 'tabelle') renderTable();
     inspector.render();       // Panel zeigt sonst veraltete Werte
+    syncPanel();
   });
 
   // ── Zoom ──
@@ -145,14 +139,19 @@ function setView(v) {
   document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
   $('bz').hidden = v !== 'gantt';
   $('tb').hidden = v !== 'tabelle';
-  $('ins').hidden = v !== 'gantt' || !inspector.selection;
+  syncPanel();
   document.querySelector('.hd-zoom').hidden = v !== 'gantt';
   if (v === 'tabelle') renderTable();
   else gantt.relayout();
 }
 
+// Der EINZIGE Ort, der über die Sichtbarkeit des Panels entscheidet.
+function syncPanel() {
+  $('ins').hidden = view !== 'gantt' || !inspector.selection;
+}
+
 function renderTable() {
-  table.setConflicts(findConflicts(store.state));
+  table.setConflicts(gantt.conflicts());   // schon gerechnet, nicht wiederholen
   table.render();
 }
 
@@ -293,7 +292,7 @@ function refreshChrome() {
     ['kritisch', st.crit],
   ].map(([k, v]) => `<div class="kpi"><div class="kpi-v">${v}</div><div class="kpi-k">${k}</div></div>`).join('');
 
-  const conf = findConflicts(S);
+  const conf = gantt.conflicts();   // der Gantt hat sie gerade gerechnet
   const rb = $('resolve');
   rb.hidden = conf.length === 0;
   rb.textContent = conf.length === 1 ? '1 Konflikt auflösen' : conf.length + ' Konflikte auflösen';
@@ -306,8 +305,6 @@ function refreshChrome() {
   $('undo').disabled = !store.canUndo;
   $('redo').disabled = !store.canRedo;
 }
-
-const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // ── Gewerk anlegen ──────────────────────────────────────────────────────────
 function addGewerk() {

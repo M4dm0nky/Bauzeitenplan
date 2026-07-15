@@ -233,7 +233,7 @@ const LEER = {
 };
 
 export const TEMPLATES = [FESTIVAL, TOUR, CORPORATE, MESSE, LEER];
-export const templateByKey = (key) => TEMPLATES.find((x) => x.key === key) || LEER;
+const templateByKey = (key) => TEMPLATES.find((x) => x.key === key) || LEER;
 
 // ── Plan aus einer Vorlage bauen ────────────────────────────────────────────
 

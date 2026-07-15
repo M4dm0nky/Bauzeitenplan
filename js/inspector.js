@@ -7,21 +7,17 @@ import { parseDuration, fmtDuration, local } from './conflicts.js';
 import { toMin, toDate, computeSchedule } from './schedule.js';
 import { gewerkVar, gewerkTexture, HUES, MAX_SLOTS } from './palette.js';
 import { fmtFloat } from './timeaxis.js';
+import { el, toInput, STATUS } from './dom.js';
 
-const el = (tag, cls, txt) => {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (txt != null) n.textContent = txt;
-  return n;
-};
-const toInput = (iso) => String(iso || '').slice(0, 16);
-
-const STATUS = [['geplant', 'geplant'], ['laeuft', 'läuft'], ['fertig', 'fertig']];
 const DEP_TYPES = [
   ['FS', 'Ende → Start'], ['SS', 'Start → Start'],
   ['FF', 'Ende → Ende'], ['SF', 'Start → Ende'],
 ];
 
+// Der Inspector entscheidet über seinen INHALT, nie über seine Sichtbarkeit.
+// Vorher schrieben vier Stellen an #ins.hidden — zwei hier, zwei in app.js —
+// und render() kannte die Ansicht nicht. Jede Änderung holte das Panel in der
+// Tabellen-Ansicht zurück. Ein Zustand, ein Besitzer: app.js.
 export function createInspector(root, { store, onError, onClose } = {}) {
   root.classList.add('ins');
   let sel = null;
@@ -41,8 +37,7 @@ export function createInspector(root, { store, onError, onClose } = {}) {
 
   function render() {
     root.replaceChildren();
-    if (!sel) { root.hidden = true; return; }
-    root.hidden = false;
+    if (!sel) return;
 
     const head = el('div', 'ins-head');
     head.append(el('span', 'ins-kind', sel.kind === 'gewerk' ? 'Gewerk' : 'Vorgang'));
@@ -59,7 +54,7 @@ export function createInspector(root, { store, onError, onClose } = {}) {
   // ── Gewerk ────────────────────────────────────────────────────────────────
   function renderGewerk() {
     const g = curG(sel.id);
-    if (!g) { sel = null; root.hidden = true; return; }
+    if (!g) { sel = null; if (onClose) onClose(); return; }
     const tasks = store.state.tasks.filter((t) => t.gewerk === g.id);
 
     const dot = el('span', 'bz-dot ins-dot');
@@ -109,7 +104,7 @@ export function createInspector(root, { store, onError, onClose } = {}) {
   // ── Vorgang ───────────────────────────────────────────────────────────────
   function renderTask() {
     const t = cur(sel.id);
-    if (!t) { sel = null; root.hidden = true; return; }
+    if (!t) { sel = null; if (onClose) onClose(); return; }
     const isProj = t.gewerk === 'projekt';
 
     root.append(el('div', 'ins-title', t.title));
@@ -154,14 +149,29 @@ export function createInspector(root, { store, onError, onClose } = {}) {
         const real = toMin(now.end) - toMin(now.start);
         const m = parseDuration(du.value);
         if (m == null || m === 0) { du.value = fmtDuration(real); du.classList.add('is-bad'); setTimeout(() => du.classList.remove('is-bad'), 900); return; }
-        send({ type: 'setTaskField', id: t.id, field: 'end', value: local(toDate(toMin(now.start) + m)) });
+        if (m === real) return;
+        // Wer die Dauer eintippt, hat sie bestätigt: die Schätzmarke fällt weg.
+        // Sonst bliebe der Balken gestrichelt, obwohl die Zahl feststeht.
+        send(now.estimated
+          ? { type: 'batch', label: 'Dauer gesetzt', cmds: [
+              { type: 'setTaskField', id: t.id, field: 'end', value: local(toDate(toMin(now.start) + m)) },
+              { type: 'setTaskField', id: t.id, field: 'estimated', value: false }] }
+          : { type: 'setTaskField', id: t.id, field: 'end', value: local(toDate(toMin(now.start) + m)) });
       };
       root.append(field('Dauer', du, '4h · 1,5h · 90m · 2t · 1t 4h'));
 
       const en = el('input');
       en.type = 'datetime-local';
       en.value = toInput(t.end);
-      en.onchange = () => { if (en.value) send({ type: 'setTaskField', id: t.id, field: 'end', value: en.value }); };
+      en.onchange = () => {
+        const now = cur(t.id);
+        if (!now || !en.value || en.value === toInput(now.end)) return;
+        send(now.estimated
+          ? { type: 'batch', label: 'Ende gesetzt', cmds: [
+              { type: 'setTaskField', id: t.id, field: 'end', value: en.value },
+              { type: 'setTaskField', id: t.id, field: 'estimated', value: false }] }
+          : { type: 'setTaskField', id: t.id, field: 'end', value: en.value });
+      };
       root.append(field('Ende', en));
     }
 

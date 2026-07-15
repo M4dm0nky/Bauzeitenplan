@@ -11,9 +11,13 @@
 
 import { topoSort } from './schedule.js';
 
+// Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
+// Ablage die äußere Schicht — diese Abhängigkeit liefe verkehrt herum. Für eine
+// Zeile ist die Wiederholung billiger als ein falscher Pfeil.
+const clone = (o) => JSON.parse(JSON.stringify(o));
+
 const UNDO_MAX = 100;
 
-const clone = (o) => JSON.parse(JSON.stringify(o));
 const ok = (extra = {}) => ({ ok: true, ...extra });
 const err = (msg) => ({ ok: false, error: msg });
 

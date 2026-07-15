@@ -119,6 +119,32 @@ weg»), plus die Kopplung der aufgeteilten «Rigging/Set»-Zeile. **Keine
 Abhängigkeiten dazuerfinden**: ein erfundenes Netz erzeugt rote Konflikte, die
 mit der Wirklichkeit nichts zu tun haben. `tests/amk.test.mjs` hält das fest.
 
+**`js/dom.js` ist der Ort für DOM-Kleinkram** (`el`, `svgEl`, `$`, `escapeHtml`,
+`toInput`, `STATUS`). Lag vorher fünfmal identisch herum. **Nicht** dort hin
+gehört `clone` — der Store dürfte dafür nicht auf persistence.js zeigen (Kern →
+äußere Schicht wäre der falsche Pfeil), und für eine Zeile ist die Wiederholung
+billiger als eine schlechte Abhängigkeit.
+
+**Wer `js/` um einen Import erweitert, muss `tools/build-prototypes.mjs`
+mitpflegen.** Die Modulliste dort steht an EINER Stelle (`FILES`) und ist zugleich
+die Bauanleitung: Abhängigkeit vor Verwender. Der Build prüft seit dem
+`el`-Vorfall auf **fehlende** und auf **doppelte** Namen — vorher nur auf doppelte,
+weshalb `live.js` monatelang ungebündelt blieb und die Prototypen nur deshalb
+liefen, weil `runningAt` ausschließlich im Live-Modus gerufen wird.
+
+**Ein Zustand, ein Besitzer.** `#ins.hidden` hatte vier Schreiber (zwei in
+app.js, zwei in inspector.js) — und inspector.js kannte die Ansicht nicht, also
+holte jede Änderung das Panel in der Tabellen-Ansicht zurück. Der Inspector
+entscheidet jetzt nur über seinen INHALT, `syncPanel()` in app.js allein über
+die Sichtbarkeit.
+
+**Kein Cache in `computeSchedule`.** Er müsste auf Objekt-Identität schlüsseln,
+und wer Vorgänge in dieselbe Array-Instanz schiebt (Tests, `tools/make-amk.mjs`),
+bekäme still ein veraltetes Ergebnis. Stattdessen wurde die Zahl der AUFRUFE
+gesenkt: `findConflicts(state, vorab)` nimmt eine fertige Rechnung an, `app.js`
+holt die Liste über `gantt.conflicts()`. Von 5 Läufen pro Änderung auf 2.
+Gemessen: 500 Vorgänge = 3,4 ms pro Lauf.
+
 ## Aus Crewplaner gelernt — gilt ab Phase 1
 
 - `project_id` & Co. als **Text**, niemals als Relation. Coolify-Reimport kippt

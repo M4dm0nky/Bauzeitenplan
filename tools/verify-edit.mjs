@@ -318,6 +318,58 @@ await check('das gewechselte Projekt ist danach das aktive', async () => {
   return n === 'Testprojekt Halle 7' ? true : 'nach Reload: ' + n;
 });
 
+console.log('\nPANEL-SICHTBARKEIT');
+await check('Panel bleibt in der Tabellen-Ansicht zu, auch nach einer Änderung', async () => {
+  // Regression: vier Stellen schrieben #ins.hidden, und inspector.render()
+  // kannte die Ansicht nicht — jede Änderung holte das Panel zurück.
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(300);
+  await page.locator('.bz-bar').first().click();       // Auswahl setzen
+  await page.waitForTimeout(300);
+  if (await page.locator('#ins').isHidden()) return 'Panel öffnet im Gantt gar nicht';
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(400);
+  if (!(await page.locator('#ins').isHidden())) return 'Panel bleibt beim Wechsel offen';
+  const t = page.locator('.tb-r .c-title input').first();
+  await t.fill('Änderung in der Tabelle');
+  await t.blur();
+  await page.waitForTimeout(600);
+  return (await page.locator('#ins').isHidden()) ? true : 'Panel poppt nach einer Änderung auf';
+});
+await check('zurück im Gantt ist das Panel wieder da', async () => {
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(400);
+  return (await page.locator('#ins').isVisible()) ? true : 'Panel bleibt weg';
+});
+
+console.log('\nGESCHÄTZTE DAUER');
+await check('echte Dauer eintippen räumt die Schätzung ab', async () => {
+  // Sonst bleibt der Balken gestrichelt, obwohl die Zahl feststeht — und nach
+  // drei Korrekturen weiß niemand mehr, was noch geraten ist.
+  const id = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.bz-bar.is-estimated')][0];
+    return b ? b.closest('.bz-track').previousSibling : null;
+  });
+  // Vorgang über das Panel schätzen lassen und dann korrigieren
+  await page.locator('.bz-bar').first().click();
+  await page.waitForTimeout(300);
+  const hk = page.locator('.ins-check', { hasText: 'Dauer geschätzt' }).locator('input');
+  if (!(await hk.isChecked())) await hk.check();
+  await page.waitForTimeout(400);
+  const du = page.locator('.ins-f', { hasText: 'Dauer' }).locator('input').first();
+  await du.fill('3h');
+  await du.blur();
+  await page.waitForTimeout(500);
+  const noch = await page.locator('.ins-check', { hasText: 'Dauer geschätzt' }).locator('input').isChecked();
+  return !noch ? true : 'Häkchen bleibt gesetzt — der Balken bleibt gestrichelt';
+});
+await check('das Häkchen lässt sich weiterhin von Hand setzen', async () => {
+  const hk = page.locator('.ins-check', { hasText: 'Dauer geschätzt' }).locator('input');
+  await hk.check();
+  await page.waitForTimeout(400);
+  return (await hk.isChecked()) ? true : 'lässt sich nicht mehr setzen';
+});
+
 console.log('\nEXPORT');
 await check('Export lädt eine JSON-Datei herunter', async () => {
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), page.locator('#export').click()]);

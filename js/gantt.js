@@ -9,6 +9,7 @@ import { computeSchedule, toMin } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
 import { runningAt, delaysAt } from './live.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
+import { el, svgEl } from './dom.js';
 import {
   ZOOM, clampZoom, zoomAnchored, nearestPreset, tickScale, ticksFor,
   weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat,
@@ -38,18 +39,6 @@ function nowInZone(tz) {
 const SLACK_MAX_MIN = 72 * 60;
 // Innenabstand, den die Beschriftung im Balken zusätzlich braucht.
 const LABEL_PAD = 18;
-
-const el = (tag, cls, txt) => {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (txt != null) n.textContent = txt;
-  return n;
-};
-const svgEl = (tag, attrs = {}) => {
-  const n = document.createElementNS('http://www.w3.org/2000/svg', tag);
-  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-  return n;
-};
 
 export function createGantt(root, opts = {}) {
   const O = {
@@ -82,12 +71,15 @@ export function createGantt(root, opts = {}) {
     NOW = readNow();
     byId = new Map(S.tasks.map((t) => [t.id, t]));
     gwById = new Map(S.gewerke.map((g) => [g.id, g]));
+    let ok = null;
     try {
-      SCHED = computeSchedule(S.tasks, S.deps);
+      ok = computeSchedule(S.tasks, S.deps);
     } catch {
-      SCHED = new Map();   // Ring (nur aus Import möglich) — Konfliktliste erklärt es
+      ok = null;           // Ring (nur aus Import möglich) — Konfliktliste erklärt es
     }
-    CONFLICTS = new Map(findConflicts(S).map((c) => [c.taskId, c]));
+    SCHED = ok || new Map();
+    // Die Rechnung weiterreichen, statt sie in findConflicts zu wiederholen.
+    CONFLICTS = new Map(findConflicts(S, ok).map((c) => [c.taskId, c]));
   }
   syncState();
 
