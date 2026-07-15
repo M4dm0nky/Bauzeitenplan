@@ -20,6 +20,11 @@ Undo/Redo, Auto-Save, JSON-Export.
 Rechner — und sie sind weg. Bis PocketBase steht, ist der **JSON-Export die
 einzige Sicherung**. Nutze ihn.
 
+**Live-Modus** für den Aufbau: Zeitlinie läuft mit, Ansicht folgt, laufende
+Vorgänge leuchten, Verzug wird benannt («sollte seit 20m laufen»). Der Status
+wird dabei **nie** automatisch gesetzt — sonst sähe der Plan immer nach Plan aus
+und das Signal «wir hängen» wäre weg.
+
 **Als Nächstes:** Drag & Drop im Gantt, danach PocketBase mit Login und Rollen.
 
 ## Starten
@@ -48,6 +53,10 @@ Kein Build, keine Abhängigkeiten zur Laufzeit.
 `4h`, `1,5h`, `90m`, `2t`, `1t 4h`. Das Ende rechnet sich; das Ende zu ändern
 rechnet die Dauer zurück.
 
+**Im Gantt:** Klick auf Balken oder Zeile → Panel rechts mit allen Feldern und
+den Verknüpfungen. **Rechtsklick** öffnet das Menü (umbenennen, duplizieren,
+sortieren, löschen). **Doppelklick** auf einen Namen benennt an Ort und Stelle um.
+
 **Konflikte:** Verletzt ein Vorgang eine Abhängigkeit, wird er rot markiert und
 sagt im Klartext, woran es liegt. «Konflikte auflösen» schiebt alles auf den
 frühestmöglichen Termin — ein `⌘Z` nimmt das komplett zurück. Es verschiebt sich
@@ -58,7 +67,8 @@ nie etwas hinter deinem Rücken.
 ```bash
 node tests/run.mjs            # 192 Unit-Tests + statische Prüfungen, ohne Browser
 node tools/verify-browser.mjs # Darstellung: App + 4 Theme-Prototypen im Browser
-node tools/verify-edit.mjs    # Bearbeiten: anlegen, tippen, Undo, Konflikte, Neuladen
+node tools/verify-edit.mjs    # Bearbeiten: anlegen, tippen, Undo, Konflikte, Panel, Menü
+node tools/verify-live.mjs    # Live-Modus mit gestellter Uhr (page.clock)
 
 # gegen die veröffentlichte Seite statt lokal:
 node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
@@ -113,6 +123,9 @@ js/
   templates.js          Vier Vorlagen (Festival, Tour, Corporate, Messe)
   persistence.js        localStorage, Export/Import, Migration — DOM-frei
   palette.js            Gewerk-Farben: 8 Töne × 2 Schraffuren = 16 Plätze
+  live.js               Verzug + laufende Vorgänge — DOM-frei
+  inspector.js          Seitenpanel
+  menu.js               Kontextmenü
 styles/
   base.css              Nur Geometrie + Verhalten. Dazu die Gewerk-Farben.
   themes/*.css          Vier Gestaltungsebenen; console ist aktiv
@@ -152,6 +165,7 @@ Ein Umschalter ist vorbereitet, aber noch nicht gebaut — siehe
 |---|---|
 | ✅ | Darstellung: Gantt, vier Zoomstufen, Abhängigkeiten, kritischer Pfad |
 | ✅ | Befüllen & Bearbeiten: Vorlagen, Tabelle, Konflikte, Undo, Speichern |
+| ✅ | Live-Modus: Zeitlinie läuft, Verzug, laufende Vorgänge · Panel · Rechtsklick-Menü |
 | → | Drag & Drop im Gantt: Balken ziehen, Dauer ziehen, Verknüpfungen ziehen |
 | | PocketBase, Login, Rollen (`projektleiter` / `gewerk_lead` / `gewerk_member` / `viewer`) |
 | | Ansichten & Export: Tagesplan, öffentlicher Link ohne Login, PDF/ICS |

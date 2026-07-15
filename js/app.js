@@ -10,6 +10,10 @@ import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
 import { findConflicts, resolveConflictsCmd, local } from './conflicts.js';
 import { slotsExhausted, MAX_SLOTS } from './palette.js';
+import { createInspector } from './inspector.js';
+import { openMenu } from './menu.js';
+import { liveStats } from './live.js';
+import { toMin, toDate } from './schedule.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, txt) => {
@@ -20,7 +24,7 @@ const el = (tag, cls, txt) => {
 };
 
 const repo = createRepo(window.localStorage);
-let store = null, gantt = null, table = null, view = 'gantt';
+let store = null, gantt = null, table = null, inspector = null, view = 'gantt';
 
 // ── Erststart ───────────────────────────────────────────────────────────────
 function boot() {
@@ -49,11 +53,35 @@ function open(plan) {
 
 // ── Aufbau ──────────────────────────────────────────────────────────────────
 function mount() {
-  gantt = createGantt($('bz'), { store, rowH: 24, groupH: 28, barH: 12, sideW: 228, initialZoom: 'tage' });
+  gantt = createGantt($('bz'), {
+    store, rowH: 24, groupH: 28, barH: 12, sideW: 228, initialZoom: 'tage',
+    onSelect: (sel) => inspector.show(sel),
+    onContext: showContext,
+    onError: (msg) => toast(msg, 'bad'),
+    onTick: () => refreshLive(),
+  });
   table = createTable($('tb'), { store, onConflicts: ({ error }) => toast(error, 'bad') });
+  inspector = createInspector($('ins'), {
+    store,
+    onError: (msg) => toast(msg, 'bad'),
+    onClose: () => gantt.select(null),
+  });
   if (gantt.minimapNode) $('mini').append(gantt.minimapNode);
 
-  store.subscribe(() => { refreshChrome(); scheduleSave(); if (view === 'tabelle') renderTable(); });
+  // Live-Modus überlebt das Neuladen — der Monitor beim Aufbau soll nach einem
+  // Stromausfall wieder live sein, ohne dass jemand hinläuft.
+  const wantLive = localStorage.getItem('bzp_live') === '1';
+  $('live').onclick = () => setLive(!gantt.isLive);
+  if (wantLive) setLive(true);
+  refreshLive();
+
+  store.subscribe(() => {
+    refreshChrome();
+    refreshLive();
+    scheduleSave();
+    if (view === 'tabelle') renderTable();
+    inspector.render();       // Panel zeigt sonst veraltete Werte
+  });
 
   // ── Zoom ──
   const segs = [...document.querySelectorAll('[data-z]')];
@@ -119,6 +147,7 @@ function setView(v) {
   document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
   $('bz').hidden = v !== 'gantt';
   $('tb').hidden = v !== 'tabelle';
+  $('ins').hidden = v !== 'gantt' || !inspector.selection;
   document.querySelector('.hd-zoom').hidden = v !== 'gantt';
   if (v === 'tabelle') renderTable();
   else gantt.relayout();
@@ -127,6 +156,100 @@ function setView(v) {
 function renderTable() {
   table.setConflicts(findConflicts(store.state));
   table.render();
+}
+
+// ── Live ────────────────────────────────────────────────────────────────────
+function setLive(on) {
+  gantt.setLive(on);
+  localStorage.setItem('bzp_live', on ? '1' : '0');
+  $('live').setAttribute('aria-pressed', String(on));
+  $('live').textContent = on ? '● Live' : 'Live';
+  if (on) {
+    setView('gantt');
+    toast('Live: die Ansicht folgt jetzt der Zeit. Nochmal klicken beendet das.');
+  }
+  refreshLive();
+}
+
+function refreshLive() {
+  if (!store || !gantt) return;
+  const st = liveStats(store.state.tasks, gantt.liveInfo().now);
+  const n = $('live-bar');
+  n.hidden = !gantt.isLive;
+  if (!gantt.isLive) return;
+  const parts = [];
+  parts.push(st.running + (st.running === 1 ? ' läuft' : ' laufen'));
+  if (st.late) parts.push(st.late + ' im Verzug');
+  if (st.next) parts.push('in ' + fmtMin(st.next.inMin) + ': ' + st.next.title);
+  n.replaceChildren();
+  const dot = el('span', 'live-dot');
+  n.append(dot, el('span', 'live-txt', parts.join(' · ')));
+  n.classList.toggle('is-late', st.late > 0);
+}
+
+const fmtMin = (m) => (m < 60 ? m + ' Min' : Math.round(m / 60) + ' Std');
+
+// ── Kontextmenü ─────────────────────────────────────────────────────────────
+function showContext(sel, x, y) {
+  const S = store.state;
+  if (sel.kind === 'gewerk') {
+    const g = S.gewerke.find((z) => z.id === sel.id);
+    if (!g) return;
+    const list = [...S.gewerke].sort((a, b) => a.sort - b.sort);
+    const i = list.findIndex((z) => z.id === g.id);
+    const count = S.tasks.filter((t) => t.gewerk === g.id).length;
+    openMenu(x, y, [
+      { label: 'Umbenennen', hint: 'Doppelklick', run: () => renameInPlace('gewerk', g.id) },
+      { label: 'Vorgang hinzufügen', run: () => inspector.addTaskTo(g.id) },
+      null,
+      { label: 'Nach oben', hint: '↑', disabled: i === 0, run: () => apply({ type: 'reorderGewerk', id: g.id, dir: -1 }) },
+      { label: 'Nach unten', hint: '↓', disabled: i === list.length - 1, run: () => apply({ type: 'reorderGewerk', id: g.id, dir: 1 }) },
+      null,
+      { label: 'Bearbeiten …', run: () => gantt.select(sel) },
+      { label: count ? `Löschen (${count} ${count === 1 ? 'Vorgang' : 'Vorgänge'})` : 'Löschen', danger: true, run: () => {
+        if (!confirm(count
+          ? `«${g.name}» löschen? ${count} ${count === 1 ? 'Vorgang geht' : 'Vorgänge gehen'} mit. ⌘Z holt alles zurück.`
+          : `«${g.name}» löschen?`)) return;
+        apply({ type: 'removeGewerk', id: g.id });
+      } },
+    ]);
+    return;
+  }
+
+  const t = S.tasks.find((z) => z.id === sel.id);
+  if (!t) return;
+  openMenu(x, y, [
+    { label: 'Umbenennen', hint: 'Doppelklick', run: () => renameInPlace('task', t.id) },
+    { label: 'Duplizieren', run: () => {
+      const r = apply({ type: 'duplicateTask', id: t.id });
+      if (r && r.id) gantt.select({ kind: 'task', id: r.id });
+    } },
+    { label: t.milestone ? 'In Vorgang zurückverwandeln' : 'Zu Meilenstein machen', run: () => {
+      apply(t.milestone
+        ? { type: 'batch', label: 'Meilenstein aufheben', cmds: [
+            { type: 'setTaskField', id: t.id, field: 'end', value: local(toDate(toMin(t.start) + 120)) },
+            { type: 'setTaskField', id: t.id, field: 'milestone', value: false }] }
+        : { type: 'batch', label: 'Zu Meilenstein', cmds: [
+            { type: 'setTaskField', id: t.id, field: 'end', value: t.start },
+            { type: 'setTaskField', id: t.id, field: 'milestone', value: true }] });
+    } },
+    null,
+    { label: 'Bearbeiten …', run: () => gantt.select(sel) },
+    { label: 'Löschen', danger: true, run: () => apply({ type: 'removeTask', id: t.id }) },
+  ]);
+}
+
+function renameInPlace(kind, id) {
+  const lab = kind === 'gewerk'
+    ? document.querySelector(`.bz-lab[data-gewerk="${id}"] .bz-lab-name`)
+    : document.querySelector(`.bz-lab[data-task="${id}"] .bz-lab-name`);
+  if (lab) lab.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+}
+
+function apply(cmd) {
+  const r = store.apply(cmd);
+  if (r && r.ok === false) toast(r.error, 'bad', 6000);
+  return r;
 }
 
 // ── Speichern ───────────────────────────────────────────────────────────────

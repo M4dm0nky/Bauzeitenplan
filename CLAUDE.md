@@ -10,7 +10,8 @@ Projekte leben im Browser (localStorage) + JSON-Export. PocketBase kommt danach.
 ```bash
 node tests/run.mjs              # 192 Unit-Tests + statische Prüfungen
 node tools/verify-browser.mjs   # Darstellung: App + 4 Prototypen
-node tools/verify-edit.mjs      # Bearbeiten: anlegen, tippen, Undo, Konflikte
+node tools/verify-edit.mjs      # Bearbeiten: anlegen, tippen, Undo, Panel, Menü
+node tools/verify-live.mjs      # Live-Modus mit gestellter Uhr
 ```
 
 Beides muss grün sein, bevor etwas als fertig gilt. `verify-browser.mjs` braucht
@@ -90,6 +91,20 @@ trotzdem sein `blur` — mit dem veralteten Objekt aus der Closure. Jede Änderu
 lag dadurch doppelt auf dem Undo-Stapel und ⌘Z wirkte kaputt. Handler lesen den
 Stand immer frisch aus dem Store (`cur(id)`), nie aus der Closure.
 
+**Die Jetzt-Linie tickt IMMER**, nicht nur im Live-Modus (`startTicking()` in
+gantt.js, alle 15 s). Sie hing früher an `syncState()` und stand nach dem Laden
+still — bei einem Plan, der beim Aufbau auf dem Monitor läuft, ist eine falsche
+Linie schlimmer als keine. Der Tick ruft bewusst **kein** `layout()`: das baute
+jede Minute den DOM neu und risse die Auswahl weg. Nur `paintNow()`/`paintLive()`.
+
+**Status wird nie automatisch gesetzt.** Der Verzug (`js/live.js`) entsteht genau
+daraus, dass die menschliche Aussage «geplant» der Uhr widerspricht. Schaltete
+etwas automatisch um, sähe der Plan immer nach Plan aus — und das Signal wäre weg.
+
+**`reorderGewerk` darf `slot` nicht anfassen.** Farbe gehört dem Gewerk, nicht
+seiner Position; sonst färbt sich beim Sortieren der halbe Plan um. Ein Test
+prüft das.
+
 ## Aus Crewplaner gelernt — gilt ab Phase 1
 
 - `project_id` & Co. als **Text**, niemals als Relation. Coolify-Reimport kippt
@@ -113,6 +128,9 @@ Stand immer frisch aus dem Store (`cur(id)`), nie aus der Closure.
 | `js/table.js` | Tabellen-Editor |
 | `js/templates.js` | Vier Vorlagen |
 | `js/palette.js` | 8 Farbtöne × 2 Schraffuren = 16 Gewerke |
+| `js/live.js` | Verzug + laufende Vorgänge — **DOM-frei** |
+| `js/inspector.js` | Seitenpanel |
+| `js/menu.js` | Kontextmenü (Muster: Crewplaner dropdown.js) |
 | `tools/build-prototypes.mjs` | **Nur** für die Design-Artifacts (CSP verlangt alles inline). Die App braucht keinen Build. |
 
 Warum was so ist: `docs/entscheidungen.md`. Besonders der kritische Pfad hat eine
@@ -121,7 +139,7 @@ dort begründet und ist durch Regressionstests abgesichert.
 
 ## Fahrplan
 
-✅ Darstellung · ✅ Befüllen & Bearbeiten (Tabelle, Vorlagen, Konflikte, Undo)
+✅ Darstellung · ✅ Befüllen & Bearbeiten · ✅ Panel, Rechtsklick-Menü, Live-Modus
 → Als Nächstes: Drag & Drop im Gantt · danach PocketBase + Login + Rollen ·
 zuletzt Ansichten & Export (Tagesplan, öffentlicher Link, PDF/ICS)
 

@@ -159,6 +159,31 @@ const HANDLERS = {
     return ok();
   },
 
+  reorderGewerk(state, cmd) {
+    const list = [...state.gewerke].sort((a, b) => a.sort - b.sort);
+    const i = list.findIndex((g) => g.id === cmd.id);
+    if (i < 0) return 'Gewerk nicht gefunden.';
+    const j = i + (cmd.dir < 0 ? -1 : 1);
+    if (j < 0 || j >= list.length) return cmd.dir < 0 ? 'Steht schon ganz oben.' : 'Steht schon ganz unten.';
+    [list[i], list[j]] = [list[j], list[i]];
+    // Lückenlos durchnummerieren. Würde man nur die beiden Werte tauschen,
+    // blieben Doppelte aus Altdaten bestehen und die Reihenfolge wäre zufällig.
+    // Der Farbplatz (slot) wird NICHT angefasst: Farbe gehört dem Gewerk, nicht
+    // seiner Position — sonst färbte sich beim Sortieren der halbe Plan um.
+    list.forEach((g, k) => { g.sort = k; });
+    return ok();
+  },
+
+  duplicateTask(state, cmd) {
+    const t = state.tasks.find((x) => x.id === cmd.id);
+    if (!t) return 'Vorgang nicht gefunden.';
+    const id = newId('t');
+    // Bewusst OHNE Verknüpfungen: mit denselben Vorgängern stünde das Duplikat
+    // sofort im Konflikt — niemand will beim Duplizieren einen roten Plan.
+    state.tasks.push({ ...t, id, title: t.title + ' (Kopie)' });
+    return ok({ id });
+  },
+
   setGewerkField(state, cmd) {
     const g = state.gewerke.find((x) => x.id === cmd.id);
     if (!g) return 'Gewerk nicht gefunden.';

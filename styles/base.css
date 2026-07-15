@@ -275,3 +275,47 @@ body { margin: 0; }
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
   z-index: 60; padding: 9px 15px; max-width: min(560px, 90vw);
 }
+
+/* ── Arbeitsfläche: Gantt/Tabelle + Panel ─────────────────────────────────── */
+.work { flex: 1; min-height: 0; display: flex; }
+.work > .bz, .work > .tb { flex: 1; min-width: 0; }
+.ins { flex: none; width: 320px; overflow-y: auto; display: flex; flex-direction: column; }
+
+.ins-head { display: flex; align-items: center; justify-content: space-between; }
+.ins-x { border: 0; background: none; font: inherit; cursor: pointer; line-height: 1; }
+.ins-title { display: flex; align-items: center; gap: 7px; }
+.ins-dot { width: 11px; height: 11px; }
+.ins-f { display: flex; flex-direction: column; gap: 3px; }
+.ins-f input, .ins-f select, .ins-f textarea { font: inherit; width: 100%; }
+.ins-f textarea { resize: vertical; }
+.ins-row { display: flex; gap: 5px; }
+.ins-row .btn { flex: 1; }
+.ins-check { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.ins-hint { display: block; }
+.ins-dep { display: grid; grid-template-columns: auto 1fr auto auto auto; align-items: center; gap: 4px; }
+.ins-dep-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ins-dep-l { width: 56px; }
+.ins-dep-x { border: 0; background: none; font: inherit; cursor: pointer; }
+.ins-dep-add { width: 100%; font: inherit; }
+.ins .is-bad { outline: 2px solid var(--crit, red); outline-offset: -2px; }
+
+/* ── Kontextmenü ──────────────────────────────────────────────────────────── */
+.mn { position: fixed; z-index: 70; min-width: 190px; }
+.mn-i {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer;
+}
+.mn-i:disabled { cursor: default; }
+.mn-sep { height: 1px; }
+
+/* ── Live ─────────────────────────────────────────────────────────────────── */
+.live-bar { display: flex; align-items: center; gap: 7px; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; animation: bz-blink 2s ease-in-out infinite; }
+@keyframes bz-blink { 50% { opacity: .25; } }
+/* Laufende und überfällige Marken gibt es NUR im Live-Modus — beim Bearbeiten
+   ist das Geblinke im Weg. */
+.bz.is-live .bz-bar.is-running { box-shadow: 0 0 0 2px var(--panel2, #fff), 0 0 0 4px var(--live-run, #0a0); }
+.bz.is-live .bz-bar.is-late, .bz.is-live .bz-ms.is-late .bz-ms-d { animation: bz-blink 1.4s ease-in-out infinite; }
+.bz.is-live .bz-lab.is-late .bz-lab-name::after { content: ' ⚠'; }
+.bz-lab-edit { width: 100%; font: inherit; border: 0; padding: 0; background: none; color: inherit; }
+.bz-lab.is-sel, .bz-bar.is-sel, .bz-ms.is-sel .bz-ms-d { outline: 2px solid var(--sel, currentColor); outline-offset: 1px; }

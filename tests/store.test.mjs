@@ -304,5 +304,114 @@ test('Sammelbefehl benachrichtigt nur einmal', () => {
   assert.equal(calls, 1, 'sonst zeichnet der Gantt bei jedem Teilschritt neu');
 });
 
+console.log('\nGewerke umsortieren');
+const seed3 = () => ({
+  project: { id: 'p1', name: 'T', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin' },
+  gewerke: [
+    { id: 'a', name: 'Bühne', sort: 0, slot: 0 },
+    { id: 'b', name: 'Licht', sort: 1, slot: 1 },
+    { id: 'c', name: 'Ton', sort: 2, slot: 2 },
+  ],
+  tasks: [], deps: [],
+});
+const order = (s) => [...s.state.gewerke].sort((x, y) => x.sort - y.sort).map((g) => g.name);
+const slots = (s) => Object.fromEntries(s.state.gewerke.map((g) => [g.name, g.slot]));
+
+test('nach oben tauscht mit dem Vorgänger', () => {
+  const s = createStore(seed3());
+  s.apply({ type: 'reorderGewerk', id: 'c', dir: -1 });
+  assert.deepEqual(order(s), ['Bühne', 'Ton', 'Licht']);
+});
+test('nach unten tauscht mit dem Nachfolger', () => {
+  const s = createStore(seed3());
+  s.apply({ type: 'reorderGewerk', id: 'a', dir: 1 });
+  assert.deepEqual(order(s), ['Licht', 'Bühne', 'Ton']);
+});
+test('DIE FARBE BLEIBT — sie gehört dem Gewerk, nicht seiner Position', () => {
+  // Sonst färbte sich beim Sortieren der halbe Plan um und die validierte
+  // Palette wäre wertlos.
+  const s = createStore(seed3());
+  const before = slots(s);
+  s.apply({ type: 'reorderGewerk', id: 'c', dir: -1 });
+  assert.deepEqual(slots(s), before);
+});
+test('Reihenfolge bleibt lückenlos 0,1,2 — keine Doppelten', () => {
+  const s = createStore(seed3());
+  s.apply({ type: 'reorderGewerk', id: 'c', dir: -1 });
+  s.apply({ type: 'reorderGewerk', id: 'b', dir: 1 });
+  assert.deepEqual([...s.state.gewerke].map((g) => g.sort).sort(), [0, 1, 2]);
+});
+test('nach oben beim obersten tut nichts', () => {
+  const s = createStore(seed3());
+  const r = s.apply({ type: 'reorderGewerk', id: 'a', dir: -1 });
+  assert.equal(r.ok, false);
+  assert.deepEqual(order(s), ['Bühne', 'Licht', 'Ton']);
+});
+test('nach unten beim untersten tut nichts', () => {
+  const s = createStore(seed3());
+  const r = s.apply({ type: 'reorderGewerk', id: 'c', dir: 1 });
+  assert.equal(r.ok, false);
+});
+test('abgelehntes Umsortieren kommt nicht auf den Undo-Stapel', () => {
+  const s = createStore(seed3());
+  s.apply({ type: 'reorderGewerk', id: 'a', dir: -1 });
+  assert.equal(s.canUndo, false);
+});
+test('Umsortieren ist rückgängig zu machen', () => {
+  const s = createStore(seed3());
+  s.apply({ type: 'reorderGewerk', id: 'c', dir: -1 });
+  s.undo();
+  assert.deepEqual(order(s), ['Bühne', 'Licht', 'Ton']);
+});
+test('unbekanntes Gewerk wird abgelehnt', () => {
+  const s = createStore(seed3());
+  assert.equal(s.apply({ type: 'reorderGewerk', id: 'weg', dir: 1 }).ok, false);
+});
+test('krumme sort-Werte werden beim Umsortieren begradigt', () => {
+  const raw = seed3();
+  raw.gewerke[0].sort = 5; raw.gewerke[1].sort = 5; raw.gewerke[2].sort = 99;
+  const s = createStore(raw);
+  s.apply({ type: 'reorderGewerk', id: 'c', dir: -1 });
+  assert.deepEqual([...s.state.gewerke].map((g) => g.sort).sort(), [0, 1, 2]);
+});
+
+console.log('\nVorgang duplizieren');
+test('Duplikat übernimmt die Felder', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'duplicateTask', id: 'a' });
+  const dup = s.state.tasks.find((t) => t.id === r.id);
+  assert.equal(dup.gewerk, 'buehne');
+  assert.equal(dup.start, '2026-07-13T08:00');
+  assert.equal(dup.crew, 4);
+});
+test('Duplikat bekommt eine eigene id', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'duplicateTask', id: 'a' });
+  assert.notEqual(r.id, 'a');
+  assert.equal(s.state.tasks.length, 3);
+});
+test('Duplikat ist am Namen erkennbar', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'duplicateTask', id: 'a' });
+  assert.match(s.state.tasks.find((t) => t.id === r.id).title, /Kopie/);
+});
+test('Duplikat erbt KEINE Verknüpfungen', () => {
+  // Mit denselben Vorgängern stünde es sofort im Konflikt — und niemand will
+  // beim Duplizieren einen roten Plan geschenkt bekommen.
+  const s = createStore(seed());
+  s.apply({ type: 'duplicateTask', id: 'b' });   // b hängt an a
+  assert.equal(s.state.deps.length, 1, 'die eine bestehende Verknüpfung, keine neue');
+});
+test('Duplizieren ist rückgängig zu machen', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'duplicateTask', id: 'a' });
+  s.undo();
+  assert.equal(s.state.tasks.length, 2);
+});
+test('unbekannter Vorgang wird abgelehnt', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'duplicateTask', id: 'weg' }).ok, false);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

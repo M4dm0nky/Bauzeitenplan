@@ -190,6 +190,100 @@ await check('9. Gewerk bekommt Schraffur', async () => {
 });
 await page.screenshot({ path: join(here, 'shots', 'edit-5-16gewerke.png') });
 
+console.log('\nSEITENPANEL');
+await page.locator('[data-view="gantt"]').click();
+await page.waitForTimeout(400);
+await check('Klick auf einen Balken öffnet das Panel', async () => {
+  await page.locator('.bz-bar').first().click();
+  await page.waitForTimeout(300);
+  return (await page.locator('#ins').isVisible()) ? true : 'Panel bleibt zu';
+});
+await check('Panel zeigt den angeklickten Vorgang', async () => {
+  const titel = await page.locator('.ins-title').textContent();
+  const bar = await page.locator('.bz-bar').first().locator('.bz-bar-t').textContent();
+  return titel.trim() === bar.trim() ? true : `Panel «${titel}» vs Balken «${bar}»`;
+});
+await check('Name im Panel ändern zieht in den Gantt durch', async () => {
+  const f = page.locator('.ins-f', { hasText: 'Name' }).locator('input').first();
+  await f.fill('Panel-Test');
+  await f.blur();
+  await page.waitForTimeout(400);
+  const n = await page.evaluate(() => [...document.querySelectorAll('.bz-lab-name')].map((x) => x.textContent));
+  return n.includes('Panel-Test') ? true : 'Gantt kennt den neuen Namen nicht';
+});
+await check('Panel zeigt Puffer bzw. kritischen Pfad', async () => {
+  const t = await page.locator('.ins-f', { hasText: 'Puffer' }).textContent();
+  return /Puffer|kritisch/i.test(t) ? true : 'kein Puffer im Panel: ' + t;
+});
+await check('Verknüpfungen stehen im Panel', async () =>
+  (await page.locator('.ins-deps').count()) === 1 ? true : 'kein Verknüpfungsblock');
+await page.screenshot({ path: join(here, 'shots', 'edit-6-panel.png') });
+
+console.log('\nRECHTSKLICK-MENÜ');
+await check('Rechtsklick auf ein Gewerk öffnet das Menü', async () => {
+  await page.locator('.bz-lab-group').first().click({ button: 'right' });
+  await page.waitForTimeout(300);
+  return (await page.locator('.mn').isVisible()) ? true : 'kein Menü';
+});
+await check('Menü bietet Umbenennen, Sortieren und Löschen', async () => {
+  const t = await page.locator('.mn').textContent();
+  for (const w of ['Umbenennen', 'Nach oben', 'Nach unten', 'Löschen', 'Bearbeiten']) {
+    if (!t.includes(w)) return 'fehlt: ' + w;
+  }
+  return true;
+});
+await page.screenshot({ path: join(here, 'shots', 'edit-7-menu.png') });
+await check('«Nach oben» beim obersten Gewerk ist ausgegraut', async () => {
+  const d = await page.locator('.mn-i', { hasText: 'Nach oben' }).isDisabled();
+  return d ? true : 'anklickbar, obwohl es nicht geht';
+});
+await check('Escape schließt das Menü', async () => {
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  return (await page.locator('.mn').count()) === 0 ? true : 'Menü bleibt offen';
+});
+await check('Umsortieren ändert die Reihenfolge, DIE FARBEN BLEIBEN', async () => {
+  const vorher = await page.evaluate(() => [...document.querySelectorAll('.bz-lab-group')]
+    .map((n) => ({ name: n.querySelector('.bz-lab-name').textContent,
+                   farbe: getComputedStyle(n.querySelector('.bz-dot')).backgroundColor })));
+  await page.locator('.bz-lab-group').nth(1).click({ button: 'right' });
+  await page.waitForTimeout(250);
+  await page.locator('.mn-i', { hasText: 'Nach oben' }).click();
+  await page.waitForTimeout(450);
+  const nachher = await page.evaluate(() => [...document.querySelectorAll('.bz-lab-group')]
+    .map((n) => ({ name: n.querySelector('.bz-lab-name').textContent,
+                   farbe: getComputedStyle(n.querySelector('.bz-dot')).backgroundColor })));
+  if (nachher[0].name !== vorher[1].name) return 'Reihenfolge nicht getauscht';
+  const f = (arr, name) => (arr.find((x) => x.name === name) || {}).farbe;
+  for (const v of vorher) {
+    if (f(nachher, v.name) !== v.farbe) return `«${v.name}» hat die Farbe gewechselt — der Farbplatz muss stabil bleiben`;
+  }
+  return true;
+});
+
+console.log('\nUMBENENNEN PER DOPPELKLICK');
+await check('Doppelklick auf einen Gewerknamen macht ein Eingabefeld', async () => {
+  await page.locator('.bz-lab-group .bz-lab-name').first().dblclick();
+  await page.waitForTimeout(250);
+  return (await page.locator('.bz-lab-edit').count()) === 1 ? true : 'kein Eingabefeld';
+});
+await check('Enter übernimmt den neuen Namen', async () => {
+  await page.locator('.bz-lab-edit').fill('Umbenannt');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  const n = await page.locator('.bz-lab-group .bz-lab-name').first().textContent();
+  return n === 'Umbenannt' ? true : 'Name: ' + n;
+});
+await check('Escape verwirft', async () => {
+  await page.locator('.bz-lab-group .bz-lab-name').first().dblclick();
+  await page.waitForTimeout(200);
+  await page.locator('.bz-lab-edit').fill('Verworfen');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(350);
+  const n = await page.locator('.bz-lab-group .bz-lab-name').first().textContent();
+  return n === 'Umbenannt' ? true : 'Name wurde doch geändert: ' + n;
+});
+
 console.log('\nEXPORT');
 await check('Export lädt eine JSON-Datei herunter', async () => {
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), page.locator('#export').click()]);

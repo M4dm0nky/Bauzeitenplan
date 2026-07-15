@@ -7,6 +7,7 @@
 
 import { computeSchedule, toMin } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
+import { runningAt, delaysAt } from './live.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import {
   ZOOM, clampZoom, zoomAnchored, nearestPreset, tickScale, ticksFor,
@@ -64,13 +65,21 @@ export function createGantt(root, opts = {}) {
   let S, T0, T1, NOW, TOTAL_MIN, SCHED, byId, gwById, CONFLICTS;
   const collapsed = new Set();
 
+  // «Jetzt» hängt an der Uhr, nicht an den Daten — deshalb eigene Funktion und
+  // ein eigener Tick. Vorher wurde NOW nur bei einer Datenänderung neu
+  // berechnet: die Linie stand nach dem Laden für immer still.
+  function readNow() {
+    const S0 = store.state;
+    if (S0.project.now) return toMin(S0.project.now);   // Demo-Übersteuerung
+    return toMin(local(nowInZone(S0.project.timezone)));
+  }
+
   function syncState() {
     S = store.state;
     T0 = toMin(S.project.start);
     T1 = toMin(S.project.end);
     TOTAL_MIN = Math.max(1, T1 - T0);
-    NOW = toMin(local(nowInZone(S.project.now ? null : S.project.timezone)));
-    if (S.project.now) NOW = toMin(S.project.now);   // Demo-Übersteuerung
+    NOW = readNow();
     byId = new Map(S.tasks.map((t) => [t.id, t]));
     gwById = new Map(S.gewerke.map((g) => [g.id, g]));
     try {
@@ -153,6 +162,8 @@ export function createGantt(root, opts = {}) {
 
   const x = (min) => (min - T0) * px;
   const rowById = new Map();
+  const labById = new Map();   // id → Zeile in der Seitenspalte
+  let selected = null;        // {kind:'task'|'gewerk', id}
 
   // ── Statisches Gerüst: Seitenspalte + Zeilenspuren ──────────────────────────
   function rebuild() {
@@ -160,6 +171,7 @@ export function createGantt(root, opts = {}) {
     side.replaceChildren();
     rowLayer.replaceChildren();
     rowById.clear();
+    labById.clear();
     canvas.style.height = totalH + 'px';
     side.style.height = totalH + 'px';
     depLayer.setAttribute('height', totalH);
@@ -183,6 +195,8 @@ export function createGantt(root, opts = {}) {
         const meta = el('span', 'bz-lab-meta', r.done + '/' + r.tasks.length);
         meta.title = r.done + ' von ' + r.tasks.length + ' Vorgängen fertig';
         lab.append(tw, dot, nm, meta);
+        lab.dataset.gewerk = r.g.id;
+        bindRow(lab, { kind: 'gewerk', id: r.g.id }, nm);
       } else if (r.kind === 'projekt') {
         lab.append(el('span', 'bz-lab-name', 'Zieltermin'));
       } else {
@@ -201,6 +215,9 @@ export function createGantt(root, opts = {}) {
           c.title = 'Auf dem kritischen Pfad — kein Puffer';
           lab.append(c);
         } else if (r.t.crew) lab.append(el('span', 'bz-lab-meta', r.t.crew + ' P'));
+        lab.dataset.task = r.t.id;
+        labById.set(r.t.id, lab);
+        bindRow(lab, { kind: 'task', id: r.t.id }, nm);
       }
       side.append(lab);
 
@@ -232,6 +249,7 @@ export function createGantt(root, opts = {}) {
           d.dataset.at = toMin(t.start);
           d.append(el('span', 'bz-ms-d'), el('span', 'bz-ms-t', t.title));
           bindTip(d, t);
+          bindMark(d, { kind: 'task', id: t.id });
           track.append(d);
           rowById.set('task:' + t.id, d);
         }
@@ -244,6 +262,7 @@ export function createGantt(root, opts = {}) {
           d.dataset.at = toMin(t.start);
           d.append(el('span', 'bz-ms-d'), el('span', 'bz-ms-t', t.title));
           bindTip(d, t);
+          bindMark(d, { kind: 'task', id: t.id });
           track.append(d);
           rowById.set('task:' + t.id, d);
         } else {
@@ -273,12 +292,91 @@ export function createGantt(root, opts = {}) {
             rowById.set('slack:' + t.id, f);
           }
           bindTip(b, t);
+          bindMark(b, { kind: 'task', id: t.id });
           track.append(b);
           rowById.set('task:' + t.id, b);
         }
       }
     }
     buildDeps();
+  }
+
+  // Klick wählt aus (→ Seitenpanel), Rechtsklick öffnet das Menü, Doppelklick
+  // benennt an Ort und Stelle um — der häufigste Handgriff soll nicht durchs
+  // Panel müssen.
+  // Balken/Raute: Klick wählt aus, Rechtsklick öffnet dasselbe Menü wie links.
+  function bindMark(node, sel) {
+    node.addEventListener('click', () => select(sel));
+    node.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      select(sel);
+      if (O.onContext) O.onContext(sel, e.clientX, e.clientY);
+    });
+  }
+
+  function bindRow(lab, sel, nameNode) {
+    lab.addEventListener('click', (e) => {
+      if (e.target.closest('.bz-tw')) return;   // Aufklappen ist keine Auswahl
+      select(sel);
+    });
+    lab.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      select(sel);
+      if (O.onContext) O.onContext(sel, e.clientX, e.clientY);
+    });
+    lab.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.bz-tw')) return;
+      e.preventDefault();
+      editName(sel, nameNode);
+    });
+  }
+
+  // Umbenennen direkt in der Zeile.
+  function editName(sel, nameNode) {
+    if (nameNode.querySelector('input')) return;
+    const old = nameNode.textContent;
+    const inp = el('input', 'bz-lab-edit');
+    inp.value = old;
+    nameNode.replaceChildren(inp);
+    inp.focus();
+    inp.select();
+    let done = false;
+    const finish = (save) => {
+      if (done) return;
+      done = true;
+      const v = inp.value.trim();
+      nameNode.textContent = old;   // erst zurück; der Neuaufbau setzt den Rest
+      if (!save || !v || v === old) return;
+      const cmd = sel.kind === 'gewerk'
+        ? { type: 'setGewerkField', id: sel.id, field: 'name', value: v }
+        : { type: 'setTaskField', id: sel.id, field: 'title', value: v };
+      const r = store.apply(cmd);
+      if (r.ok === false && O.onError) O.onError(r.error);
+    };
+    inp.addEventListener('blur', () => finish(true));
+    inp.addEventListener('keydown', (e) => {
+      e.stopPropagation();                       // ⌘Z gehört hier dem Feld
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+  }
+
+  function select(sel) {
+    selected = sel;
+    paintSelection();
+    if (O.onSelect) O.onSelect(sel);
+  }
+
+  function paintSelection() {
+    for (const n of root.querySelectorAll('.is-sel')) n.classList.remove('is-sel');
+    if (!selected) return;
+    const key = selected.kind === 'gewerk' ? 'group:' + selected.id : 'task:' + selected.id;
+    const bar = rowById.get(key);
+    if (bar) bar.classList.add('is-sel');
+    const lab = selected.kind === 'gewerk'
+      ? root.querySelector('.bz-lab[data-gewerk="' + selected.id + '"]')
+      : labById.get(selected.id);
+    if (lab) lab.classList.add('is-sel');
   }
 
   // ── Abhängigkeitspfeile ─────────────────────────────────────────────────────
@@ -529,7 +627,7 @@ export function createGantt(root, opts = {}) {
   }
 
   // ── Minimap ─────────────────────────────────────────────────────────────────
-  let mini, miniWin;
+  let mini, miniWin, miniNow;
   function buildMinimap() {
     mini = el('div', 'bz-mini-map');
     const strip = el('div', 'bz-mini-strip');
@@ -545,9 +643,9 @@ export function createGantt(root, opts = {}) {
       }
       strip.append(lane);
     }
-    const nowM = el('div', 'bz-mini-now');
-    nowM.style.left = (NOW - T0) / TOTAL_MIN * 100 + '%';
-    strip.append(nowM);
+    miniNow = el('div', 'bz-mini-now');
+    miniNow.style.left = (NOW - T0) / TOTAL_MIN * 100 + '%';
+    strip.append(miniNow);
     miniWin = el('div', 'bz-mini-win');
     strip.append(miniWin);
     mini.append(strip);
@@ -570,6 +668,65 @@ export function createGantt(root, opts = {}) {
     miniWin.style.left = (scroller.scrollLeft / total * 100) + '%';
     miniWin.style.width = Math.min(100, scroller.clientWidth / total * 100) + '%';
   }
+
+  // ── Jetzt-Linie & Live ──────────────────────────────────────────────────────
+  // Bewusst KEIN layout(): das baute jede Minute den DOM neu und risse dir die
+  // Auswahl unter den Fingern weg. Hier wird nur bewegt, was sich bewegt.
+  let live = false;
+  let tickTimer = null;
+
+  function paintNow() {
+    nowLine.style.left = x(NOW) + 'px';
+    nowLine.style.display = NOW >= T0 && NOW <= T1 ? '' : 'none';
+    if (miniNow) miniNow.style.left = ((NOW - T0) / TOTAL_MIN * 100) + '%';
+  }
+
+  function paintLive() {
+    const on = live;
+    root.classList.toggle('is-live', on);
+    const running = on ? runningAt(S.tasks, NOW) : new Set();
+    const late = new Map(on ? delaysAt(S.tasks, NOW).map((d) => [d.taskId, d]) : []);
+    for (const [key, node] of rowById) {
+      if (!key.startsWith('task:')) continue;
+      const id = key.slice(5);
+      node.classList.toggle('is-running', running.has(id));
+      const d = late.get(id);
+      node.classList.toggle('is-late', !!d);
+      if (d) node.dataset.late = d.message; else delete node.dataset.late;
+    }
+    for (const [id, node] of labById) {
+      const d = late.get(id);
+      node.classList.toggle('is-late', !!d);
+      node.classList.toggle('is-running', running.has(id));
+      if (d) node.title = '«' + d.title + '» ' + d.message;
+    }
+  }
+
+  function tickNow() {
+    const before = NOW;
+    NOW = readNow();
+    if (NOW === before && !live) return;
+    paintNow();
+    paintLive();
+    // «Immer folgen»: die Ansicht klebt an der Linie.
+    if (live && NOW >= T0 && NOW <= T1) centerOn(NOW, 0.4);
+    if (O.onTick) O.onTick(NOW);
+  }
+
+  function startTicking() {
+    stopTicking();
+    // 15 s statt 60: bei Stundenzoom wandert die Linie sichtbar, statt jede
+    // Minute zu springen. Kostet nichts — es wird eine Position gesetzt.
+    tickTimer = setInterval(tickNow, 15000);
+  }
+  function stopTicking() { clearInterval(tickTimer); tickTimer = null; }
+
+  // Ein vergessener Tab soll nicht tagelang rechnen. Beim Zurückkommen aufholen.
+  const onVis = () => {
+    if (document.hidden) stopTicking();
+    else { tickNow(); startTicking(); }
+  };
+  document.addEventListener('visibilitychange', onVis);
 
   // ── Navigation ──────────────────────────────────────────────────────────────
   function setZoom(next, anchorX) {
@@ -648,8 +805,19 @@ export function createGantt(root, opts = {}) {
     },
     relayout: layout,
     refresh,
+    select,
+    get selected() { return selected; },
+    setLive(on) {
+      live = !!on;
+      tickNow();
+      paintLive();
+      if (live) centerOn(NOW, 0.4);
+    },
+    get isLive() { return live; },
+    tickNow,
+    liveInfo: () => ({ now: NOW, running: runningAt(S.tasks, NOW), late: delaysAt(S.tasks, NOW) }),
     conflicts: () => [...CONFLICTS.values()],
-    destroy() { unsubscribe(); root.replaceChildren(); },
+    destroy() { unsubscribe(); stopTicking(); document.removeEventListener('visibilitychange', onVis); root.replaceChildren(); },
   };
 
   // Auf Änderungen reagieren. Scrollstand halten — sonst spränge der Plan bei
@@ -663,11 +831,23 @@ export function createGantt(root, opts = {}) {
     scroller.scrollTop = keepTop;
     renderAxis(true);
     updateLabels();
+    // Der Neuaufbau wirft das DOM weg — Auswahl und Live-Marken müssen zurück,
+    // sonst verliert man bei jeder Änderung die markierte Zeile.
+    if (selected && !store.state.tasks.some((t) => t.id === selected.id)
+        && !store.state.gewerke.some((g) => g.id === selected.id)) {
+      selected = null;
+      if (O.onSelect) O.onSelect(null);
+    }
+    paintSelection();
+    paintLive();
   }
   const unsubscribe = store.subscribe(refresh);
 
   rebuild();
   requestAnimationFrame(() => { layout(); centerOn(initialFocus()); renderAxis(true); updateLabels(); });
+  // Ticken läuft IMMER, nicht nur im Live-Modus: eine Linie, die falsch steht,
+  // ist schlimmer als keine.
+  startTicking();
   new ResizeObserver(() => { renderAxis(true); layoutMinimap(); }).observe(scroller);
 
   return api;

@@ -22,8 +22,8 @@
 <!-- Struktur (Geometrie + Verhalten) und Gestaltung sind getrennt.
      Der Theme-Link ist der einzige Umschaltpunkt: styles/themes/ enthält vier
      fertige Ebenen (console = aktiv). Siehe docs/themes.md. -->
-<link rel="stylesheet" href="styles/base.css?v=2">
-<link rel="stylesheet" href="styles/themes/console.css?v=2" id="theme-css" data-theme-name="console">
+<link rel="stylesheet" href="styles/base.css?v=3">
+<link rel="stylesheet" href="styles/themes/console.css?v=3" id="theme-css" data-theme-name="console">
 </head>
 <body>
 
@@ -65,6 +65,8 @@
       </div>
 
       <button class="btn btn-warn" id="resolve" hidden></button>
+      <button class="btn btn-live" id="live" aria-pressed="false" title="Zeitlinie läuft mit, Ansicht folgt">Live</button>
+      <div class="live-bar" id="live-bar" hidden></div>
 
       <div class="hd-right">
         <span class="save-state" id="save-state" data-state="saved">gesichert</span>
@@ -79,8 +81,11 @@
     <div class="legend" id="legend"></div>
   </header>
 
-  <div class="bz" id="bz" tabindex="-1"></div>
-  <div class="tb" id="tb" hidden></div>
+  <div class="work">
+    <div class="bz" id="bz" tabindex="-1"></div>
+    <div class="tb" id="tb" hidden></div>
+    <aside class="ins" id="ins" hidden></aside>
+  </div>
 
   <footer class="ft">
     <div class="ft-mini" id="mini"></div>
@@ -89,6 +94,7 @@
       <span><kbd>⇧</kbd>+Rad scrollt seitwärts</span>
       <span><kbd>H</kbd> springt zu heute</span>
       <span><kbd>⌘Z</kbd> rückgängig</span>
+      <span>Rechtsklick öffnet das Menü · Doppelklick benennt um</span>
       <span class="ft-crit"><i></i> kritischer Pfad — kein Puffer</span>
     </div>
   </footer>
@@ -98,6 +104,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="import-file" accept="application/json,.json" hidden>
 
-<script type="module" src="js/app.js?v=2"></script>
+<script type="module" src="js/app.js?v=3"></script>
 </body>
 </html>
