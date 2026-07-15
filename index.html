@@ -20,11 +20,10 @@
 </script>
 
 <!-- Struktur (Geometrie + Verhalten) und Gestaltung sind getrennt.
-     Der Theme-Link unten ist der einzige Umschaltpunkt: styles/themes/ enthält
-     vier fertige Ebenen (console = aktiv, dazu blueprint, studio, board).
-     Siehe docs/themes.md, wenn der Umschalter kommt. -->
-<link rel="stylesheet" href="styles/base.css?v=1">
-<link rel="stylesheet" href="styles/themes/console.css?v=1" id="theme-css" data-theme-name="console">
+     Der Theme-Link ist der einzige Umschaltpunkt: styles/themes/ enthält vier
+     fertige Ebenen (console = aktiv). Siehe docs/themes.md. -->
+<link rel="stylesheet" href="styles/base.css?v=2">
+<link rel="stylesheet" href="styles/themes/console.css?v=2" id="theme-css" data-theme-name="console">
 </head>
 <body>
 
@@ -38,37 +37,67 @@
       </div>
       <div class="kpis" id="kpis"></div>
     </div>
+
     <div class="hd-row hd-bar">
-      <div class="seg" role="group" aria-label="Zoomstufe">
-        <button data-z="monate">Monate</button>
-        <button data-z="wochen">Wochen</button>
-        <button data-z="tage">Tage</button>
-        <button data-z="stunden">Stunden</button>
+      <div class="seg" role="group" aria-label="Ansicht">
+        <button data-view="gantt">Gantt</button>
+        <button data-view="tabelle">Tabelle</button>
       </div>
-      <div class="seg seg-icon" role="group" aria-label="Zoom">
-        <button id="zout" aria-label="Herauszoomen">−</button>
-        <button id="zin" aria-label="Hineinzoomen">+</button>
+
+      <div class="hd-zoom">
+        <div class="seg" role="group" aria-label="Zoomstufe">
+          <button data-z="monate">Monate</button>
+          <button data-z="wochen">Wochen</button>
+          <button data-z="tage">Tage</button>
+          <button data-z="stunden">Stunden</button>
+        </div>
+        <div class="seg seg-icon" role="group" aria-label="Zoom">
+          <button id="zout" aria-label="Herauszoomen">−</button>
+          <button id="zin" aria-label="Hineinzoomen">+</button>
+        </div>
+        <button class="btn" id="now">Heute</button>
+        <button class="btn" id="fold">Alle zuklappen</button>
       </div>
-      <button class="btn" id="now">Heute</button>
-      <button class="btn" id="fold">Alle zuklappen</button>
-      <div class="legend" id="legend"></div>
+
+      <div class="seg seg-icon" role="group" aria-label="Rückgängig">
+        <button id="undo" title="Rückgängig (⌘Z)" aria-label="Rückgängig">↺</button>
+        <button id="redo" title="Wiederholen (⇧⌘Z)" aria-label="Wiederholen">↻</button>
+      </div>
+
+      <button class="btn btn-warn" id="resolve" hidden></button>
+
+      <div class="hd-right">
+        <span class="save-state" id="save-state" data-state="saved">gesichert</span>
+        <button class="btn" id="add-gewerk">+ Gewerk</button>
+        <button class="btn" id="export" title="Sicherung herunterladen">Export</button>
+        <button class="btn" id="import">Import</button>
+        <button class="btn" id="new-proj">Neu</button>
+        <button class="btn" id="proj-menu">Projekte</button>
+      </div>
     </div>
+
+    <div class="legend" id="legend"></div>
   </header>
 
   <div class="bz" id="bz" tabindex="-1"></div>
+  <div class="tb" id="tb" hidden></div>
 
   <footer class="ft">
     <div class="ft-mini" id="mini"></div>
     <div class="ft-keys">
       <span><kbd>⌘</kbd>+Rad zoomt am Cursor</span>
       <span><kbd>⇧</kbd>+Rad scrollt seitwärts</span>
-      <span><kbd>←</kbd><kbd>→</kbd> blättern</span>
       <span><kbd>H</kbd> springt zu heute</span>
+      <span><kbd>⌘Z</kbd> rückgängig</span>
       <span class="ft-crit"><i></i> kritischer Pfad — kein Puffer</span>
     </div>
   </footer>
 </div>
 
-<script type="module" src="js/app.js?v=1"></script>
+<div class="dlg" id="dlg" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<input type="file" id="import-file" accept="application/json,.json" hidden>
+
+<script type="module" src="js/app.js?v=2"></script>
 </body>
 </html>

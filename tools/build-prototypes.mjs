@@ -23,7 +23,7 @@ const strip = (code) =>
     .replace(/^export\s+\{[^}]*\};\s*$/gm, '')
     .replace(/^export\s+(const|function|class|let)\s/gm, '$1 ');
 
-const JS = ['data.js', 'schedule.js', 'timeaxis.js', 'gantt.js']
+const JS = ['schedule.js', 'timeaxis.js', 'palette.js', 'conflicts.js', 'store.js', 'templates.js', 'gantt.js']
   .map((f) => strip(read('js', f))).join('\n');
 
 // Zeilenmaße je Theme: Board will Plakat-Format, Console dichte Datenaufstellung.
@@ -38,6 +38,24 @@ export const VARIANTS = [
   { key: 'board',     name: 'Board',     title: 'Bauzeitenplan — Board',
     opts: { rowH: 40, groupH: 50, barH: 28, sideW: 268, initialZoom: 'tage' } },
 ];
+
+// Naives Aneinanderhängen kann Namen doppeln (zwei Module mit demselben
+// const). Als ES-Module fällt das nie auf, im Bündel ist es ein SyntaxError
+// und die Seite bleibt leer. Also hier prüfen, nicht erst im Browser.
+{
+  const dup = new Map();
+  for (const f of ['schedule.js', 'timeaxis.js', 'palette.js', 'conflicts.js', 'store.js', 'templates.js', 'gantt.js']) {
+    for (const m of read('js', f).matchAll(/^(?:export\s+)?(?:const|function|class|let)\s+([A-Za-z_$][\w$]*)/gm)) {
+      const prev = dup.get(m[1]);
+      if (prev && prev !== f) {
+        console.error(`\n  ✗ «${m[1]}» ist in ${prev} UND ${f} deklariert.`);
+        console.error('    Im Bündel gäbe das einen SyntaxError. Eines importiert es besser vom anderen.\n');
+        process.exit(1);
+      }
+      dup.set(m[1], f);
+    }
+  }
+}
 
 const shell = read('tools', 'prototype-shell.html');
 const base = read('styles', 'base.css');

@@ -136,7 +136,8 @@ body {
 .bz-bar.is-narrow .bz-bar-t { color: var(--ink-2); text-shadow: none; font-weight: 500; }
 .bz-prog { background: rgba(255,255,255,.34); border-radius: 5px 0 0 5px; }
 .bz-st-fertig { opacity: .5; }
-.bz-st-geplant { background: color-mix(in srgb, var(--gw) 42%, var(--card)); }
+.bz-st-geplant { background: transparent; box-shadow: inset 0 0 0 2px var(--gw), 0 0 0 2px var(--card); }
+.bz-conf-tag { background: var(--crit); color: #fff; font-size: 9px; }
 .bz-st-geplant .bz-bar-t { color: var(--ink); text-shadow: none; }
 .bz-bar:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .bz-bar.is-crit { box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--crit); }
@@ -168,14 +169,14 @@ body {
 /* ── Bänder ───────────────────────────────────────────────────────────────── */
 .bz-we { background: color-mix(in srgb, var(--line) 42%, transparent); }
 .bz-phase-aufbau { background: color-mix(in srgb, var(--brand) 4%, transparent); }
-.bz-phase-show { background: color-mix(in srgb, var(--gw-licht) 9%, transparent); }
+.bz-phase-show { background: color-mix(in srgb, var(--gw-2) 9%, transparent); }
 .bz-phase { border-left: 1px solid var(--line-2); }
 .bz-axis-phase { border-bottom: 1px solid var(--line); }
 .bz-ph { border-left: 1px solid var(--line-2); }
 .bz-ph-t { font-size: 9px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; color: var(--ink-3); padding: 0 10px; }
 .bz-ph-aufbau { background: color-mix(in srgb, var(--brand) 9%, transparent); }
 .bz-ph-aufbau .bz-ph-t { color: var(--brand); }
-.bz-ph-show { background: color-mix(in srgb, var(--gw-licht) 16%, transparent); }
+.bz-ph-show { background: color-mix(in srgb, var(--gw-2) 16%, transparent); }
 .bz-corner-cap { font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); padding-left: 10px; }
 
 /* ── Pfeile ───────────────────────────────────────────────────────────────── */

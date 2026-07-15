@@ -4,33 +4,49 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* Das Attribut hidden setzt display:none nur über das Browser-Stylesheet —
+   jede eigene display-Regel (.dlg{display:grid}, .bz{display:flex}) schlägt es.
+   Der Dialog blieb dadurch unsichtbar, lag aber weiter über allem und
+   schluckte jeden Klick. */
+[hidden] { display: none !important; }
+
+/* Acht Farbtöne auf nummerierten Plätzen. Reihenfolge und Zuordnung stammen aus
+   tools/farbsuche.mjs (720 Anordnungen durchgerechnet) und maximieren die
+   Unterscheidbarkeit BENACHBARTER Zeilen bei Farbenblindheit. Nicht per Hand
+   ändern — siehe docs/entscheidungen.md. Ab Platz 9 wiederholen sich die Töne
+   und werden per Schraffur unterschieden (js/palette.js). */
 :root {
-  --gw-buehne:   #eb6834;
-  --gw-rigging:  #1baf7a;
-  --gw-licht:    #eda100;
-  --gw-ton:      #e87ba4;
-  --gw-video:    #2a78d6;
-  --gw-pyro:     #e34948;
-  --gw-catering: #4a3aa7;
-  --gw-sanitaer: #008300;
+  --gw-0: #eb6834;  /* orange  */
+  --gw-1: #1baf7a;  /* aqua    */
+  --gw-2: #eda100;  /* gelb    */
+  --gw-3: #e87ba4;  /* magenta */
+  --gw-4: #2a78d6;  /* blau    */
+  --gw-5: #e34948;  /* rot     */
+  --gw-6: #4a3aa7;  /* violett */
+  --gw-7: #008300;  /* grün    */
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
-    --gw-buehne:   #d95926;
-    --gw-rigging:  #199e70;
-    --gw-licht:    #c98500;
-    --gw-ton:      #d55181;
-    --gw-video:    #3987e5;
-    --gw-pyro:     #e66767;
-    --gw-catering: #9085e9;
-    --gw-sanitaer: #008300;
+    --gw-0: #d95926; --gw-1: #199e70; --gw-2: #c98500; --gw-3: #d55181;
+    --gw-4: #3987e5; --gw-5: #e66767; --gw-6: #9085e9; --gw-7: #008300;
   }
 }
 :root[data-theme="dark"] {
-  --gw-buehne:   #d95926; --gw-rigging: #199e70; --gw-licht: #c98500;
-  --gw-ton:      #d55181; --gw-video:   #3987e5; --gw-pyro:  #e66767;
-  --gw-catering: #9085e9; --gw-sanitaer:#008300;
+  --gw-0: #d95926; --gw-1: #199e70; --gw-2: #c98500; --gw-3: #d55181;
+  --gw-4: #3987e5; --gw-5: #e66767; --gw-6: #9085e9; --gw-7: #008300;
 }
+
+/* Zweiter Identitätskanal für Gewerk 9–16: 45°-Schraffur über dem Farbton.
+   Liegt auf ::after, damit die Füllung des Balkens (Fortschritt, Status)
+   unberührt bleibt. */
+.bz-bar[data-tex], .bz-sum[data-tex], .bz-mini-b[data-tex], .bz-dot[data-tex] { position: relative; }
+.bz-bar[data-tex]::after, .bz-sum[data-tex]::after, .bz-mini-b[data-tex]::after, .bz-dot[data-tex]::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  background: repeating-linear-gradient(45deg,
+    rgba(255,255,255,.55) 0 2px, transparent 2px 5px);
+  border-radius: inherit;
+}
+.bz-dot[data-tex]::after { background: repeating-linear-gradient(45deg, rgba(255,255,255,.7) 0 1px, transparent 1px 3px); }
 
 body { margin: 0; }
 
@@ -112,6 +128,15 @@ body { margin: 0; }
 .bz-bar.lab-hide .bz-bar-t { display: none; }
 .bz-prog { position: absolute; inset: 0 auto 0 0; z-index: 0; }
 
+/* Konflikt: Balken verletzt eine Abhängigkeit. Nie über Farbe allein — das
+   Ausrufezeichen in der Seitenspalte trägt dieselbe Aussage. */
+.bz-bar.is-conflict { animation: bz-pulse 1.6s ease-in-out infinite; }
+@keyframes bz-pulse { 50% { opacity: .72; } }
+.bz-conf-tag {
+  flex: none; display: grid; place-items: center;
+  width: 14px; height: 14px; border-radius: 50%; font-weight: 700; cursor: help;
+}
+
 /* Puffer als Geisterspur hinter dem Balken */
 .bz-slack { position: absolute; top: 50%; transform: translateY(-50%); height: var(--bar-h); pointer-events: none; }
 
@@ -184,4 +209,69 @@ body { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
+}
+
+/* ── Bearbeiten: Struktur ─────────────────────────────────────────────────────
+   Nur Geometrie. Farben und Schrift kommen aus der Theme-Ebene.               */
+
+.hd-zoom { display: flex; align-items: center; gap: 8px; }
+.hd-right { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.save-state { white-space: nowrap; }
+
+/* ── Tabellen-Editor ────────────────────────────────────────────────────────── */
+.tb { flex: 1; min-height: 0; overflow: auto; }
+.tb-t { width: 100%; border-collapse: collapse; }
+.tb-t th { position: sticky; top: 0; z-index: 2; text-align: left; white-space: nowrap; }
+.tb-t th, .tb-t td { padding: 0; }
+.tb-r input, .tb-r select {
+  width: 100%; border: 0; background: none; font: inherit; color: inherit;
+  padding: 4px 6px; min-width: 0;
+}
+.tb-r input:focus, .tb-r select:focus { outline: 2px solid var(--gw, currentColor); outline-offset: -2px; }
+.tb-r input[type="number"] { text-align: right; font-variant-numeric: tabular-nums; }
+.tb-r input[type="datetime-local"] { font-variant-numeric: tabular-nums; }
+.c-gw { width: 130px; }
+.c-title { width: auto; min-width: 220px; }
+.c-start, .c-end { width: 175px; }
+.c-dur { width: 82px; }
+.c-crew { width: 62px; }
+.c-st { width: 96px; }
+.c-act { width: 56px; white-space: nowrap; }
+.tb-group td { padding: 8px 8px 5px; }
+.tb-group .bz-dot { display: inline-block; vertical-align: middle; margin-right: 6px; }
+.tb-gname { vertical-align: middle; }
+.tb-gcount { margin-left: 8px; }
+.tb-add { margin-left: 10px; border: 0; background: none; font: inherit; cursor: pointer; padding: 0; }
+.tb-empty td { padding: 5px 8px 5px 30px; }
+.tb-fixed { padding: 4px 6px; display: inline-block; }
+.tb-ico { border: 0; background: none; font: inherit; cursor: pointer; padding: 2px 5px; line-height: 1; }
+.tb-conf { display: block; padding: 0 6px 4px; }
+.tb-dur.is-bad { outline: 2px solid var(--crit, red); outline-offset: -2px; }
+
+/* ── Dialog ─────────────────────────────────────────────────────────────────── */
+.dlg { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; overflow: auto; }
+.dlg-box { width: min(620px, 100%); max-height: 90vh; overflow: auto; }
+.dlg-h { margin: 0; }
+.dlg-h3 { margin: 18px 0 8px; }
+.dlg-sub { margin: 6px 0 0; }
+.dlg-list { display: flex; flex-direction: column; gap: 4px; }
+.dlg-row { display: flex; gap: 4px; }
+.dlg-open { flex: 1; text-align: left; border: 0; font: inherit; cursor: pointer; padding: 8px 10px; display: block; }
+.dlg-open-n { display: block; }
+.dlg-open-m { display: block; }
+.dlg-del { border: 0; font: inherit; cursor: pointer; padding: 0 12px; }
+.dlg-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dlg-f { display: flex; flex-direction: column; gap: 3px; }
+.dlg-f:first-child { grid-column: 1 / -1; }
+.dlg-f input { font: inherit; padding: 6px 8px; }
+.dlg-tpl { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; margin-top: 12px; }
+.dlg-t { text-align: left; font: inherit; cursor: pointer; padding: 9px 11px; }
+.dlg-t-n { display: block; }
+.dlg-t-d { display: block; }
+.dlg-act { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+
+/* ── Hinweis ────────────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  z-index: 60; padding: 9px 15px; max-width: min(560px, 90vw);
 }

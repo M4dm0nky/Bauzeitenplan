@@ -48,8 +48,18 @@
 <script type="module">
 {{JS}}
 
+// Die Engine ist store-getrieben. Für die Entwurfs-Vorschau reicht ein Store
+// mit der Festival-Vorlage — dieselben Daten wie im abgenommenen Stand.
 const root = document.getElementById('bz');
-const g = createGantt(root, {{OPTS}});
+const plan = planFromTemplate('festival', {
+  name: 'Nordlicht Festival 2026',
+  venue: 'Messegelände Hannover · Freigelände Nord',
+  loadIn: '2026-07-13T06:00',
+});
+plan.project.now = '2026-07-15T11:20';   // fester Zeitpunkt: Entwürfe bleiben vergleichbar
+const store = createStore(plan);
+const g = createGantt(root, { ...{{OPTS}}, store });
+const GEWERKE = [...store.state.gewerke].sort((a, b) => a.sort - b.sort);
 
 // ── Zoom-Segmente ───────────────────────────────────────────────────────────
 const segs = [...document.querySelectorAll('[data-z]')];
@@ -88,6 +98,7 @@ document.getElementById('kpis').innerHTML = kpis
 
 // ── Legende: Identität nie über Farbe allein ────────────────────────────────
 document.getElementById('legend').innerHTML = GEWERKE
-  .map(x => '<span class="legend-i"><span class="bz-dot" style="--gw:var(--gw-' + x.id + ')"></span>' + x.name + '</span>')
+  .map(x => '<span class="legend-i"><span class="bz-dot" style="--gw:var(--gw-' + (x.slot % 8) + ')"'
+    + (x.slot >= 8 ? ' data-tex="1"' : '') + '></span>' + x.name + '</span>')
   .join('');
 </script>

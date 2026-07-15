@@ -5,17 +5,33 @@
 // Das Raster im Canvas ist ein CSS-Gradient (kostenlos, beliebig breit); nur die
 // Beschriftungen im Viewport landen im DOM und werden beim Scrollen recycelt.
 
-import { PROJECT, PHASES, GEWERKE, TASKS, DEPS } from './data.js';
 import { computeSchedule, toMin } from './schedule.js';
+import { findConflicts, local } from './conflicts.js';
+import { gewerkVar, gewerkTexture } from './palette.js';
 import {
   ZOOM, clampZoom, zoomAnchored, nearestPreset, tickScale, ticksFor,
   weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat,
 } from './timeaxis.js';
 
-const T0 = toMin(PROJECT.start);
-const T1 = toMin(PROJECT.end);
-const NOW = toMin(PROJECT.now);
-const TOTAL_MIN = T1 - T0;
+// T0/T1/NOW/TOTAL_MIN hingen früher als Modul-Konstanten an einem festen
+// Projekt — beim Wechsel wäre die Zeitachse auf dem alten stehengeblieben.
+// Sie leben jetzt in der Instanz und werden bei jeder Änderung neu bestimmt.
+
+// «Jetzt» in der Projekt-Zeitzone. Ohne die Umrechnung stünde die Linie für
+// jemanden außerhalb dieser Zone um den Zonenversatz falsch.
+function nowInZone(tz) {
+  const d = new Date();
+  if (!tz) return d;
+  try {
+    const p = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(d);                       // «2026-07-15 11:20»
+    return new Date(p.replace(' ', 'T'));
+  } catch {
+    return d;                           // unbekannte Zone → lokale Zeit
+  }
+}
 
 // Ab hier ist Puffer keine Disposition mehr, sondern Rauschen (3 Tage).
 const SLACK_MAX_MIN = 72 * 60;
@@ -41,10 +57,30 @@ export function createGantt(root, opts = {}) {
     ...opts,
   };
 
-  const SCHED = computeSchedule(TASKS, DEPS);
-  const byId = new Map(TASKS.map((t) => [t.id, t]));
-  const gwById = new Map(GEWERKE.map((g) => [g.id, g]));
+  const store = O.store;
+  if (!store) throw new Error('createGantt braucht einen store.');
+
+  // Alles Abgeleitete lebt hier und wird bei jeder Änderung neu bestimmt.
+  let S, T0, T1, NOW, TOTAL_MIN, SCHED, byId, gwById, CONFLICTS;
   const collapsed = new Set();
+
+  function syncState() {
+    S = store.state;
+    T0 = toMin(S.project.start);
+    T1 = toMin(S.project.end);
+    TOTAL_MIN = Math.max(1, T1 - T0);
+    NOW = toMin(local(nowInZone(S.project.now ? null : S.project.timezone)));
+    if (S.project.now) NOW = toMin(S.project.now);   // Demo-Übersteuerung
+    byId = new Map(S.tasks.map((t) => [t.id, t]));
+    gwById = new Map(S.gewerke.map((g) => [g.id, g]));
+    try {
+      SCHED = computeSchedule(S.tasks, S.deps);
+    } catch {
+      SCHED = new Map();   // Ring (nur aus Import möglich) — Konfliktliste erklärt es
+    }
+    CONFLICTS = new Map(findConflicts(S).map((c) => [c.taskId, c]));
+  }
+  syncState();
 
   let px = ZOOM[O.initialZoom].px;
 
@@ -90,8 +126,8 @@ export function createGantt(root, opts = {}) {
   function buildRows() {
     rows = [];
     let y = 0;
-    for (const g of GEWERKE) {
-      const tasks = TASKS.filter((t) => t.gewerk === g.id);
+    for (const g of [...S.gewerke].sort((a, b) => a.sort - b.sort)) {
+      const tasks = S.tasks.filter((t) => t.gewerk === g.id);
       if (!tasks.length) continue;
       const spans = tasks.filter((t) => !t.milestone);
       const gStart = Math.min(...tasks.map((t) => toMin(t.start)));
@@ -107,7 +143,7 @@ export function createGantt(root, opts = {}) {
       }
     }
     // Projekt-Meilensteine (gewerk 'projekt') als eigene Zeile ganz unten
-    const proj = TASKS.filter((t) => t.gewerk === 'projekt');
+    const proj = S.tasks.filter((t) => t.gewerk === 'projekt');
     if (proj.length) {
       rows.push({ kind: 'projekt', tasks: proj, y, h: O.groupH });
       y += O.groupH;
@@ -135,13 +171,14 @@ export function createGantt(root, opts = {}) {
 
       if (r.kind === 'group') {
         lab.classList.toggle('is-collapsed', collapsed.has(r.g.id));
-        lab.style.setProperty('--gw', 'var(--gw-' + r.g.id + ')');
+        lab.style.setProperty('--gw', gewerkVar(r.g.slot));
         const tw = el('button', 'bz-tw');
         tw.setAttribute('aria-expanded', String(!collapsed.has(r.g.id)));
         tw.setAttribute('aria-label', (collapsed.has(r.g.id) ? 'Aufklappen: ' : 'Zuklappen: ') + r.g.name);
         tw.append(el('span', 'bz-tw-i'));
         tw.onclick = () => { collapsed.has(r.g.id) ? collapsed.delete(r.g.id) : collapsed.add(r.g.id); rebuild(); layout(); };
         const dot = el('span', 'bz-dot');
+        if (gewerkTexture(r.g.slot)) dot.dataset.tex = '1';
         const nm = el('span', 'bz-lab-name', r.g.name);
         const meta = el('span', 'bz-lab-meta', r.done + '/' + r.tasks.length);
         meta.title = r.done + ' von ' + r.tasks.length + ' Vorgängen fertig';
@@ -149,13 +186,21 @@ export function createGantt(root, opts = {}) {
       } else if (r.kind === 'projekt') {
         lab.append(el('span', 'bz-lab-name', 'Zieltermin'));
       } else {
-        lab.style.setProperty('--gw', 'var(--gw-' + r.g.id + ')');
-        const s = SCHED.get(r.t.id);
+        lab.style.setProperty('--gw', gewerkVar(r.g.slot));
+        const s = SCHED.get(r.t.id) || { critical: false, float: 0 };
         const nm = el('span', 'bz-lab-name', r.t.title);
         nm.title = r.t.title;
         lab.append(nm);
-        if (s.critical) { const c = el('span', 'bz-crit-tag', 'KRIT'); c.title = 'Auf dem kritischen Pfad — kein Puffer'; lab.append(c); }
-        else if (r.t.crew) lab.append(el('span', 'bz-lab-meta', r.t.crew + ' P'));
+        const conf = CONFLICTS.get(r.t.id);
+        if (conf) {
+          const c = el('span', 'bz-conf-tag', '!');
+          c.title = '«' + r.t.title + '» ' + conf.message;
+          lab.append(c);
+        } else if (s.critical) {
+          const c = el('span', 'bz-crit-tag', 'KRIT');
+          c.title = 'Auf dem kritischen Pfad — kein Puffer';
+          lab.append(c);
+        } else if (r.t.crew) lab.append(el('span', 'bz-lab-meta', r.t.crew + ' P'));
       }
       side.append(lab);
 
@@ -166,7 +211,8 @@ export function createGantt(root, opts = {}) {
 
       if (r.kind === 'group') {
         const sum = el('div', 'bz-sum');
-        sum.style.setProperty('--gw', 'var(--gw-' + r.g.id + ')');
+        sum.style.setProperty('--gw', gewerkVar(r.g.slot));
+        if (gewerkTexture(r.g.slot)) sum.dataset.tex = '1';
         sum.dataset.from = r.gStart; sum.dataset.to = r.gEnd;
         sum.append(el('span', 'bz-sum-cap bz-sum-cap-l'), el('span', 'bz-sum-cap bz-sum-cap-r'));
         track.append(sum);
@@ -190,10 +236,10 @@ export function createGantt(root, opts = {}) {
           rowById.set('task:' + t.id, d);
         }
       } else {
-        const t = r.t, s = SCHED.get(t.id);
+        const t = r.t, s = SCHED.get(t.id) || { critical: false, float: 0 };
         if (t.milestone) {
           const d = el('div', 'bz-ms');
-          d.style.setProperty('--gw', 'var(--gw-' + r.g.id + ')');
+          d.style.setProperty('--gw', gewerkVar(r.g.slot));
           d.classList.toggle('is-crit', s.critical);
           d.dataset.at = toMin(t.start);
           d.append(el('span', 'bz-ms-d'), el('span', 'bz-ms-t', t.title));
@@ -202,8 +248,10 @@ export function createGantt(root, opts = {}) {
           rowById.set('task:' + t.id, d);
         } else {
           const b = el('div', 'bz-bar bz-st-' + t.status);
-          b.style.setProperty('--gw', 'var(--gw-' + r.g.id + ')');
+          b.style.setProperty('--gw', gewerkVar(r.g.slot));
+          if (gewerkTexture(r.g.slot)) b.dataset.tex = '1';
           b.classList.toggle('is-crit', s.critical);
+          b.classList.toggle('is-conflict', CONFLICTS.has(t.id));
           b.dataset.from = toMin(t.start); b.dataset.to = toMin(t.end);
           b.tabIndex = 0;
           if (t.progress > 0 && t.progress < 100) {
@@ -248,7 +296,7 @@ export function createGantt(root, opts = {}) {
     }
     depLayer.append(defs);
 
-    for (const d of DEPS) {
+    for (const d of S.deps) {
       const a = byId.get(d.from), b = byId.get(d.to);
       if (!a || !b) continue;
       // Bei zugeklappter Gruppe auf den Sammelbalken umlenken
@@ -380,7 +428,7 @@ export function createGantt(root, opts = {}) {
   function layoutBands() {
     bandLayer.replaceChildren();
     axisPhase.replaceChildren();
-    for (const ph of PHASES) {
+    for (const ph of (S.phases || [])) {
       const a = x(toMin(ph.start)), b = x(toMin(ph.end));
       // Tönung auf dem Canvas …
       const n = el('div', 'bz-phase bz-phase-' + ph.name.toLowerCase());
@@ -395,7 +443,7 @@ export function createGantt(root, opts = {}) {
     }
     // Wochenenden nur zeigen, wenn ein Tag überhaupt breit genug ist
     if (1440 * px >= 26) {
-      for (const w of weekendBands(new Date(PROJECT.start), new Date(PROJECT.end))) {
+      for (const w of weekendBands(new Date(S.project.start), new Date(S.project.end))) {
         const a = x(Math.round(w.from.getTime() / 60000));
         const b = x(Math.round(w.to.getTime() / 60000));
         const n = el('div', 'bz-we');
@@ -439,7 +487,7 @@ export function createGantt(root, opts = {}) {
 
   // ── Tooltip ─────────────────────────────────────────────────────────────────
   function bindTip(node, t) {
-    const s = SCHED.get(t.id);
+    const s = SCHED.get(t.id) || { critical: false, float: 0 };
     const g = gwById.get(t.gewerk);
     const show = () => {
       tip.replaceChildren();
@@ -457,6 +505,8 @@ export function createGantt(root, opts = {}) {
         add('Dauer', fmtDur(toMin(t.end) - toMin(t.start)));
       }
       if (t.crew) add('Crew', t.crew + ' Personen');
+      const conf = CONFLICTS.get(t.id);
+      if (conf) add('Konflikt', conf.message);
       add('Puffer', s.critical ? 'kritischer Pfad' : fmtFloat(s.float));
       if (!t.milestone && t.progress > 0) add('Fortschritt', t.progress + ' %');
       tip.append(dl);
@@ -483,10 +533,10 @@ export function createGantt(root, opts = {}) {
   function buildMinimap() {
     mini = el('div', 'bz-mini-map');
     const strip = el('div', 'bz-mini-strip');
-    for (const g of GEWERKE) {
+    for (const g of [...S.gewerke].sort((a, b) => a.sort - b.sort)) {
       const lane = el('div', 'bz-mini-lane');
-      lane.style.setProperty('--gw', 'var(--gw-' + g.id + ')');
-      for (const t of TASKS.filter((x) => x.gewerk === g.id && !x.milestone)) {
+      lane.style.setProperty('--gw', gewerkVar(g.slot));
+      for (const t of S.tasks.filter((x) => x.gewerk === g.id && !x.milestone)) {
         const m = el('div', 'bz-mini-b');
         const a = (toMin(t.start) - T0) / TOTAL_MIN * 100;
         const b = (toMin(t.end) - T0) / TOTAL_MIN * 100;
@@ -534,6 +584,22 @@ export function createGantt(root, opts = {}) {
     scroller.scrollLeft = x(min) - scroller.clientWidth * ratio;
   }
 
+  // Wohin beim Öffnen? «Jetzt» ist die naheliegende Antwort, aber die falsche,
+  // wenn der Aufbau erst in zwei Wochen beginnt: dann liegt die Jetzt-Linie
+  // mitten in der Planungsphase und der Plan öffnet auf einem leeren Bild.
+  // Also: Jetzt nur, wenn dort auch etwas los ist — sonst der Aufbaubeginn.
+  function initialFocus() {
+    const aufbau = (S.phases || []).find((p) => /aufbau|load.?in/i.test(p.name));
+    const spans = S.tasks.filter((t) => !t.milestone).map((t) => toMin(t.start));
+    const anchor = aufbau ? toMin(aufbau.start) : (spans.length ? Math.min(...spans) : NOW);
+    // KEINE «läuft gerade etwas?»-Prüfung: ein 29-tägiger Planungsbalken läuft
+    // zwar, ist aber kein Geschehen — die Ansicht öffnete dann mit einem
+    // einzigen Balken im Bild. Es zählt allein, ob der Aufbau noch bevorsteht.
+    if (NOW < anchor) return anchor;
+    if (NOW > T1) return anchor;          // Projekt liegt ganz in der Vergangenheit
+    return NOW;
+  }
+
   scroller.addEventListener('scroll', () => {
     requestAnimationFrame(() => { renderAxis(); layoutMinimap(); updateLabels(); });
   }, { passive: true });
@@ -569,25 +635,41 @@ export function createGantt(root, opts = {}) {
     zoomOut() { setZoom(px / 1.6); },
     goToNow() { centerOn(NOW); },
     goTo(iso) { centerOn(toMin(iso)); },
-    collapseAll() { for (const g of GEWERKE) collapsed.add(g.id); rebuild(); layout(); },
+    collapseAll() { for (const g of S.gewerke) collapsed.add(g.id); rebuild(); layout(); },
     expandAll() { collapsed.clear(); rebuild(); layout(); },
     minimapNode: O.minimap ? buildMinimap() : null,
     get zoomName() { return nearestPreset(px); },
     stats() {
-      const crit = TASKS.filter((t) => SCHED.get(t.id).critical).length;
-      const done = TASKS.filter((t) => t.status === 'fertig').length;
-      const run = TASKS.filter((t) => t.status === 'laeuft').length;
-      const crew = TASKS.filter((t) => t.status === 'laeuft').reduce((a, t) => a + (t.crew || 0), 0);
-      return { total: TASKS.length, crit, done, run, crew, gewerke: GEWERKE.length };
+      const crit = S.tasks.filter((t) => (SCHED.get(t.id) || {}).critical).length;
+      const done = S.tasks.filter((t) => t.status === 'fertig').length;
+      const run = S.tasks.filter((t) => t.status === 'laeuft').length;
+      const crew = S.tasks.filter((t) => t.status === 'laeuft').reduce((a, t) => a + (t.crew || 0), 0);
+      return { total: S.tasks.length, crit, done, run, crew, gewerke: S.gewerke.length, conflicts: CONFLICTS.size };
     },
     relayout: layout,
+    refresh,
+    conflicts: () => [...CONFLICTS.values()],
+    destroy() { unsubscribe(); root.replaceChildren(); },
   };
 
+  // Auf Änderungen reagieren. Scrollstand halten — sonst spränge der Plan bei
+  // jedem Tastendruck an den Anfang zurück.
+  function refresh() {
+    const keepLeft = scroller.scrollLeft, keepTop = scroller.scrollTop;
+    syncState();
+    rebuild();
+    layout();
+    scroller.scrollLeft = keepLeft;
+    scroller.scrollTop = keepTop;
+    renderAxis(true);
+    updateLabels();
+  }
+  const unsubscribe = store.subscribe(refresh);
+
   rebuild();
-  requestAnimationFrame(() => { layout(); centerOn(NOW); renderAxis(true); updateLabels(); });
+  requestAnimationFrame(() => { layout(); centerOn(initialFocus()); renderAxis(true); updateLabels(); });
   new ResizeObserver(() => { renderAxis(true); layoutMinimap(); }).observe(scroller);
 
   return api;
 }
 
-export { GEWERKE, PROJECT, TASKS };

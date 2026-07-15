@@ -115,7 +115,9 @@ body {
 .bz-bar.is-narrow .bz-bar-t { color: var(--ink); text-shadow: none; }
 .bz-prog { background: rgba(0,0,0,.22); }
 .bz-st-fertig { opacity: .32; }
-.bz-st-geplant { background: repeating-linear-gradient(135deg, var(--gw) 0 7px, color-mix(in srgb, var(--gw) 45%, #fff) 7px 14px); }
+.bz-st-geplant { background: transparent; box-shadow: inset 0 0 0 3px var(--gw), 0 0 0 2px var(--panel); }
+.bz-st-geplant .bz-bar-t { color: var(--ink); text-shadow: none; }
+.bz-conf-tag { background: var(--crit); color: #fff; font-size: 10px; }
 .bz-bar:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .bz-bar.is-crit { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--crit), 2px 2px 0 4px rgba(0,0,0,.12); }
 
@@ -140,13 +142,13 @@ body {
 /* ── Bänder ───────────────────────────────────────────────────────────────── */
 .bz-we { background: var(--panel2); }
 .bz-phase { border-left: 2px solid var(--line); }
-.bz-phase-show { background: color-mix(in srgb, var(--gw-licht) 12%, transparent); }
+.bz-phase-show { background: color-mix(in srgb, var(--gw-2) 12%, transparent); }
 .bz-axis-phase { border-bottom: 2px solid var(--line-2); background: var(--ink); }
 .bz-ph { border-left: 2px solid rgba(255,255,255,.25); }
 .bz-ph-t { font-size: 9px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: rgba(255,255,255,.65); padding: 0 10px; }
 .bz-ph-aufbau { background: rgba(255,255,255,.14); }
 .bz-ph-aufbau .bz-ph-t { color: #fff; }
-.bz-ph-show { background: var(--gw-licht); }
+.bz-ph-show { background: var(--gw-2); }
 .bz-ph-show .bz-ph-t { color: var(--ink); }
 .bz-corner-cap { font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); padding-left: 10px; }
 

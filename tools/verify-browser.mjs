@@ -89,6 +89,16 @@ for (const pg of PAGES) {
   await page.goto(pg.url, { waitUntil: 'load', timeout: 30000 });
   await page.waitForTimeout(argBase ? 1600 : 700);
 
+  // Die App startet ohne Projekt mit dem Anlege-Dialog. Für die Darstellungs-
+  // prüfungen brauchen wir Inhalt: Festival-Vorlage anlegen. Die Prototypen
+  // bringen ihre Daten selbst mit.
+  if (pg.app && await page.locator('#dlg').isVisible()) {
+    await page.fill('.dlg-f:first-child input', 'Prüfprojekt');
+    await page.locator('.dlg-t[data-k="festival"]').click();
+    await page.locator('.dlg-act .btn-p').click();
+    await page.waitForTimeout(900);
+  }
+
   // ── Verhaltensprüfungen ───────────────────────────────────────────────────
   const check = async (name, fn) => {
     const r = await fn();
@@ -120,6 +130,13 @@ for (const pg of PAGES) {
     const n = await page.locator('.bz-bar').count();
     return n > 20 ? true : `nur ${n} Balken`;
   });
+  await check('beim Öffnen sind Balken auch WIRKLICH ZU SEHEN', async () => {
+    // Im DOM zu stehen reicht nicht: liegt der Aufbau zwei Wochen in der
+    // Zukunft, sprang die Ansicht auf «jetzt» und der Plan öffnete leer.
+    const vis = await page.locator('.bz-bar').evaluateAll((ns, w) =>
+      ns.filter((n) => { const r = n.getBoundingClientRect(); return r.width > 0 && r.right > 240 && r.left < w; }).length, 1600);
+    return vis >= 3 ? true : `nur ${vis} Balken im Sichtfeld — der Plan öffnet fast leer`;
+  });
   await check('Meilensteine gerendert', async () => {
     const n = await page.locator('.bz-ms').count();
     return n >= 6 ? true : `nur ${n} Meilensteine`;
@@ -139,7 +156,13 @@ for (const pg of PAGES) {
     const sl = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
     return sl > 100 ? true : `scrollLeft = ${sl}`;
   });
-  await check('Jetzt-Linie im sichtbaren Bereich', async () => {
+  // Ab hier auf «heute» springen: die Erstansicht steht bewusst beim Aufbau,
+  // nicht bei jetzt (siehe initialFocus in gantt.js). Die folgenden Prüfungen
+  // gelten der Jetzt-Linie selbst, also erst dorthin fahren.
+  await page.click('#now');
+  await page.waitForTimeout(350);
+
+  await check('«Heute» bringt die Jetzt-Linie ins Bild', async () => {
     const box = await page.locator('.bz-now').boundingBox();
     if (!box) return 'nicht gefunden';
     return box.x > 0 && box.x < 1600 ? true : `x = ${Math.round(box.x)} außerhalb`;
@@ -271,6 +294,12 @@ for (const pg of PAGES) {
   const dark = await browser.newPage({ viewport: { width: 1600, height: 950 }, colorScheme: 'dark' });
   await dark.goto(pg.url);
   await dark.waitForTimeout(700);
+  if (pg.app && await dark.locator('#dlg').isVisible()) {
+    await dark.fill('.dlg-f:first-child input', 'Prüfprojekt');
+    await dark.locator('.dlg-t[data-k="festival"]').click();
+    await dark.locator('.dlg-act .btn-p').click();
+    await dark.waitForTimeout(900);
+  }
   await dark.screenshot({ path: join(shots, `${v}-dark.png`) });
   await dark.close();
 

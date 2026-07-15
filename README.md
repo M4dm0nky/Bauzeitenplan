@@ -11,12 +11,16 @@ der Load-In läuft stundengenau.
 
 ## Stand
 
-**Phase 0 abgeschlossen.** Die Darstellung steht und ist im Browser verifiziert:
-Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF mit Lag), Meilensteine,
-kritischer Pfad, Puffer, Minimap, Tooltip, Hell/Dunkel.
+**Benutzbar.** Projekte anlegen (4 Vorlagen), befüllen, bearbeiten — alles im
+Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
+mit Lag), Meilensteine, kritischer Pfad, Konfliktanzeige mit Auflösen,
+Undo/Redo, Auto-Save, JSON-Export.
 
-Die Daten stammen noch aus `js/data.js` (realistischer Demo-Datensatz eines
-Festival-Aufbaus). **Login, Backend und Bearbeiten kommen in Phase 1.**
+**Deine Daten liegen im Browser.** Privater Modus, Verlauf löschen, anderer
+Rechner — und sie sind weg. Bis PocketBase steht, ist der **JSON-Export die
+einzige Sicherung**. Nutze ihn.
+
+**Als Nächstes:** Drag & Drop im Gantt, danach PocketBase mit Login und Rollen.
 
 ## Starten
 
@@ -35,15 +39,26 @@ Kein Build, keine Abhängigkeiten zur Laufzeit.
 |---|---|
 | `⌘`/`Ctrl` + Mausrad | zoomt am Cursor — der Zeitpunkt unter der Maus bleibt stehen |
 | `⇧` + Mausrad | scrollt seitwärts |
-| `←` `→` | blättern |
-| `H` | springt zu heute |
+| `←` `→` | blättern · `H` springt zu heute |
+| `⌘Z` / `⇧⌘Z` | rückgängig / wiederholen |
 | Minimap unten | Fenster ziehen, um über Monate zu navigieren |
+
+**Tabelle** (der schnelle Weg rein): `Enter` legt eine Zeile darunter an,
+`Tab` springt weiter, `⌫` auf leerem Namen löscht. Dauer als Kurzform —
+`4h`, `1,5h`, `90m`, `2t`, `1t 4h`. Das Ende rechnet sich; das Ende zu ändern
+rechnet die Dauer zurück.
+
+**Konflikte:** Verletzt ein Vorgang eine Abhängigkeit, wird er rot markiert und
+sagt im Klartext, woran es liegt. «Konflikte auflösen» schiebt alles auf den
+frühestmöglichen Termin — ein `⌘Z` nimmt das komplett zurück. Es verschiebt sich
+nie etwas hinter deinem Rücken.
 
 ## Prüfen
 
 ```bash
-node tests/run.mjs            # 45 Unit-Tests + statische Prüfungen, ohne Browser
-node tools/verify-browser.mjs # fährt App + Prototypen im echten Browser hoch
+node tests/run.mjs            # 192 Unit-Tests + statische Prüfungen, ohne Browser
+node tools/verify-browser.mjs # Darstellung: App + 4 Theme-Prototypen im Browser
+node tools/verify-edit.mjs    # Bearbeiten: anlegen, tippen, Undo, Konflikte, Neuladen
 
 # gegen die veröffentlichte Seite statt lokal:
 node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
@@ -88,11 +103,16 @@ hochzählen — der Service Worker greift erst ab dem zweiten Aufruf.
 ```
 index.html              Die App
 js/
-  app.js                Einstieg: verdrahtet Bedienelemente mit der Engine
+  app.js                Einstieg: Projektverwaltung, Speichern, Ansichten
+  store.js              Zustand + Befehle + Undo/Redo — DOM-frei
   gantt.js              Render-Engine (DOM, Zoom, Pfeile, Tooltip, Minimap)
+  table.js              Tabellen-Editor
   schedule.js           Terminrechnung: CPM, Topo-Sort, kritischer Pfad — DOM-frei
+  conflicts.js          Konflikte + Auflösen + Dauer-Kurzform — DOM-frei
   timeaxis.js           Zeit ↔ Pixel, Zoomstufen, Ticks, Kalenderwochen — DOM-frei
-  data.js               Demo-Datensatz (später: PocketBase)
+  templates.js          Vier Vorlagen (Festival, Tour, Corporate, Messe)
+  persistence.js        localStorage, Export/Import, Migration — DOM-frei
+  palette.js            Gewerk-Farben: 8 Töne × 2 Schraffuren = 16 Plätze
 styles/
   base.css              Nur Geometrie + Verhalten. Dazu die Gewerk-Farben.
   themes/*.css          Vier Gestaltungsebenen; console ist aktiv

@@ -8,8 +8,9 @@ Backend (PocketBase) kommt in Phase 1 — Stand jetzt läuft alles aus `js/data.
 ## Vor jeder Änderung
 
 ```bash
-node tests/run.mjs              # 45 Unit-Tests + statische Prüfungen
-node tools/verify-browser.mjs   # App + 4 Prototypen im echten Browser
+node tests/run.mjs              # 192 Unit-Tests + statische Prüfungen
+node tools/verify-browser.mjs   # Darstellung: App + 4 Prototypen
+node tools/verify-edit.mjs      # Bearbeiten: anlegen, tippen, Undo, Konflikte
 ```
 
 Beides muss grün sein, bevor etwas als fertig gilt. `verify-browser.mjs` braucht
@@ -68,8 +69,26 @@ Kein Theme definiert Gewerk-Farben neu. Jedes Theme braucht beide Dunkel-Scopes
 (`@media prefers-color-scheme` **und** `:root[data-theme="dark"]`) — der Umschalter
 des Betrachters muss die OS-Wahl in beide Richtungen schlagen. Details: `docs/themes.md`.
 
-**Rechenlogik bleibt DOM-frei.** `schedule.js` und `timeaxis.js` haben keinen
-DOM-Bezug und sind damit direkt testbar. So halten. Neue Logik dort → Test dazu.
+**Rechenlogik bleibt DOM-frei.** `schedule.js`, `timeaxis.js`, `store.js`,
+`conflicts.js` und `persistence.js` haben keinen DOM-Bezug und sind damit direkt
+testbar. So halten. Neue Logik dort → Test dazu.
+
+**Der Store ist der einzige Weg, den Plan zu ändern.** Nie direkt an `state`
+schreiben. Validierung läuft VOR der Änderung; ein abgelehnter Befehl darf
+nichts hinterlassen — kein halber Zustand, kein Undo-Eintrag, keine
+Ungesichert-Marke. Rückgängig läuft über Schnappschüsse, nicht über
+Gegenbefehle: ein Plan wiegt wenige zehn kB, aber jeder handgeschriebene
+Gegenbefehl wäre eine Fehlerquelle, die erst Stunden später beim ⌘Z auffällt.
+
+**Schraffur gehört der Gewerk-Identität** (Platz 9–16), nicht dem Status. Sie war
+früher für `status: geplant` belegt — das ist jetzt ein umrandeter Balken. Nicht
+zurückdrehen, sonst bedeutet dasselbe Muster zwei Dinge.
+
+**In der Tabelle nur an `change` hängen, nie zusätzlich an `blur`.** Das erste
+`change` baut die Tabelle neu, der alte Knoten wird abgehängt und feuert danach
+trotzdem sein `blur` — mit dem veralteten Objekt aus der Closure. Jede Änderung
+lag dadurch doppelt auf dem Undo-Stapel und ⌘Z wirkte kaputt. Handler lesen den
+Stand immer frisch aus dem Store (`cur(id)`), nie aus der Closure.
 
 ## Aus Crewplaner gelernt — gilt ab Phase 1
 
