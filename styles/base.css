@@ -327,3 +327,6 @@ body { margin: 0; }
   background: repeating-linear-gradient(to bottom,
     currentColor 0 2px, transparent 2px 4px);
 }
+
+/* Version in der Fußzeile — leise, aber auffindbar. */
+.ft-ver { font-variant-numeric: tabular-nums; cursor: help; }

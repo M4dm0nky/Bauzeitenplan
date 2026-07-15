@@ -3,7 +3,7 @@
 Gantt-Ablaufplan für die Veranstaltungsbranche. Vanilla JS, ES-Module, **kein Build-Step**.
 Projekte leben im Browser (localStorage) + JSON-Export. PocketBase kommt danach.
 
-**Live:** https://m4dm0nky.github.io/Bauzeitenplan/ · **Repo:** M4dm0nky/Bauzeitenplan
+**Live:** https://m4dm0nky.github.io/Bauzeitenplan/ · **Repo:** M4dm0nky/Bauzeitenplan · **Version:** siehe unten
 
 ## Vor jeder Änderung
 
@@ -36,8 +36,10 @@ Workflow, Quelle `main` / `root`. Danach **live gegenprüfen**, nicht nur lokal:
 node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
 ```
 
-**Bei Änderungen an `js/*` oder `styles/*` das `?v=` in `index.html` hochzählen.**
-`sw.js` (Cache-Buster) fängt den Rest ab, greift aber erst ab dem zweiten Aufruf.
+**Vor dem Deploy: `node tools/version.mjs <neu>`.** Das setzt auch alle `?v=`.
+Von Hand hochzählen ist nicht mehr nötig und wird vom Testlauf bestraft.
+`sw.js` (Cache-Buster) fängt die Untermodule ab, greift aber erst ab dem
+zweiten Aufruf — deshalb beides.
 Warum er nötig ist: `app.js` importiert `./gantt.js` ohne Version, und Pages sendet
 `max-age=600` — ohne ihn kämen Änderungen an Untermodulen zehn Minuten lang nicht an.
 Der Worker cacht selbst nichts und kann deshalb nie eine alte Version einsperren;
@@ -47,6 +49,35 @@ Kill-Switch steht in `sw.js`.
 Angemeldet als **M4dm0nky**. Das Repo liegt bewusst dort und nicht unter `Aniflu`:
 Aniflu ist ein fremdes persönliches Konto, dort kann M4dm0nky weder Repos anlegen
 noch Pages einschalten (nur `push`, kein `admin`).
+
+## Version
+
+**Aktuell: 0.1.0** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
+
+**Die Version wird NIE von Hand geändert.** Ein Befehl stempelt sie in alle
+sechs Stellen zugleich:
+
+```bash
+node tools/version.mjs          # zeigt die aktuelle
+node tools/version.mjs 0.2.0    # setzt sie überall + Changelog-Abschnitt
+```
+
+Betroffen: `js/version.js` (Quelle) · `package.json` · `index.html` (alle `?v=`)
+· `sw.js` (`SW_VERSION`) · `CHANGELOG.md`. **Die Nummer entscheidet Marco**, nicht
+die Automatik. Rückschritte und Nicht-SemVer lehnt der Befehl ab — eine Version
+zurückzudrehen bricht den Cache-Schutz.
+
+`node tests/run.mjs` prüft, dass alle Stellen übereinstimmen und dass der
+Changelog einen Abschnitt für die aktuelle Version hat. Das ist der Unterschied
+zu Crewplaner: dort verlangt CLAUDE.md, in fünf Dateien von Hand hochzuzählen
+(drei unabhängige Zähler: `?v=23`, `?v=12`, `?v=38`) — geprüft wird nichts.
+Vergisst man eine, sieht der Nutzer alten Code und niemand merkt es.
+
+**Nebenwirkung jedes Versionswechsels:** `sw.js` ändert sich → der Browser
+installiert den neuen Worker → `controllerchange` in `index.html` **lädt offene
+Tabs neu**. Daten sind sicher (Auto-Save nach 800 ms), aber der Live-Modus
+springt kurz. Beim Aufbau mit dem Plan auf dem Monitor also nicht grundlos
+deployen.
 
 ## Harte Regeln
 

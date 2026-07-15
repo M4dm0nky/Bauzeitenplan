@@ -15,6 +15,7 @@ import { openMenu } from './menu.js';
 import { liveStats } from './live.js';
 import { toMin, toDate } from './schedule.js';
 import { $, el, escapeHtml } from './dom.js';
+import { VERSION } from './version.js';
 
 const repo = createRepo(window.localStorage);
 let store = null, gantt = null, table = null, inspector = null, view = 'gantt';
@@ -456,5 +457,7 @@ $('new-proj').onclick = () => showProjectDialog({});
 // öffnet oder seinen Speicher geleert hat, konnte nichts importieren.
 $('import').onclick = () => $('import-file').click();
 $('import-file').onchange = doImport;
+
+$('ver').textContent = 'v' + VERSION;
 
 boot();

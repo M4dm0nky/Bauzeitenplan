@@ -29,7 +29,10 @@ for (const f of readdirSync(here).filter((x) => x.endsWith('.test.mjs')).sort())
 // ── 2. Statische Prüfungen ──────────────────────────────────────────────────
 console.log('\nStatische Prüfungen');
 const check = (name, fn) => {
-  const r = fn();
+  // try/catch ist Pflicht: eine werfende Prüfung riss vorher den ganzen Läufer
+  // mit und verdeckte alles danach.
+  let r;
+  try { r = fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
   if (r === true) console.log('  ✓ ' + name);
   else { console.log('  ✗ ' + name + '\n      ' + r); failed++; }
 };
@@ -129,6 +132,52 @@ check('kein Export, den niemand importiert', () => {
     }
   }
   return bad.length ? bad.join(', ') : true;
+});
+
+// ── Version ─────────────────────────────────────────────────────────────────
+// Der eigentliche Gewinn gegenüber Crewplaner: dort verlangt CLAUDE.md, in fünf
+// Dateien von Hand hochzuzählen — geprüft wird nichts. Vergisst man eine, sieht
+// der Nutzer alten Code und niemand merkt es. Hier fällt es sofort auf.
+
+const versionStellen = () => {
+  const raw = (p) => { try { return readFileSync(join(root, p), 'utf8'); } catch { return ''; } };
+  const holen = (p, re, was) => {
+    const m = raw(p).match(re);
+    return { wo: was, wert: m ? m[1] : null };
+  };
+  const html = raw('index.html');
+  const vs = [...html.matchAll(/\?v=([^"']+)["']/g)].map((m, i) => ({ wo: `index.html ?v= #${i + 1}`, wert: m[1] }));
+  return [
+    holen('js/version.js', /export const VERSION = '([^']+)'/, 'js/version.js'),
+    holen('package.json', /"version":\s*"([^"]+)"/, 'package.json'),
+    holen('sw.js', /const SW_VERSION = 'v([^']+)'/, 'sw.js'),
+    ...vs,
+  ];
+};
+
+check('alle Versionsstellen tragen dieselbe Nummer', () => {
+  const st = versionStellen();
+  const fehlt = st.filter((x) => !x.wert);
+  if (fehlt.length) return 'keine Version gefunden in: ' + fehlt.map((x) => x.wo).join(', ');
+  const einzig = [...new Set(st.map((x) => x.wert))];
+  if (einzig.length > 1) {
+    return 'laufen auseinander:\n      ' + st.map((x) => `${x.wo.padEnd(22)} ${x.wert}`).join('\n      ');
+  }
+  return true;
+});
+
+check('die Version ist gültiges SemVer', () => {
+  const v = versionStellen()[0].wert;
+  return /^\d+\.\d+\.\d+$/.test(v || '') ? true : 'kein SemVer: ' + v;
+});
+
+check('CHANGELOG hat einen Abschnitt für die aktuelle Version', () => {
+  // Zwingt dazu, den Eintrag beim Versionswechsel wirklich zu füllen.
+  const v = versionStellen()[0].wert;
+  let cl;
+  try { cl = readFileSync(join(root, 'CHANGELOG.md'), 'utf8'); }
+  catch { return 'CHANGELOG.md fehlt'; }
+  return cl.includes('## ' + v) ? true : `kein Abschnitt «## ${v}»`;
 });
 
 check('alle in index.html verdrahteten IDs kommen in app.js vor', () => {

@@ -294,3 +294,5 @@ kbd { font: inherit; border: 1px solid var(--rule-2); background: var(--panel2);
 .bz-bar.is-estimated { color: var(--panel2); }
 .bz-bar.is-estimated.bz-st-geplant { color: var(--gw); }
 .ins-check input { accent-color: var(--accent); }
+
+.ft-ver { color: var(--muted); font-size: 8.5px; letter-spacing: .06em; padding-left: 4px; }

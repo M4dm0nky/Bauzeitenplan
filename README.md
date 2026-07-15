@@ -1,6 +1,6 @@
 # Bauzeitenplan
 
-**Live: https://m4dm0nky.github.io/Bauzeitenplan/**
+**Live: https://m4dm0nky.github.io/Bauzeitenplan/** · [Changelog](CHANGELOG.md)
 
 Digitaler Gantt-Ablaufplan für die Veranstaltungsbranche. Jedes Gewerk — Licht, Ton,
 Video, Pyro, Catering, Sanitär, Bühne, Rigging — pflegt seine eigenen Vorgänge, alle
@@ -90,6 +90,9 @@ Projekt die automatischen Prüfungen passiert und wurden erst im Bild sichtbar.
 ## Deploy
 
 ```bash
+node tools/version.mjs 0.2.0   # eine Nummer, alle Stellen
+# CHANGELOG.md füllen
+node tests/run.mjs             # prüft, dass nichts auseinanderläuft
 git push origin main
 ```
 
@@ -111,8 +114,10 @@ beim Entwickeln erst nach manuellem Cache-Leeren.
 nichts** — er kann also nie eine alte Version einsperren. Fremde Origins (ab Phase 1
 die PocketBase-API) fasst er nicht an. Ein Kill-Switch steht in der Datei.
 
-Bei Änderungen an `js/*` oder `styles/*` trotzdem das `?v=` in `index.html`
-hochzählen — der Service Worker greift erst ab dem zweiten Aufruf.
+Das `?v=` in `index.html` setzt `tools/version.mjs` mit — von Hand hochzählen
+ist nicht nötig. Beides zusammen, weil der Service Worker erst ab dem zweiten
+Aufruf greift: `?v=` trägt den allerersten Aufruf nach einem Deploy, der Worker
+alles danach.
 
 ## Aufbau
 

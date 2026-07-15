@@ -6,6 +6,8 @@
 // Der Speicher wird hereingereicht (statt global localStorage zu greifen), damit
 // die Logik ohne Browser testbar bleibt.
 
+import { VERSION } from './version.js';
+
 export const SCHEMA_VERSION = 1;
 
 const K_INDEX = 'bzp_projects';
@@ -113,6 +115,9 @@ export function serialize(plan) {
     schema: SCHEMA_VERSION,
     exported: new Date().toISOString(),
     app: 'Bauzeitenplan',
+    // Metadatum, keine Anzeige: wenn eine Sicherung später komisch aussieht,
+    // ist die erste Frage, welche Version sie geschrieben hat.
+    version: VERSION,
     ...clone(plan),
   }, null, 2);
 }
