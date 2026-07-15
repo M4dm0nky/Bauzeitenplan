@@ -1,5 +1,7 @@
 # Bauzeitenplan
 
+**Live: https://m4dm0nky.github.io/Bauzeitenplan/**
+
 Digitaler Gantt-Ablaufplan für die Veranstaltungsbranche. Jedes Gewerk — Licht, Ton,
 Video, Pyro, Catering, Sanitär, Bühne, Rigging — pflegt seine eigenen Vorgänge, alle
 sehen denselben Stand.
@@ -42,11 +44,44 @@ Kein Build, keine Abhängigkeiten zur Laufzeit.
 ```bash
 node tests/run.mjs            # 45 Unit-Tests + statische Prüfungen, ohne Browser
 node tools/verify-browser.mjs # fährt App + Prototypen im echten Browser hoch
+
+# gegen die veröffentlichte Seite statt lokal:
+node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
 ```
 
 `verify-browser.mjs` braucht einmalig einen Browser: `npx playwright install firefox`.
 Er prüft Verhalten (Sticky-Spalten, Zoomstufen, Pfeilgeometrie, Beschriftungen,
-Jetzt-Linie) und legt Screenshots unter `tools/shots/` ab.
+Jetzt-Linie, Service Worker) und legt Screenshots unter `tools/shots/` ab.
+
+**Screenshots ansehen, nicht nur Häkchen zählen.** Vier echte Fehler haben in diesem
+Projekt die automatischen Prüfungen passiert und wurden erst im Bild sichtbar.
+
+## Deploy
+
+```bash
+git push origin main
+```
+
+GitHub Pages aktualisiert sich automatisch ~1 Minute nach dem Push — kein Build,
+kein Workflow, Quelle ist `main` / `root`. Danach live prüfen:
+
+```bash
+node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
+```
+
+### Warum es einen Service Worker gibt
+
+`index.html` lädt `js/app.js?v=N`, aber `app.js` importiert `./gantt.js` **ohne**
+Versionsangabe — und GitHub Pages sendet `cache-control: max-age=600`. Ohne
+Gegenmaßnahme kämen Änderungen an den Untermodulen bis zu zehn Minuten lang nicht an,
+beim Entwickeln erst nach manuellem Cache-Leeren.
+
+`sw.js` erzwingt deshalb für eigene JS/CSS/HTML eine Revalidierung und **cacht selbst
+nichts** — er kann also nie eine alte Version einsperren. Fremde Origins (ab Phase 1
+die PocketBase-API) fasst er nicht an. Ein Kill-Switch steht in der Datei.
+
+Bei Änderungen an `js/*` oder `styles/*` trotzdem das `?v=` in `index.html`
+hochzählen — der Service Worker greift erst ab dem zweiten Aufruf.
 
 ## Aufbau
 

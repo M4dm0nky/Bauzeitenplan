@@ -3,6 +3,8 @@
 Gantt-Ablaufplan für die Veranstaltungsbranche. Vanilla JS, ES-Module, **kein Build-Step**.
 Backend (PocketBase) kommt in Phase 1 — Stand jetzt läuft alles aus `js/data.js`.
 
+**Live:** https://m4dm0nky.github.io/Bauzeitenplan/ · **Repo:** M4dm0nky/Bauzeitenplan
+
 ## Vor jeder Änderung
 
 ```bash
@@ -21,6 +23,27 @@ eine Prüfung — der nächste Fehler dieser Art hat aber noch keine.
 
 Zum Starten: `python3 -m http.server 8080`. Ohne Server blockiert der Browser die
 ES-Module per CORS.
+
+## Deploy
+
+`git push origin main` → GitHub Pages zieht ~1 Minute später nach. Kein Build, kein
+Workflow, Quelle `main` / `root`. Danach **live gegenprüfen**, nicht nur lokal:
+
+```bash
+node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
+```
+
+**Bei Änderungen an `js/*` oder `styles/*` das `?v=` in `index.html` hochzählen.**
+`sw.js` (Cache-Buster) fängt den Rest ab, greift aber erst ab dem zweiten Aufruf.
+Warum er nötig ist: `app.js` importiert `./gantt.js` ohne Version, und Pages sendet
+`max-age=600` — ohne ihn kämen Änderungen an Untermodulen zehn Minuten lang nicht an.
+Der Worker cacht selbst nichts und kann deshalb nie eine alte Version einsperren;
+Kill-Switch steht in `sw.js`.
+
+`~/.local/bin/gh` ist installiert (nicht im PATH — mit vollem Pfad aufrufen).
+Angemeldet als **M4dm0nky**. Das Repo liegt bewusst dort und nicht unter `Aniflu`:
+Aniflu ist ein fremdes persönliches Konto, dort kann M4dm0nky weder Repos anlegen
+noch Pages einschalten (nur `push`, kein `admin`).
 
 ## Harte Regeln
 
