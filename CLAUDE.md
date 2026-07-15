@@ -1,7 +1,7 @@
 # Bauzeitenplan — Arbeitsanweisungen
 
 Gantt-Ablaufplan für die Veranstaltungsbranche. Vanilla JS, ES-Module, **kein Build-Step**.
-Backend (PocketBase) kommt in Phase 1 — Stand jetzt läuft alles aus `js/data.js`.
+Projekte leben im Browser (localStorage) + JSON-Export. PocketBase kommt danach.
 
 **Live:** https://m4dm0nky.github.io/Bauzeitenplan/ · **Repo:** M4dm0nky/Bauzeitenplan
 
@@ -107,7 +107,12 @@ Stand immer frisch aus dem Store (`cur(id)`), nie aus der Closure.
 | `js/schedule.js` | CPM, Topo-Sort, kritischer Pfad — **DOM-frei** |
 | `js/timeaxis.js` | Zeit ↔ Pixel, Zoomstufen, Ticks, KW — **DOM-frei** |
 | `js/app.js` | Verdrahtung; bewusst dünn |
-| `js/data.js` | Demo-Daten (Phase 1: PocketBase) |
+| `js/store.js` | Zustand + Befehle + Undo — **DOM-frei** |
+| `js/conflicts.js` | Konflikte + Dauer-Kurzform — **DOM-frei** |
+| `js/persistence.js` | localStorage, Export/Import — **DOM-frei** |
+| `js/table.js` | Tabellen-Editor |
+| `js/templates.js` | Vier Vorlagen |
+| `js/palette.js` | 8 Farbtöne × 2 Schraffuren = 16 Gewerke |
 | `tools/build-prototypes.mjs` | **Nur** für die Design-Artifacts (CSP verlangt alles inline). Die App braucht keinen Build. |
 
 Warum was so ist: `docs/entscheidungen.md`. Besonders der kritische Pfad hat eine
@@ -116,5 +121,9 @@ dort begründet und ist durch Regressionstests abgesichert.
 
 ## Fahrplan
 
-Phase 0 ✅ Darstellung · Phase 1 Backend + Login + Rollen · Phase 2 Bearbeiten ·
-Phase 3 Ansichten + Export
+✅ Darstellung · ✅ Befüllen & Bearbeiten (Tabelle, Vorlagen, Konflikte, Undo)
+→ Als Nächstes: Drag & Drop im Gantt · danach PocketBase + Login + Rollen ·
+zuletzt Ansichten & Export (Tagesplan, öffentlicher Link, PDF/ICS)
+
+**Vorlagen:** «festival» ist abgenommener Praxisstand. Tour, Corporate und Messe
+sind entworfene Gerüste — beim ersten echten Einsatz korrigieren.

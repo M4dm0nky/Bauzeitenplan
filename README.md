@@ -123,9 +123,9 @@ tools/
 docs/                   Entscheidungen, Themes, Farbsuche
 ```
 
-`schedule.js` und `timeaxis.js` sind bewusst frei von DOM-Bezügen — die ganze
-Rechnung ist damit direkt testbar. Fehler im Backward-Pass sind visuell unsichtbar
-und produzieren trotzdem falsche Termine.
+Alles Rechnende ist bewusst frei von DOM-Bezügen und damit direkt testbar —
+Fehler im Backward-Pass oder im Undo-Stapel sind visuell unsichtbar und
+produzieren trotzdem falsche Termine.
 
 ## Bevor du etwas änderst
 
@@ -150,7 +150,12 @@ Ein Umschalter ist vorbereitet, aber noch nicht gebaut — siehe
 
 | | |
 |---|---|
-| ✅ Phase 0 | Darstellung: Gantt, Zoom, Abhängigkeiten, kritischer Pfad |
-| Phase 1 | PocketBase, Login, Rollen (`superadmin` / `projektleiter` / `gewerk_lead` / `gewerk_member` / `viewer`) |
-| Phase 2 | Bearbeiten: Vorgänge anlegen, verschieben, Auto-Verschieben mit Vorschau |
-| Phase 3 | Ansichten & Export: Tagesplan, öffentlicher Link ohne Login, PDF/ICS |
+| ✅ | Darstellung: Gantt, vier Zoomstufen, Abhängigkeiten, kritischer Pfad |
+| ✅ | Befüllen & Bearbeiten: Vorlagen, Tabelle, Konflikte, Undo, Speichern |
+| → | Drag & Drop im Gantt: Balken ziehen, Dauer ziehen, Verknüpfungen ziehen |
+| | PocketBase, Login, Rollen (`projektleiter` / `gewerk_lead` / `gewerk_member` / `viewer`) |
+| | Ansichten & Export: Tagesplan, öffentlicher Link ohne Login, PDF/ICS |
+
+**Zu den Vorlagen:** «Festival» ist abgenommener Praxisstand. Tour, Corporate und
+Messe sind entworfene Gerüste — richtige Gewerke und Meilensteine, aber keine
+erfundenen Detailvorgänge. Korrigier sie beim ersten echten Einsatz.
