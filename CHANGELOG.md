@@ -3,6 +3,13 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.1.2 — 2026-07-16
+
+**Optik**
+- Deutlich heller: heller Modus jetzt auf Weiß (statt gedämpftem Creme),
+  dunkler Modus von Fast-Schwarz auf ein angehobenes Schiefergrau — in beiden
+  Systemeinstellungen spürbar heller
+
 ## 0.1.1 — 2026-07-16
 
 **Bedienung**

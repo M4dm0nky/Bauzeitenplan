@@ -6,14 +6,14 @@
    nutzt calc(px * var(--fs))). 1.0 = Ausgangsgröße, 1.3 = 30 % größer.        */
 
 :root {
-  --bg:      #f4f1e9;
-  --panel:   #faf8f2;
-  --panel2:  #fdfcf9;
-  --rule:    #e6e0d2;
-  --rule-2:  #d0c8b6;
-  --ink:     #1b1a17;
-  --ink-2:   #57534a;
-  --muted:   #8a8578;
+  --bg:      #ffffff;
+  --panel:   #f2f1ec;
+  --panel2:  #ffffff;
+  --rule:    #e4e1d6;
+  --rule-2:  #cbc6b8;
+  --ink:     #17160f;
+  --ink-2:   #4a463d;
+  --muted:   #837e70;
   --accent:  #a97c14;      /* Crewplaner-Gold, für Hell auf Kontrast gezogen */
   --accent-b:#d4a53a;      /* das Original — für Flächen */
   --crit:    #b3261e;
@@ -22,16 +22,16 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
-    --bg: #0e1013; --panel: #15181d; --panel2: #1b1f26; --rule: #252a33;
-    --rule-2: #333a46; --ink: #e6e4dd; --ink-2: #a8a498; --muted: #7a808b;
+    --bg: #21252c; --panel: #2a2f38; --panel2: #333944; --rule: #3d4653;
+    --rule-2: #4d5766; --ink: #f1efe8; --ink-2: #bcb8ab; --muted: #8f95a0;
     --accent: #d4a53a; --accent-b: #d4a53a; --crit: #f06a5a; --now: #f06a5a;
   }
 }
 /* Der Theme-Umschalter des Betrachters muss die OS-Wahl in beide
    Richtungen schlagen — die Media-Query allein reicht dafür nicht. */
 :root[data-theme="dark"] {
-    --bg: #0e1013; --panel: #15181d; --panel2: #1b1f26; --rule: #252a33;
-    --rule-2: #333a46; --ink: #e6e4dd; --ink-2: #a8a498; --muted: #7a808b;
+    --bg: #21252c; --panel: #2a2f38; --panel2: #333944; --rule: #3d4653;
+    --rule-2: #4d5766; --ink: #f1efe8; --ink-2: #bcb8ab; --muted: #8f95a0;
     --accent: #d4a53a; --accent-b: #d4a53a; --crit: #f06a5a; --now: #f06a5a;
 }
 
