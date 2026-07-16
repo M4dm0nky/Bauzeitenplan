@@ -9,7 +9,7 @@ import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
 import { resolveConflictsCmd, local } from './conflicts.js';
-import { slotsExhausted, MAX_SLOTS } from './palette.js';
+import { slotsExhausted, MAX_SLOTS, gewerkVar, gewerkTexture } from './palette.js';
 import { createInspector } from './inspector.js';
 import { openMenu } from './menu.js';
 import { liveStats } from './live.js';
@@ -48,7 +48,8 @@ function open(plan) {
 // ── Aufbau ──────────────────────────────────────────────────────────────────
 function mount() {
   gantt = createGantt($('bz'), {
-    store, rowH: 24, groupH: 28, barH: 12, sideW: 228, initialZoom: 'tage',
+    // Geometrie ~30 % größer, damit sie zur um 30 % größeren Schrift passt.
+    store, rowH: 31, groupH: 36, barH: 16, sideW: 296, milestoneSize: 12, initialZoom: 'tage',
     onSelect: (sel) => { inspector.show(sel); syncPanel(); },
     onContext: showContext,
     onError: (msg) => toast(msg, 'bad'),
@@ -79,15 +80,34 @@ function mount() {
   });
 
   // ── Zoom ──
+  // ── Datum-Navigation ──
+  // Das Datumsfeld zeigt den Tag in der Bildmitte. Es aktuell zu halten und die
+  // Preset-Markierung zu setzen gehört zusammen: beides nach jeder Navigation.
+  const dateInput = $('date-jump');
+  const syncDate = () => { dateInput.value = gantt.centerDayIso(); };
+  const shiftDay = (iso, days) => {
+    const d = new Date((iso || gantt.centerDayIso()) + 'T00:00');
+    d.setDate(d.getDate() + days);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+
   const segs = [...document.querySelectorAll('[data-z]')];
   const syncSeg = () => segs.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.z === gantt.zoomName)));
-  segs.forEach((b) => { b.onclick = () => { gantt.setZoomPreset(b.dataset.z); syncSeg(); }; });
-  $('zin').onclick = () => { gantt.zoomIn(); syncSeg(); };
-  $('zout').onclick = () => { gantt.zoomOut(); syncSeg(); };
-  $('now').onclick = () => gantt.goToNow();
-  $('bz').addEventListener('wheel', () => requestAnimationFrame(syncSeg), { passive: true });
-  $('bz').addEventListener('keyup', syncSeg);
+  const afterNav = () => { syncSeg(); syncDate(); };
+  segs.forEach((b) => { b.onclick = () => { gantt.setZoomPreset(b.dataset.z); afterNav(); }; });
+  $('zin').onclick = () => { gantt.zoomIn(); afterNav(); };
+  $('zout').onclick = () => { gantt.zoomOut(); afterNav(); };
+  $('now').onclick = () => { gantt.goToNow(); syncDate(); };
+  dateInput.onchange = () => { if (dateInput.value) gantt.goToDay(dateInput.value); };
+  $('date-prev').onclick = () => { dateInput.value = shiftDay(dateInput.value, -1); gantt.goToDay(dateInput.value); };
+  $('date-next').onclick = () => { dateInput.value = shiftDay(dateInput.value, 1); gantt.goToDay(dateInput.value); };
+  $('bz').addEventListener('wheel', () => requestAnimationFrame(afterNav), { passive: true });
+  $('bz').addEventListener('keyup', afterNav);
   syncSeg();
+  // Feldgrenzen = Projektzeitraum; Startwert nach dem ersten Layout (rAF).
+  dateInput.min = (store.state.project.start || '').slice(0, 10);
+  dateInput.max = (store.state.project.end || '').slice(0, 10);
+  requestAnimationFrame(syncDate);
 
   // ── Zuklappen ──
   let folded = false;
@@ -284,6 +304,11 @@ function refreshChrome() {
   $('proj-venue').textContent = S.project.venue || '';
   document.title = S.project.name + ' — Bauzeitenplan';
 
+  // Datumsfeld an das (evtl. neue) Projekt anpassen.
+  $('date-jump').min = (S.project.start || '').slice(0, 10);
+  $('date-jump').max = (S.project.end || '').slice(0, 10);
+  $('date-jump').value = gantt.centerDayIso();
+
   const st = gantt.stats();
   $('kpis').innerHTML = [
     ['Gewerke', st.gewerke],
@@ -299,8 +324,11 @@ function refreshChrome() {
   rb.textContent = conf.length === 1 ? '1 Konflikt auflösen' : conf.length + ' Konflikte auflösen';
 
   // Legende: Identität hängt nie an der Farbe allein — deshalb Namen, nicht nur Punkte.
+  // Farbton und Schraffur kommen aus palette.js — nie hier zweitverdrahten,
+  // sonst weicht die Legende von den Balken ab (genau das ist passiert, als die
+  // Palette von 8 auf 9 Töne wuchs).
   $('legend').innerHTML = [...S.gewerke].sort((a, b) => a.sort - b.sort)
-    .map((g) => `<span class="legend-i"><span class="bz-dot" style="--gw:var(--gw-${g.slot % 8})"${g.slot >= 8 ? ' data-tex="1"' : ''}></span>${escapeHtml(g.name)}</span>`)
+    .map((g) => `<span class="legend-i"><span class="bz-dot" style="--gw:${gewerkVar(g.slot)}"${gewerkTexture(g.slot) ? ' data-tex="1"' : ''}></span>${escapeHtml(g.name)}</span>`)
     .join('');
 
   $('undo').disabled = !store.canUndo;

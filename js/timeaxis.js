@@ -15,6 +15,12 @@ const ZOOM_MIN = 0.008, ZOOM_MAX = 4.0;
 
 export const clampZoom = (px) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, px));
 
+/**
+ * pxPerMinute, damit eine Zeitspanne genau die Viewport-Breite füllt.
+ * Für die Tagesansicht: fitPx(sichtbareBreite, 1440) → ein Tag von Kante zu Kante.
+ */
+export const fitPx = (viewportPx, minutes) => clampZoom(viewportPx / minutes);
+
 /** Nächstgelegenes Zoom-Preset zu einem pxPerMinute-Wert (für die Button-Anzeige). */
 export function nearestPreset(px) {
   let best = null, bestD = Infinity;

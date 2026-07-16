@@ -3,6 +3,26 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.1.1 — 2026-07-16
+
+**Bedienung**
+- Datums-Navigation in der Toolbar: Feld zum direkten Springen zu einem Tag,
+  plus ◀ / ▶ zum tageweisen Blättern (läuft mit dem Sichtfenster mit)
+- Tagesansicht zeigt jetzt **einen Kalendertag über die volle Breite**,
+  linksbündig auf 00:00 — der „Tage"-Knopf zieht den Tag im Blick auf
+- Optik heller (warmes Creme eine Stufe aufgehellt) und Schrift 30 % größer;
+  Zeilen, Balken und Achse wachsen proportional mit (`--fs` als ein Regler)
+
+**Palette**
+- Neunter Farbton (Ocker) für Pläne mit mehr als acht Gewerken; bis 18 Gewerke
+  über Farbe + Schraffur eindeutig. Legende liest Farbe/Schraffur jetzt aus
+  `palette.js` statt aus einer zweiten, fest verdrahteten Kopie
+
+**Vorlagen**
+- Klassentreffen Festival 2026 als importierbare JSON aus dem PDF-Grobplan
+  (17 Gewerke, quellentreu, alle Dauern als geschätzt markiert), erzeugt und
+  quellentreu geprüft über `tools/make-klassentreffen.mjs`
+
 ## 0.1.0 — 2026-07-16
 
 Erste benannte Version. Der Stand, mit dem du arbeiten kannst.

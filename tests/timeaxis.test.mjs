@@ -1,4 +1,4 @@
-import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, ZOOM } from '../js/timeaxis.js';
+import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM } from '../js/timeaxis.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -39,6 +39,18 @@ test('nearestPreset vergleicht multiplikativ, nicht additiv', () => {
   // Kritisch ist der große Zoombereich: 3.0 muss "stunden" (2.0) treffen, nicht "tage".
   assert.equal(nearestPreset(3.0), 'stunden');
   assert.equal(nearestPreset(0.03), 'monate');
+});
+
+console.log('\nTagesansicht: ein Tag füllt die Breite');
+test('fitPx macht aus Viewport-Breite genau eine Tagesbreite', () => {
+  // 1440 Minuten (ein Tag) × fitPx == Viewport-Breite (solange nicht geklemmt)
+  for (const w of [1000, 1300, 2000, 3000]) {
+    assert.ok(Math.abs(1440 * fitPx(w, 1440) - w) < 1e-6, w + 'px füllt keinen ganzen Tag');
+  }
+});
+test('fitPx hält die Zoomgrenzen ein', () => {
+  assert.equal(fitPx(9_000_000, 1440), 4.0);   // extrem breit → gedeckelt
+  assert.equal(fitPx(1, 1440), 0.008);          // extrem schmal → Mindestzoom
 });
 
 console.log('\nZoom-Presets: was ist tatsächlich sichtbar?');

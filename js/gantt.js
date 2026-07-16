@@ -5,13 +5,13 @@
 // Das Raster im Canvas ist ein CSS-Gradient (kostenlos, beliebig breit); nur die
 // Beschriftungen im Viewport landen im DOM und werden beim Scrollen recycelt.
 
-import { computeSchedule, toMin } from './schedule.js';
+import { computeSchedule, toMin, toDate } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
 import { runningAt, delaysAt } from './live.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, svgEl } from './dom.js';
 import {
-  ZOOM, clampZoom, zoomAnchored, nearestPreset, tickScale, ticksFor,
+  ZOOM, clampZoom, zoomAnchored, nearestPreset, fitPx, tickScale, ticksFor,
   weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat,
 } from './timeaxis.js';
 
@@ -38,7 +38,7 @@ function nowInZone(tz) {
 // Ab hier ist Puffer keine Disposition mehr, sondern Rauschen (3 Tage).
 const SLACK_MAX_MIN = 72 * 60;
 // Innenabstand, den die Beschriftung im Balken zusätzlich braucht.
-const LABEL_PAD = 18;
+const LABEL_PAD = 23;
 
 export function createGantt(root, opts = {}) {
   const O = {
@@ -84,6 +84,10 @@ export function createGantt(root, opts = {}) {
   syncState();
 
   let px = ZOOM[O.initialZoom].px;
+  // Welches Preset ist gewählt? «tage» ist dynamisch (füllt eine Tagesbreite),
+  // liegt also nicht auf einem festen px-Wert — nearestPreset würde es verfehlen
+  // und der Knopf verlöre die Markierung. Freies Zoomen setzt das wieder auf null.
+  let zoomMode = O.initialZoom;
 
   // ── DOM-Gerüst ──────────────────────────────────────────────────────────────
   root.classList.add('bz');
@@ -726,12 +730,41 @@ export function createGantt(root, opts = {}) {
     const oldPx = px;
     px = clampZoom(next);
     if (px === oldPx) return;
+    zoomMode = null;   // freies Zoomen verlässt jedes Preset
     const ax = anchorX ?? scroller.clientWidth / 2;
     scroller.scrollLeft = zoomAnchored({ scrollLeft: scroller.scrollLeft, anchorX: ax, oldPx, newPx: px });
     layout();
   }
   function centerOn(min, ratio = 0.35) {
     scroller.scrollLeft = x(min) - scroller.clientWidth * ratio;
+  }
+
+  // Sichtbare Timeline-Breite = Viewport minus die feste Seitenspalte.
+  const timelineW = () => scroller.clientWidth - O.sideW;
+
+  // Ein Kalendertag füllt die Breite: px so wählen, dass 1440 min == Timeline,
+  // und den Tag linksbündig auf 00:00 stellen. Der Canvas beginnt bei sideW,
+  // deshalb genügt scrollLeft = x(Tagesbeginn) — dann sitzt 00:00 an der
+  // Seitenspalte und 24:00 genau am rechten Rand.
+  function fitDay(iso) {
+    const day = String(iso).slice(0, 10);
+    px = fitPx(timelineW(), 1440);
+    zoomMode = 'tage';
+    layout();
+    scroller.scrollLeft = x(toMin(day + 'T00:00'));
+  }
+
+  // Datum in der Mitte der sichtbaren Timeline, als YYYY-MM-DD (lokal).
+  function centerDayIso() {
+    const mid = T0 + (scroller.scrollLeft + timelineW() / 2) / px;
+    return local(toDate(mid)).slice(0, 10);
+  }
+
+  // Zu einem Tag springen: in der Tagesansicht neu einpassen, sonst hinscrollen.
+  function goToDay(iso) {
+    const day = String(iso).slice(0, 10);
+    if (zoomMode === 'tage') fitDay(day);
+    else centerOn(toMin(day + 'T12:00'));
   }
 
   // Wohin beim Öffnen? «Jetzt» ist die naheliegende Antwort, aber die falsche,
@@ -748,6 +781,13 @@ export function createGantt(root, opts = {}) {
     if (NOW < anchor) return anchor;
     if (NOW > T1) return anchor;          // Projekt liegt ganz in der Vergangenheit
     return NOW;
+  }
+
+  // Erstansicht / nach Projektwechsel: in der Tagesansicht den Fokustag voll
+  // aufziehen, sonst nur hinscrollen.
+  function goToInitial() {
+    if (zoomMode === 'tage') fitDay(local(toDate(initialFocus())).slice(0, 10));
+    else centerOn(initialFocus());
   }
 
   scroller.addEventListener('scroll', () => {
@@ -780,15 +820,21 @@ export function createGantt(root, opts = {}) {
 
   // ── API ─────────────────────────────────────────────────────────────────────
   const api = {
-    setZoomPreset(name) { setZoom(ZOOM[name].px); },
+    setZoomPreset(name) {
+      if (name === 'tage') fitDay(centerDayIso());   // den Tag im Blick voll aufziehen
+      else setZoom(ZOOM[name].px);
+      zoomMode = name;
+    },
     zoomIn() { setZoom(px * 1.6); },
     zoomOut() { setZoom(px / 1.6); },
-    goToNow() { centerOn(NOW); },
+    goToNow() { zoomMode === 'tage' ? fitDay(local(toDate(NOW)).slice(0, 10)) : centerOn(NOW); },
     goTo(iso) { centerOn(toMin(iso)); },
+    goToDay(iso) { goToDay(iso); },
+    centerDayIso() { return centerDayIso(); },
     collapseAll() { for (const g of S.gewerke) collapsed.add(g.id); rebuild(); layout(); },
     expandAll() { collapsed.clear(); rebuild(); layout(); },
     minimapNode: O.minimap ? buildMinimap() : null,
-    get zoomName() { return nearestPreset(px); },
+    get zoomName() { return zoomMode ?? nearestPreset(px); },
     stats() {
       const crit = S.tasks.filter((t) => (SCHED.get(t.id) || {}).critical).length;
       const done = S.tasks.filter((t) => t.status === 'fertig').length;
@@ -829,7 +875,7 @@ export function createGantt(root, opts = {}) {
       collapsed.clear();
       selected = null;
       if (O.onSelect) O.onSelect(null);
-      centerOn(initialFocus());
+      goToInitial();
     } else {
       scroller.scrollLeft = keepLeft;
       scroller.scrollTop = keepTop;
@@ -849,7 +895,7 @@ export function createGantt(root, opts = {}) {
   const unsubscribe = store.subscribe(refresh);
 
   rebuild();
-  requestAnimationFrame(() => { layout(); centerOn(initialFocus()); renderAxis(true); updateLabels(); });
+  requestAnimationFrame(() => { layout(); goToInitial(); renderAxis(true); updateLabels(); });
   // Ticken läuft IMMER, nicht nur im Live-Modus: eine Linie, die falsch steht,
   // ist schlimmer als keine.
   startTicking();

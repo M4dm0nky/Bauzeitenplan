@@ -22,8 +22,8 @@
 <!-- Struktur (Geometrie + Verhalten) und Gestaltung sind getrennt.
      Der Theme-Link ist der einzige Umschaltpunkt: styles/themes/ enthält vier
      fertige Ebenen (console = aktiv). Siehe docs/themes.md. -->
-<link rel="stylesheet" href="styles/base.css?v=0.1.0">
-<link rel="stylesheet" href="styles/themes/console.css?v=0.1.0" id="theme-css" data-theme-name="console">
+<link rel="stylesheet" href="styles/base.css?v=0.1.1">
+<link rel="stylesheet" href="styles/themes/console.css?v=0.1.1" id="theme-css" data-theme-name="console">
 </head>
 <body>
 
@@ -56,6 +56,11 @@
           <button id="zin" aria-label="Hineinzoomen">+</button>
         </div>
         <button class="btn" id="now">Heute</button>
+        <input type="date" class="date-jump" id="date-jump" title="Zu einem Datum springen" aria-label="Zu einem Datum springen">
+        <div class="seg seg-icon" role="group" aria-label="Tag wechseln">
+          <button id="date-prev" title="Ein Tag zurück" aria-label="Ein Tag zurück">◀</button>
+          <button id="date-next" title="Ein Tag vor" aria-label="Ein Tag vor">▶</button>
+        </div>
         <button class="btn" id="fold">Alle zuklappen</button>
       </div>
 
@@ -105,6 +110,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="import-file" accept="application/json,.json" hidden>
 
-<script type="module" src="js/app.js?v=0.1.0"></script>
+<script type="module" src="js/app.js?v=0.1.1"></script>
 </body>
 </html>
