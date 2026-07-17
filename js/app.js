@@ -371,11 +371,22 @@ async function doImport(e) {
   // diese Datei) oder zusätzlich importieren — sonst sammeln sich Duplikate.
   const dupes = repo.list().filter((p) => p.name === name);
   if (dupes.length) {
-    const ersetzen = confirm(
-      `«${name}» ist bereits vorhanden (${dupes.length}×).\n\n`
-      + 'OK  =  alte Version(en) löschen und NUR diese Datei laden\n'
-      + 'Abbrechen  =  zusätzlich als neues Projekt behalten');
-    if (ersetzen) for (const p of dupes) repo.remove(p.id);
+    const choice = await askDialog({
+      title: `«${name}» ist bereits vorhanden`,
+      message: [
+        dupes.length === 1
+          ? 'Ein Projekt mit diesem Namen liegt schon in diesem Browser.'
+          : `${dupes.length} Projekte mit diesem Namen liegen schon in diesem Browser.`,
+        'Alte Version(en) ersetzen oder diese Datei zusätzlich als neues Projekt behalten?',
+      ],
+      buttons: [
+        { label: 'Abbrechen', value: null },
+        { label: 'Zusätzlich behalten', value: 'keep' },
+        { label: 'Ersetzen', value: 'replace', primary: true },
+      ],
+    });
+    if (choice === null) return;                 // Abbruch: gar nicht importieren
+    if (choice === 'replace') for (const p of dupes) repo.remove(p.id);
     else r.plan.project.id = 'p' + Date.now().toString(36);
   }
 
@@ -489,6 +500,45 @@ function toast(msg, kind = 'ok', ms = 4000) {
   n.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { n.hidden = true; }, ms);
+}
+
+// Popup im Bauzeitenplan-Design statt window.confirm/alert — die nativen Kästen
+// fallen optisch aus dem Rahmen und sind je Browser anders. Nutzt dieselben
+// .dlg-Bausteine wie der Projektdialog, legt sich als eigenes Overlay über alles
+// (auch über einen offenen #dlg) und räumt sich selbst wieder ab.
+// Liefert den `value` des gewählten Knopfs — oder null bei Abbruch (Escape,
+// Klick auf den Hintergrund, Knopf mit value:null).
+function askDialog({ title, message, buttons }) {
+  return new Promise((resolve) => {
+    const dlg = el('div', 'dlg');
+    const box = el('div', 'dlg-box');
+    if (title) box.append(el('h2', 'dlg-h', title));
+    for (const line of [].concat(message || [])) {
+      if (line) box.append(el('p', 'dlg-sub', line));
+    }
+    const actions = el('div', 'dlg-act');
+    let done = false;
+    const finish = (v) => {
+      if (done) return;
+      done = true;
+      document.removeEventListener('keydown', onKey);
+      dlg.remove();
+      resolve(v);
+    };
+    for (const b of buttons) {
+      const cls = 'btn' + (b.primary ? ' btn-p' : '') + (b.danger ? ' btn-danger' : '');
+      const btn = el('button', cls, b.label);
+      btn.onclick = () => finish(b.value);
+      actions.append(btn);
+    }
+    box.append(actions);
+    dlg.append(box);
+    dlg.onclick = (e) => { if (e.target === dlg) finish(null); };
+    const onKey = (e) => { if (e.key === 'Escape') finish(null); };
+    document.addEventListener('keydown', onKey);
+    document.body.append(dlg);
+    (actions.querySelector('.btn-p') || actions.lastElementChild)?.focus();
+  });
 }
 
 $('undo').onclick = () => store && store.undo();

@@ -3,6 +3,14 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.1.4 — 2026-07-17
+
+**Import**
+- Die Rückfrage bei Namensgleichheit ist jetzt ein Popup im App-Design statt
+  des nativen Browser-Dialogs — gleiche Optik wie der Projektdialog, drei klare
+  Knöpfe (Ersetzen · Zusätzlich behalten · Abbrechen) mit ausdrücklichem
+  Abbrechen, das den Import ganz stoppt
+
 ## 0.1.3 — 2026-07-17
 
 **Zeitachse**
