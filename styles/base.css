@@ -13,11 +13,11 @@
 /* Acht validierte Farbtöne auf nummerierten Plätzen. Reihenfolge und Zuordnung
    stammen aus tools/farbsuche.mjs (720 Anordnungen durchgerechnet) und maximieren
    die Unterscheidbarkeit BENACHBARTER Zeilen bei Farbenblindheit. Nicht per Hand
-   ändern — siehe docs/entscheidungen.md. Ab Platz 10 wiederholen sich die Töne
+   ändern — siehe docs/entscheidungen.md. Ab Platz 11 wiederholen sich die Töne
    und werden per Schraffur unterschieden (js/palette.js).
-   --gw-8 (Ocker) ist eine spätere Handergänzung für einen Plan mit >8 Gewerken
-   (Klassentreffen): bewusst außerhalb der Farbsuche, auf Ansage. Sauber wäre,
-   die Farbsuche für neun Töne neu zu rechnen, falls dieser Bedarf bleibt. */
+   --gw-8 (Ocker) und --gw-9 (Türkis) sind spätere Handergänzungen für einen Plan
+   mit >8 Gewerken (Klassentreffen): bewusst außerhalb der Farbsuche, auf Ansage.
+   Sauber wäre, die Farbsuche für zehn Töne neu zu rechnen, falls der Bedarf bleibt. */
 :root {
   --gw-0: #eb6834;  /* orange  */
   --gw-1: #1baf7a;  /* aqua    */
@@ -28,21 +28,22 @@
   --gw-6: #4a3aa7;  /* violett */
   --gw-7: #008300;  /* grün    */
   --gw-8: #8a5a2b;  /* ocker   */
+  --gw-9: #0e9aa7;  /* türkis  */
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     --gw-0: #d95926; --gw-1: #199e70; --gw-2: #c98500; --gw-3: #d55181;
     --gw-4: #3987e5; --gw-5: #e66767; --gw-6: #9085e9; --gw-7: #008300;
-    --gw-8: #a06a33;
+    --gw-8: #a06a33; --gw-9: #1fb0bd;
   }
 }
 :root[data-theme="dark"] {
   --gw-0: #d95926; --gw-1: #199e70; --gw-2: #c98500; --gw-3: #d55181;
   --gw-4: #3987e5; --gw-5: #e66767; --gw-6: #9085e9; --gw-7: #008300;
-  --gw-8: #a06a33;
+  --gw-8: #a06a33; --gw-9: #1fb0bd;
 }
 
-/* Zweiter Identitätskanal für Gewerk 10–18: 45°-Schraffur über dem Farbton.
+/* Zweiter Identitätskanal für Gewerk 11–20: 45°-Schraffur über dem Farbton.
    Liegt auf ::after, damit die Füllung des Balkens (Fortschritt, Status)
    unberührt bleibt. */
 .bz-bar[data-tex], .bz-sum[data-tex], .bz-mini-b[data-tex], .bz-dot[data-tex] { position: relative; }
@@ -91,6 +92,9 @@ body { margin: 0; }
 
 .bz-corner-cap { display: flex; align-items: center; height: 100%; }
 .bz-t { position: absolute; top: 0; height: 100%; display: flex; align-items: center; white-space: nowrap; pointer-events: none; }
+/* Die grobe Zeile spannt ihr Intervall und zentriert das Label darüber
+   (Tagesdatum mittig über den Stunden). Randlinie bleibt am Intervallanfang. */
+.bz-t-major { justify-content: center; overflow: hidden; }
 .bz-t-major > span { padding: 0 8px; }
 .bz-t-minor { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; }
 .bz-t-minor > span { padding-left: 4px; line-height: 1; }

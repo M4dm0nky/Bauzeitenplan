@@ -42,17 +42,17 @@ await p.waitForTimeout(1200);
 
 await check('Projekt heißt richtig', async () =>
   (await p.locator('#proj-name').textContent()).includes('Klassentreffen') ? true : 'Name falsch');
-await check('17 Gewerke', async () => {
+await check('19 Gewerke', async () => {
   const n = await p.locator('.legend-i').count();
-  return n === 17 ? true : n + ' statt 17';
+  return n === 19 ? true : n + ' statt 19';
 });
-await check('acht Gewerke mit Schraffur (Platz 10–17)', async () => {
+await check('neun Gewerke mit Schraffur (Platz 11–19)', async () => {
   const n = await p.locator('.legend-i .bz-dot[data-tex]').count();
-  return n === 8 ? true : n + ' statt 8';
+  return n === 9 ? true : n + ' statt 9';
 });
-await check('63 Vorgänge', async () => {
+await check('122 Vorgänge', async () => {
   const t = await p.locator('.kpi', { hasText: 'Vorgänge' }).locator('.kpi-v').textContent();
-  return t.trim() === '63' ? true : t;
+  return t.trim() === '122' ? true : t;
 });
 await check('Plan startet OHNE Konflikte', async () =>
   (await p.locator('#resolve').isHidden()) ? true : 'Konfliktknopf sichtbar');
@@ -60,14 +60,14 @@ await check('ein Meilenstein (Baufrei)', async () => {
   const n = await p.locator('.bz-ms').count();
   return n === 1 ? true : n + ' statt 1';
 });
-await check('alle Balken sind gestrichelt (Dauer geschätzt)', async () => {
+await check('die meisten Balken sind NICHT gestrichelt (echte Zeiten aus V03)', async () => {
   const total = await p.locator('.bz-bar').count();
   const est = await p.locator('.bz-bar.is-estimated').count();
-  return total > 0 && est === total ? true : `${est}/${total} markiert`;
+  return total >= 100 && est <= 12 ? true : `${est}/${total} gestrichelt (erwartet ~9 von ~121)`;
 });
-await check('leere Gewerke (Video/Pyro) haben keine Balken, aber eine Zeile', async () => {
+await check('Besucher-Gastro und Sanitätsdienst sind in der Legende', async () => {
   const namen = await p.locator('.legend-i').allTextContents();
-  return namen.some((x) => /Video/.test(x)) && namen.some((x) => /Pyro/.test(x)) ? true : 'Video/Pyro fehlen in der Legende';
+  return namen.some((x) => /Besucher-Gastro/.test(x)) && namen.some((x) => /Sanitätsdienst/.test(x)) ? true : 'neue Gewerke fehlen';
 });
 
 // Überblick über die zwei Wochen

@@ -3,6 +3,24 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.1.3 — 2026-07-17
+
+**Zeitachse**
+- Tagesansicht zeigt das Datum mit Wochentag mittig über den Stunden („Do 27.08.")
+- Feinere Stundenraster: 3-Stunden-Schritte (00 · 03 · 06 … 21) statt 6-Stunden
+
+**Import**
+- Beim Import fragt die App, ob ein bereits vorhandener Plan gleichen Namens
+  ersetzt wird (nur diese Datei laden) oder zusätzlich importiert — keine
+  stillen Duplikate mehr; erneuter Import derselben Datei überschreibt sich
+
+**Klassentreffen-Vorlage**
+- Neu aus dem Detail-Bauzeitenplan V03 gebaut: echte Uhrzeiten statt Halbtage,
+  Dienstleister in der Notiz; mehrfach gelistete Dauer-/Mehrtagestätigkeiten
+  (Objektbewachung, Schichten, mehrtägige Auf-/Abbauten) je zu einem Balken
+  zusammengefasst
+- Zehnter Palettenton (Türkis) für Pläne mit mehr als neun Gewerken
+
 ## 0.1.2 — 2026-07-16
 
 **Optik**

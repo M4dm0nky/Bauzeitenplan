@@ -63,8 +63,8 @@ const startOfWeek = (d) => {
  * Obere Zeile = grobe Einheit, untere = feine.
  */
 export function tickScale(pxPerMinute) {
-  if (pxPerMinute >= 1.2)  return { major: 'day',   minor: 'hour3' };
-  if (pxPerMinute >= 0.45) return { major: 'day',   minor: 'hour6' };
+  if (pxPerMinute >= 0.5)  return { major: 'day',   minor: 'hour3' };
+  if (pxPerMinute >= 0.25) return { major: 'day',   minor: 'hour6' };
   if (pxPerMinute >= 0.16) return { major: 'week',  minor: 'day'   };
   if (pxPerMinute >= 0.05) return { major: 'month', minor: 'day'   };
   return { major: 'month', minor: 'week' };
@@ -96,6 +96,8 @@ export function ticksFor(unit, from, to) {
           t: new Date(cur),
           label: String(cur.getDate()),
           sub: DAY_NAMES[wd],
+          // Volles Datum für die Kopfzeile („Fr 27.08.") — mittig über den Stunden.
+          full: DAY_NAMES[wd] + ' ' + String(cur.getDate()).padStart(2, '0') + '.' + String(cur.getMonth() + 1).padStart(2, '0') + '.',
           weekend: wd === 0 || wd === 6,
         });
         cur.setDate(cur.getDate() + 1);

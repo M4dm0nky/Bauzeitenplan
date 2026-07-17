@@ -361,11 +361,27 @@ async function doImport(e) {
   const f = e.target.files[0];
   if (!f) return;
   e.target.value = '';
-  const r = deserialize(await f.text(), { newId: true });
+  // Ohne newId: die Datei bringt ihre eigene Projekt-ID mit → derselbe Plan
+  // erneut geladen überschreibt sich, statt sich zu verdoppeln.
+  const r = deserialize(await f.text());
   if (r.ok === false) return toast(r.error, 'bad', 8000);
+  const name = r.plan.project.name;
+
+  // Schon Projekte mit gleichem Namen da? Fragen, ob ersetzen (alte weg, nur
+  // diese Datei) oder zusätzlich importieren — sonst sammeln sich Duplikate.
+  const dupes = repo.list().filter((p) => p.name === name);
+  if (dupes.length) {
+    const ersetzen = confirm(
+      `«${name}» ist bereits vorhanden (${dupes.length}×).\n\n`
+      + 'OK  =  alte Version(en) löschen und NUR diese Datei laden\n'
+      + 'Abbrechen  =  zusätzlich als neues Projekt behalten');
+    if (ersetzen) for (const p of dupes) repo.remove(p.id);
+    else r.plan.project.id = 'p' + Date.now().toString(36);
+  }
+
   open(r.plan);
   $('dlg').hidden = true;      // sonst bleibt der Anlege-Dialog über allem liegen
-  toast('«' + r.plan.project.name + '» importiert');
+  toast('«' + name + '» importiert');
 }
 
 // ── Projektdialog ───────────────────────────────────────────────────────────

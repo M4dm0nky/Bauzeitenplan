@@ -227,9 +227,15 @@ for (const pg of PAGES) {
     });
   });
   await check('Puffer-Schraffuren bleiben disponierbar breit', async () => {
-    const wide = await page.locator('.bz-slack').evaluateAll(
-      (ns) => ns.filter((n) => n.offsetWidth > 1400).length);
-    return wide === 0 ? true : `${wide} Schraffur(en) breiter als der Bildschirm`;
+    // Zoom-unabhängig: ein freier Puffer kann NIE breiter sein als der ganze Plan.
+    // (Früher gegen feste 1400 px geprüft — das hing an der alten Standard-Zoomstufe;
+    // seit die Tagesansicht einen Tag voll aufzieht, ist Pixelbreite kein Maß mehr.)
+    const wide = await page.evaluate(() => {
+      const canvas = document.querySelector('.bz-canvas');
+      const planW = canvas ? canvas.scrollWidth : Infinity;
+      return [...document.querySelectorAll('.bz-slack')].filter((n) => n.offsetWidth > planW + 4).length;
+    });
+    return wide === 0 ? true : `${wide} Schraffur(en) breiter als der ganze Plan`;
   });
   await check('keine Beschriftung ohne sichtbaren Balken', async () => {
     // Balken links aus dem Bild dürfen keinen Text unter der Gewerk-Spalte

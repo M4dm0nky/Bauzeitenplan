@@ -3,3 +3,7 @@ package-lock.json
 tools/out/
 tools/shots/
 .DS_Store
+
+# PocketBase (lokale Entwicklung — nicht einchecken)
+pocketbase/bin/
+pocketbase/pb_data/

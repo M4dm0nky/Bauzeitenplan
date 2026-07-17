@@ -562,11 +562,17 @@ export function createGantt(root, opts = {}) {
     const from = new Date(Math.max(T0, vFrom) * 60000);
     const to = new Date(Math.min(T1, vTo) * 60000);
 
+    // Die grobe Zeile (Tag/Woche/Monat) spannt ihr Intervall und trägt das Label
+    // MITTIG — im Tagesmodus das volle Datum genau über den Stunden.
+    const majSpan = (u, d) => u === 'day' ? 1440 : u === 'week' ? 10080
+      : Math.round((new Date(d.getFullYear(), d.getMonth() + 1, 1) - new Date(d.getFullYear(), d.getMonth(), 1)) / 60000);
     axisMajor.replaceChildren();
     for (const t of ticksFor(sc.major, from, to)) {
+      const startMin = Math.round(t.t.getTime() / 60000);
       const n = el('div', 'bz-t bz-t-major');
-      n.style.left = x(Math.round(t.t.getTime() / 60000)) + 'px';
-      n.append(el('span', null, t.label));
+      n.style.left = x(startMin) + 'px';
+      n.style.width = (majSpan(sc.major, t.t) * px) + 'px';
+      n.append(el('span', null, sc.major === 'day' ? t.full : t.label));
       axisMajor.append(n);
     }
     axisMinor.replaceChildren();
