@@ -3,6 +3,30 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.3.0 — 2026-07-18
+
+**Gleiche Reihenfolge in beiden Ansichten**
+- Vorgänge eines Gewerks stehen jetzt in Gantt **und** Tabelle nach Startzeit
+  (08:00 über 08:05), aus einer Quelle. Bisher zeigte der Gantt sie in
+  Einfügereihenfolge — derselbe Plan sah in beiden Ansichten anders sortiert aus.
+  Neu angelegte oder verschobene Vorgänge sortieren sich automatisch ein.
+
+**Untervorgänge**
+- Vorgänge können jetzt **Untervorgänge** haben (z. B. „PA hängen" mit Main PA SL/SR,
+  Sidefill, Delay …). In der Tabelle legt „+↳" einen Untervorgang an; er wird
+  eingerückt und ist über den Pfeil am Elternvorgang **einklappbar** — in Tabelle
+  und Gantt.
+- Der übergeordnete Vorgang ist die **Hülle** seiner Untervorgänge: Start und Ende
+  ergeben sich automatisch (frühester Kindstart … spätestes Kindende) und sind nicht
+  von Hand editierbar. Im Gantt erscheint er als Sammelbalken über seinen
+  Untervorgängen. Elternvorgang löschen nimmt die Untervorgänge mit (⌘Z holt alles
+  zurück). Eine Ebene tief.
+
+**Handy & Tablet**
+- Die Seite ist jetzt auf schmalen Bildschirmen bedienbar: der Kopf bricht um, die
+  Detailseite öffnet als Overlay von rechts, Gantt und Tabelle scrollen für sich —
+  die Seite selbst läuft nicht mehr über den Rand. Größere Tap-Ziele fürs Antippen.
+
 ## 0.2.1 — 2026-07-18
 
 **Gewerke umsortieren**

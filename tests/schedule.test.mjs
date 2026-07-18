@@ -1,4 +1,4 @@
-import { computeSchedule, topoSort, toMin } from '../js/schedule.js';
+import { computeSchedule, topoSort, toMin, byStart } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -181,6 +181,38 @@ test('Sommerzeit: Dauer über den DST-Sprung bleibt in Echtzeit korrekt', () => 
   const R = computeSchedule(tasks, []);
   const hours = (R.get('a').ef - R.get('a').es) / 60;
   assert.ok(hours === 3 || hours === 4, 'Dauer aus echten Zeitstempeln, nicht aus Ziffernarithmetik: ' + hours);
+});
+
+console.log('\nbyStart — eine Reihenfolge für Tabelle und Gantt');
+const tt = (id, start, end, title = id) => ({ id, start, end, title });
+test('sortiert nach Startzeit (08:00 vor 08:05)', () => {
+  const list = [
+    tt('spät', '2026-07-13T08:05', '2026-07-13T09:00'),
+    tt('früh', '2026-07-13T08:00', '2026-07-13T09:00'),
+  ].sort(byStart);
+  assert.deepEqual(list.map((x) => x.id), ['früh', 'spät']);
+});
+test('gleicher Start: kürzeres Ende zuerst', () => {
+  const list = [
+    tt('lang', '2026-07-13T08:00', '2026-07-13T12:00'),
+    tt('kurz', '2026-07-13T08:00', '2026-07-13T09:00'),
+  ].sort(byStart);
+  assert.deepEqual(list.map((x) => x.id), ['kurz', 'lang']);
+});
+test('gleicher Start und gleiches Ende: nach Titel (stabil, deckungsgleich)', () => {
+  const list = [
+    tt('b', '2026-07-13T08:00', '2026-07-13T09:00', 'Bravo'),
+    tt('a', '2026-07-13T08:00', '2026-07-13T09:00', 'Alpha'),
+  ].sort(byStart);
+  assert.deepEqual(list.map((x) => x.title), ['Alpha', 'Bravo']);
+});
+test('Sommerzeit: Reihenfolge aus echten Zeitstempeln (toMin), nicht aus Ziffern', () => {
+  // 02:30 CEST liegt real VOR 02:30 CET nach der Rückstellung am 2026-10-25.
+  const list = [
+    tt('nach', '2026-10-25T02:30+01:00', '2026-10-25T03:00+01:00'),
+    tt('vor', '2026-10-25T02:30+02:00', '2026-10-25T03:00+02:00'),
+  ].sort(byStart);
+  assert.deepEqual(list.map((x) => x.id), ['vor', 'nach']);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

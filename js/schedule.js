@@ -10,6 +10,14 @@
 export const toMin = (iso) => Math.round(new Date(iso).getTime() / 60000);
 export const toDate = (min) => new Date(min * 60000);
 
+// Kanonische Reihenfolge der Vorgänge INNERHALB eines Gewerks: nach Startzeit,
+// bei Gleichstand nach Ende, zuletzt nach Titel (stabil). Der EINE Vergleicher
+// für Tabelle und Gantt — sonst zeigt derselbe Plan zwei Reihenfolgen und wirkt
+// „nicht gleich". Über toMin gerechnet, nie aus Datumsziffern (Sommerzeit).
+export const byStart = (a, b) =>
+  toMin(a.start) - toMin(b.start) || toMin(a.end) - toMin(b.end)
+  || (a.title || '').localeCompare(b.title || '');
+
 /**
  * Topologische Sortierung (Kahn). Wirft bei Zyklus — sonst würde der
  * Forward-Pass endlos laufen.

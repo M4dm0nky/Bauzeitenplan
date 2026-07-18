@@ -35,9 +35,14 @@ export function findConflicts(state, vorab) {
   }
 
   const byId = new Map(state.tasks.map((t) => [t.id, t]));
+  // Sammelvorgänge ausnehmen: ihre Lage ist die HÜLLE der Untervorgänge, nicht
+  // direkt verschiebbar. Ein Konflikt an ihnen wäre nicht auflösbar (moveTask
+  // lehnt sie ab) und risse den Sammelbefehl «Konflikte auflösen» mit.
+  const parentIds = new Set(state.tasks.filter((t) => t.parent != null).map((t) => t.parent));
   const out = [];
 
   for (const t of state.tasks) {
+    if (parentIds.has(t.id)) continue;
     const r = sched.get(t.id);
     if (!r) continue;
     const planned = toMin(t.start);

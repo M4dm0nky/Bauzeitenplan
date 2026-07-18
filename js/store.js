@@ -9,7 +9,7 @@
 // falsch sein. Nebenbei fällt das Zurückrollen gescheiterter Sammelbefehle
 // geschenkt ab.
 
-import { topoSort } from './schedule.js';
+import { topoSort, toMin } from './schedule.js';
 
 // Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
 // Ablage die äußere Schicht — diese Abhängigkeit liefe verkehrt herum. Für eine
@@ -38,6 +38,30 @@ function checkSpan(start, end, milestone) {
   return null;
 }
 
+// Hat der Vorgang Untervorgänge? Dann ist er ein Sammelvorgang: seine Zeiten sind
+// die HÜLLE der Kinder und nicht von Hand editierbar.
+const hasChildren = (state, id) => state.tasks.some((t) => t.parent === id);
+
+// Sammelvorgänge auf die Hülle ihrer Untervorgänge nachziehen: Start = frühester
+// Kindstart, Ende = spätestes Kindende. Läuft nach JEDER Änderung (in apply),
+// damit schedule.js, conflicts.js und persistence.js konsistente Werte sehen —
+// kein Cache, der veralten könnte (Regel aus CLAUDE.md). Nur EINE Ebene: ein Kind
+// kann selbst keine Kinder haben (in addTask erzwungen), also genügt ein Durchlauf.
+function reflowParents(state) {
+  for (const p of state.tasks) {
+    let s = null, e = null;
+    for (const k of state.tasks) {
+      if (k.parent !== p.id) continue;
+      if (s == null || toMin(k.start) < toMin(s)) s = k.start;
+      if (e == null || toMin(k.end) > toMin(e)) e = k.end;
+    }
+    if (s == null) continue;          // keine Kinder → kein Sammelvorgang
+    p.start = s;
+    p.end = e;
+    p.milestone = false;              // ein Sammelvorgang hat Dauer, ist keine Raute
+  }
+}
+
 function wouldCycle(state, deps) {
   try {
     topoSort(state.tasks.map((t) => t.id), deps);
@@ -57,7 +81,17 @@ function wouldCycle(state, deps) {
 const HANDLERS = {
   addTask(state, cmd) {
     const t = cmd.task || {};
-    if (!state.gewerke.some((g) => g.id === t.gewerk) && t.gewerk !== 'projekt') return 'Unbekanntes Gewerk: ' + t.gewerk;
+    let gewerk = t.gewerk;
+    // Untervorgang: der Elternvorgang muss existieren und darf selbst kein Kind
+    // sein (nur eine Ebene). Das Gewerk erbt das Kind vom Elternvorgang.
+    const parent = t.parent ?? null;
+    if (parent != null) {
+      const p = state.tasks.find((x) => x.id === parent);
+      if (!p) return 'Übergeordneter Vorgang nicht gefunden.';
+      if (p.parent != null) return 'Ein Untervorgang kann keine eigenen Untervorgänge haben (nur eine Ebene).';
+      gewerk = p.gewerk;
+    }
+    if (!state.gewerke.some((g) => g.id === gewerk) && gewerk !== 'projekt') return 'Unbekanntes Gewerk: ' + gewerk;
     if (!String(t.title || '').trim()) return 'Der Vorgang braucht einen Namen.';
     const milestone = !!t.milestone;
     const bad = checkSpan(t.start, t.end, milestone);
@@ -65,10 +99,10 @@ const HANDLERS = {
     const id = t.id || newId('t');
     if (state.tasks.some((x) => x.id === id)) return 'Diese id gibt es schon: ' + id;
     state.tasks.push({
-      id, gewerk: t.gewerk, title: String(t.title).trim(),
+      id, gewerk, title: String(t.title).trim(),
       start: t.start, end: t.end, milestone,
       progress: t.progress ?? 0, status: t.status || 'geplant',
-      crew: t.crew ?? null, notes: t.notes || '',
+      crew: t.crew ?? null, notes: t.notes || '', parent,
     });
     return ok({ id });
   },
@@ -76,16 +110,29 @@ const HANDLERS = {
   removeTask(state, cmd) {
     const i = state.tasks.findIndex((t) => t.id === cmd.id);
     if (i < 0) return 'Vorgang nicht gefunden.';
-    state.tasks.splice(i, 1);
+    // Ein Sammelvorgang nimmt seine Untervorgänge mit (Kaskade) — wie beim
+    // Löschen eines Gewerks. Rückgängig über den Schnappschuss, nicht Stück für
+    // Stück. Ohne die Kaskade blieben verwaiste Kinder mit totem parent zurück.
+    const gone = new Set([cmd.id, ...state.tasks.filter((t) => t.parent === cmd.id).map((t) => t.id)]);
+    state.tasks = state.tasks.filter((t) => !gone.has(t.id));
     // Verwaiste Abhängigkeiten mitnehmen: sonst zeigen Pfeile ins Leere und
     // die Terminrechnung stolpert über undefined.
-    state.deps = state.deps.filter((d) => d.from !== cmd.id && d.to !== cmd.id);
+    state.deps = state.deps.filter((d) => !gone.has(d.from) && !gone.has(d.to));
     return ok();
   },
 
   setTaskField(state, cmd) {
     const t = state.tasks.find((x) => x.id === cmd.id);
     if (!t) return 'Vorgang nicht gefunden.';
+    // Die Zuordnung zum Elternvorgang läuft nicht über setTaskField (Ring-/Ebenen-
+    // Prüfung fehlte hier) — heute nur über addTask beim Anlegen des Untervorgangs.
+    if (cmd.field === 'parent') return 'Die Zuordnung zum Elternvorgang wird nicht so geändert.';
+    // Sammelvorgang: Zeiten sind die Hülle der Untervorgänge, nicht editierbar.
+    if (['start', 'end', 'milestone'].includes(cmd.field) && hasChildren(state, cmd.id))
+      return 'Die Zeiten ergeben sich aus den Untervorgängen.';
+    // Ein Untervorgang bleibt im Gewerk seines Elternvorgangs.
+    if (cmd.field === 'gewerk' && t.parent != null)
+      return 'Ein Untervorgang bleibt im Gewerk seines Elternvorgangs.';
     const next = { ...t, [cmd.field]: cmd.value };
     if (['start', 'end', 'milestone'].includes(cmd.field)) {
       const bad = checkSpan(next.start, next.end, next.milestone);
@@ -94,12 +141,17 @@ const HANDLERS = {
     if (cmd.field === 'title' && !String(cmd.value || '').trim()) return 'Der Vorgang braucht einen Namen.';
     if (cmd.field === 'gewerk' && !state.gewerke.some((g) => g.id === cmd.value)) return 'Unbekanntes Gewerk.';
     t[cmd.field] = cmd.value;
+    // Wechselt ein Elternvorgang das Gewerk, ziehen seine Untervorgänge mit —
+    // sonst blieben sie im alten Gewerk zurück.
+    if (cmd.field === 'gewerk') for (const k of state.tasks) if (k.parent === t.id) k.gewerk = cmd.value;
     return ok();
   },
 
   moveTask(state, cmd) {
     const t = state.tasks.find((x) => x.id === cmd.id);
     if (!t) return 'Vorgang nicht gefunden.';
+    // Sammelvorgänge werden nicht direkt verschoben — ihre Lage folgt den Kindern.
+    if (hasChildren(state, cmd.id)) return 'Die Zeiten ergeben sich aus den Untervorgängen.';
     const bad = checkSpan(cmd.start, cmd.end, t.milestone);
     if (bad) return bad;
     t.start = cmd.start;
@@ -253,6 +305,8 @@ export function createStore(initial) {
   if (!state.gewerke) state.gewerke = [];
   // Bestandsdaten ohne Farbplatz nachrüsten
   state.gewerke.forEach((g, i) => { if (g.slot == null) g.slot = i; });
+  state.tasks.forEach((t) => { if (t.parent === undefined) t.parent = null; });
+  reflowParents(state);   // Sammelvorgänge gleich auf ihre Hülle setzen
 
   const undoStack = [];
   const redoStack = [];
@@ -283,6 +337,9 @@ export function createStore(initial) {
     const draft = clone(state);
     const r = run(draft, cmd);
     if (r.ok === false) return r;
+    // Sammelvorgänge auf die Hülle ihrer Untervorgänge nachziehen — zentral nach
+    // jedem erfolgreichen Befehl, damit kein Handler es einzeln bedenken muss.
+    reflowParents(draft);
 
     undoStack.push(state);
     if (undoStack.length > UNDO_MAX) undoStack.shift();
@@ -323,6 +380,8 @@ export function createStore(initial) {
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
     replace(next) {           // Projektwechsel / Import
       state = clone(next);
+      state.tasks.forEach((t) => { if (t.parent === undefined) t.parent = null; });
+      reflowParents(state);
       undoStack.length = 0;
       redoStack.length = 0;
       dirty = false;

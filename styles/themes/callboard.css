@@ -162,6 +162,14 @@ body {
 
 .bz-slack { background: repeating-linear-gradient(45deg, var(--rule-2) 0 2px, transparent 2px 5px); opacity: .7; }
 
+/* Sammelbalken (Elternvorgang): der Gewerk-Balken mit dunklen Ober-/Unterschienen
+   — liest sich als Klammer über den Untervorgängen, behält aber Farbe und
+   Beschriftung. Kein box-shadow (den belegen der Panel-Ring und is-crit). */
+.bz-bar.is-summary {
+  background-image: linear-gradient(to bottom,
+    rgba(0,0,0,.38) 0 2px, transparent 2px calc(100% - 2px), rgba(0,0,0,.38) calc(100% - 2px) 100%);
+}
+
 .bz-sum { height: 4px; background: var(--gw); }
 .bz-sum-cap-l, .bz-sum-cap-r { border-top: 4px solid var(--gw); top: 4px; }
 .bz-sum-cap-l { border-left: 4px solid transparent; }
@@ -253,6 +261,13 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .tb-add:hover { color: var(--ink); text-decoration: underline; }
 .tb-drag { color: var(--muted); }
 .tb-drag:hover { color: var(--ink); }
+.tb-tog { color: var(--muted); }
+.tb-tog:hover { color: var(--ink); }
+.tb-submark { color: var(--muted); }
+.tb-subadd { color: var(--muted); }
+.tb-subadd:hover { color: var(--ink); }
+/* Sammelvorgang hervorheben — der Name trägt die Gruppe. */
+.tb-r.is-parent .c-title input { font-weight: 600; color: var(--ink); }
 .tb-empty td { color: var(--muted); font-size: calc(10px * var(--fs)); font-style: italic; }
 .tb-fixed { color: var(--muted); font-size: calc(10px * var(--fs)); }
 .tb-ico { color: var(--muted); font-size: calc(12px * var(--fs)); }

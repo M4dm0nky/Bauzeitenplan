@@ -5,7 +5,7 @@
 // Das Raster im Canvas ist ein CSS-Gradient (kostenlos, beliebig breit); nur die
 // Beschriftungen im Viewport landen im DOM und werden beim Scrollen recycelt.
 
-import { computeSchedule, toMin, toDate } from './schedule.js';
+import { computeSchedule, toMin, toDate, byStart } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
 import { runningAt, delaysAt } from './live.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
@@ -132,7 +132,7 @@ export function createGantt(root, opts = {}) {
     rows = [];
     let y = 0;
     for (const g of [...S.gewerke].sort((a, b) => a.sort - b.sort)) {
-      const tasks = S.tasks.filter((t) => t.gewerk === g.id);
+      const tasks = S.tasks.filter((t) => t.gewerk === g.id).sort(byStart);
       if (!tasks.length) continue;
       const spans = tasks.filter((t) => !t.milestone);
       const gStart = Math.min(...tasks.map((t) => toMin(t.start)));
@@ -141,14 +141,23 @@ export function createGantt(root, opts = {}) {
       rows.push({ kind: 'group', g, y, h: O.groupH, gStart, gEnd, tasks, done, spans });
       y += O.groupH;
       if (!collapsed.has(g.id)) {
-        for (const t of tasks) {
-          rows.push({ kind: 'task', t, g, y, h: O.rowH });
+        // Erst die obersten Vorgänge (nach Start), darunter je Elternvorgang seine
+        // Untervorgänge — eingerückt und über collapsed[parentId] einklappbar.
+        for (const t of tasks.filter((x) => x.parent == null)) {
+          const kids = tasks.filter((k) => k.parent === t.id);
+          rows.push({ kind: 'task', t, g, y, h: O.rowH, parent: kids.length > 0 });
           y += O.rowH;
+          if (kids.length && !collapsed.has(t.id)) {
+            for (const k of kids) {
+              rows.push({ kind: 'task', t: k, g, y, h: O.rowH, child: true });
+              y += O.rowH;
+            }
+          }
         }
       }
     }
     // Projekt-Meilensteine (gewerk 'projekt') als eigene Zeile ganz unten
-    const proj = S.tasks.filter((t) => t.gewerk === 'projekt');
+    const proj = S.tasks.filter((t) => t.gewerk === 'projekt').sort(byStart);
     if (proj.length) {
       rows.push({ kind: 'projekt', tasks: proj, y, h: O.groupH });
       y += O.groupH;
@@ -198,6 +207,18 @@ export function createGantt(root, opts = {}) {
       } else {
         lab.style.setProperty('--gw', gewerkVar(r.g.slot));
         const s = SCHED.get(r.t.id) || { critical: false, float: 0 };
+        if (r.child) lab.classList.add('is-child');
+        // Elternvorgang: Ein-/Ausklapp-Pfeil, wie beim Gewerk (collapsed[taskId]).
+        if (r.parent) {
+          lab.classList.add('has-sub');
+          lab.classList.toggle('is-collapsed', collapsed.has(r.t.id));
+          const tw = el('button', 'bz-tw');
+          tw.setAttribute('aria-expanded', String(!collapsed.has(r.t.id)));
+          tw.setAttribute('aria-label', (collapsed.has(r.t.id) ? 'Aufklappen: ' : 'Zuklappen: ') + r.t.title);
+          tw.append(el('span', 'bz-tw-i'));
+          tw.onclick = () => { collapsed.has(r.t.id) ? collapsed.delete(r.t.id) : collapsed.add(r.t.id); rebuild(); layout(); };
+          lab.append(tw);
+        }
         const nm = el('span', 'bz-lab-name', r.t.title);
         nm.title = r.t.title;
         lab.append(nm);
@@ -262,7 +283,7 @@ export function createGantt(root, opts = {}) {
           track.append(d);
           rowById.set('task:' + t.id, d);
         } else {
-          const b = el('div', 'bz-bar bz-st-' + t.status);
+          const b = el('div', 'bz-bar bz-st-' + t.status + (r.parent ? ' is-summary' : ''));
           b.style.setProperty('--gw', gewerkVar(r.g.slot));
           if (gewerkTexture(r.g.slot)) b.dataset.tex = '1';
           b.classList.toggle('is-crit', s.critical);

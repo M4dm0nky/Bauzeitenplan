@@ -462,5 +462,96 @@ test('unbekannter Vorgang wird abgelehnt', () => {
   assert.equal(s.apply({ type: 'duplicateTask', id: 'weg' }).ok, false);
 });
 
+console.log('\nUntervorgänge (Eltern = Hülle)');
+// Elternvorgang «pa» ohne eigene sinnvolle Dauer; zwei Kinder tragen die echten
+// Zeiten. Die Hülle des Elternteils muss sich daraus ergeben.
+const seedSub = () => ({
+  project: { id: 'p1', name: 'Test', venue: '', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin' },
+  gewerke: [{ id: 'ton', name: 'Ton', sort: 0, slot: 0 }],
+  tasks: [
+    { id: 'pa', gewerk: 'ton', title: 'PA hängen', start: '2026-07-13T08:00', end: '2026-07-13T09:00', milestone: false, progress: 0, status: 'geplant', crew: null, parent: null },
+  ],
+  deps: [],
+});
+const addKid = (s, title, start, end) =>
+  s.apply({ type: 'addTask', task: { gewerk: 'ton', parent: 'pa', title, start, end } });
+
+test('Untervorgang erbt das Gewerk des Elternvorgangs', () => {
+  const s = createStore(seedSub());
+  const r = s.apply({ type: 'addTask', task: { gewerk: 'gibtsnicht', parent: 'pa', title: 'Main SL', start: '2026-07-13T10:00', end: '2026-07-13T12:00' } });
+  assert.equal(r.ok, true);
+  assert.equal(taskById(s, r.id).gewerk, 'ton');
+});
+test('Eltern-Zeiten sind die Hülle der Kinder (frühester Start … spätestes Ende)', () => {
+  const s = createStore(seedSub());
+  addKid(s, 'Main SL', '2026-07-13T10:00', '2026-07-13T12:00');
+  addKid(s, 'Main SR', '2026-07-13T09:30', '2026-07-13T13:30');
+  const pa = taskById(s, 'pa');
+  assert.equal(pa.start, '2026-07-13T09:30', 'frühester Kindstart');
+  assert.equal(pa.end, '2026-07-13T13:30', 'spätestes Kindende');
+  assert.equal(pa.milestone, false);
+});
+test('ein neues Kind außerhalb dehnt die Hülle', () => {
+  const s = createStore(seedSub());
+  addKid(s, 'Main SL', '2026-07-13T10:00', '2026-07-13T12:00');
+  addKid(s, 'Sidefill', '2026-07-13T14:00', '2026-07-13T16:00');
+  assert.equal(taskById(s, 'pa').end, '2026-07-13T16:00');
+});
+test('Kind verschieben zieht die Eltern-Hülle nach', () => {
+  const s = createStore(seedSub());
+  const r = addKid(s, 'Main SL', '2026-07-13T10:00', '2026-07-13T12:00');
+  s.apply({ type: 'moveTask', id: r.id, start: '2026-07-13T06:00', end: '2026-07-13T08:00' });
+  assert.equal(taskById(s, 'pa').start, '2026-07-13T06:00');
+});
+test('nur EINE Ebene: ein Untervorgang bekommt keine eigenen Untervorgänge', () => {
+  const s = createStore(seedSub());
+  const r = addKid(s, 'Main SL', '2026-07-13T10:00', '2026-07-13T12:00');
+  const bad = s.apply({ type: 'addTask', task: { gewerk: 'ton', parent: r.id, title: 'Enkel', start: '2026-07-13T10:00', end: '2026-07-13T11:00' } });
+  assert.equal(bad.ok, false);
+});
+test('unbekannter Elternvorgang wird abgelehnt', () => {
+  const s = createStore(seedSub());
+  assert.equal(s.apply({ type: 'addTask', task: { gewerk: 'ton', parent: 'weg', title: 'x', start: '2026-07-13T10:00', end: '2026-07-13T11:00' } }).ok, false);
+});
+test('Eltern-Zeit lässt sich nicht von Hand setzen (Hülle gewinnt)', () => {
+  const s = createStore(seedSub());
+  addKid(s, 'Main SL', '2026-07-13T10:00', '2026-07-13T12:00');
+  const r = s.apply({ type: 'setTaskField', id: 'pa', field: 'start', value: '2026-07-13T05:00' });
+  assert.equal(r.ok, false);
+  assert.equal(taskById(s, 'pa').start, '2026-07-13T10:00', 'unverändert');
+});
+test('Sammelvorgang lässt sich nicht direkt verschieben', () => {
+  const s = createStore(seedSub());
+  addKid(s, 'Main SL', '2026-07-13T10:00', '2026-07-13T12:00');
+  assert.equal(s.apply({ type: 'moveTask', id: 'pa', start: '2026-07-13T05:00', end: '2026-07-13T06:00' }).ok, false);
+});
+test('Untervorgang bleibt im Gewerk des Elternvorgangs (kein Wechsel)', () => {
+  const s = createStore(seedSub());
+  s.apply({ type: 'addGewerk', gewerk: { id: 'licht', name: 'Licht' } });
+  const r = addKid(s, 'Main SL', '2026-07-13T10:00', '2026-07-13T12:00');
+  assert.equal(s.apply({ type: 'setTaskField', id: r.id, field: 'gewerk', value: 'licht' }).ok, false);
+});
+test('Elternvorgang löschen nimmt die Kinder mit (Kaskade)', () => {
+  const s = createStore(seedSub());
+  addKid(s, 'Main SL', '2026-07-13T10:00', '2026-07-13T12:00');
+  addKid(s, 'Main SR', '2026-07-13T09:30', '2026-07-13T13:30');
+  s.apply({ type: 'removeTask', id: 'pa' });
+  assert.equal(s.state.tasks.length, 0);
+});
+test('Kaskaden-Löschen ist mit einem ⌘Z komplett zurück', () => {
+  const s = createStore(seedSub());
+  addKid(s, 'Main SL', '2026-07-13T10:00', '2026-07-13T12:00');
+  addKid(s, 'Main SR', '2026-07-13T09:30', '2026-07-13T13:30');
+  s.apply({ type: 'removeTask', id: 'pa' });
+  s.undo();
+  assert.equal(s.state.tasks.length, 3);
+  assert.equal(taskById(s, 'pa').end, '2026-07-13T13:30', 'Hülle wieder da');
+});
+test('parent lässt sich nicht über setTaskField umbiegen', () => {
+  const s = createStore(seedSub());
+  const r = addKid(s, 'Main SL', '2026-07-13T10:00', '2026-07-13T12:00');
+  assert.equal(s.apply({ type: 'setTaskField', id: r.id, field: 'parent', value: null }).ok, false);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

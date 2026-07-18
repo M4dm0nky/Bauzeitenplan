@@ -315,6 +315,94 @@ for (const pg of PAGES) {
   await page.close();
 }
 
+// ── Handy-Durchlauf (390×844) ─────────────────────────────────────────────────
+// Die Seite war am Telefon unbrauchbar (fixe Seitenleiste, breiter Kopf). Hier im
+// echten schmalen Viewport prüfen: keine horizontale SEITEN-Scrollleiste, das Panel
+// öffnet als Overlay-Drawer, Gantt und Tabelle scrollen für sich.
+{
+  console.log('\nHANDY (390×844)');
+  // isMobile/hasTouch unterstützt Firefox nicht — der schmale Viewport allein
+  // löst die Media-Query aus, mehr braucht die Darstellungsprüfung nicht.
+  const m = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const merr = [];
+  m.on('pageerror', (e) => merr.push('JS: ' + e.message));
+  m.on('console', (e) => { if (e.type() === 'error') merr.push('console: ' + e.text()); });
+  await m.goto(PAGES[0].url, { waitUntil: 'load', timeout: 30000 });
+  await m.waitForTimeout(argBase ? 1600 : 800);
+  if (await m.locator('#dlg').isVisible()) {
+    await m.fill('.dlg-f:first-child input', 'Handy');
+    await m.locator('.dlg-t[data-k="festival"]').click();
+    await m.locator('.dlg-act .btn-p').click();
+    await m.waitForTimeout(900);
+  }
+  const mcheck = async (name, fn) => {
+    let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
+    if (r === true) console.log('    ✓ ' + name);
+    else { console.log('    ✗ ' + name + ': ' + r); problems++; }
+  };
+
+  // Nur Elemente, die den Überlauf WIRKLICH verursachen: right > Viewport UND
+  // kein Vorfahr klippt (overflow ≠ visible). Alles im .bz-scroll/.tb ist geklippt
+  // und zählt nicht — das echte Leck steht außerhalb.
+  const widestCulprit = () => m.evaluate(() => {
+    const w = window.innerWidth; let worst = null;
+    const clipped = (n) => {
+      for (let p = n.parentElement; p; p = p.parentElement) {
+        const o = getComputedStyle(p).overflowX;
+        if (o === 'auto' || o === 'hidden' || o === 'scroll') return true;
+      }
+      return false;
+    };
+    for (const n of document.querySelectorAll('*')) {
+      const r = n.getBoundingClientRect();
+      if (r.right > w + 1 && !clipped(n) && (!worst || r.right > worst.right)) {
+        worst = { right: Math.round(r.right), tag: n.tagName.toLowerCase(), cls: (n.className && String(n.className).slice(0, 40)) || '', id: n.id };
+      }
+    }
+    return worst;
+  });
+  await mcheck('keine horizontale Seiten-Scrollleiste', async () => {
+    if (await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)) return true;
+    return `scrollWidth ${await m.evaluate(() => document.documentElement.scrollWidth)} > 390 · breitestes: ${JSON.stringify(await widestCulprit())}`;
+  });
+  await mcheck('Ansichts-Umschalter ist fingergroß (≥ 38 px)', async () =>
+    (await m.locator('[data-view="gantt"]').evaluate((n) => n.getBoundingClientRect().height)) >= 38
+      ? true : 'Knopf zu niedrig');
+  await mcheck('Gantt zeigt Balken im schmalen Viewport', async () =>
+    (await m.locator('.bz-bar').count()) > 20 ? true : 'zu wenige Balken');
+  await m.screenshot({ path: join(shots, 'mobile-gantt.png') });
+
+  await mcheck('Panel öffnet als Overlay-Drawer (position:fixed, schmal)', async () => {
+    // Auswahl auslösen, ohne Hit-Testing: dispatchEvent stellt den Klick direkt
+    // zu (der Balken liegt teils unter der klebenden Spalte/Achse). Getestet wird
+    // hier die Drawer-POSITIONIERUNG, nicht die Klickbarkeit.
+    await m.locator('.bz-side .bz-lab[data-gewerk]').first().dispatchEvent('click');
+    await m.waitForTimeout(300);
+    return m.locator('#ins').evaluate((n) => {
+      if (n.hidden) return 'Panel blieb zu';
+      const s = getComputedStyle(n);
+      if (s.position !== 'fixed') return 'position=' + s.position + ' (kein Drawer)';
+      if (n.getBoundingClientRect().width > 362) return 'Drawer zu breit: ' + Math.round(n.getBoundingClientRect().width);
+      return true;
+    });
+  });
+  await m.screenshot({ path: join(shots, 'mobile-drawer.png') });
+  await m.locator('#ins .ins-x').click().catch(() => {});
+  await m.waitForTimeout(200);
+
+  await mcheck('Tabelle: Seite bleibt ohne horizontalen Überlauf', async () => {
+    await m.locator('[data-view="tabelle"]').click();
+    await m.waitForTimeout(400);
+    if (await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)) return true;
+    return `Seite läuft horizontal über · breitestes: ${JSON.stringify(await widestCulprit())}`;
+  });
+  await m.screenshot({ path: join(shots, 'mobile-table.png') });
+
+  if (merr.length) { console.log('    ✗ Fehler auf der Seite:'); merr.slice(0, 6).forEach((e) => console.log('        ' + e)); problems += merr.length; }
+  else console.log('    ✓ keine JS-Fehler');
+  await m.close();
+}
+
 await browser.close();
 if (server) server.close();
 console.log(problems ? `\n${problems} Problem(e) gefunden.\n` : `\nAlle Prüfungen bestanden (${PAGES.length} Seiten).\n`);

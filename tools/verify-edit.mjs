@@ -431,6 +431,98 @@ await check('Gewerk ganz nach oben ziehen — Farbe bleibt, ⌘Z zurück', async
   return true;
 });
 
+console.log('\nGLEICHE REIHENFOLGE (Gantt == Tabelle, nach Start)');
+// Vorgänge eines Gewerks stehen in BEIDEN Ansichten nach Startzeit — aus einer
+// Quelle (byStart). Vier echte Fehler sind hier früher durch die Prüfung
+// gerutscht; diese vergleicht die tatsächliche Reihenfolge beider Ansichten.
+const firstGroupOrder = {
+  // Gantt: side-Labels sind eine flache Liste (Gruppe, Task, Task, Gruppe …).
+  gantt: () => page.evaluate(() => {
+    const labs = [...document.querySelectorAll('#bz .bz-side .bz-lab')];
+    const out = []; let started = false;
+    for (const l of labs) {
+      if (l.dataset.gewerk != null) { if (started) break; started = true; continue; }
+      if (started && l.dataset.task != null) out.push((l.querySelector('.bz-lab-name')?.textContent || '').trim());
+    }
+    return out;
+  }),
+  // Tabelle: Gruppenkopf, dann Vorgangszeilen bis zum nächsten Kopf.
+  table: () => page.evaluate(() => {
+    const rows = [...document.querySelectorAll('#tb tbody tr')];
+    const titles = []; const starts = []; let started = false;
+    for (const r of rows) {
+      if (r.classList.contains('tb-group')) { if (started) break; started = true; continue; }
+      if (!started) continue;
+      if (r.classList.contains('tb-empty')) break;
+      if (r.classList.contains('tb-r')) {
+        titles.push((r.querySelector('.c-title input')?.value || '').trim());
+        starts.push(r.querySelector('.c-start input')?.value || '');
+      }
+    }
+    return { titles, starts };
+  }),
+};
+await check('Gantt- und Tabellen-Reihenfolge des ersten Gewerks sind identisch', async () => {
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(300);
+  const g = await firstGroupOrder.gantt();
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(300);
+  const { titles: t } = await firstGroupOrder.table();
+  if (!g.length || !t.length) return `leere Reihenfolge (Gantt ${g.length}, Tabelle ${t.length})`;
+  if (g.join('|') !== t.join('|')) return `verschieden:\n        Gantt:   ${g.join(' · ')}\n        Tabelle: ${t.join(' · ')}`;
+  return true;
+});
+await check('Reihenfolge ist nach Startzeit sortiert (08:00 vor 08:05)', async () => {
+  const { starts } = await firstGroupOrder.table();   // ISO-Strings sind lexikografisch sortierbar
+  for (let i = 1; i < starts.length; i++) {
+    if (starts[i] < starts[i - 1]) return `nicht aufsteigend: ${starts[i - 1]} vor ${starts[i]}`;
+  }
+  return true;
+});
+
+console.log('\nUNTERVORGÄNGE');
+await page.locator('[data-view="tabelle"]').click();
+await page.waitForTimeout(300);
+const subParentId = await page.locator('#tb tr.tb-r').first().getAttribute('data-id');
+await check('«+↳» legt einen eingerückten Untervorgang an; Eltern-Zeit ist schreibgeschützt', async () => {
+  await page.locator(`#tb tr[data-id="${subParentId}"] .tb-subadd`).click();
+  await page.waitForTimeout(400);
+  if (await page.locator('#tb tr.tb-r.is-child').count() < 1) return 'kein Kind angelegt';
+  if (await page.locator(`#tb tr[data-id="${subParentId}"] .tb-tog`).count() < 1) return 'Elternzeile ohne Klapp-Pfeil';
+  if (!(await page.locator(`#tb tr[data-id="${subParentId}"] .c-start input`).isDisabled())) return 'Eltern-Start nicht schreibgeschützt';
+  return true;
+});
+await page.screenshot({ path: join(here, 'shots', 'edit-8-sub-table.png') });
+await check('Einklappen verbirgt die Untervorgänge, Ausklappen zeigt sie wieder', async () => {
+  await page.locator(`#tb tr[data-id="${subParentId}"] .tb-tog`).click();
+  await page.waitForTimeout(300);
+  if (await page.locator('#tb tr.tb-r.is-child').count() !== 0) return 'eingeklappt, Kind noch sichtbar';
+  await page.locator(`#tb tr[data-id="${subParentId}"] .tb-tog`).click();
+  await page.waitForTimeout(300);
+  return (await page.locator('#tb tr.tb-r.is-child').count()) >= 1 ? true : 'ausgeklappt, Kind fehlt';
+});
+await check('Eltern-Hülle deckt den Untervorgang (Start ≤ Kindstart)', async () => {
+  const pStart = await page.locator(`#tb tr[data-id="${subParentId}"] .c-start input`).inputValue();
+  const kStart = await page.locator('#tb tr.tb-r.is-child .c-start input').first().inputValue();
+  return pStart <= kStart ? true : `Eltern-Start ${pStart} > Kindstart ${kStart}`;
+});
+// Datum des Elternvorgangs merken, um im Gantt gezielt dorthin zu navigieren.
+const subDay = (await page.locator(`#tb tr[data-id="${subParentId}"] .c-start input`).inputValue()).slice(0, 10);
+await check('Gantt zeigt den Elternvorgang als Sammelbalken mit eingerückter Unterzeile', async () => {
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(400);
+  if (await page.locator('.bz-bar.is-summary').count() < 1) return 'kein Sammelbalken';
+  if (await page.locator('.bz-side .bz-lab.is-child').count() < 1) return 'keine eingerückte Unterzeile';
+  return true;
+});
+// Zum Tag des Elternvorgangs springen, damit der Sammelbalken im Bild ist —
+// Screenshots ansehen, nicht nur Häkchen zählen (CLAUDE.md).
+await page.fill('#date-jump', subDay);
+await page.locator('#date-jump').dispatchEvent('change');
+await page.waitForTimeout(400);
+await page.screenshot({ path: join(here, 'shots', 'edit-9-sub-gantt.png') });
+
 console.log('\nEXPORT');
 await check('Export lädt eine JSON-Datei herunter', async () => {
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), page.locator('#export').click()]);

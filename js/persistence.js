@@ -47,6 +47,9 @@ export function migrate(plan) {
     t.status ??= 'geplant';
     t.crew ??= null;
     t.notes ??= '';
+    // Untervorgänge: parent = id des Elternvorgangs, sonst null. Altpläne ohne
+    // das Feld sind reine top-level → voll abwärtskompatibel.
+    t.parent ??= null;
     // Dauer geschätzt, nicht aus der Quelle. Muss sichtbar sein — sonst weiß in
     // drei Wochen niemand mehr, welcher Balken eine Zahl aus dem Plan ist und
     // welcher eine Annahme.

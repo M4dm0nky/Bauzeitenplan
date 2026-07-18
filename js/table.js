@@ -7,13 +7,16 @@
 // bearbeiten rechnet die Dauer zurück.
 
 import { parseDuration, fmtDuration, local } from './conflicts.js';
-import { toMin, toDate } from './schedule.js';
+import { toMin, toDate, byStart } from './schedule.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, toInput, STATUS } from './dom.js';
 
 export function createTable(root, { store, onConflicts } = {}) {
   root.classList.add('tb');
   let conflicts = new Map();
+  // Eingeklappte Elternvorgänge (deren Untervorgänge verborgen sind). Tabellen-
+  // eigener Anzeige-Zustand — kein Store-Belang, überlebt das render() hier.
+  const collapsed = new Set();
 
   function render() {
     const S = store.state;
@@ -34,8 +37,9 @@ export function createTable(root, { store, onConflicts } = {}) {
     const gewerke = [...S.gewerke].sort((a, b) => a.sort - b.sort);
 
     for (const g of gewerke) {
-      const tasks = S.tasks.filter((t) => t.gewerk === g.id)
-        .sort((a, b) => toMin(a.start) - toMin(b.start));
+      const all = S.tasks.filter((t) => t.gewerk === g.id);
+      const tops = all.filter((t) => t.parent == null).sort(byStart);
+      const kidsOf = (id) => all.filter((t) => t.parent === id).sort(byStart);
 
       // Gruppenkopf — ziehbar zum Umsortieren (data-gewerk + Griff)
       const gr = el('tr', 'tb-group');
@@ -48,15 +52,23 @@ export function createTable(root, { store, onConflicts } = {}) {
       const dot = el('span', 'bz-dot');
       dot.style.setProperty('--gw', gewerkVar(g.slot));
       if (gewerkTexture(g.slot)) dot.dataset.tex = '1';
-      gc.append(grip, dot, el('span', 'tb-gname', g.name), el('span', 'tb-gcount', tasks.length + (tasks.length === 1 ? ' Vorgang' : ' Vorgänge')));
+      gc.append(grip, dot, el('span', 'tb-gname', g.name), el('span', 'tb-gcount', all.length + (all.length === 1 ? ' Vorgang' : ' Vorgänge')));
       const add = el('button', 'tb-add', '+ Vorgang');
-      add.onclick = () => addRow(g.id, tasks[tasks.length - 1]);
+      add.onclick = () => addRow(g.id, tops[tops.length - 1]);
       gc.append(add);
       gr.append(gc);
       tbody.append(gr);
 
-      for (const t of tasks) tbody.append(row(t, gewerke));
-      if (!tasks.length) {
+      // Erst die obersten Vorgänge (nach Start), darunter je Elternvorgang seine
+      // Untervorgänge — eingerückt und einklappbar.
+      for (const t of tops) {
+        const kids = kidsOf(t.id);
+        tbody.append(row(t, gewerke, { kids: kids.length }));
+        if (kids.length && !collapsed.has(t.id)) {
+          for (const k of kids) tbody.append(row(k, gewerke, { child: true }));
+        }
+      }
+      if (!tops.length) {
         const er = el('tr', 'tb-empty');
         const ec = el('td'); ec.colSpan = 8;
         ec.textContent = 'Noch nichts eingetragen.';
@@ -65,7 +77,7 @@ export function createTable(root, { store, onConflicts } = {}) {
     }
 
     // Projekt-Meilensteine
-    const proj = S.tasks.filter((t) => t.gewerk === 'projekt');
+    const proj = S.tasks.filter((t) => t.gewerk === 'projekt').sort(byStart);
     if (proj.length) {
       const gr = el('tr', 'tb-group');
       const gc = el('td'); gc.colSpan = 8;
@@ -79,16 +91,24 @@ export function createTable(root, { store, onConflicts } = {}) {
     root.scrollTop = scrollTop;
   }
 
-  function row(t, gewerke) {
+  function row(t, gewerke, opts = {}) {
+    const { kids = 0, child = false } = opts;
+    const isParent = kids > 0;                 // Sammelvorgang mit Untervorgängen
     const tr = el('tr', 'tb-r');
     tr.dataset.id = t.id;
+    if (child) tr.classList.add('is-child');
+    if (isParent) tr.classList.add('is-parent');
     const conf = conflicts.get(t.id);
     if (conf) tr.classList.add('is-conflict');
     if (t.milestone) tr.classList.add('is-ms');
 
     // ── Gewerk ──
     const gw = el('td', 'c-gw');
-    if (t.gewerk === 'projekt') {
+    if (child) {
+      // Ein Untervorgang erbt das Gewerk des Elternvorgangs — keine Auswahl,
+      // nur eine Einrückungsmarke.
+      gw.append(el('span', 'tb-submark', '↳'));
+    } else if (t.gewerk === 'projekt') {
       gw.append(el('span', 'tb-fixed', 'Projekt'));
     } else {
       const sel = el('select');
@@ -105,6 +125,14 @@ export function createTable(root, { store, onConflicts } = {}) {
 
     // ── Vorgang ──
     const ti = el('td', 'c-title');
+    // Elternvorgang: Ein-/Ausklapp-Pfeil vor dem Namen.
+    if (isParent) {
+      const tog = el('button', 'tb-tog', collapsed.has(t.id) ? '▸' : '▾');
+      tog.title = collapsed.has(t.id) ? 'Untervorgänge zeigen' : 'Untervorgänge einklappen';
+      tog.setAttribute('aria-label', tog.title);
+      tog.onclick = () => { collapsed.has(t.id) ? collapsed.delete(t.id) : collapsed.add(t.id); render(); };
+      ti.append(tog);
+    }
     const tin = el('input');
     tin.value = t.title;
     tin.setAttribute('aria-label', 'Vorgangsname');
@@ -117,7 +145,12 @@ export function createTable(root, { store, onConflicts } = {}) {
       send({ type: 'setTaskField', id: t.id, field: 'title', value: v });
     });
     tin.onkeydown = (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); tin.blur(); addRow(t.gewerk, t); }
+      // Enter legt die nächste Zeile auf DERSELBEN Ebene an: unter einem Kind ein
+      // Geschwister-Kind, sonst einen normalen Vorgang.
+      if (e.key === 'Enter') {
+        e.preventDefault(); tin.blur();
+        if (child) addSub(t.parent, t); else addRow(t.gewerk, t);
+      }
       if (e.key === 'Backspace' && !tin.value && t.gewerk !== 'projekt') {
         e.preventDefault();
         send({ type: 'removeTask', id: t.id });
@@ -136,6 +169,8 @@ export function createTable(root, { store, onConflicts } = {}) {
     sin.type = 'datetime-local';
     sin.value = toInput(t.start);
     sin.setAttribute('aria-label', 'Start');
+    // Sammelvorgang: Start/Dauer/Ende sind die Hülle der Untervorgänge — nur lesen.
+    if (isParent) { sin.disabled = true; sin.title = 'Ergibt sich aus den Untervorgängen'; }
     commitOn(sin, () => {
       const now = cur(t.id);
       if (!now || !sin.value || sin.value === toInput(now.start)) return;
@@ -153,7 +188,7 @@ export function createTable(root, { store, onConflicts } = {}) {
     din.value = fmtDuration(durMin);
     din.placeholder = '4h';
     din.setAttribute('aria-label', 'Dauer');
-    if (t.milestone) din.disabled = true;
+    if (t.milestone || isParent) din.disabled = true;
     commitOn(din, () => {
       const now = cur(t.id);
       if (!now) return;
@@ -177,7 +212,7 @@ export function createTable(root, { store, onConflicts } = {}) {
     ein.type = 'datetime-local';
     ein.value = toInput(t.end);
     ein.setAttribute('aria-label', 'Ende');
-    if (t.milestone) ein.disabled = true;
+    if (t.milestone || isParent) { ein.disabled = true; if (isParent) ein.title = 'Ergibt sich aus den Untervorgängen'; }
     commitOn(ein, () => {
       const now = cur(t.id);
       if (!now || !ein.value || ein.value === toInput(now.end)) return;
@@ -219,7 +254,9 @@ export function createTable(root, { store, onConflicts } = {}) {
     // ── Aktionen ──
     const ac = el('td', 'c-act');
     const msb = el('button', 'tb-ico' + (t.milestone ? ' is-on' : ''), '◆');
-    msb.title = t.milestone ? 'In einen Vorgang zurückverwandeln' : 'In einen Meilenstein verwandeln';
+    // Ein Sammelvorgang hat eine abgeleitete Dauer und kann keine Raute sein.
+    if (isParent) { msb.disabled = true; msb.title = 'Ein Vorgang mit Untervorgängen ist kein Meilenstein'; }
+    else msb.title = t.milestone ? 'In einen Vorgang zurückverwandeln' : 'In einen Meilenstein verwandeln';
     msb.onclick = () => {
       if (t.milestone) {
         // Meilenstein → Vorgang: Dauer 0 wäre ungültig, also 2h vorgeben.
@@ -235,13 +272,46 @@ export function createTable(root, { store, onConflicts } = {}) {
       }
     };
     const del = el('button', 'tb-ico tb-del', '×');
-    del.title = 'Vorgang löschen';
+    del.title = isParent ? 'Vorgang samt Untervorgängen löschen' : 'Vorgang löschen';
     del.onclick = () => send({ type: 'removeTask', id: t.id });
+    // „+ Untervorgang" nur auf oberster Ebene (eine Ebene) und nicht bei Zielterminen.
+    if (!child && t.gewerk !== 'projekt') {
+      const sub = el('button', 'tb-ico tb-subadd', '＋↳');
+      sub.title = 'Untervorgang hinzufügen';
+      sub.setAttribute('aria-label', 'Untervorgang hinzufügen');
+      sub.onclick = () => addSub(t.id, kidsOfLast(t.id));
+      ac.append(sub);
+    }
     ac.append(msb, del);
     tr.append(ac);
 
     return tr;
   }
+
+  // Neuen Untervorgang unter `parentId` anlegen: schließt zeitlich an den letzten
+  // vorhandenen Untervorgang an (sonst an den Elternstart), 2h Vorgabe. Vor dem
+  // Anlegen aufklappen, damit das neue Kind sichtbar ist.
+  function addSub(parentId, after) {
+    const S = store.state;
+    const p = S.tasks.find((t) => t.id === parentId);
+    if (!p) return;
+    const start = after ? after.end : p.start;
+    collapsed.delete(parentId);
+    const r = send({
+      type: 'addTask',
+      task: { gewerk: p.gewerk, parent: parentId, title: 'Untervorgang', start, end: local(toDate(toMin(start) + 120)) },
+    });
+    if (r && r.id) {
+      requestAnimationFrame(() => {
+        const inp = root.querySelector(`tr[data-id="${r.id}"] .c-title input`);
+        if (inp) { inp.focus(); inp.select(); }
+      });
+    }
+  }
+
+  // Der letzte Untervorgang eines Elternteils (nach Start), an den angeschlossen wird.
+  const kidsOfLast = (parentId) =>
+    store.state.tasks.filter((t) => t.parent === parentId).sort(byStart).pop();
 
   // Neue Zeile unter dem letzten Vorgang des Gewerks: schließt zeitlich an,
   // 2h Vorgabe. So tippt man eine Kette runter, ohne Daten einzugeben.

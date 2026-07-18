@@ -185,6 +185,23 @@ gesenkt: `findConflicts(state, vorab)` nimmt eine fertige Rechnung an, `app.js`
 holt die Liste über `gantt.conflicts()`. Von 5 Läufen pro Änderung auf 2.
 Gemessen: 500 Vorgänge = 3,4 ms pro Lauf.
 
+**Untervorgänge: der Elternvorgang ist die HÜLLE, nicht editierbar.** Ein
+Untervorgang ist ein Vorgang mit `parent` (Text-id, nie Relation) und demselben
+Gewerk wie sein Elternvorgang. `reflowParents(state)` läuft nach JEDER Änderung in
+`store.apply` und setzt Eltern-`start`/`end` auf frühesten Kindstart … spätestes
+Kindende — damit `schedule.js`, `conflicts.js` und `persistence.js` konsistente
+Werte sehen. Kein Cache. Eltern-Zeiten von Hand setzen, Sammelvorgänge verschieben
+oder zum Meilenstein machen wird abgelehnt (Tabelle sperrt die Felder). **Nur EINE
+Ebene** (in `addTask` erzwungen), sonst genügte ein reflow-Durchlauf nicht.
+Elternvorgang löschen kaskadiert auf die Kinder; Gewerkwechsel zieht sie mit.
+`findConflicts` nimmt Sammelvorgänge AUS — ihre Lage ist abgeleitet, nicht direkt
+verschiebbar, und ein Konflikt an ihnen risse den Auflösen-Sammelbefehl.
+
+**Eine Reihenfolge für beide Ansichten: `byStart` (schedule.js).** Gantt und
+Tabelle sortieren Vorgänge eines Gewerks über DENSELBEN Vergleicher (Start, dann
+Ende, dann Titel). Nie eine der beiden Ansichten separat sortieren — sonst sieht
+derselbe Plan zweimal anders aus und wirkt „nicht gleich".
+
 ## Aus Crewplaner gelernt — gilt ab Phase 1
 
 - `project_id` & Co. als **Text**, niemals als Relation. Coolify-Reimport kippt
@@ -219,9 +236,11 @@ dort begründet und ist durch Regressionstests abgesichert.
 
 ## Fahrplan
 
-✅ Darstellung · ✅ Befüllen & Bearbeiten · ✅ Panel, Rechtsklick-Menü, Live-Modus
-→ Als Nächstes: Drag & Drop im Gantt · danach PocketBase + Login + Rollen ·
-zuletzt Ansichten & Export (Tagesplan, öffentlicher Link, PDF/ICS)
+✅ Darstellung · ✅ Befüllen & Bearbeiten · ✅ Panel, Rechtsklick-Menü, Live-Modus ·
+✅ Gewerke per Drag & Drop · ✅ Gleiche Reihenfolge (Gantt = Tabelle, nach Start) ·
+✅ Untervorgänge (Eltern = Hülle, einklappbar) · ✅ Handy/Tablet-tauglich
+→ Als Nächstes: Drag & Drop der Balken im Gantt · danach PocketBase + Login +
+Rollen · zuletzt Ansichten & Export (Tagesplan, öffentlicher Link, PDF/ICS)
 
 **Vorlagen:** «festival» ist abgenommener Praxisstand. Tour, Corporate und Messe
 sind entworfene Gerüste — beim ersten echten Einsatz korrigieren.
