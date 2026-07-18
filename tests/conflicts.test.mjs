@@ -254,5 +254,36 @@ test('Hin und zurück bleibt gleich', () => {
   }
 });
 
+console.log('\nKonflikt abhaken (»ist ok«)');
+const konflikt = (extra) => seed(
+  [T('a', 'g1', 'Podest', '2026-07-13T08:00', '2026-07-13T12:00'),
+   T('b', 'g2', 'Licht', '2026-07-13T10:00', '2026-07-13T14:00', extra)],  // 120 min zu früh
+  [{ id: 'd1', from: 'a', to: 'b', type: 'FS', lag: 0 }]);
+
+test('abgehakt (ackConflictMin ≥ Verzug) → kein Konflikt mehr', () => {
+  assert.deepEqual(findConflicts(konflikt({ ackConflictMin: 120 })), []);
+});
+test('zu klein abgehakt → Konflikt bleibt', () => {
+  assert.equal(findConflicts(konflikt({ ackConflictMin: 60 })).length, 1);
+});
+test('Konflikt wird schlimmer als abgehakt → meldet sich wieder', () => {
+  const s = seed(
+    [T('a', 'g1', 'Podest', '2026-07-13T08:00', '2026-07-13T12:00'),
+     T('b', 'g2', 'Licht', '2026-07-13T09:00', '2026-07-13T13:00', { ackConflictMin: 120 })],  // jetzt 180 zu früh
+    [{ id: 'd1', from: 'a', to: 'b', type: 'FS', lag: 0 }]);
+  assert.equal(findConflicts(s).length, 1);
+});
+test('resolveConflictsCmd lässt Abgehaktes in Ruhe', () => {
+  assert.equal(resolveConflictsCmd(konflikt({ ackConflictMin: 120 })).cmds.length, 0);
+});
+test('Abhaken läuft über den Store und ist per Undo zurücknehmbar', () => {
+  const st = createStore(konflikt({}));
+  assert.equal(findConflicts(st.state).length, 1);
+  st.apply({ type: 'setTaskField', id: 'b', field: 'ackConflictMin', value: 120 });
+  assert.deepEqual(findConflicts(st.state), []);
+  st.undo();
+  assert.equal(findConflicts(st.state).length, 1);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

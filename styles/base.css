@@ -313,6 +313,21 @@ body { margin: 0; }
 .dlg-t-d { display: block; }
 .dlg-act { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 
+/* ── Prüf-Liste (kritisch & Konflikte) ───────────────────────────────────────
+   Nur Geometrie. Ein Eintrag zeigt Name/Grund links, die Knöpfe rechts; wird es
+   eng, brechen die Knöpfe unter den Text. */
+.rv-body { display: flex; flex-direction: column; gap: 16px; margin-top: 12px; max-height: 62vh; overflow: auto; }
+.rv-sec { display: flex; flex-direction: column; gap: 6px; }
+.rv-h { margin: 0; }
+.rv-note, .rv-empty { margin: 0; }
+.rv-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 7px 9px; }
+.rv-txt { min-width: 0; flex: 1 1 220px; }
+.rv-name { overflow: hidden; text-overflow: ellipsis; }
+.rv-acts { display: flex; gap: 5px; flex: none; }
+.rv-acts .btn { padding: 4px 9px; }
+.rv-all { margin-top: 2px; align-self: flex-start; }
+.kpi.is-clickable { cursor: pointer; }
+
 /* ── Hinweis ────────────────────────────────────────────────────────────────── */
 .toast {
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);

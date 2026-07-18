@@ -24,7 +24,7 @@ const fakeStorage = () => {
 const plan = (name = 'Test') => ({
   project: { id: 'p1', name, venue: 'Halle', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin' },
   gewerke: [{ id: 'g1', name: 'Bühne', sort: 0, slot: 0 }],
-  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null }],
+  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null }],
   deps: [],
 });
 

@@ -156,18 +156,56 @@ await check('Start vorziehen erzeugt einen sichtbaren Konflikt', async () => {
   return !(await page.locator('#resolve').isHidden()) ? true : 'kein Konfliktknopf';
 });
 await page.screenshot({ path: join(here, 'shots', 'edit-4-konflikt.png') });
-await check('«Konflikte auflösen» räumt auf', async () => {
+await check('Konflikt-Knopf öffnet die Prüf-Liste MIT dem Konflikt (nicht blind lösen)', async () => {
   await page.locator('#resolve').click();
-  await page.waitForTimeout(600);
-  return (await page.locator('#resolve').isHidden()) ? true : 'noch Konflikte';
+  await page.waitForTimeout(300);
+  return (await page.locator('.rv-row.is-conflict').count()) >= 1 ? true : 'kein Konflikt in der Liste';
 });
-await check('⌘Z holt die Auflösung als Ganzes zurück', async () => {
+await page.screenshot({ path: join(here, 'shots', 'edit-4b-pruefliste.png') });
+await check('«Ist ok» hakt den Konflikt ab — der Konflikt-Knopf verschwindet', async () => {
+  await page.locator('.rv-row.is-conflict .rv-acts .btn', { hasText: 'Ist ok' }).first().click();
+  await page.waitForTimeout(400);
+  if (await page.locator('.rv-row.is-conflict').count() !== 0) return 'Konflikt noch in der Liste';
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  return (await page.locator('#resolve').isHidden()) ? true : 'Konfliktknopf noch da';
+});
+await check('⌘Z nimmt das Abhaken zurück (Konflikt wieder da)', async () => {
   await page.keyboard.press('Meta+z');
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(400);
   return !(await page.locator('#resolve').isHidden()) ? true : 'Konflikt nicht zurück';
 });
 await page.keyboard.press('Meta+z');  // auch das Vorziehen zurück
 await page.waitForTimeout(400);
+
+console.log('\nPRÜF-LISTE: KRITISCH');
+await check('«kritisch»-Kachel öffnet die Liste mit kritischen Vorgängen', async () => {
+  await page.locator('[data-kpi="kritisch"]').click();
+  await page.waitForTimeout(300);
+  return (await page.locator('.rv-sec-kritisch .rv-row').count()) >= 1 ? true : 'keine kritischen Vorgänge in der Liste';
+});
+await page.screenshot({ path: join(here, 'shots', 'edit-4c-kritisch.png') });
+await check('«Gesehen» senkt die kritisch-Zahl; ⌘Z bringt sie zurück', async () => {
+  const before = Number(await page.locator('[data-kpi="kritisch"] .kpi-v').textContent());
+  await page.locator('.rv-sec-kritisch .rv-row .btn', { hasText: 'Gesehen' }).first().click();
+  await page.waitForTimeout(400);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  const after = Number(await page.locator('[data-kpi="kritisch"] .kpi-v').textContent());
+  if (!(after < before)) return `kritisch nicht gesunken (${before} → ${after})`;
+  await page.keyboard.press('Meta+z');
+  await page.waitForTimeout(400);
+  const back = Number(await page.locator('[data-kpi="kritisch"] .kpi-v').textContent());
+  return back === before ? true : `⌘Z hat kritisch nicht zurückgeholt (${after} → ${back})`;
+});
+await check('«Zeigen» springt zum Vorgang und wählt ihn im Gantt aus', async () => {
+  await page.locator('[data-kpi="kritisch"]').click();
+  await page.waitForTimeout(300);
+  await page.locator('.rv-sec-kritisch .rv-row .btn', { hasText: 'Zeigen' }).first().click();
+  await page.waitForTimeout(500);
+  if ((await page.locator('.rv-body').count()) !== 0) return 'Prüf-Liste blieb offen';
+  return (await page.locator('.bz-lab.is-sel, .bz-bar.is-sel, .bz-ms.is-sel').count()) >= 1 ? true : 'nichts ausgewählt';
+});
 
 console.log('\nDAUERHAFTIGKEIT');
 await check('nach Neuladen ist das Projekt noch da', async () => {

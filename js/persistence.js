@@ -50,6 +50,11 @@ export function migrate(plan) {
     // Untervorgänge: parent = id des Elternvorgangs, sonst null. Altpläne ohne
     // das Feld sind reine top-level → voll abwärtskompatibel.
     t.parent ??= null;
+    // Abhaken: menschliche Aussage über eine gerechnete Warnung.
+    // ackCrit = „kritisch gesehen"; ackConflictMin = akzeptierte Konfliktgröße
+    // in Minuten (null = nicht akzeptiert). Meldet sich neu, wenn er größer wird.
+    t.ackCrit = !!t.ackCrit;
+    t.ackConflictMin ??= null;
     // Dauer geschätzt, nicht aus der Quelle. Muss sichtbar sein — sonst weiß in
     // drei Wochen niemand mehr, welcher Balken eine Zahl aus dem Plan ist und
     // welcher eine Annahme.

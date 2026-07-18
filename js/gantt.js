@@ -227,6 +227,11 @@ export function createGantt(root, opts = {}) {
           const c = el('span', 'bz-conf-tag', '!');
           c.title = '«' + r.t.title + '» ' + conf.message;
           lab.append(c);
+        } else if (s.critical && r.t.ackCrit) {
+          // Kritisch, aber abgehakt — ruhige Marke statt rotem KRIT.
+          const c = el('span', 'bz-crit-tag is-ack', '✓');
+          c.title = 'Kritisch, als gesehen abgehakt';
+          lab.append(c);
         } else if (s.critical) {
           const c = el('span', 'bz-crit-tag', 'KRIT');
           c.title = 'Auf dem kritischen Pfad — kein Puffer';
@@ -383,6 +388,19 @@ export function createGantt(root, opts = {}) {
     selected = sel;
     paintSelection();
     if (O.onSelect) O.onSelect(sel);
+  }
+
+  // „Zeigen": den Vorgang sichtbar machen — Gewerk und ggf. Elternvorgang
+  // aufklappen, auswählen, hinscrollen. Für die Prüf-Liste (kritisch/Konflikt).
+  function reveal(taskId) {
+    const t = S.tasks.find((x) => x.id === taskId);
+    if (!t) return;
+    let changed = false;
+    if (collapsed.has(t.gewerk)) { collapsed.delete(t.gewerk); changed = true; }
+    if (t.parent && collapsed.has(t.parent)) { collapsed.delete(t.parent); changed = true; }
+    if (changed) { rebuild(); layout(); }
+    select({ kind: 'task', id: taskId });
+    centerOn(toMin(t.start));
   }
 
   function paintSelection() {
@@ -863,7 +881,8 @@ export function createGantt(root, opts = {}) {
     minimapNode: O.minimap ? buildMinimap() : null,
     get zoomName() { return zoomMode ?? nearestPreset(px); },
     stats() {
-      const crit = S.tasks.filter((t) => (SCHED.get(t.id) || {}).critical).length;
+      // Nur die UNGEPRÜFTEN kritischen Vorgänge — abgehakte sollen Ruhe geben.
+      const crit = S.tasks.filter((t) => (SCHED.get(t.id) || {}).critical && !t.ackCrit).length;
       const done = S.tasks.filter((t) => t.status === 'fertig').length;
       const run = S.tasks.filter((t) => t.status === 'laeuft').length;
       const crew = S.tasks.filter((t) => t.status === 'laeuft').reduce((a, t) => a + (t.crew || 0), 0);
@@ -872,6 +891,9 @@ export function createGantt(root, opts = {}) {
     relayout: layout,
     refresh,
     select,
+    reveal,
+    // Alle kritischen Vorgänge (ids), abgehakt oder nicht — für die Prüf-Liste.
+    criticals: () => S.tasks.filter((t) => (SCHED.get(t.id) || {}).critical).map((t) => t.id),
     get selected() { return selected; },
     setLive(on) {
       live = !!on;

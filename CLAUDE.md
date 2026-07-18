@@ -202,6 +202,15 @@ Tabelle sortieren Vorgänge eines Gewerks über DENSELBEN Vergleicher (Start, da
 Ende, dann Titel). Nie eine der beiden Ansichten separat sortieren — sonst sieht
 derselbe Plan zweimal anders aus und wirkt „nicht gleich".
 
+**Abhaken ist eine menschliche Aussage über eine gerechnete Warnung — persistiert,
+signaturgebunden.** `ackCrit` (bool) nimmt einen kritischen Vorgang aus der
+kritisch-Zahl; `ackConflictMin` (Minuten) akzeptiert eine Konfliktgröße. `findConflicts`
+überspringt den Konflikt nur, solange `shortBy <= ackConflictMin + EPS` — wird er
+GRÖSSER, meldet er sich wieder (kein stilles Wegdrücken). Läuft über `setTaskField`
+(Undo, Persistenz). **Eine Quelle:** Zählung, Prüf-Liste und `resolveConflictsCmd`
+lesen alle `findConflicts` — nie einen zweiten Zähler danebenstellen. „Kritisch" bleibt
+Information (kein automatisches Verschieben), nur die Sichtbarkeit wird abhakbar.
+
 ## Aus Crewplaner gelernt — gilt ab Phase 1
 
 - `project_id` & Co. als **Text**, niemals als Relation. Coolify-Reimport kippt
@@ -238,7 +247,8 @@ dort begründet und ist durch Regressionstests abgesichert.
 
 ✅ Darstellung · ✅ Befüllen & Bearbeiten · ✅ Panel, Rechtsklick-Menü, Live-Modus ·
 ✅ Gewerke per Drag & Drop · ✅ Gleiche Reihenfolge (Gantt = Tabelle, nach Start) ·
-✅ Untervorgänge (Eltern = Hülle, einklappbar) · ✅ Handy/Tablet-tauglich
+✅ Untervorgänge (Eltern = Hülle, einklappbar) · ✅ Handy/Tablet-tauglich ·
+✅ Prüf-Liste (kritisch & Konflikte sehen, zeigen, abhaken/lösen)
 → Als Nächstes: Drag & Drop der Balken im Gantt · danach PocketBase + Login +
 Rollen · zuletzt Ansichten & Export (Tagesplan, öffentlicher Link, PDF/ICS)
 

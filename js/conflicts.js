@@ -48,6 +48,9 @@ export function findConflicts(state, vorab) {
     const planned = toMin(t.start);
     const shortBy = r.es - planned;
     if (shortBy <= EPS) continue;
+    // Als „ist ok" abgehakt? Nur solange der Konflikt nicht SCHLIMMER geworden ist
+    // als beim Akzeptieren — wird er größer, meldet er sich wieder.
+    if (t.ackConflictMin != null && shortBy <= t.ackConflictMin + EPS) continue;
 
     // Welcher Vorgänger bindet? Der, der die früheste Lage erzwingt.
     const binding = bindingPred(state, sched, t);

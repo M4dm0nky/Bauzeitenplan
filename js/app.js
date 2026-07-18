@@ -126,13 +126,13 @@ function mount() {
   $('proj-menu').onclick = () => showProjectDialog({});
   $('export').onclick = doExport;
   $('add-gewerk').onclick = addGewerk;
-  $('resolve').onclick = () => {
-    const cmd = resolveConflictsCmd(store.state);
-    if (!cmd.cmds.length) return;
-    const r = store.apply(cmd);
-    if (r.ok === false) toast(r.error, 'bad');
-    else toast(cmd.cmds.length + (cmd.cmds.length === 1 ? ' Vorgang verschoben' : ' Vorgänge verschoben') + ' — ⌘Z nimmt es zurück');
-  };
+  // Der Konflikt-Knopf zeigt jetzt die Liste, statt blind alle zu verschieben —
+  // im Popup entscheidet man je Konflikt (zeigen · lösen · ist ok) oder auf einmal.
+  $('resolve').onclick = () => openReview('konflikt');
+  // Die „kritisch"-Kachel im Kopf öffnet dieselbe Liste beim Kritisch-Abschnitt.
+  $('kpis').addEventListener('click', (e) => {
+    if (e.target.closest('[data-kpi="kritisch"]')) openReview('kritisch');
+  });
 
   // ── Tastatur ──
   document.addEventListener('keydown', (e) => {
@@ -315,8 +315,8 @@ function refreshChrome() {
     ['Vorgänge', st.total],
     ['läuft', st.run],
     ['Crew', st.crew],
-    ['kritisch', st.crit],
-  ].map(([k, v]) => `<div class="kpi"><div class="kpi-v">${v}</div><div class="kpi-k">${k}</div></div>`).join('');
+    ['kritisch', st.crit, 'kritisch'],
+  ].map(([k, v, key]) => `<div class="kpi${key ? ' is-clickable' : ''}"${key ? ` data-kpi="${key}" title="Kritische Vorgänge prüfen"` : ''}><div class="kpi-v">${v}</div><div class="kpi-k">${k}</div></div>`).join('');
 
   const conf = gantt.conflicts();   // der Gantt hat sie gerade gerechnet
   const rb = $('resolve');
@@ -539,6 +539,118 @@ function askDialog({ title, message, buttons }) {
     document.body.append(dlg);
     (actions.querySelector('.btn-p') || actions.lastElementChild)?.focus();
   });
+}
+
+// ── Prüf-Liste ────────────────────────────────────────────────────────────────
+// Zeigt, WELCHE Vorgänge kritisch bzw. im Konflikt sind, und lässt je Eintrag
+// entscheiden: zeigen (auswählen + hinscrollen), lösen (früheste Lage) oder als
+// „ist ok"/„gesehen" abhaken. Eine Quelle: gantt.conflicts()/criticals().
+let reviewClose = null;
+function openReview(focus) {
+  if (reviewClose) reviewClose();          // immer nur eine Liste offen
+  const dlg = el('div', 'dlg');
+  const box = el('div', 'dlg-box rv');
+  box.append(el('h2', 'dlg-h', 'Prüfen'));
+  const bodyEl = el('div', 'rv-body');
+  box.append(bodyEl);
+  const foot = el('div', 'dlg-act');
+  const closeBtn = el('button', 'btn btn-p', 'Schließen');
+  closeBtn.onclick = () => finish();
+  foot.append(closeBtn);
+  box.append(foot);
+  dlg.append(box);
+
+  let unsub = null, done = false;
+  const onKey = (e) => { if (e.key === 'Escape') finish(); };
+  function finish() {
+    if (done) return;
+    done = true;
+    document.removeEventListener('keydown', onKey);
+    if (unsub) unsub();
+    dlg.remove();
+    reviewClose = null;
+  }
+  const showTask = (id) => { setView('gantt'); gantt.reveal(id); finish(); };
+
+  function renderBody() {
+    const S = store.state;
+    const byId = (id) => S.tasks.find((t) => t.id === id);
+    bodyEl.replaceChildren();
+
+    // ── Konflikte ──
+    const conf = gantt.conflicts();
+    const ks = el('div', 'rv-sec rv-sec-konflikt');
+    ks.append(el('h3', 'rv-h', 'Konflikte' + (conf.length ? ' (' + conf.length + ')' : '')));
+    if (!conf.length) ks.append(el('p', 'rv-empty', 'Keine offenen Konflikte.'));
+    for (const c of conf) {
+      const t = byId(c.taskId); if (!t) continue;
+      const row = el('div', 'rv-row is-conflict');
+      const txt = el('div', 'rv-txt');
+      txt.append(el('div', 'rv-name', t.title), el('div', 'rv-why', c.message));
+      const acts = el('div', 'rv-acts');
+      const show = el('button', 'btn', 'Zeigen'); show.onclick = () => showTask(t.id);
+      const solve = el('button', 'btn', 'Lösen');
+      solve.onclick = () => {
+        const dur = toMin(t.end) - toMin(t.start);
+        const es = toMin(c.es);
+        apply({ type: 'moveTask', id: t.id, start: local(toDate(es)), end: local(toDate(es + dur)) });
+      };
+      const okb = el('button', 'btn', 'Ist ok');
+      okb.title = 'Diesen Konflikt als in Ordnung abhaken';
+      okb.onclick = () => apply({ type: 'setTaskField', id: t.id, field: 'ackConflictMin', value: c.shortByMin });
+      acts.append(show, solve, okb);
+      row.append(txt, acts);
+      ks.append(row);
+    }
+    if (conf.length > 1) {
+      const all = el('button', 'btn btn-warn rv-all', 'Alle auflösen');
+      all.onclick = () => {
+        const cmd = resolveConflictsCmd(store.state);
+        if (!cmd.cmds.length) return;
+        const r = store.apply(cmd);
+        if (r.ok === false) toast(r.error, 'bad');
+        else toast(cmd.cmds.length + ' Vorgänge verschoben — ⌘Z nimmt es zurück');
+      };
+      ks.append(all);
+    }
+    bodyEl.append(ks);
+
+    // ── Kritisch ──
+    const crit = gantt.criticals().map(byId).filter(Boolean);
+    const offen = crit.filter((t) => !t.ackCrit).length;
+    const cs = el('div', 'rv-sec rv-sec-kritisch');
+    cs.append(el('h3', 'rv-h', 'Kritisch' + (offen ? ' (' + offen + ')' : '')));
+    cs.append(el('p', 'rv-note', 'Kein Puffer — bestimmt das Enddatum. Kein Fehler; abhaken bringt Ruhe rein.'));
+    if (!crit.length) cs.append(el('p', 'rv-empty', 'Kein Vorgang ohne Puffer.'));
+    for (const t of crit) {
+      const row = el('div', 'rv-row' + (t.ackCrit ? ' is-ack' : ''));
+      const txt = el('div', 'rv-txt');
+      txt.append(el('div', 'rv-name', t.title));
+      const acts = el('div', 'rv-acts');
+      const show = el('button', 'btn', 'Zeigen'); show.onclick = () => showTask(t.id);
+      if (t.ackCrit) {
+        const un = el('button', 'btn', 'Doch prüfen');
+        un.onclick = () => apply({ type: 'setTaskField', id: t.id, field: 'ackCrit', value: false });
+        acts.append(show, un);
+      } else {
+        const seen = el('button', 'btn', 'Gesehen');
+        seen.onclick = () => apply({ type: 'setTaskField', id: t.id, field: 'ackCrit', value: true });
+        acts.append(show, seen);
+      }
+      row.append(txt, acts);
+      cs.append(row);
+    }
+    bodyEl.append(cs);
+  }
+
+  renderBody();
+  unsub = store.subscribe(renderBody);     // hält die Liste live aktuell
+  reviewClose = finish;
+  dlg.onclick = (e) => { if (e.target === dlg) finish(); };
+  document.addEventListener('keydown', onKey);
+  document.body.append(dlg);
+  bodyEl.querySelector(focus === 'kritisch' ? '.rv-sec-kritisch' : '.rv-sec-konflikt')
+    ?.scrollIntoView({ block: 'start' });
 }
 
 $('undo').onclick = () => store && store.undo();

@@ -3,6 +3,23 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.4.0 — 2026-07-18
+
+**Prüf-Liste: sehen, was kritisch bzw. im Konflikt ist — und entscheiden**
+- Die **„kritisch"-Kachel** im Kopf und der **Konflikt-Knopf** öffnen jetzt eine
+  Liste, die zeigt, WELCHE Vorgänge gemeint sind. Bisher waren es nur Zahlen; der
+  Knopf verschob blind alle Konflikte auf einmal.
+- Je Eintrag: **Zeigen** (springt zum Vorgang, wählt ihn aus — auch aus
+  eingeklappten Gewerken/Untervorgängen heraus), bei Konflikten **Lösen** (nur
+  diesen auf die früheste mögliche Lage) und **Ist ok** (abhaken). „Alle auflösen"
+  bleibt als Abkürzung.
+- Kritische Vorgänge lassen sich als **Gesehen** abhaken — sie fallen aus der
+  „kritisch"-Zahl (im Gantt ein ruhiges ✓ statt des roten KRIT). „Doch prüfen"
+  nimmt es zurück.
+- Abhaken ist eine bewusste Aussage und bleibt gespeichert (kein Nörgeln nach
+  jedem Neuladen), rückgängig per ⌘Z. Ein akzeptierter Konflikt **meldet sich
+  wieder, wenn er größer wird** als beim Abhaken — er verschwindet nicht für immer.
+
 ## 0.3.0 — 2026-07-18
 
 **Gleiche Reihenfolge in beiden Ansichten**
