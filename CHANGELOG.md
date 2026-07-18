@@ -3,6 +3,17 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.2.1 — 2026-07-18
+
+**Gewerke umsortieren**
+- In der Tabellenansicht lässt sich die Reihenfolge der Gewerke jetzt per Drag &
+  Drop ändern: den Griff (⠿) am Gruppenkopf greifen und an die gewünschte Stelle
+  ziehen (Maus oder Touch). So steht „Produktion" bei dem einen Event ganz oben,
+  beim nächsten weiter unten — in einer Geste statt vieler Einzelschritte.
+- Die **Farbe bleibt am Gewerk**, nicht an der Position: Umsortieren färbt nichts
+  um. Rückgängig per ⌘Z. Die bisherigen „Nach oben/unten" (Rechtsklick & Panel)
+  bleiben als präziser Zusatzweg.
+
 ## 0.2.0 — 2026-07-18
 
 **CallBoard — Logo & Marke**

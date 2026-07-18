@@ -10,6 +10,10 @@ import { createServer } from 'node:http';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 mkdirSync(join(here, 'shots'), { recursive: true });
+// Zahl der reinen Farbtöne aus der Quelle lesen, nicht raten: Schraffur ist der
+// zweite Kanal und beginnt bei Platz HUES (0-basiert). HUES wuchs 8→9→10 — ein
+// hart verdrahtetes «9. Gewerk» rostet bei jeder Palette-Erweiterung fest.
+const HUES = Number((/export const HUES\s*=\s*(\d+)/.exec(readFileSync(join(root, 'js/palette.js'), 'utf8')) || [])[1]);
 const cache = join(process.env.HOME, 'Library/Caches/ms-playwright');
 const ff = readdirSync(cache).find((d) => d.startsWith('firefox-'));
 const exe = join(cache, ff, 'firefox/Nightly.app/Contents/MacOS/firefox');
@@ -180,13 +184,20 @@ await check('Balken sind nach Neuladen wieder da', async () => {
   return n > 20 ? true : `nur ${n}`;
 });
 
-console.log('\nGEWERK 9–16 (Schraffur als zweiter Kanal)');
-await check('9. Gewerk bekommt Schraffur', async () => {
-  await page.evaluate(() => { window.__p = window.prompt; window.prompt = () => 'Security'; });
-  await page.locator('#add-gewerk').click();
-  await page.waitForTimeout(500);
+console.log(`\nGEWERK ${HUES + 1}–${2 * HUES} (Schraffur als zweiter Kanal)`);
+await check(`das ${HUES + 1}. Gewerk (Platz ${HUES}) bekommt Schraffur`, async () => {
+  // Die ersten HUES Plätze (0…HUES-1) sind reine Farbtöne; erst Platz HUES
+  // trägt zusätzlich 45°-Schraffur. So viele Gewerke anlegen, bis genau Platz
+  // HUES besetzt ist — dann muss es GENAU EINEN schraffierten Punkt geben.
+  // Der Store lehnt Namensdubletten ab, deshalb jedes Mal ein eigener Name.
+  const start = await page.locator('.legend-i').count();
+  for (let slot = start; slot <= HUES; slot++) {
+    await page.evaluate((name) => { window.prompt = () => name; }, 'Extra-Gewerk ' + slot);
+    await page.locator('#add-gewerk').click();
+    await page.waitForTimeout(250);
+  }
   const n = await page.locator('.legend-i .bz-dot[data-tex]').count();
-  return n === 1 ? true : `${n} schraffierte Punkte (erwartet 1)`;
+  return n === 1 ? true : `${n} schraffierte Punkte (erwartet 1 bei Platz ${HUES})`;
 });
 await page.screenshot({ path: join(here, 'shots', 'edit-5-16gewerke.png') });
 
@@ -302,10 +313,18 @@ await check('nach dem Wechsel steht die Ansicht beim AUFBAU, nicht irgendwo', as
   await page.waitForTimeout(400);
   await page.locator('.dlg-open', { hasText: 'Testprojekt Halle 7' }).click();
   await page.waitForTimeout(1000);
-  const vis = await page.locator('.bz-bar').evaluateAll((ns, w) =>
-    ns.filter((n) => { const r = n.getBoundingClientRect(); return r.width > 0 && r.right > 240 && r.left < w; }).length, 1600);
-  const all = await page.locator('.bz-bar').count();
-  return vis >= 10 ? true : `nur ${vis} von ${all} Balken im Bild — die Ansicht steht nicht beim Aufbau`;
+  // Die Tagesansicht zieht GENAU EINEN Kalendertag auf die Breite (volle
+  // Tagesansicht) — sichtbar sind also nur die Balken des Aufbau-Tags, nicht
+  // «möglichst viele». Richtig positioniert ist die Ansicht, wenn die ersten
+  // Aufbau-Vorgänge im Bild stehen und nicht Wochen daneben in der Planung.
+  const r = await page.locator('.bz-bar').evaluateAll((ns, w) => {
+    const vis = ns.filter((n) => { const b = n.getBoundingClientRect(); return b.width > 0 && b.right > 240 && b.left < w; });
+    const AUFBAU = /Anlieferung Bühnenteile|Podest & Unterbau|Dach & Traversentürme/;
+    return { count: vis.length, all: ns.length,
+      hatAufbau: vis.some((n) => AUFBAU.test(n.querySelector('.bz-bar-t')?.textContent || '')) };
+  }, 1600);
+  return r.hatAufbau ? true
+    : `Aufbau-Vorgänge nicht im Bild (${r.count} von ${r.all} Balken sichtbar) — Ansicht steht nicht beim Aufbau`;
 });
 await check('nach dem Wechsel zeigt das Panel nichts Altes mehr', async () => {
   // Die Auswahl gehört zum alten Projekt und muss weg.
@@ -368,6 +387,48 @@ await check('das Häkchen lässt sich weiterhin von Hand setzen', async () => {
   await hk.check();
   await page.waitForTimeout(400);
   return (await hk.isChecked()) ? true : 'lässt sich nicht mehr setzen';
+});
+
+console.log('\nGEWERKE UMSORTIEREN PER DRAG (Tabelle)');
+await check('Gewerk ganz nach oben ziehen — Farbe bleibt, ⌘Z zurück', async () => {
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(400);
+  const names = () => page.locator('.tb-group[data-gewerk] .tb-gname').allTextContents();
+  const before = await names();
+  if (before.length < 2) return 'zu wenige Gewerke: ' + before.length;
+  const lastName = before[before.length - 1];
+  const lastDot = page.locator('.tb-group[data-gewerk]').last().locator('.bz-dot');
+  const colorBefore = await lastDot.evaluate((n) => getComputedStyle(n).backgroundColor);
+
+  // Pointer-Sequenz direkt auslösen: Playwrights synthetische Maus erzeugt in
+  // Firefox nicht zuverlässig Pointer-Events. Echte Browser tun das sehr wohl —
+  // hier geht es nur darum, dieselben Handler deterministisch zu treffen.
+  await page.evaluate(() => {
+    const groups = [...document.querySelectorAll('.tb-group[data-gewerk]')];
+    const handle = groups[groups.length - 1].querySelector('.tb-drag');
+    const root = document.querySelector('.tb');
+    const hb = handle.getBoundingClientRect();
+    const fb = groups[0].getBoundingClientRect();
+    const fire = (el, type, x, y) => el.dispatchEvent(new PointerEvent(type,
+      { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1, button: 0, pointerType: 'mouse', isPrimary: true }));
+    fire(handle, 'pointerdown', hb.x + hb.width / 2, hb.y + hb.height / 2);
+    fire(root, 'pointermove', fb.x + 30, fb.y + 3);   // knapp unter die Oberkante der ersten Zeile
+    fire(root, 'pointerup', fb.x + 30, fb.y + 3);
+  });
+  await page.waitForTimeout(400);
+
+  const after = await names();
+  if (after[0] !== lastName) return `«${lastName}» sollte oben stehen, oben ist «${after[0]}»`;
+  // Der Farbplatz (slot) darf NICHT mitwandern — Farbe gehört dem Gewerk.
+  const colorAfter = await page.locator('.tb-group[data-gewerk]').first().locator('.bz-dot')
+    .evaluate((n) => getComputedStyle(n).backgroundColor);
+  if (colorAfter !== colorBefore) return `Farbe hat sich beim Sortieren geändert: ${colorBefore} → ${colorAfter}`;
+
+  await page.keyboard.press('Meta+z');
+  await page.waitForTimeout(400);
+  const undone = await names();
+  if (undone.join('|') !== before.join('|')) return '⌘Z hat die Reihenfolge nicht zurückgeholt';
+  return true;
 });
 
 console.log('\nEXPORT');

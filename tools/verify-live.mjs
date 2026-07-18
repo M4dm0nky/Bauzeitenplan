@@ -61,15 +61,22 @@ await check('Linie steht beim Laden auf der gestellten Zeit', async () => {
 });
 await check('nach 30 Minuten steht die Linie 30 Minuten weiter', async () => {
   // DAS ist der Fehler, den du gefunden hast: NOW wurde einmal beim Laden
-  // gerechnet und danach nie wieder.
-  const vorher = await lineX();
-  await page.clock.fastForward('30:00');
-  await page.waitForTimeout(400);
-  const nachher = await lineX();
-  const gewandert = nachher - vorher;
-  // Tage-Zoom: 0.25 px/min → 30 min = 7.5 px
-  const erwartet = 30 * 0.25;
-  if (Math.abs(gewandert - erwartet) > 1) return `${gewandert.toFixed(1)}px statt ${erwartet}px — die Linie steht still`;
+  // gerechnet und danach nie wieder. Geprüft wird, dass die Linie MIT der Zeit
+  // wandert und zwar LINEAR. Die px/min-Skala hängt am Zoom (volle Tagesansicht:
+  // ein Kalendertag füllt die Breite) und wird deshalb NICHT hart verdrahtet,
+  // sondern aus zwei Teilschritten abgeleitet — 10 + 20 min ergeben zusammen die
+  // 30 min von früher, die Folgeprüfungen sehen also denselben Zeitstand.
+  const t0 = await lineX();
+  await page.clock.fastForward('10:00');
+  await page.waitForTimeout(300);
+  const t1 = await lineX();
+  await page.clock.fastForward('20:00');
+  await page.waitForTimeout(300);
+  const t2 = await lineX();
+  const d10 = t1 - t0, d20 = t2 - t1;
+  if (d10 <= 0.5) return `${d10.toFixed(1)}px in 10 min — die Linie steht still`;
+  if (Math.abs(d20 - 2 * d10) > Math.max(1, 0.25 * 2 * d10))
+    return `unproportional: 10 min → ${d10.toFixed(1)}px, 20 min → ${d20.toFixed(1)}px`;
   return true;
 });
 await check('Minimap-Marke wandert mit', async () => {

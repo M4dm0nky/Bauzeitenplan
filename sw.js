@@ -21,7 +21,7 @@
 //     .then(()=>self.clients.matchAll()).then(cs=>cs.forEach(c=>c.navigate(c.url)))));
 // Danach deployen → der SW deinstalliert sich beim nächsten Aufruf selbst.
 
-const SW_VERSION = 'v0.2.0';
+const SW_VERSION = 'v0.2.1';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));

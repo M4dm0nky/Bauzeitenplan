@@ -260,6 +260,14 @@ body { margin: 0; }
 .tb-group .bz-dot { display: inline-block; vertical-align: middle; margin-right: 6px; }
 .tb-gname { vertical-align: middle; }
 .tb-gcount { margin-left: 8px; }
+
+/* Gewerk-Ziehgriff + Drop-Anzeige (Umsortieren per Drag). Nur Geometrie/Verhalten;
+   Farbe kommt aus dem Theme. touch-action:none → Ziehen scrollt nicht. */
+.tb-drag { display: inline-block; vertical-align: middle; cursor: grab; touch-action: none; user-select: none; padding: 0 4px; line-height: 1; }
+.tb-group.is-dragging { opacity: .4; }
+.tb-group.is-dragging .tb-drag { cursor: grabbing; }
+.tb-group.is-drop-before td { box-shadow: inset 0 2px 0 0 currentColor; }
+.tb-group.is-drop-end td { box-shadow: inset 0 -2px 0 0 currentColor; }
 .tb-add { margin-left: 10px; border: 0; background: none; font: inherit; cursor: pointer; padding: 0; }
 .tb-empty td { padding: 5px 8px 5px 30px; }
 .tb-fixed { padding: 4px 6px; display: inline-block; }

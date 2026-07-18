@@ -37,14 +37,18 @@ export function createTable(root, { store, onConflicts } = {}) {
       const tasks = S.tasks.filter((t) => t.gewerk === g.id)
         .sort((a, b) => toMin(a.start) - toMin(b.start));
 
-      // Gruppenkopf
+      // Gruppenkopf — ziehbar zum Umsortieren (data-gewerk + Griff)
       const gr = el('tr', 'tb-group');
+      gr.dataset.gewerk = g.id;
       const gc = el('td');
       gc.colSpan = 8;
+      const grip = el('span', 'tb-drag', '⠿');
+      grip.title = 'Ziehen, um das Gewerk umzusortieren';
+      grip.setAttribute('aria-hidden', 'true');
       const dot = el('span', 'bz-dot');
       dot.style.setProperty('--gw', gewerkVar(g.slot));
       if (gewerkTexture(g.slot)) dot.dataset.tex = '1';
-      gc.append(dot, el('span', 'tb-gname', g.name), el('span', 'tb-gcount', tasks.length + (tasks.length === 1 ? ' Vorgang' : ' Vorgänge')));
+      gc.append(grip, dot, el('span', 'tb-gname', g.name), el('span', 'tb-gcount', tasks.length + (tasks.length === 1 ? ' Vorgang' : ' Vorgänge')));
       const add = el('button', 'tb-add', '+ Vorgang');
       add.onclick = () => addRow(g.id, tasks[tasks.length - 1]);
       gc.append(add);
@@ -288,6 +292,60 @@ export function createTable(root, { store, onConflicts } = {}) {
   // Immer den aktuellen Stand aus dem Store lesen, nie den aus der Closure.
   // Der Knoten kann längst abgehängt sein, wenn sein Ereignis eintrifft.
   const cur = (id) => store.state.tasks.find((x) => x.id === id);
+
+  // ── Gewerke per Drag umsortieren (nur Gruppenköpfe) ──────────────────────────
+  // Delegation auf root, damit die Handler ein render() überleben. Während des
+  // Ziehens ändert sich der Store NICHT → kein Re-Render, die Knoten bleiben
+  // stabil. Erst beim Loslassen geht EIN moveGewerk raus; der Store renummeriert
+  // sort (slot/Farbe bleibt) und die Tabelle zeichnet sich in neuer Reihenfolge.
+  let drag = null;   // { id }
+  const groupRows = () => [...root.querySelectorAll('tr.tb-group[data-gewerk]')];
+  const clearMarks = () => root.querySelectorAll('.is-dragging, .is-drop-before, .is-drop-end')
+    .forEach((n) => n.classList.remove('is-dragging', 'is-drop-before', 'is-drop-end'));
+  // Zielposition unter dem Zeiger: vor das erste Gewerk, dessen Mitte unter der
+  // Zeigerhöhe liegt — sonst ans Ende (null).
+  const dropBeforeAt = (clientY) => {
+    for (const gr of groupRows()) {
+      const r = gr.getBoundingClientRect();
+      if (clientY < r.top + r.height / 2) return gr.dataset.gewerk;
+    }
+    return null;
+  };
+  const endDrag = () => { drag = null; clearMarks(); };
+
+  root.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const handle = e.target.closest('.tb-drag');
+    if (!handle) return;
+    const gr = handle.closest('tr.tb-group[data-gewerk]');
+    if (!gr) return;
+    e.preventDefault();
+    drag = { id: gr.dataset.gewerk };
+    gr.classList.add('is-dragging');
+    try { root.setPointerCapture(e.pointerId); } catch (_) { /* egal */ }
+  });
+  root.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const before = dropBeforeAt(e.clientY);
+    root.querySelectorAll('.is-drop-before, .is-drop-end')
+      .forEach((n) => n.classList.remove('is-drop-before', 'is-drop-end'));
+    if (before) root.querySelector(`tr.tb-group[data-gewerk="${before}"]`)?.classList.add('is-drop-before');
+    else groupRows().pop()?.classList.add('is-drop-end');
+  });
+  root.addEventListener('pointerup', (e) => {
+    if (!drag) return;
+    const id = drag.id;
+    const before = dropBeforeAt(e.clientY);
+    endDrag();
+    try { root.releasePointerCapture(e.pointerId); } catch (_) { /* egal */ }
+    // Nur schicken, wenn es die Reihenfolge wirklich ändert — sonst gäbe der
+    // Store ein „Steht schon dort." zurück und würde als Fehler getoastet.
+    const list = [...store.state.gewerke].sort((a, b) => a.sort - b.sort).map((g) => g.id);
+    const curBefore = list[list.indexOf(id) + 1] ?? null;
+    if (before !== id && before !== curBefore) send({ type: 'moveGewerk', id, before });
+  });
+  root.addEventListener('pointercancel', endDrag);
+  root.addEventListener('keydown', (e) => { if (e.key === 'Escape') endDrag(); });
 
   return {
     render,

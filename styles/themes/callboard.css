@@ -251,6 +251,8 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .tb-gcount { font-family: var(--mono); font-size: calc(9px * var(--fs)); color: var(--muted); }
 .tb-add { font-family: var(--mono); color: var(--ink-2); font-size: calc(9px * var(--fs)); letter-spacing: .05em; text-transform: uppercase; }
 .tb-add:hover { color: var(--ink); text-decoration: underline; }
+.tb-drag { color: var(--muted); }
+.tb-drag:hover { color: var(--ink); }
 .tb-empty td { color: var(--muted); font-size: calc(10px * var(--fs)); font-style: italic; }
 .tb-fixed { color: var(--muted); font-size: calc(10px * var(--fs)); }
 .tb-ico { color: var(--muted); font-size: calc(12px * var(--fs)); }

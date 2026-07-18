@@ -178,6 +178,31 @@ const HANDLERS = {
     return ok();
   },
 
+  // Wie reorderGewerk, aber an eine BELIEBIGE Position — fürs Drag & Drop in der
+  // Tabelle. `before` = ID des Gewerks, VOR das eingefügt wird; null = ans Ende.
+  // before-Semantik statt Zielindex ist robust gegen die Verschiebung, die das
+  // Herausnehmen des gezogenen Gewerks erzeugt.
+  moveGewerk(state, cmd) {
+    const list = [...state.gewerke].sort((a, b) => a.sort - b.sort);
+    const orig = list.map((g) => g.id);
+    const i = list.findIndex((g) => g.id === cmd.id);
+    if (i < 0) return 'Gewerk nicht gefunden.';
+    if (cmd.before === cmd.id) return 'Steht schon dort.';
+    const [moved] = list.splice(i, 1);
+    let j = list.length;                       // Vorgabe: ans Ende
+    if (cmd.before != null) {
+      j = list.findIndex((g) => g.id === cmd.before);
+      if (j < 0) return 'Zielgewerk nicht gefunden.';
+    }
+    list.splice(j, 0, moved);
+    // Nichts verschoben? Ablehnen — kein leerer Undo-Eintrag.
+    if (list.every((g, k) => g.id === orig[k])) return 'Steht schon dort.';
+    // Der Farbplatz (slot) bleibt unberührt: Farbe gehört dem Gewerk, nicht seiner
+    // Position. Nur sort wird lückenlos 0…n neu vergeben.
+    list.forEach((g, k) => { g.sort = k; });
+    return ok();
+  },
+
   duplicateTask(state, cmd) {
     const t = state.tasks.find((x) => x.id === cmd.id);
     if (!t) return 'Vorgang nicht gefunden.';

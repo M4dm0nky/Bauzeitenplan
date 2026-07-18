@@ -375,6 +375,55 @@ test('krumme sort-Werte werden beim Umsortieren begradigt', () => {
   assert.deepEqual([...s.state.gewerke].map((g) => g.sort).sort(), [0, 1, 2]);
 });
 
+console.log('\nGewerke per Drag an beliebige Position (moveGewerk)');
+test('ganz nach oben: vor das erste Gewerk', () => {
+  const s = createStore(seed3());
+  s.apply({ type: 'moveGewerk', id: 'c', before: 'a' });
+  assert.deepEqual(order(s), ['Ton', 'Bühne', 'Licht']);
+});
+test('ans Ende: before = null', () => {
+  const s = createStore(seed3());
+  s.apply({ type: 'moveGewerk', id: 'a', before: null });
+  assert.deepEqual(order(s), ['Licht', 'Ton', 'Bühne']);
+});
+test('in die Mitte: vor ein späteres Gewerk', () => {
+  const s = createStore(seed3());
+  s.apply({ type: 'moveGewerk', id: 'a', before: 'c' });
+  assert.deepEqual(order(s), ['Licht', 'Bühne', 'Ton']);
+});
+test('DIE FARBE BLEIBT auch beim Verschieben an beliebige Position', () => {
+  const s = createStore(seed3());
+  const before = slots(s);
+  s.apply({ type: 'moveGewerk', id: 'c', before: 'a' });
+  assert.deepEqual(slots(s), before);
+});
+test('sort bleibt lückenlos 0,1,2 nach moveGewerk', () => {
+  const s = createStore(seed3());
+  s.apply({ type: 'moveGewerk', id: 'c', before: 'a' });
+  assert.deepEqual([...s.state.gewerke].map((g) => g.sort).sort(), [0, 1, 2]);
+});
+test('an dieselbe Stelle ziehen wird abgelehnt (kein Undo-Eintrag)', () => {
+  const s = createStore(seed3());
+  // b steht schon vor c → b vor c einfügen ändert nichts
+  const r = s.apply({ type: 'moveGewerk', id: 'b', before: 'c' });
+  assert.equal(r.ok, false);
+  assert.equal(s.canUndo, false);
+});
+test('vor sich selbst ziehen wird abgelehnt', () => {
+  const s = createStore(seed3());
+  assert.equal(s.apply({ type: 'moveGewerk', id: 'b', before: 'b' }).ok, false);
+});
+test('unbekanntes Zielgewerk wird abgelehnt', () => {
+  const s = createStore(seed3());
+  assert.equal(s.apply({ type: 'moveGewerk', id: 'a', before: 'weg' }).ok, false);
+});
+test('moveGewerk ist rückgängig zu machen', () => {
+  const s = createStore(seed3());
+  s.apply({ type: 'moveGewerk', id: 'c', before: 'a' });
+  s.undo();
+  assert.deepEqual(order(s), ['Bühne', 'Licht', 'Ton']);
+});
+
 console.log('\nVorgang duplizieren');
 test('Duplikat übernimmt die Felder', () => {
   const s = createStore(seed());
