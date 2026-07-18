@@ -19,6 +19,39 @@ export const byStart = (a, b) =>
   || (a.title || '').localeCompare(b.title || '');
 
 /**
+ * Kandidaten fürs Verknüpfen, gruppiert nach Gewerk und je Gewerk nach Start
+ * (byStart). Ohne den Vorgang selbst (`selfId`) und ohne die bereits mit ihm
+ * Verknüpften. `query` filtert groß/klein-egal auf Titel ODER Gewerkname; leer =
+ * alles. Projekt-Zieltermine kommen als eigene Gruppe ans Ende. Rein, kein DOM —
+ * so ist das eigentliche Sortier-/Filterverhalten direkt testbar; die Combobox im
+ * Inspector rendert nur das Ergebnis.
+ * @returns {{gewerk:{id,name,slot?}, items:object[]}[]}
+ */
+export function candidateGroups({ tasks = [], gewerke = [], deps = [], selfId, query = '' }) {
+  const linked = new Set();
+  for (const d of deps) {
+    if (d.from === selfId) linked.add(d.to);
+    if (d.to === selfId) linked.add(d.from);
+  }
+  const gName = new Map(gewerke.map((g) => [g.id, g.name]));
+  gName.set('projekt', 'Zieltermine');
+  const q = String(query).trim().toLowerCase();
+  const match = (t) => !q
+    || (t.title || '').toLowerCase().includes(q)
+    || (gName.get(t.gewerk) || '').toLowerCase().includes(q);
+  const cand = tasks.filter((t) => t.id !== selfId && !linked.has(t.id) && match(t));
+
+  const groups = [];
+  for (const g of [...gewerke].sort((a, b) => a.sort - b.sort)) {
+    const items = cand.filter((t) => t.gewerk === g.id).sort(byStart);
+    if (items.length) groups.push({ gewerk: g, items });
+  }
+  const proj = cand.filter((t) => t.gewerk === 'projekt').sort(byStart);
+  if (proj.length) groups.push({ gewerk: { id: 'projekt', name: 'Zieltermine' }, items: proj });
+  return groups;
+}
+
+/**
  * Topologische Sortierung (Kahn). Wirft bei Zyklus — sonst würde der
  * Forward-Pass endlos laufen.
  * @returns {string[]} Task-IDs in Abhängigkeitsreihenfolge

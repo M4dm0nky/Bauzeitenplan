@@ -202,6 +202,12 @@ Tabelle sortieren Vorgänge eines Gewerks über DENSELBEN Vergleicher (Start, da
 Ende, dann Titel). Nie eine der beiden Ansichten separat sortieren — sonst sieht
 derselbe Plan zweimal anders aus und wirkt „nicht gleich".
 
+**Der Verknüpfungs-Picker sucht, statt zu scrollen** (`candidateGroups` in
+schedule.js, DOM-frei und getestet). Bei 100+ Vorgängen ist der native Dropdown
+unbenutzbar. Die reine Funktion gruppiert nach Gewerk, sortiert je Gewerk über
+`byStart` und filtert per Query (Titel/Gewerkname); der Inspector rendert nur ihr
+Ergebnis. Neue lange Auswahllisten genauso lösen — nie einen 122-Zeilen-`<select>`.
+
 **Abhaken ist eine menschliche Aussage über eine gerechnete Warnung — persistiert,
 signaturgebunden.** `ackCrit` (bool) nimmt einen kritischen Vorgang aus der
 kritisch-Zahl; `ackConflictMin` (Minuten) akzeptiert eine Konfliktgröße. `findConflicts`

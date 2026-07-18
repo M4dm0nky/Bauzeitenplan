@@ -1,4 +1,4 @@
-import { computeSchedule, topoSort, toMin, byStart } from '../js/schedule.js';
+import { computeSchedule, topoSort, toMin, byStart, candidateGroups } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -213,6 +213,50 @@ test('Sommerzeit: Reihenfolge aus echten Zeitstempeln (toMin), nicht aus Ziffern
     tt('vor', '2026-10-25T02:30+02:00', '2026-10-25T03:00+02:00'),
   ].sort(byStart);
   assert.deepEqual(list.map((x) => x.id), ['vor', 'nach']);
+});
+
+console.log('\ncandidateGroups — Verknüpfungs-Picker');
+const cgTasks = [
+  { id: 's', gewerk: 'g1', title: 'Selbst', start: '2026-07-13T08:00', end: '2026-07-13T09:00' },
+  { id: 'a', gewerk: 'g1', title: 'Anlieferung', start: '2026-07-13T10:00', end: '2026-07-13T12:00' },
+  { id: 'b', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:30', end: '2026-07-13T09:30' },
+  { id: 'c', gewerk: 'g2', title: 'Motoren hängen', start: '2026-07-13T07:00', end: '2026-07-13T08:00' },
+  { id: 'p', gewerk: 'projekt', title: 'Doors', start: '2026-07-14T18:00', end: '2026-07-14T18:00' },
+];
+const cgGewerke = [{ id: 'g1', name: 'Bühne', sort: 0 }, { id: 'g2', name: 'Rigging', sort: 1 }];
+const cg = (extra) => candidateGroups({ tasks: cgTasks, gewerke: cgGewerke, deps: [], selfId: 's', ...extra });
+
+test('lässt den Vorgang selbst weg', () => {
+  const ids = cg().flatMap((g) => g.items.map((t) => t.id));
+  assert.equal(ids.includes('s'), false);
+});
+test('lässt bereits Verknüpfte weg (beide Richtungen)', () => {
+  const g = cg({ deps: [{ from: 'a', to: 's' }, { from: 's', to: 'c' }] });
+  const ids = g.flatMap((x) => x.items.map((t) => t.id));
+  assert.deepEqual(ids.includes('a'), false);
+  assert.deepEqual(ids.includes('c'), false);
+});
+test('gruppiert nach Gewerk (nach sort), je Gewerk nach Start', () => {
+  const g = cg();
+  assert.deepEqual(g.map((x) => x.gewerk.id), ['g1', 'g2', 'projekt']);
+  assert.deepEqual(g[0].items.map((t) => t.id), ['b', 'a'], 'Podest 08:30 vor Anlieferung 10:00');
+});
+test('Query filtert auf Titel', () => {
+  const g = cg({ query: 'moto' });
+  const ids = g.flatMap((x) => x.items.map((t) => t.id));
+  assert.deepEqual(ids, ['c']);
+});
+test('Query filtert auch auf Gewerkname', () => {
+  const g = cg({ query: 'rigg' });
+  assert.deepEqual(g.map((x) => x.gewerk.id), ['g2']);
+});
+test('leeres Query = alle Kandidaten', () => {
+  const n = cg({ query: '' }).flatMap((x) => x.items).length;
+  assert.equal(n, 4, 'a, b, c, p (ohne selbst)');
+});
+test('Projekt-Zieltermine als eigene Gruppe am Ende', () => {
+  const g = cg();
+  assert.equal(g[g.length - 1].gewerk.id, 'projekt');
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

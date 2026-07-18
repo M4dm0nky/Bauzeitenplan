@@ -3,6 +3,17 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.4.1 — 2026-07-18
+
+**Verknüpfen: suchen statt scrollen**
+- Beim Verknüpfen zweier Vorgänge gibt es jetzt ein **Suchfeld**: tippen filtert die
+  Liste sofort, statt durch alle Vorgänge zu scrollen (bei 100+ Vorgängen der
+  entscheidende Unterschied). Die Treffer sind **nach Gewerk gruppiert** und je
+  Gewerk **nach Startzeit** sortiert, mit Kontext (Gewerk · Datum/Uhrzeit) — wichtig,
+  wenn Namen sich ähneln.
+- Bedienung per Tastatur (↑↓ + Enter) oder Klick. Der Vorgang selbst und bereits
+  Verknüpfte tauchen nicht auf; Ringe lehnt die App weiter mit Namen ab.
+
 ## 0.4.0 — 2026-07-18
 
 **Prüf-Liste: sehen, was kritisch bzw. im Konflikt ist — und entscheiden**

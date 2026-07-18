@@ -268,6 +268,34 @@ await check('Verknüpfungen stehen im Panel', async () =>
   (await page.locator('.ins-deps').count()) === 1 ? true : 'kein Verknüpfungsblock');
 await page.screenshot({ path: join(here, 'shots', 'edit-6-panel.png') });
 
+console.log('\nVERKNÜPFUNGS-SUCHE');
+let firstCand = '';
+await check('Suchfeld: Unsinn zeigt „nichts", ein Teilstring filtert die Treffer', async () => {
+  const s = page.locator('.ins-dep-search');
+  await s.click();
+  await page.waitForTimeout(200);
+  const all = await page.locator('.ins-dep-opt').count();
+  if (all < 2) return `zu wenige Kandidaten (${all})`;
+  firstCand = (await page.locator('.ins-dep-opt-n').first().textContent()).trim();
+  await s.fill('zzzqxnope');
+  await page.waitForTimeout(200);
+  if (await page.locator('.ins-dep-opt').count() !== 0) return 'Unsinns-Query zeigt trotzdem Treffer';
+  if (await page.locator('.ins-dep-none').count() !== 1) return 'kein „Nichts gefunden"';
+  await s.fill(firstCand.slice(0, 4));
+  await page.waitForTimeout(200);
+  const some = await page.locator('.ins-dep-opt').count();
+  return (some >= 1 && some <= all) ? true : `Filter unplausibel (${all} → ${some})`;
+});
+await page.screenshot({ path: join(here, 'shots', 'edit-6b-verkn-suche.png') });
+await check('Treffer wählen legt die Verknüpfung an (oder lehnt einen Ring ab)', async () => {
+  const before = await page.locator('.ins-deps .ins-dep').count();
+  await page.locator('.ins-dep-opt').first().click();   // mousedown-Handler wählt
+  await page.waitForTimeout(400);
+  const after = await page.locator('.ins-deps .ins-dep').count();
+  const ring = await page.locator('.toast[data-kind="bad"]').isVisible().catch(() => false);
+  return (after > before || ring) ? true : 'Klick auf einen Treffer bewirkte nichts';
+});
+
 console.log('\nRECHTSKLICK-MENÜ');
 await check('Rechtsklick auf ein Gewerk öffnet das Menü', async () => {
   await page.locator('.bz-lab-group').first().click({ button: 'right' });

@@ -355,6 +355,17 @@ body { margin: 0; }
 .ins-dep-l { width: 56px; }
 .ins-dep-x { border: 0; background: none; font: inherit; cursor: pointer; }
 .ins-dep-add { width: 100%; font: inherit; }
+
+/* Verknüpfungs-Suche: Suchfeld + gefilterte, gruppierte Trefferliste inline. */
+.ins-combo { position: relative; }
+.ins-dep-search { width: 100%; font: inherit; }
+.ins-dep-list { max-height: 240px; overflow-y: auto; }
+.ins-dep-grp { padding: 5px 8px 2px; }
+.ins-dep-opt { display: flex; align-items: center; gap: 7px; padding: 5px 8px; cursor: pointer; }
+.ins-dep-opt .bz-dot { flex: none; width: 9px; height: 9px; }
+.ins-dep-opt-tx { min-width: 0; }
+.ins-dep-opt-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ins-dep-none { padding: 6px 8px; }
 .ins .is-bad { outline: 2px solid var(--crit, red); outline-offset: -2px; }
 
 /* ── Kontextmenü ──────────────────────────────────────────────────────────── */

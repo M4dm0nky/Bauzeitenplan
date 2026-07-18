@@ -344,6 +344,16 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .ins-dep-x:hover { color: var(--crit); }
 .ins-dep-add { background: var(--panel2); border: 1px dashed var(--rule-2); color: var(--ink-2); font-family: var(--mono); font-size: calc(9px * var(--fs)); padding: 4px; margin-top: 4px; }
 .ins-dep-add:hover { color: var(--ink); border-color: var(--ink); }
+/* Verknüpfungs-Suche */
+.ins-dep-search { background: var(--panel2); border: 1px dashed var(--rule-2); color: var(--ink); font-family: var(--mono); font-size: calc(9.5px * var(--fs)); padding: 5px 7px; margin-top: 4px; }
+.ins-dep-search:focus { outline: none; border-style: solid; border-color: var(--ink); }
+.ins-dep-search::placeholder { color: var(--muted); }
+.ins-dep-list { border: 1px solid var(--rule); border-top: 0; background: var(--panel); }
+.ins-dep-grp { font-family: var(--mono); font-size: calc(8px * var(--fs)); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.ins-dep-opt-n { font-size: calc(11px * var(--fs)); color: var(--ink); }
+.ins-dep-opt-c { font-family: var(--mono); font-size: calc(8.5px * var(--fs)); color: var(--muted); }
+.ins-dep-opt.is-active { background: var(--bg); }
+.ins-dep-none { color: var(--muted); font-style: italic; font-size: calc(10px * var(--fs)); }
 .btn-danger { border-color: var(--crit); color: var(--crit); }
 .btn-danger:hover { background: var(--crit); color: #fff; }
 

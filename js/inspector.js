@@ -4,7 +4,7 @@
 // Rechtsklick-Menü und Doppelklick.
 
 import { parseDuration, fmtDuration, local } from './conflicts.js';
-import { toMin, toDate, computeSchedule } from './schedule.js';
+import { toMin, toDate, computeSchedule, candidateGroups } from './schedule.js';
 import { gewerkVar, gewerkTexture, HUES, MAX_SLOTS } from './palette.js';
 import { fmtFloat } from './timeaxis.js';
 import { el, toInput, STATUS } from './dom.js';
@@ -292,23 +292,72 @@ export function createInspector(root, { store, onError, onClose } = {}) {
       box.append(r);
     }
 
-    // Neue Verknüpfung: nur Vorgänge anbieten, die noch keine haben.
-    const taken = new Set(rows.map((r) => r.other));
-    const pick = el('select', 'ins-dep-add');
-    pick.append(el('option', null, '+ Verknüpfung zu …'));
-    for (const o of store.state.tasks) {
-      if (o.id === t.id || taken.has(o.id)) continue;
-      const op = el('option', null, o.title);
-      op.value = o.id;
-      pick.append(op);
-    }
-    pick.onchange = () => {
-      if (!pick.value) return;
-      // Vorgänger: der andere kommt VOR diesem. Ringe lehnt der Store mit Namen ab.
-      send({ type: 'addDep', dep: { from: pick.value, to: t.id, type: 'FS', lag: 0 } });
-      pick.selectedIndex = 0;
+    // Neue Verknüpfung: Suchfeld + gefilterte, gruppierte Trefferliste. Bei 100+
+    // Vorgängen schlägt Tippen das Scrollen durch einen endlosen Dropdown. Die
+    // Sortier-/Filterlogik ist rein (candidateGroups) und getestet; hier nur DOM.
+    const combo = el('div', 'ins-combo');
+    const search = el('input', 'ins-dep-search');
+    search.type = 'text';
+    search.placeholder = '+ Verknüpfung suchen …';
+    search.setAttribute('aria-label', 'Vorgang zum Verknüpfen suchen');
+    const list = el('div', 'ins-dep-list');
+    list.hidden = true;
+    combo.append(search, list);
+
+    let flat = [];      // sichtbare Treffer in Anzeigereihenfolge (für ↑↓)
+    let active = -1;
+    const setActive = (i) => {
+      if (flat[active]) flat[active].classList.remove('is-active');
+      active = i;
+      if (flat[active]) { flat[active].classList.add('is-active'); flat[active].scrollIntoView({ block: 'nearest' }); }
     };
-    box.append(pick);
+    // Vorgänger: der andere kommt VOR diesem. Ringe lehnt der Store mit Namen ab.
+    // Nach dem Anlegen baut render() den Inspector neu → das Feld ist wieder leer.
+    const pickId = (id) => { if (id) send({ type: 'addDep', dep: { from: id, to: t.id, type: 'FS', lag: 0 } }); };
+    const fmtWhen = (iso) => {
+      const d = toDate(toMin(iso));
+      const p = (n) => String(n).padStart(2, '0');
+      return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '. ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    };
+
+    const paint = () => {
+      const groups = candidateGroups({
+        tasks: store.state.tasks, gewerke: store.state.gewerke,
+        deps: store.state.deps, selfId: t.id, query: search.value,
+      });
+      list.replaceChildren();
+      flat = []; active = -1;
+      if (!groups.length) { list.append(el('div', 'ins-dep-none', 'Nichts gefunden.')); return; }
+      for (const { gewerk, items } of groups) {
+        list.append(el('div', 'ins-dep-grp', gewerk.name));
+        for (const o of items) {
+          const opt = el('div', 'ins-dep-opt');
+          opt.dataset.id = o.id;
+          const dot = el('span', 'bz-dot');
+          if (gewerk.slot != null) { dot.style.setProperty('--gw', gewerkVar(gewerk.slot)); if (gewerkTexture(gewerk.slot)) dot.dataset.tex = '1'; }
+          const tx = el('div', 'ins-dep-opt-tx');
+          tx.append(el('div', 'ins-dep-opt-n', o.title), el('div', 'ins-dep-opt-c', gewerk.name + ' · ' + fmtWhen(o.start)));
+          opt.append(dot, tx);
+          const idx = flat.length;
+          opt.onmouseenter = () => setActive(idx);
+          // mousedown (nicht click): feuert VOR dem blur des Feldes, das die Liste schließt.
+          opt.onmousedown = (e) => { e.preventDefault(); pickId(o.id); };
+          flat.push(opt);
+          list.append(opt);
+        }
+      }
+    };
+
+    search.onfocus = () => { list.hidden = false; paint(); };
+    search.oninput = () => { list.hidden = false; paint(); };
+    search.onblur = () => { setTimeout(() => { list.hidden = true; }, 120); };
+    search.onkeydown = (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (flat.length) setActive((active + 1) % flat.length); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); if (flat.length) setActive((active - 1 + flat.length) % flat.length); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (flat[active]) pickId(flat[active].dataset.id); }
+      else if (e.key === 'Escape') { e.stopPropagation(); if (search.value) { search.value = ''; paint(); } else { list.hidden = true; search.blur(); } }
+    };
+    box.append(combo);
     return box;
   }
 
