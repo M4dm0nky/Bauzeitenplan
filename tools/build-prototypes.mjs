@@ -31,8 +31,13 @@ const strip = (code) =>
 const JS = FILES.map((f) => strip(read('js', f))).join('\n');
 
 // Zeilenmaße je Theme: Board will Plakat-Format, Console dichte Datenaufstellung.
-// console steht zuerst — das ist die gewählte Variante.
+// callboard steht zuerst — das ist die gewählte, aktive Variante (NYX-Navy-CI).
+// Hinweis: Im inline gebündelten Prototyp laden die @font-face-Dateien nicht
+// (CSP/relativer Pfad) → Geist/JetBrains Mono fallen auf den System-Stack zurück.
+// In der echten App liegen die Fonts unter assets/fonts/ und greifen.
 export const VARIANTS = [
+  { key: 'callboard', name: 'CallBoard', title: 'CallBoard — NYX Navy-CI',
+    opts: { rowH: 24, groupH: 28, barH: 12, sideW: 228, initialZoom: 'tage' } },
   { key: 'console',   name: 'Console',   title: 'Bauzeitenplan — Console',
     opts: { rowH: 24, groupH: 28, barH: 12, sideW: 228, initialZoom: 'tage' } },
   { key: 'blueprint', name: 'Blueprint', title: 'Bauzeitenplan — Blueprint',

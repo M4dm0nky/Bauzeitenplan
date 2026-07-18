@@ -3,7 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bauzeitenplan</title>
+<title>CallBoard — Bauzeitenplan</title>
+<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.2.0">
+
+<script>
+  // Hell/Dunkel VOR dem CSS festlegen, damit beim Laden nichts aufblitzt.
+  // Eigener Schlüssel bzp_mode — NICHT bzp_theme (das ist für den späteren
+  // Theme-Familien-Wechsel reserviert, siehe docs/themes.md).
+  try {
+    var _m = localStorage.getItem('bzp_mode');
+    if (_m === 'light' || _m === 'dark') document.documentElement.dataset.theme = _m;
+  } catch (e) {}
+</script>
 
 <script>
   // Service Worker: hält die ES-Module dauerhaft aktuell (Begründung in sw.js).
@@ -11,19 +22,26 @@
   // kommen nach einem Deploy nicht an. Pfad relativ → trägt auch unter
   // /Bauzeitenplan/ auf GitHub Pages.
   if ('serviceWorker' in navigator) {
+    // Beim ALLERERSTEN Besuch übernimmt der frische Worker die Seite (claim) und
+    // löst controllerchange aus — ein Reload wäre hier sinnlos (es hat sich nichts
+    // geändert) und bricht gerade laufende Font-/Asset-Ladungen ab. Nur neu laden,
+    // wenn die Seite schon von einem ÄLTEREN Worker kontrolliert wurde — das ist
+    // der echte Update-Fall (neuer sw.js nach Deploy), für den der Reload gedacht ist.
+    var _hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js').catch(function () {});
     var _swReloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', function () {
-      if (_swReloaded) return; _swReloaded = true; location.reload();
+      if (!_hadController || _swReloaded) return; _swReloaded = true; location.reload();
     });
   }
 </script>
 
 <!-- Struktur (Geometrie + Verhalten) und Gestaltung sind getrennt.
-     Der Theme-Link ist der einzige Umschaltpunkt: styles/themes/ enthält vier
-     fertige Ebenen (console = aktiv). Siehe docs/themes.md. -->
-<link rel="stylesheet" href="styles/base.css?v=0.1.4">
-<link rel="stylesheet" href="styles/themes/console.css?v=0.1.4" id="theme-css" data-theme-name="console">
+     Der Theme-Link wählt die Gestaltungsebene: styles/themes/ enthält fünf
+     fertige Ebenen (callboard = aktiv). Hell/Dunkel schaltet der Betrachter
+     über data-theme (Knopf im Kopf). Siehe docs/themes.md. -->
+<link rel="stylesheet" href="styles/base.css?v=0.2.0">
+<link rel="stylesheet" href="styles/themes/callboard.css?v=0.2.0" id="theme-css" data-theme-name="callboard">
 </head>
 <body>
 
@@ -31,9 +49,26 @@
   <header class="hd">
     <div class="hd-row hd-top">
       <div class="hd-id">
-        <div class="hd-kicker">Bauzeitenplan</div>
-        <h1 class="hd-title" id="proj-name">—</h1>
-        <div class="hd-sub" id="proj-venue"></div>
+        <div class="hd-brand">
+          <svg class="hd-mark" viewBox="0 0 56 56" fill="none" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" role="img" aria-label="CallBoard">
+            <path d="M28 3 L49 14 L49 42 L28 53 L7 42 L7 14 Z" stroke="currentColor"/>
+            <rect x="23.5" y="13" width="9" height="5.5" rx="1.4" stroke="currentColor"/>
+            <rect x="17" y="17" width="22" height="26" rx="2.2" stroke="currentColor"/>
+            <circle cx="28" cy="30.5" r="8" stroke="currentColor"/>
+            <line x1="28" y1="30.5" x2="28" y2="24.5" stroke="#f7c948" stroke-width="3"/>
+            <line x1="28" y1="30.5" x2="32" y2="32" stroke="currentColor"/>
+            <circle cx="28" cy="30.5" r="1" fill="currentColor" stroke="none"/>
+          </svg>
+          <div class="hd-brandtext">
+            <span class="hd-name">CallBoard</span>
+            <span class="hd-eyebrow">Bauzeitenplan · Event</span>
+          </div>
+        </div>
+        <div class="hd-div"></div>
+        <div class="hd-proj">
+          <h1 class="hd-title" id="proj-name">—</h1>
+          <div class="hd-sub" id="proj-venue"></div>
+        </div>
       </div>
       <div class="kpis" id="kpis"></div>
     </div>
@@ -80,6 +115,7 @@
         <button class="btn" id="import">Import</button>
         <button class="btn" id="new-proj">Neu</button>
         <button class="btn" id="proj-menu">Projekte</button>
+        <button class="btn hd-mode" id="theme-toggle" title="Hell/Dunkel umschalten" aria-label="Hell/Dunkel umschalten">☾</button>
       </div>
     </div>
 
@@ -110,6 +146,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="import-file" accept="application/json,.json" hidden>
 
-<script type="module" src="js/app.js?v=0.1.4"></script>
+<script type="module" src="js/app.js?v=0.2.0"></script>
 </body>
 </html>

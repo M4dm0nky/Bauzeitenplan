@@ -1,15 +1,21 @@
 # Themes
 
-Vier fertige Gestaltungsebenen liegen unter `styles/themes/`. **Aktiv ist `console`.**
-Die anderen drei sind vollständig gepflegt und werden bei jedem Testlauf mitgeprüft —
-sie sind keine Leichen, sondern einsatzbereite Alternativen.
+Fünf fertige Gestaltungsebenen liegen unter `styles/themes/`. **Aktiv ist `callboard`**
+(das NYX-Navy-CI). Die anderen vier sind vollständig gepflegt und werden bei jedem
+Testlauf mitgeprüft — sie sind keine Leichen, sondern einsatzbereite Alternativen.
 
 | Theme | Charakter | Schrift |
 |---|---|---|
-| **console** ← aktiv | Crewplaner-DNA ins Helle gedreht: Mono, Gold `#d4a53a`, dichte Daten | SF Mono / Menlo, Avenir Next Condensed |
+| **callboard** ← aktiv | NYX-Navy-CI: Navy/Paper, ruhig, Gold **nur** im Logo. Hell = Paper, Dunkel = Navy | Geist + JetBrains Mono (selbst gehostet, `assets/fonts/`) |
+| console | Crewplaner-DNA ins Helle gedreht: Mono, Gold `#d4a53a`, dichte Daten | SF Mono / Menlo, Avenir Next Condensed |
 | blueprint | Millimeterpapier, technische Zeichnung, Balken als Tuschelinien | SF Mono / Menlo, Gill Sans |
 | studio | Heller Salbeigrund, viel Luft, weiche Balken | Charter (Serife), Avenir Next |
 | board | Kräftige Flächen auf Weiß, aus 5 m lesbar, A0-tauglich | Futura / Gill Sans |
+
+Das aktive `callboard` bringt eigene Schriften mit: **Geist** (Wortmarke, Titel,
+Zahlen) und **JetBrains Mono** (Labels, Eyebrows, Meta) liegen als `woff2` unter
+`assets/fonts/` und werden per `@font-face` im Theme geladen — offline, ohne externe
+Requests. Gold `#f7c948` lebt ausschließlich im Logo (Minutenzeiger).
 
 ## Wie die Trennung funktioniert
 
@@ -25,7 +31,19 @@ Ein Testlauf (`node tests/run.mjs`) stellt sicher, dass
 2. jedes Theme alle Bausteine der Engine gestaltet (sonst fehlt einer unsichtbar),
 3. jedes Theme beide Dunkel-Scopes bedient.
 
-## Umschalter einbauen (wenn er kommt)
+## Hell/Dunkel umschalten (im Kopf, `bzp_mode`)
+
+Der Knopf `#theme-toggle` im Kopf schaltet **Hell ↔ Dunkel** — nicht die Theme-
+Familie. Er setzt `data-theme="light"|"dark"` am `<html>` und merkt sich die Wahl in
+`localStorage['bzp_mode']`. Ein Inline-Script im `<head>` liest den Wert **vor** dem
+CSS, damit nichts aufblitzt. Ohne gespeicherte Wahl folgt die App der OS-Einstellung
+(`@media (prefers-color-scheme)`). Die Verdrahtung steht in `js/app.js` (`currentMode`,
+`paintModeToggle`).
+
+**Wichtig:** `bzp_mode` (Hell/Dunkel) ist ein **anderer** Schlüssel als `bzp_theme`
+(Theme-Familie, siehe unten). Nicht vermischen — sonst schlägt das eine das andere.
+
+## Theme-Familie umschalten (wenn er kommt)
 
 Der Aufhänger steht schon in `index.html`:
 

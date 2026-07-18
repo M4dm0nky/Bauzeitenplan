@@ -554,4 +554,26 @@ $('import-file').onchange = doImport;
 
 $('ver').textContent = 'v' + VERSION;
 
+// ── Hell/Dunkel ───────────────────────────────────────────────────────────────
+// Der Betrachter schaltet das Erscheinungsbild über data-theme am <html>. Der
+// Anfangswert steht schon (Inline-Script im <head>, Schlüssel bzp_mode); hier nur
+// der Knopf. Ohne gespeicherte Wahl folgt die App der OS-Einstellung.
+function currentMode() {
+  return document.documentElement.dataset.theme
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+function paintModeToggle() {
+  const dark = currentMode() === 'dark';
+  const b = $('theme-toggle');
+  b.textContent = dark ? '☀' : '☾';           // zeigt das Ziel, nicht den Ist-Zustand
+  b.title = dark ? 'Auf Hell umschalten' : 'Auf Dunkel umschalten';
+}
+$('theme-toggle').onclick = () => {
+  const next = currentMode() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('bzp_mode', next); } catch (e) { /* Privatmodus: nur diese Sitzung */ }
+  paintModeToggle();
+};
+paintModeToggle();
+
 boot();

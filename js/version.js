@@ -8,4 +8,4 @@
 // geprüft wird nichts. Vergisst man eine, sieht der Nutzer alten Code und
 // niemand merkt es. Hier schlägt `node tests/run.mjs` sofort an.
 
-export const VERSION = '0.1.4';
+export const VERSION = '0.2.0';

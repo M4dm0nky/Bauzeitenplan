@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56" fill="none" stroke-linejoin="round" stroke-linecap="round" width="56" height="56">
+  <style>
+    .o { stroke: #10172A; }
+    @media (prefers-color-scheme: dark) { .o { stroke: #FFFFFF; } }
+  </style>
+  <!-- Klein lesbar (24-px-Regel): Shield + Zifferblatt + gelber Zeiger. Outlines
+       passen sich der Tab-Farbe an; der Minutenzeiger bleibt immer gelb. -->
+  <path class="o" d="M28 3 L49 14 L49 42 L28 53 L7 42 L7 14 Z" stroke-width="3.4"/>
+  <circle class="o" cx="28" cy="30.5" r="8" stroke-width="3.4"/>
+  <line class="o" x1="28" y1="30.5" x2="32" y2="32" stroke-width="3.4"/>
+  <line x1="28" y1="30.5" x2="28" y2="24.5" stroke="#f7c948" stroke-width="3.8"/>
+</svg>

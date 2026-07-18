@@ -3,6 +3,25 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.2.0 — 2026-07-18
+
+**CallBoard — Logo & Marke**
+- Logo im Kopf: Shield + Clipboard + Uhr (48 px), Wortmarke „CallBoard" mit
+  Unterzeile „Bauzeitenplan · Event". Der gelbe Minutenzeiger (#f7c948) ist das
+  einzige farbige Element und lebt ausschließlich im Logo.
+- Favicon (SVG, passt sich hellem/dunklem Browser-Tab an).
+
+**Neues Theme „callboard" (NYX-Navy-CI) — jetzt aktiv**
+- Navy/Paper, ruhig und technisch; Gold nur im Logo, kein UI-Gold mehr.
+- Schriften Geist + JetBrains Mono, selbst gehostet unter `assets/fonts/`
+  (offline, keine externen Requests).
+- **Hell/Dunkel im Kopf umschaltbar** (☾/☀): Hell = Paper, Dunkel = Navy. Die
+  Wahl merkt sich der Browser (`bzp_mode`); ohne Wahl folgt die App dem System.
+
+**Nebenbei**
+- Kein überflüssiger Reload beim allerersten Besuch mehr — der Service Worker lädt
+  nur bei einem echten Update neu, nicht schon beim ersten Übernehmen der Seite.
+
 ## 0.1.4 — 2026-07-17
 
 **Import**
