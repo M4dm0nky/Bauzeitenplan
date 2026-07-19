@@ -29,3 +29,8 @@ oben in der Datei anpassen.
 | Sanitär | `#008300` | `#008300` |
 
 Steht in `styles/base.css`. **Nicht per Hand ändern** — siehe docs/entscheidungen.md.
+
+Für Pläne mit mehr als acht Gewerken kamen später zwei Töne **außerhalb** dieser
+Suche dazu (handgesetzt, auf Ansage): Ocker `--gw-8` (`#8a5a2b`/`#a06a33`) und Türkis
+`--gw-9` (`#0e9aa7`/`#1fb0bd`). Palette heute: 10 Töne × 2 Schraffuren = 20 Plätze.
+Sauber wäre, die Suche für zehn Töne neu zu rechnen, falls der Bedarf bleibt.

@@ -8,7 +8,7 @@ Projekte leben im Browser (localStorage) + JSON-Export. PocketBase kommt danach.
 ## Vor jeder Änderung
 
 ```bash
-node tests/run.mjs              # 192 Unit-Tests + statische Prüfungen
+node tests/run.mjs              # Unit-Tests + statische Prüfungen
 node tools/verify-browser.mjs   # Darstellung: App + 4 Prototypen
 node tools/verify-edit.mjs      # Bearbeiten: anlegen, tippen, Undo, Panel, Menü
 node tools/verify-live.mjs      # Live-Modus mit gestellter Uhr
@@ -26,6 +26,40 @@ eine Prüfung — der nächste Fehler dieser Art hat aber noch keine.
 
 Zum Starten: `python3 -m http.server 8080`. Ohne Server blockiert der Browser die
 ES-Module per CORS.
+
+## ⚠️ Working Tree: die PocketBase-Vorbereitung ist ABSICHTLICH nicht committed
+
+Das Wichtigste für jede neue Sitzung. Im Arbeitsbaum liegt eine **fertige, aber
+bewusst uncommittete** PocketBase-Schicht (Login + Rollen). Sie greift nur mit
+`?backend=pb`; ohne Schalter läuft alles wie gehabt aus localStorage. `git status`
+zeigt deshalb dauerhaft:
+
+- **modifiziert (tracked):** `js/app.js`, `js/inspector.js`, `js/table.js` — jeweils
+  HEAD **plus** PB-Teile (Importe `session.js`/`roles.js`/`auth.js`/`persistence-pb.js`,
+  `pbMode()`/`relock()`, `lockRow`/`lockPanel`, `canEdit…`-Gates).
+- **untracked:** `js/pb.js`, `auth.js`, `session.js`, `roles.js`, `persistence-pb.js`,
+  `admin.js`, `login.html`, `admin.html`, `pocketbase/`, `tests/{client-auth,pb-rules,roles}.test.mjs`.
+
+**Jeder Feature-Commit muss PB-frei bleiben.** Berührt eine Änderung eine PB-behaftete
+Datei (`app.js`/`inspector.js`/`table.js`), sauber isolieren — bewährtes Vorgehen aus
+v0.3.0/0.4.0/0.4.1:
+
+1. PB-Arbeitsversionen sichern (`app.js`/`inspector.js`/`table.js`), untracked PB-Dateien
+   aus dem Baum schieben.
+2. Betroffene tracked Dateien auf HEAD: `git checkout HEAD -- js/…`.
+3. NUR die eigentliche Feature-Änderung neu auftragen (bei `app.js`/`inspector.js` heißt
+   das: das Feature ohne die PB-Importe/-Gates re-applizieren).
+4. **PB-frei verifizieren:** `grep` zeigt keine `session.js`/`roles.js`/`persistence-pb`
+   mehr; `node tests/run.mjs` + `verify-edit` + `verify-browser` grün.
+5. Nur die Feature-/Version-/Doku-Dateien stagen und committen (nie `app.js`-PB,
+   nie untracked PB).
+6. Danach PB-Arbeitsversionen + untracked PB zurückkopieren → Steady-State
+   wiederhergestellt (nur PB uncommitted).
+
+Reine `.md`- oder CSS-Änderungen berühren PB nicht und brauchen keine Isolation —
+einfach die betroffenen Dateien einzeln stagen. Details zur PB-Schicht:
+`pocketbase/README.md` (selbst untracked). Wenn die Zeit für Online + Rollen kommt,
+wird diese Schicht als eigener Schritt committed.
 
 ## Deploy
 
@@ -52,7 +86,7 @@ noch Pages einschalten (nur `push`, kein `admin`).
 
 ## Version
 
-**Aktuell: 0.1.0** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
+**Aktuell: 0.4.1** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
 
 **Die Version wird NIE von Hand geändert.** Ein Befehl stempelt sie in alle
 sechs Stellen zugleich:
@@ -239,7 +273,7 @@ Information (kein automatisches Verschieben), nur die Sichtbarkeit wird abhakbar
 | `js/persistence.js` | localStorage, Export/Import — **DOM-frei** |
 | `js/table.js` | Tabellen-Editor |
 | `js/templates.js` | Vier Vorlagen |
-| `js/palette.js` | 8 Farbtöne × 2 Schraffuren = 16 Gewerke |
+| `js/palette.js` | 10 Farbtöne × 2 Schraffuren = 20 Gewerke (HUES=10, MAX_SLOTS=20) |
 | `js/live.js` | Verzug + laufende Vorgänge — **DOM-frei** |
 | `js/inspector.js` | Seitenpanel |
 | `js/menu.js` | Kontextmenü (Muster: Crewplaner dropdown.js) |

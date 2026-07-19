@@ -88,10 +88,12 @@ Zwei Dinge dabei beachten:
 
 ## Farbpalette der Gewerke
 
-Die acht Farben sind **gerechnet, nicht ausgesucht** (`docs/entscheidungen.md`).
+Die ersten **acht Farben sind gerechnet, nicht ausgesucht** (`docs/entscheidungen.md`).
 Reihenfolge und Zuordnung stammen aus einem Suchlauf über 720 Varianten, der die
 Unterscheidbarkeit benachbarter Zeilen bei Farbenblindheit maximiert. Sie sind in
 Hell und Dunkel validiert. **Nicht per Hand ändern** — sonst ist die Prüfung wertlos.
+Zwei weitere Töne (Ocker `--gw-8`, Türkis `--gw-9`) kamen später handgesetzt dazu, für
+Pläne mit >8 Gewerken (Palette heute: 10 Töne × 2 Schraffuren = 20 Plätze).
 
 Drei Farben (Rigging, Licht, Ton) liegen auf hellem Grund unter 3:1 Kontrast. Das
 ist bekannt und zulässig, solange die Reliefregel greift: Identität hängt nie an

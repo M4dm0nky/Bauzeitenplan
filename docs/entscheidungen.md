@@ -28,6 +28,10 @@ auf einem ~1300 px breiten Zeitfeld tatsächlich sichtbar ist:
 `tests/timeaxis.test.mjs` prüft das als **sichtbare Zeitspanne**, nicht als px-Wert.
 Wer die Presets ändert, muss durch diese Tests.
 
+Seit v0.1.1 zieht der **„Tage"-Knopf einen einzelnen Kalendertag über die volle
+Breite auf** (`fitDay`, linksbündig auf 00:00) statt fixer px/min — die 0,25 oben ist
+der historische Ausgangswert, nicht mehr das aktuelle Verhalten der Tagesstufe.
+
 ## Der kritische Pfad braucht einen echten Zielmeilenstein
 
 Die naive Ankerregel — „Vorgänge ohne Nachfolger enden an ihrem geplanten Termin" —
@@ -64,6 +68,12 @@ Normalsicht ΔE 19,6 / 19,3. Alle harten Gates bestanden, in Hell und Dunkel.
 
 **Nicht per Hand ändern.** Wer die Reihenfolge umstellt, macht die Prüfung wertlos.
 
+Später kamen zwei weitere Töne dazu — **Ocker (`--gw-8`) und Türkis (`--gw-9`)** —
+für Pläne mit mehr als acht Gewerken (Palette heute: 10 Töne × 2 Schraffuren = 20
+Plätze, `HUES=10`/`MAX_SLOTS=20`). Die beiden stehen **bewusst außerhalb** der
+Farbsuche (auf Ansage handgesetzt in `base.css`). Sauber wäre, die Suche für zehn Töne
+neu zu rechnen, falls der Bedarf bleibt.
+
 ### Reliefregel — bitte nicht wegoptimieren
 
 Rigging (`#1baf7a`), Licht (`#eda100`) und Ton (`#e87ba4`) liegen auf hellem Grund
@@ -98,5 +108,9 @@ Ein Test deckt den DST-Übergang ab.
 
 ## Was bewusst noch fehlt
 
-Login, Backend, Bearbeiten, Rollen, Export. Das ist Phase 1 ff.
-`js/data.js` enthält bis dahin einen realistischen Demo-Datensatz.
+Online-Backend, Login und Rollen (die PocketBase-Schicht ist vorbereitet, liegt aber
+noch uncommittet — siehe `CLAUDE.md` und `pocketbase/README.md`) sowie Ansichten &
+Export (Tagesplan, öffentlicher Link, PDF/ICS). Darstellung, Bearbeiten, Live-Modus,
+Untervorgänge, Prüf-Liste und die Verknüpfungs-Suche stehen (Stand v0.4.1). Startdaten
+kommen aus den Vorlagen (`js/templates.js`) bzw. importierten JSON-Plänen — einen
+`js/data.js`-Demo-Datensatz gibt es nicht mehr.

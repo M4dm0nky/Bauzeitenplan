@@ -11,10 +11,15 @@ der Load-In läuft stundengenau.
 
 ## Stand
 
-**Benutzbar.** Projekte anlegen (4 Vorlagen), befüllen, bearbeiten — alles im
+**Benutzbar.** Projekte anlegen (Vorlagen), befüllen, bearbeiten — alles im
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
-mit Lag), Meilensteine, kritischer Pfad, Konfliktanzeige mit Auflösen,
-Undo/Redo, Auto-Save, JSON-Export.
+mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
+
+**Dazugekommen (bis v0.4.1):** Gewerke per Drag & Drop umsortieren · Gantt und
+Tabelle in gleicher Reihenfolge (nach Startzeit) · **Untervorgänge** (einklappbar,
+Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für kritische
+Vorgänge und Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
+statt endlosem Dropdown · Hell/Dunkel-Umschalter im Kopf · CallBoard-Marke.
 
 **Deine Daten liegen im Browser.** Privater Modus, Verlauf löschen, anderer
 Rechner — und sie sind weg. Bis PocketBase steht, ist der **JSON-Export die
@@ -25,7 +30,10 @@ Vorgänge leuchten, Verzug wird benannt («sollte seit 20m laufen»). Der Status
 wird dabei **nie** automatisch gesetzt — sonst sähe der Plan immer nach Plan aus
 und das Signal «wir hängen» wäre weg.
 
-**Als Nächstes:** Drag & Drop im Gantt, danach PocketBase mit Login und Rollen.
+**Als Nächstes:** Drag & Drop der Balken im Gantt, danach PocketBase mit Login und
+Rollen. Die PocketBase-Schicht ist bereits vorbereitet, liegt aber bewusst noch
+uncommittet im Arbeitsbaum (greift nur mit `?backend=pb`) — Details in `CLAUDE.md`
+und `pocketbase/README.md`.
 
 ## Starten
 
@@ -61,15 +69,24 @@ sortieren, löschen). **Doppelklick** auf einen Namen benennt an Ort und Stelle 
 nicht fest. Im Panel gibt es dazu ein Häkchen «Dauer geschätzt» zum Abhaken,
 sobald die echte Zahl da ist.
 
-**Konflikte:** Verletzt ein Vorgang eine Abhängigkeit, wird er rot markiert und
-sagt im Klartext, woran es liegt. «Konflikte auflösen» schiebt alles auf den
-frühestmöglichen Termin — ein `⌘Z` nimmt das komplett zurück. Es verschiebt sich
-nie etwas hinter deinem Rücken.
+**Konflikte & kritischer Pfad:** Verletzt ein Vorgang eine Abhängigkeit, wird er
+rot markiert und sagt im Klartext, woran es liegt. Die **„kritisch"-Kachel** im Kopf
+und der **Konflikt-Knopf** öffnen eine **Prüf-Liste**: je Eintrag **Zeigen** (springt
+hin), bei Konflikten **Lösen** (nur diesen auf den frühestmöglichen Termin) oder
+**Ist ok** (abhaken), bei kritischen **Gesehen**. „Alle auflösen" bleibt als
+Abkürzung. Nichts verschiebt sich hinter deinem Rücken; ein `⌘Z` nimmt jede
+Auflösung komplett zurück.
+
+**Untervorgänge:** In der Tabelle legt „+↳" einen einklappbaren Untervorgang an; der
+Elternvorgang wird zur **Hülle** (Start/Ende ergeben sich aus den Kindern) und
+erscheint im Gantt als Sammelbalken. **Verknüpfen** läuft über ein **Suchfeld** —
+tippen filtert die (nach Gewerk gruppierte, chronologische) Trefferliste, statt durch
+alle Vorgänge zu scrollen.
 
 ## Prüfen
 
 ```bash
-node tests/run.mjs            # 192 Unit-Tests + statische Prüfungen, ohne Browser
+node tests/run.mjs            # Unit-Tests + statische Prüfungen, ohne Browser
 node tools/verify-browser.mjs # Darstellung: App + 4 Theme-Prototypen im Browser
 node tools/verify-edit.mjs    # Bearbeiten: anlegen, tippen, Undo, Konflikte, Panel, Menü
 node tools/verify-live.mjs    # Live-Modus mit gestellter Uhr (page.clock)
@@ -133,13 +150,13 @@ js/
   timeaxis.js           Zeit ↔ Pixel, Zoomstufen, Ticks, Kalenderwochen — DOM-frei
   templates.js          Vier Vorlagen (Festival, Tour, Corporate, Messe)
   persistence.js        localStorage, Export/Import, Migration — DOM-frei
-  palette.js            Gewerk-Farben: 8 Töne × 2 Schraffuren = 16 Plätze
+  palette.js            Gewerk-Farben: 10 Töne × 2 Schraffuren = 20 Plätze
   live.js               Verzug + laufende Vorgänge — DOM-frei
-  inspector.js          Seitenpanel
+  inspector.js          Seitenpanel (mit Verknüpfungs-Suche)
   menu.js               Kontextmenü
 styles/
   base.css              Nur Geometrie + Verhalten. Dazu die Gewerk-Farben.
-  themes/*.css          Vier Gestaltungsebenen; console ist aktiv
+  themes/*.css          Fünf Gestaltungsebenen; callboard ist aktiv
 tests/                  Unit-Tests + statische Prüfungen
 tools/
   build-prototypes.mjs  Baut die vier Design-Entwürfe als eigenständige Dateien
@@ -166,9 +183,10 @@ Lies **[docs/entscheidungen.md](docs/entscheidungen.md)**. Kurzfassung der Falle
 
 ## Themes
 
-Vier fertige Ebenen, aktiv ist `console` (die Crewplaner-DNA ins Helle gedreht).
-Ein Umschalter ist vorbereitet, aber noch nicht gebaut — siehe
-**[docs/themes.md](docs/themes.md)**.
+Fünf fertige Ebenen, aktiv ist `callboard` (NYX-Navy-CI: Navy/Paper, eigene
+Schriften). **Hell/Dunkel** schaltet ein Knopf im Kopf (☾/☀, gemerkt in
+`bzp_mode`). Der Wechsel der Theme-**Familie** ist verdrahtet, aber noch nicht als
+Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 
 ## Fahrplan
 
@@ -177,8 +195,11 @@ Ein Umschalter ist vorbereitet, aber noch nicht gebaut — siehe
 | ✅ | Darstellung: Gantt, vier Zoomstufen, Abhängigkeiten, kritischer Pfad |
 | ✅ | Befüllen & Bearbeiten: Vorlagen, Tabelle, Konflikte, Undo, Speichern |
 | ✅ | Live-Modus: Zeitlinie läuft, Verzug, laufende Vorgänge · Panel · Rechtsklick-Menü |
-| → | Drag & Drop im Gantt: Balken ziehen, Dauer ziehen, Verknüpfungen ziehen |
-| | PocketBase, Login, Rollen (`projektleiter` / `gewerk_lead` / `gewerk_member` / `viewer`) |
+| ✅ | Gewerke per Drag & Drop · gleiche Reihenfolge Gantt = Tabelle (nach Start) |
+| ✅ | Untervorgänge (Eltern = Hülle, einklappbar) · Handy/Tablet-tauglich |
+| ✅ | Prüf-Liste (kritisch & Konflikte sehen/zeigen/abhaken) · Verknüpfungs-Suche |
+| → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen, Verknüpfungen ziehen |
+| | PocketBase, Login, Rollen (vorbereitet, noch uncommittet) — `admin`/`lead`/`viewer` |
 | | Ansichten & Export: Tagesplan, öffentlicher Link ohne Login, PDF/ICS |
 
 **Zu den Vorlagen:** «Festival» ist abgenommener Praxisstand. Tour, Corporate und
