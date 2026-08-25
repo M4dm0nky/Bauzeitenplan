@@ -1,4 +1,4 @@
-// Klassentreffen-Plan importieren und im Browser prüfen.
+// Klassentreffen-Plan (V07) importieren und im Browser prüfen.
 import { firefox } from 'playwright-core';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,32 +42,33 @@ await p.waitForTimeout(1200);
 
 await check('Projekt heißt richtig', async () =>
   (await p.locator('#proj-name').textContent()).includes('Klassentreffen') ? true : 'Name falsch');
-await check('19 Gewerke', async () => {
+await check('20 Gewerke', async () => {
   const n = await p.locator('.legend-i').count();
-  return n === 19 ? true : n + ' statt 19';
+  return n === 20 ? true : n + ' statt 20';
 });
-await check('neun Gewerke mit Schraffur (Platz 11–19)', async () => {
+await check('zehn Gewerke mit Schraffur (Platz 11–20)', async () => {
   const n = await p.locator('.legend-i .bz-dot[data-tex]').count();
-  return n === 9 ? true : n + ' statt 9';
+  return n === 10 ? true : n + ' statt 10';
 });
-await check('122 Vorgänge', async () => {
+await check('353 Vorgänge', async () => {
   const t = await p.locator('.kpi', { hasText: 'Vorgänge' }).locator('.kpi-v').textContent();
-  return t.trim() === '122' ? true : t;
+  return t.trim() === '353' ? true : t;
 });
 await check('Plan startet OHNE Konflikte', async () =>
   (await p.locator('#resolve').isHidden()) ? true : 'Konfliktknopf sichtbar');
-await check('ein Meilenstein (Baufrei)', async () => {
+await check('kein Meilenstein — V07 hat keinen baufreien Tag', async () => {
   const n = await p.locator('.bz-ms').count();
-  return n === 1 ? true : n + ' statt 1';
+  return n === 0 ? true : n + ' statt 0';
 });
-await check('die meisten Balken sind NICHT gestrichelt (echte Zeiten aus V03)', async () => {
+await check('die meisten Balken sind NICHT gestrichelt (echte Zeiten aus V07)', async () => {
   const total = await p.locator('.bz-bar').count();
   const est = await p.locator('.bz-bar.is-estimated').count();
-  return total >= 100 && est <= 12 ? true : `${est}/${total} gestrichelt (erwartet ~9 von ~121)`;
+  return total >= 300 && est <= 25 ? true : `${est}/${total} gestrichelt (erwartet 19 von 353)`;
 });
-await check('Besucher-Gastro und Sanitätsdienst sind in der Legende', async () => {
+await check('Besucher-Gastro, Sanitätsdienst und Crew sind in der Legende', async () => {
   const namen = await p.locator('.legend-i').allTextContents();
-  return namen.some((x) => /Besucher-Gastro/.test(x)) && namen.some((x) => /Sanitätsdienst/.test(x)) ? true : 'neue Gewerke fehlen';
+  return ['Besucher-Gastro', 'Sanitätsdienst', 'Crew'].every((n) => namen.some((x) => x.includes(n)))
+    ? true : 'Gewerke fehlen in der Legende';
 });
 
 // Überblick über die zwei Wochen
@@ -79,6 +80,18 @@ await check('Balken sind im Bild', async () => {
   return vis >= 15 ? true : `nur ${vis} im Bild`;
 });
 await p.screenshot({ path: join(here, 'shots', 'klassentreffen-wochen.png') });
+
+// Zugeklappt: alle 20 Gewerke auf einen Blick — die Palette ist am Limit,
+// hier muss man sehen, dass sich benachbarte Zeilen noch unterscheiden.
+await p.locator('#fold').click();
+await p.waitForTimeout(500);
+await check('zugeklappt sind alle 20 Gewerkzeilen sichtbar', async () => {
+  const n = await p.locator('.bz-lab-group').count();
+  return n >= 15 ? true : `nur ${n} Gruppenzeilen`;
+});
+await p.screenshot({ path: join(here, 'shots', 'klassentreffen-zugeklappt.png') });
+await p.locator('#fold').click();
+await p.waitForTimeout(400);
 
 await p.locator('[data-z="monate"]').click();
 await p.waitForTimeout(400);

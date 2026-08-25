@@ -15,7 +15,7 @@ der Load-In läuft stundengenau.
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
 mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
-**Dazugekommen (bis v0.4.1):** Gewerke per Drag & Drop umsortieren · Gantt und
+**Dazugekommen (bis v0.5.0):** Gewerke per Drag & Drop umsortieren · Gantt und
 Tabelle in gleicher Reihenfolge (nach Startzeit) · **Untervorgänge** (einklappbar,
 Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für kritische
 Vorgänge und Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
@@ -205,3 +205,11 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 **Zu den Vorlagen:** «Festival» ist abgenommener Praxisstand. Tour, Corporate und
 Messe sind entworfene Gerüste — richtige Gewerke und Meilensteine, aber keine
 erfundenen Detailvorgänge. Korrigier sie beim ersten echten Einsatz.
+
+**Beispielplan Klassentreffen:** `klassentreffen-festival.json` bildet den
+**Bauzeitenplan V07 (Stand 25.08.2026)** ab — 20 Gewerke, 353 Vorgänge über
+14 Tage, quellentreu bis auf 19 Zeilen, die im Original ohne Uhrzeit gedruckt
+sind (gestrichelte Kante, Grund in der Notiz). Neu gebaut wird er mit
+`node tools/make-klassentreffen.mjs`; die Quelle steht Zeile für Zeile in
+diesem Werkzeug. **Keine Verknüpfungen** — V07 ist ein terminierter Kalender,
+und erfundene Abhängigkeiten erzeugten rote Konflikte ohne Wirklichkeitsbezug.

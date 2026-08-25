@@ -86,7 +86,7 @@ noch Pages einschalten (nur `push`, kein `admin`).
 
 ## Version
 
-**Aktuell: 0.4.1** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
+**Aktuell: 0.5.0** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
 
 **Die Version wird NIE von Hand geändert.** Ein Befehl stempelt sie in alle
 sechs Stellen zugleich:

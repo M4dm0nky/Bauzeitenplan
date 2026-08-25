@@ -3,6 +3,33 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.5.0 — 2026-08-25
+
+**Klassentreffen-Beispieldaten auf V07 (Stand 25.08.2026)**
+- `klassentreffen-festival.json` stammt jetzt aus **Bauzeitenplan V07** statt V03.
+  Das ist kein Nachtrag, sondern ein anderer Plan: der 23.08. ist nicht mehr
+  baufrei (der Meilenstein „Baufrei" entfällt), es gibt **zwei Showtage**
+  (29. + 30.08.), und der komplette **Personal-Block** (SITECREW, HELFER,
+  STAPLERFAHRER, CLIMBER, STEELHANDS, SHOW CREW …) ist tagesgenau mit Kopfzahlen
+  ausgewiesen. **361 V07-Zeilen → 353 Vorgänge**, davon 19 mit geschätzter
+  Uhrzeit (in V07 ohne Zeitangabe gedruckt).
+- Neues Gewerk **„Crew"** für den Personal-Block → 20 Gewerke. Das ist exakt
+  `MAX_SLOTS`; ein 21. Gewerk verlangt eine neue Farbsuche. Ein Test hält das fest.
+- Verschmolzen wird nur, was **ohne Unterbrechung weiterläuft** (23:00–00:00 +
+  00:00–03:00). Eine Wiederholung am Folgetag bleibt eine eigene Zeile — sonst
+  sähe die Nacht dazwischen nach Durcharbeiten aus.
+- Neu gegenüber dem zwischenzeitlichen V06-Stand: **CCTV** (Aufbau 27.08.,
+  Abbau 31.08.), **CATERING ASSISTANT** an beiden Showtagen, eine zusätzliche
+  **Container-Anlieferung am 22.08.**, und die in V06 durchgestrichene Zeile
+  **„SHOWCREW SIDO complete audio"** steht in V07 regulär drin. Die
+  Wasserversorgung rückt auf den 21.08., „Einrichten Crew Catering Zelt" auf den
+  24.08. Der Sanitätsdienst hat jetzt fast überall echte Zeiten (Pandemedics)
+  statt Schätzungen.
+- Container- und Kabinenzeilen drucken in V07 die komplette Stückliste in die
+  Spalte „Aktion". Als Balkenbeschriftung wäre das unbrauchbar: der **Titel trägt
+  die Kurzform, die Notiz die vollständige gedruckte Liste** — nichts geht verloren.
+- Weiterhin **keine** erfundenen Verknüpfungen: V07 ist ein terminierter Kalender.
+
 ## 0.4.1 — 2026-07-18
 
 **Verknüpfen: suchen statt scrollen**
