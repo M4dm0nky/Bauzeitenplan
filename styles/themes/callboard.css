@@ -369,6 +369,21 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .mn-sep { background: var(--rule); margin: 3px 0; }
 
 .btn-live[aria-pressed="true"] { background: var(--live-run); border-color: var(--live-run); color: #fff; font-weight: 700; }
+/* ── Ebene, Bühnen-Filter, Live-Kopfzeile ─────────────────────────────────── */
+.buehnen { font-size: calc(9.5px * var(--fs)); color: var(--ink-2); }
+.buehne-i:has(input:not(:checked)) { color: var(--muted); opacity: .6; }
+.buehnen-leer { font-family: var(--mono); font-size: calc(9px * var(--fs)); color: var(--muted); }
+
+.showhead { background: var(--panel); border-bottom: 1px solid var(--rule-2); }
+.sh-f { background: var(--panel2); }
+.sh-k { font-family: var(--mono); font-size: calc(8.5px * var(--fs)); color: var(--muted); }
+.sh-v { font-size: calc(15px * var(--fs)); font-weight: 600; color: var(--ink); line-height: 1.25; }
+.sh-z { font-family: var(--mono); font-size: calc(9px * var(--fs)); color: var(--ink-2); }
+.sh-now .sh-v { color: var(--ink); }
+.sh-next .sh-v { color: var(--ink-2); }
+.sh-clock .sh-v { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.sh-late.is-late .sh-v, .sh-late.is-late .sh-z { color: var(--crit); }
+
 .live-bar { font-family: var(--mono); font-size: calc(9px * var(--fs)); color: var(--ink-2); padding: 0 8px; }
 .live-bar .live-dot { background: var(--live-run); }
 .live-bar.is-late { color: var(--crit); }

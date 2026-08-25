@@ -1,7 +1,7 @@
 # Bauzeitenplan — Arbeitsanweisungen
 
 Gantt-Ablaufplan für die Veranstaltungsbranche. Vanilla JS, ES-Module, **kein Build-Step**.
-Projekte leben im Browser (localStorage) + JSON-Export. PocketBase kommt danach.
+Projekte leben im Browser (localStorage) + JSON-Export. Kein Backend, keine Anmeldung.
 
 **Live:** https://m4dm0nky.github.io/Bauzeitenplan/ · **Repo:** M4dm0nky/Bauzeitenplan · **Version:** siehe unten
 
@@ -15,53 +15,23 @@ node tools/verify-live.mjs      # Live-Modus mit gestellter Uhr
 node tools/verify-amk.mjs       # AMK-Plan importieren
 node tools/verify-klassentreffen.mjs   # V07-Plan + Autostart über die Adresse
 node tools/verify-print.mjs     # Tagesblätter A3: Zuschnitt, Filter, Maßstab
+node tools/verify-showablauf.mjs # Showablauf: Ebene, Bühnen, Live-Kopfzeile, Blatt
 ```
 
 Beides muss grün sein, bevor etwas als fertig gilt. `verify-browser.mjs` braucht
 einmalig `npx playwright install firefox`.
 
-**Screenshots ansehen, nicht nur die Häkchen zählen.** Vier echte Fehler haben in
+**Screenshots ansehen, nicht nur die Häkchen zählen.** Acht echte Fehler haben in
 diesem Projekt die automatischen Prüfungen passiert und wurden erst im Bild sichtbar:
 Pfeile quer über die Gewerk-Spalte, unsichtbare Phasennamen, Beschriftungen ohne
-Balken, und eine auf „J" zusammengeschnurrte JETZT-Fahne. Für jeden gibt es jetzt
-eine Prüfung — der nächste Fehler dieser Art hat aber noch keine.
+Balken, eine auf „J" zusammengeschnurrte JETZT-Fahne, zehn Zeilen ohne Balken im
+Showablauf, „Changeover: Changeover", ein Platzhaltertext in siebzehn Tabellenzeilen,
+der wie eingetragener Inhalt aussah, und ein Showtag, der nur zwei Drittel des Bildes
+füllte. Für jeden gibt es jetzt eine Prüfung — der nächste Fehler dieser Art hat aber
+noch keine.
 
 Zum Starten: `python3 -m http.server 8080`. Ohne Server blockiert der Browser die
 ES-Module per CORS.
-
-## ⚠️ Working Tree: die PocketBase-Vorbereitung ist ABSICHTLICH nicht committed
-
-Das Wichtigste für jede neue Sitzung. Im Arbeitsbaum liegt eine **fertige, aber
-bewusst uncommittete** PocketBase-Schicht (Login + Rollen). Sie greift nur mit
-`?backend=pb`; ohne Schalter läuft alles wie gehabt aus localStorage. `git status`
-zeigt deshalb dauerhaft:
-
-- **modifiziert (tracked):** `js/app.js`, `js/inspector.js`, `js/table.js` — jeweils
-  HEAD **plus** PB-Teile (Importe `session.js`/`roles.js`/`auth.js`/`persistence-pb.js`,
-  `pbMode()`/`relock()`, `lockRow`/`lockPanel`, `canEdit…`-Gates).
-- **untracked:** `js/pb.js`, `auth.js`, `session.js`, `roles.js`, `persistence-pb.js`,
-  `admin.js`, `login.html`, `admin.html`, `pocketbase/`, `tests/{client-auth,pb-rules,roles}.test.mjs`.
-
-**Jeder Feature-Commit muss PB-frei bleiben.** Berührt eine Änderung eine PB-behaftete
-Datei (`app.js`/`inspector.js`/`table.js`), sauber isolieren — bewährtes Vorgehen aus
-v0.3.0/0.4.0/0.4.1:
-
-1. PB-Arbeitsversionen sichern (`app.js`/`inspector.js`/`table.js`), untracked PB-Dateien
-   aus dem Baum schieben.
-2. Betroffene tracked Dateien auf HEAD: `git checkout HEAD -- js/…`.
-3. NUR die eigentliche Feature-Änderung neu auftragen (bei `app.js`/`inspector.js` heißt
-   das: das Feature ohne die PB-Importe/-Gates re-applizieren).
-4. **PB-frei verifizieren:** `grep` zeigt keine `session.js`/`roles.js`/`persistence-pb`
-   mehr; `node tests/run.mjs` + `verify-edit` + `verify-browser` grün.
-5. Nur die Feature-/Version-/Doku-Dateien stagen und committen (nie `app.js`-PB,
-   nie untracked PB).
-6. Danach PB-Arbeitsversionen + untracked PB zurückkopieren → Steady-State
-   wiederhergestellt (nur PB uncommitted).
-
-Reine `.md`- oder CSS-Änderungen berühren PB nicht und brauchen keine Isolation —
-einfach die betroffenen Dateien einzeln stagen. Details zur PB-Schicht:
-`pocketbase/README.md` (selbst untracked). Wenn die Zeit für Online + Rollen kommt,
-wird diese Schicht als eigener Schritt committed.
 
 ## Deploy
 
@@ -302,6 +272,61 @@ unbenutzbar. Die reine Funktion gruppiert nach Gewerk, sortiert je Gewerk über
 `byStart` und filtert per Query (Titel/Gewerkname); der Inspector rendert nur ihr
 Ergebnis. Neue lange Auswahllisten genauso lösen — nie einen 122-Zeilen-`<select>`.
 
+**Zwei Ebenen, ein Plan — und `js/ebene.js` ist die einzige Stelle, die das weiß.**
+Der Bauzeitenplan zeigt GEWERKE, der Showablauf BÜHNEN; eine Bühne ist ein Gewerk mit
+`art:'buehne'`, ein Programmpunkt ein normaler Vorgang darin. Kein zweiter Store, kein
+zweites Undo, keine zweite Persistenz. Gantt, Tabelle und Druckseite FRAGEN
+(`sichtGewerke`/`sichtTasks`/`amTag`), sie entscheiden nicht selbst. Altdaten ohne
+`art` sind Gewerke — der Bauzeitenplan sieht aus wie immer. **Ein Gewerk wird nie
+nachträglich zur Bühne**: alle Vorgänge darin sprängen die Ebene.
+
+**Farbplätze werden JE EBENE vergeben** (`freeSlot(state, art)` in store.js). Gewerke
+und Bühnen sind nie zusammen zu sehen, dürfen also dieselben Farben tragen. Zusammen
+gezählt wäre die Palette im Klassentreffen-Plan (20 Gewerke = `MAX_SLOTS`) mit der
+ersten Bühne erschöpft. `slotsExhausted` wird entsprechend gegen die Zahl der Bänder
+der AKTIVEN Ebene geprüft, nie gegen `gewerke.length`.
+
+**Der Showablauf ist tagesbezogen.** Ein Umschalter wählt den Showtag; ohne ihn standen
+die Acts des zweiten Tages als zehn Zeilen ohne Balken im Bild — genau die Fehlerart,
+die hier schon dreimal erst der Screenshot gefunden hat. Gantt und Tabelle bekommen
+DENSELBEN Tag gereicht, sonst zeigt derselbe Plan zwei verschiedene Tage.
+
+**Bestand zählt die Sicht, Warnungen zählen den Plan.** `gantt.stats()` meldet Vorgänge,
+Bänder, laufend und Crew aus der sichtbaren Ebene — sonst stünden 353 Vorgänge über
+einem Blatt mit 17 Zeilen. Kritisch und Konflikte bleiben planweit: sie sind Aussagen
+über den Plan, nicht über den Ausschnitt, und müssen zur Prüf-Liste passen, die über
+`conflicts()`/`criticals()` ebenfalls alles zeigt. Zwei Zähler nebeneinander wären
+genau der Fehler, den die Eine-Quelle-Regel verbietet.
+
+**Verzug in der Live-Kopfzeile zählt nur, was noch aussteht oder läuft.** `delaysAt`
+meldet auch längst vergangene, nie abgehakte Punkte; bei DOORS (12:00–14:00, Status
+«geplant») stand um 15:30 groß und rot «+4 Std» — an einem Abend, der exakt nach Plan
+lief. Das ist keine Verspätung, sondern fehlende Rückmeldung, und es überdeckte den
+Verzug, auf den es ankommt. Die Regel «Status wird nie automatisch gesetzt» bleibt
+unberührt; gefiltert wird die ANZEIGE, nicht die Rechnung.
+
+**Kein Typ steht doppelt** (`typHinweis` in ebene.js). Ein Programmpunkt «Changeover»
+mit `punktTyp:'changeover'` ergab «Changeover: Changeover» in der Kopfzeile und
+«Changeover / Changeover» auf dem Blatt. Verglichen wird normalisiert und in beide
+Richtungen, damit auch «SHOW END» / «Show-Ende» als dasselbe gilt.
+
+**Achsen-Ticks und Bänder werden auf `T1` geklemmt.** Sie ragten über das Planende
+hinaus und machten den Scroller um 1400 px breiter als seinen Inhalt — im
+Bauzeitenplan unsichtbar, im Showablauf rutschte der ganze Tag aus dem Bild. Und die
+Tagesansicht passt sich neu ein, wenn der Container die Breite ändert: «ein Kalendertag
+füllt die Breite» ist eine Zusage, die bei jeder Breite gilt.
+
+**Keine Platzhaltertexte in Freitextspalten.** Ein «z. B. 2× Wedge» in siebzehn Zeilen
+sieht aus wie siebzehnmal eingetragener Inhalt; SIDOs echtes «1 Riser 2×1 m» war
+darin nicht zu finden. Was die Spalte will, sagt ihre Überschrift.
+
+**Das Running-Order-Blatt ist eine LISTE, kein Zeitstrahl** (`roBlatt` in print.js).
+So liest man einen Showablauf: von oben nach unten, Uhrzeit voran. Ein Gantt über zehn
+Stunden mit siebzehn Zeilen wäre auf Papier ein Streifenmuster, und die Felder zum
+Ausfüllen hätten keinen Platz. **Leere Felder drucken als Linie** — ein leerer Kasten
+sieht aus wie ein Satzfehler, eine Linie sagt: hier wird geschrieben. Die Zeilenhöhe
+wird GEWICHTET gerechnet (Umbauzeilen zählen 0,62), sonst bleibt ein Viertel leer.
+
 **Abhaken ist eine menschliche Aussage über eine gerechnete Warnung — persistiert,
 signaturgebunden.** `ackCrit` (bool) nimmt einen kritischen Vorgang aus der
 kritisch-Zahl; `ackConflictMin` (Minuten) akzeptiert eine Konfliktgröße. `findConflicts`
@@ -311,7 +336,7 @@ GRÖSSER, meldet er sich wieder (kein stilles Wegdrücken). Läuft über `setTas
 lesen alle `findConflicts` — nie einen zweiten Zähler danebenstellen. „Kritisch" bleibt
 Information (kein automatisches Verschieben), nur die Sichtbarkeit wird abhakbar.
 
-## Aus Crewplaner gelernt — gilt ab Phase 1
+## Aus Crewplaner gelernt — aufgehoben für den Tag, an dem ein Backend kommt
 
 - `project_id` & Co. als **Text**, niemals als Relation. Coolify-Reimport kippt
   Relations und bricht alle Filter.
@@ -334,6 +359,7 @@ Information (kein automatisches Verschieben), nur die Sichtbarkeit wird abhakbar
 | `js/table.js` | Tabellen-Editor |
 | `js/templates.js` | Vier Vorlagen |
 | `js/palette.js` | 10 Farbtöne × 2 Schraffuren = 20 Gewerke (HUES=10, MAX_SLOTS=20) |
+| `js/ebene.js` | Bauzeitenplan ↔ Showablauf: Bänder, Showtage, Typ-Hinweis — **DOM-frei** |
 | `js/live.js` | Verzug + laufende Vorgänge — **DOM-frei** |
 | `js/inspector.js` | Seitenpanel |
 | `js/menu.js` | Kontextmenü (Muster: Crewplaner dropdown.js) |
@@ -348,9 +374,17 @@ dort begründet und ist durch Regressionstests abgesichert.
 ✅ Darstellung · ✅ Befüllen & Bearbeiten · ✅ Panel, Rechtsklick-Menü, Live-Modus ·
 ✅ Gewerke per Drag & Drop · ✅ Gleiche Reihenfolge (Gantt = Tabelle, nach Start) ·
 ✅ Untervorgänge (Eltern = Hülle, einklappbar) · ✅ Handy/Tablet-tauglich ·
-✅ Prüf-Liste (kritisch & Konflikte sehen, zeigen, abhaken/lösen)
-→ Als Nächstes: Drag & Drop der Balken im Gantt · danach PocketBase + Login +
-Rollen · zuletzt Ansichten & Export (Tagesplan, öffentlicher Link, PDF/ICS)
+✅ Prüf-Liste (kritisch & Konflikte sehen, zeigen, abhaken/lösen) ·
+✅ Tagesblätter A3 · ✅ Showablauf-Ebene (Bühnen, Anforderungen/Material, Live-Kopfzeile,
+Running-Order-Blatt)
+→ Als Nächstes: Drag & Drop der Balken im Gantt · danach Ansichten & Export
+(öffentlicher Link, PDF/ICS)
+
+**PocketBase liegt auf Eis.** Die vorbereitete Login-/Rollenschicht wurde in v0.8.0 aus
+`main` entfernt — die Seite ist eine reine GitHub-Pages-Auslieferung ohne
+Nutzerverwaltung, und die Schicht kostete bei jedem Commit eine Isolationsprozedur.
+Der vollständige Stand liegt im Branch `pocketbase-vorbereitung`; er wird nicht
+deployt und nicht gemergt. Wenn Online + Rollen kommen, wird dort weitergemacht.
 
 **Vorlagen:** «festival» ist abgenommener Praxisstand. Tour, Corporate und Messe
 sind entworfene Gerüste — beim ersten echten Einsatz korrigieren.

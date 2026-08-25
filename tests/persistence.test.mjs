@@ -23,8 +23,8 @@ const fakeStorage = () => {
 
 const plan = (name = 'Test') => ({
   project: { id: 'p1', name, venue: 'Halle', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin' },
-  gewerke: [{ id: 'g1', name: 'Bühne', sort: 0, slot: 0 }],
-  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null }],
+  gewerke: [{ id: 'g1', name: 'Bühne', sort: 0, slot: 0, art: 'gewerk' }],
+  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null, punktTyp: 'act', anforderungen: '', material: '', soundcheck: '', kontakt: '' }],
   deps: [],
 });
 
@@ -198,6 +198,42 @@ test('Gewerk ohne Farbplatz bekommt einen', () => {
 test('Migration ist idempotent', () => {
   const once = migrate(plan());
   assert.deepEqual(migrate(once), once);
+});
+
+console.log('\nShowablauf-Ebene');
+test('ein Altplan ohne art besteht nur aus Gewerken', () => {
+  const raw = plan();
+  delete raw.gewerke[0].art;
+  assert.equal(migrate(raw).gewerke[0].art, 'gewerk');
+});
+test('eine Bühne bleibt eine Bühne', () => {
+  const raw = plan();
+  raw.gewerke[0].art = 'buehne';
+  assert.equal(migrate(raw).gewerke[0].art, 'buehne');
+});
+test('erfundene Arten fallen auf Gewerk zurück, statt unsichtbar zu werden', () => {
+  const raw = plan();
+  raw.gewerke[0].art = 'quatsch';
+  assert.equal(migrate(raw).gewerke[0].art, 'gewerk');
+});
+test('Vorgänge ohne die Showablauf-Felder bekommen leere', () => {
+  const raw = plan();
+  for (const f of ['punktTyp', 'anforderungen', 'material', 'soundcheck', 'kontakt']) delete raw.tasks[0][f];
+  const t = migrate(raw).tasks[0];
+  assert.equal(t.punktTyp, 'act');
+  assert.equal(t.anforderungen, '');
+  assert.equal(t.material, '');
+  assert.equal(t.soundcheck, '');
+  assert.equal(t.kontakt, '');
+});
+test('Anforderungen und Material überleben Export → Import', () => {
+  const raw = plan();
+  Object.assign(raw.tasks[0], {
+    punktTyp: 'changeover', anforderungen: '2× Wedge, Drehleiter',
+    material: '1 Riser 2×1 m', soundcheck: '2026-07-13T09:30', kontakt: 'Max Mustermann',
+  });
+  const back = deserialize(serialize(raw));
+  assert.deepEqual(back.plan.tasks[0], raw.tasks[0]);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

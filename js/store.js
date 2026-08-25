@@ -16,6 +16,14 @@ import { topoSort, toMin } from './schedule.js';
 // Zeile ist die Wiederholung billiger als ein falscher Pfeil.
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
+// Ebenso bewusst nicht aus ebene.js importiert — dieselbe Richtung, dasselbe
+// Argument: der Kern zeigt nicht auf die Ansichtsschicht (ebene.js hängt an
+// conflicts.js, und dorthin liefe der Pfeil verkehrt herum). Altdaten ohne
+// `art` sind Gewerke. Eigener Name, weil der Prototypen-Build alle Module in
+// EINE Datei zieht und zwei gleichnamige Deklarationen dort ein SyntaxError
+// wären — dieselbe Prüfung, die schon den `el`-Vorfall gefangen hat.
+const artVon = (g) => g.art || 'gewerk';
+
 const UNDO_MAX = 100;
 
 const ok = (extra = {}) => ({ ok: true, ...extra });
@@ -193,14 +201,19 @@ const HANDLERS = {
     const g = cmd.gewerk || {};
     const name = String(g.name || '').trim();
     if (!name) return 'Das Gewerk braucht einen Namen.';
-    if (state.gewerke.some((x) => x.name.toLowerCase() === name.toLowerCase())) return 'Dieses Gewerk gibt es schon: ' + name;
-    const id = g.id || newId('g');
+    // Eine Bühne ist ein Gewerk der Showablauf-Ebene (js/ebene.js). Ein Name darf
+    // in beiden Ebenen einmal vorkommen — «Bühne» als Gewerk und «Bühne» als
+    // Spielstätte sind zwei verschiedene Dinge und stehen nie nebeneinander.
+    const art = g.art === 'buehne' ? 'buehne' : 'gewerk';
+    const was = art === 'buehne' ? 'Diese Bühne gibt es schon: ' : 'Dieses Gewerk gibt es schon: ';
+    if (state.gewerke.some((x) => artVon(x) === art && x.name.toLowerCase() === name.toLowerCase())) return was + name;
+    const id = g.id || newId(art === 'buehne' ? 'b' : 'g');
     state.gewerke.push({
-      id, name,
+      id, name, art,
       sort: g.sort ?? state.gewerke.length,
       // Farbe folgt dem Gewerk, nicht seiner Position: der Platz wird einmal
       // vergeben und bleibt. Sonst färbte sich beim Umsortieren alles um.
-      slot: g.slot ?? freeSlot(state),
+      slot: g.slot ?? freeSlot(state, art),
     });
     return ok({ id });
   },
@@ -268,10 +281,15 @@ const HANDLERS = {
   setGewerkField(state, cmd) {
     const g = state.gewerke.find((x) => x.id === cmd.id);
     if (!g) return 'Gewerk nicht gefunden.';
+    // Die Ebene eines Bandes wechselt man nicht im Vorbeigehen: alle Vorgänge
+    // darin sprängen mit, aus Aufbauschritten würden Programmpunkte. Wer eine
+    // Bühne will, legt eine an.
+    if (cmd.field === 'art') return 'Ein Gewerk wird nicht nachträglich zur Bühne.';
     if (cmd.field === 'name') {
       const name = String(cmd.value || '').trim();
       if (!name) return 'Das Gewerk braucht einen Namen.';
-      if (state.gewerke.some((x) => x.id !== cmd.id && x.name.toLowerCase() === name.toLowerCase())) return 'Dieses Gewerk gibt es schon: ' + name;
+      if (state.gewerke.some((x) => x.id !== cmd.id && artVon(x) === artVon(g) && x.name.toLowerCase() === name.toLowerCase()))
+        return (artVon(g) === 'buehne' ? 'Diese Bühne gibt es schon: ' : 'Dieses Gewerk gibt es schon: ') + name;
       g.name = name;
       return ok();
     }
@@ -291,8 +309,13 @@ const HANDLERS = {
 };
 
 // Niedrigster freier Farbplatz — nach dem Löschen wird er wieder vergeben.
-function freeSlot(state) {
-  const used = new Set(state.gewerke.map((g) => g.slot));
+//
+// Die Plätze werden JE EBENE vergeben: Gewerke und Bühnen sind nie zusammen zu
+// sehen, also dürfen sie dieselben Farben tragen. Zählte man alle zusammen,
+// bekäme im Klassentreffen-Plan (20 Gewerke) die erste Bühne Platz 20 und die
+// Palette gälte als erschöpft, obwohl kein Betrachter je eine Dopplung sieht.
+function freeSlot(state, art = 'gewerk') {
+  const used = new Set(state.gewerke.filter((g) => artVon(g) === art).map((g) => g.slot));
   for (let i = 0; ; i++) if (!used.has(i)) return i;
 }
 

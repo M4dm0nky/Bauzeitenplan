@@ -8,6 +8,7 @@
 import { computeSchedule, toMin, toDate, byStart, seriesRows } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
 import { runningAt, delaysAt } from './live.js';
+import { sichtGewerke, zeitraumFuer, amTag } from './ebene.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, svgEl } from './dom.js';
 import {
@@ -52,6 +53,15 @@ export function createGantt(root, opts = {}) {
 
   // Alles Abgeleitete lebt hier und wird bei jeder Änderung neu bestimmt.
   let S, T0, T1, NOW, TOTAL_MIN, SCHED, byId, gwById, CONFLICTS;
+  // Die sichtbaren Bänder und ihre Vorgänge — je nach Ebene Gewerke oder Bühnen
+  // (js/ebene.js). Einmal in syncState bestimmt, damit Zeilen, Minimap, Achse
+  // und Kennzahlen garantiert dieselbe Auswahl sehen.
+  let VG = [], VT = [];
+  let ebene = O.ebene || 'bau';
+  let ausBlend = new Set();
+  // Showablauf: der gezeigte Kalendertag. null = alle. Eine Running Order ist
+  // tagesbezogen — beide Showtage nebeneinander ergäben zehn Zeilen ohne Balken.
+  let tag = null;
   const collapsed = new Set();
 
   // «Jetzt» hängt an der Uhr, nicht an den Daten — deshalb eigene Funktion und
@@ -65,8 +75,20 @@ export function createGantt(root, opts = {}) {
 
   function syncState() {
     S = store.state;
-    T0 = toMin(S.project.start);
-    T1 = toMin(S.project.end);
+    VG = sichtGewerke(S, ebene, ausBlend);
+    const sichtbar = new Set(VG.map((g) => g.id));
+    // Die Zieltermine (`gewerk: 'projekt'`) haben kein Band, gehören aber zum
+    // Bauzeitenplan und stehen dort in einer eigenen Zeile ganz unten. Ohne sie
+    // zählte die Kopfzeile sie nicht mit — der AMK-Plan meldete 36 statt 37.
+    if (ebene === 'bau') sichtbar.add('projekt');
+    VT = S.tasks.filter((t) => sichtbar.has(t.gewerk));
+    if (ebene === 'show' && tag) VT = amTag(VT, tag);
+    // Der Bauzeitenplan spannt die Achse über die ganze Veranstaltung — das IST
+    // sein Zweck. Der Showablauf nimmt seine Spanne aus den Programmpunkten:
+    // zwei Showtage in vierzehn Tagen Projektlaufzeit wären zwei Striche.
+    const z = ebene === 'bau' ? null : zeitraumFuer(VT);
+    T0 = toMin(z ? z.start : S.project.start);
+    T1 = toMin(z ? z.end : S.project.end);
     TOTAL_MIN = Math.max(1, T1 - T0);
     NOW = readNow();
     byId = new Map(S.tasks.map((t) => [t.id, t]));
@@ -111,7 +133,11 @@ export function createGantt(root, opts = {}) {
   const axisMajor = el('div', 'bz-axis-major');
   const axisMinor = el('div', 'bz-axis-minor');
   axis.append(axisPhase, axisMajor, axisMinor);
-  const cornerCap = el('div', 'bz-corner-cap', 'Gewerk / Vorgang');
+  // Die Spaltenüberschrift sagt, WAS in der Seitenspalte steht — und das ist je
+  // Ebene etwas anderes.
+  const cornerCap = el('div', 'bz-corner-cap');
+  const setCap = () => { cornerCap.textContent = ebene === 'show' ? 'Bühne / Programmpunkt' : 'Gewerk / Vorgang'; };
+  setCap();
   corner.append(cornerCap);
 
   const bandLayer = el('div', 'bz-bands');
@@ -138,8 +164,8 @@ export function createGantt(root, opts = {}) {
   function buildRows() {
     rows = [];
     let y = 0;
-    for (const g of [...S.gewerke].sort((a, b) => a.sort - b.sort)) {
-      const tasks = S.tasks.filter((t) => t.gewerk === g.id).sort(byStart);
+    for (const g of VG) {
+      const tasks = VT.filter((t) => t.gewerk === g.id).sort(byStart);
       if (!tasks.length) continue;
       const spans = tasks.filter((t) => !t.milestone);
       const gStart = Math.min(...tasks.map((t) => toMin(t.start)));
@@ -173,8 +199,10 @@ export function createGantt(root, opts = {}) {
         }
       }
     }
-    // Projekt-Meilensteine (gewerk 'projekt') als eigene Zeile ganz unten
-    const proj = S.tasks.filter((t) => t.gewerk === 'projekt').sort(byStart);
+    // Projekt-Meilensteine (gewerk 'projekt') als eigene Zeile ganz unten.
+    // Sie gehören zum Bauzeitenplan; im Showablauf hat der Tag seine eigenen
+    // Marken (Doors, Show-Ende) und der Zielmeilenstein wäre hier nur Ballast.
+    const proj = VT.filter((t) => t.gewerk === 'projekt').sort(byStart);
     if (proj.length) {
       rows.push({ kind: 'projekt', tasks: proj, y, h: O.groupH });
       y += O.groupH;
@@ -655,9 +683,14 @@ export function createGantt(root, opts = {}) {
     }
     // Wochenenden nur zeigen, wenn ein Tag überhaupt breit genug ist
     if (1440 * px >= 26) {
+      // Auf die dargestellte Spanne klemmen. Ein Wochenendband läuft über zwei
+      // Kalendertage; zeigt die Ansicht nur einen (Showablauf), ragte es
+      // 1400 px über den Canvas hinaus und machte den Scroller genau so viel
+      // breiter — der Tag rutschte aus dem Bild und rechts klaffte Grau.
       for (const w of weekendBands(new Date(S.project.start), new Date(S.project.end))) {
-        const a = x(Math.round(w.from.getTime() / 60000));
-        const b = x(Math.round(w.to.getTime() / 60000));
+        const a = x(Math.max(T0, Math.round(w.from.getTime() / 60000)));
+        const b = x(Math.min(T1, Math.round(w.to.getTime() / 60000)));
+        if (b <= a) continue;
         const n = el('div', 'bz-we');
         n.style.left = a + 'px'; n.style.width = (b - a) + 'px';
         bandLayer.append(n);
@@ -686,14 +719,18 @@ export function createGantt(root, opts = {}) {
     axisMajor.replaceChildren();
     for (const t of ticksFor(sc.major, from, to)) {
       const startMin = Math.round(t.t.getTime() / 60000);
+      if (startMin >= T1) continue;
       const n = el('div', 'bz-t bz-t-major');
       n.style.left = x(startMin) + 'px';
-      n.style.width = (majSpan(sc.major, t.t) * px) + 'px';
+      // Ebenfalls auf T1 geklemmt: ein Tagesbalken der groben Zeile ist 1440 min
+      // breit, auch wenn davon nur zehn Minuten in die Ansicht fallen.
+      n.style.width = (Math.min(majSpan(sc.major, t.t), T1 - startMin) * px) + 'px';
       n.append(el('span', null, sc.major === 'day' ? t.full : t.label));
       axisMajor.append(n);
     }
     axisMinor.replaceChildren();
     for (const t of ticksFor(sc.minor, from, to)) {
+      if (Math.round(t.t.getTime() / 60000) >= T1) continue;
       const n = el('div', 'bz-t bz-t-minor');
       if (t.weekend) n.classList.add('is-we');
       n.style.left = x(Math.round(t.t.getTime() / 60000)) + 'px';
@@ -747,27 +784,37 @@ export function createGantt(root, opts = {}) {
   }
 
   // ── Minimap ─────────────────────────────────────────────────────────────────
-  let mini, miniWin, miniNow;
-  function buildMinimap() {
-    mini = el('div', 'bz-mini-map');
-    const strip = el('div', 'bz-mini-strip');
-    for (const g of [...S.gewerke].sort((a, b) => a.sort - b.sort)) {
+  let mini, miniStrip, miniWin, miniNow;
+
+  // Die Spuren werden neu gefüllt, wenn sich die Ebene ändert — dort wechselt
+  // die ganze Auswahl UND die Zeitspanne, eine stehengebliebene Karte zeigte
+  // dann die Aufbauwochen unter einem Showtag.
+  function fillMiniStrip() {
+    miniStrip.replaceChildren();
+    for (const g of VG) {
       const lane = el('div', 'bz-mini-lane');
       lane.style.setProperty('--gw', gewerkVar(g.slot));
-      for (const t of S.tasks.filter((x) => x.gewerk === g.id && !x.milestone)) {
+      for (const t of VT.filter((x) => x.gewerk === g.id && !x.milestone)) {
         const m = el('div', 'bz-mini-b');
         const a = (toMin(t.start) - T0) / TOTAL_MIN * 100;
         const b = (toMin(t.end) - T0) / TOTAL_MIN * 100;
         m.style.left = a + '%'; m.style.width = Math.max(0.3, b - a) + '%';
         lane.append(m);
       }
-      strip.append(lane);
+      miniStrip.append(lane);
     }
     miniNow = el('div', 'bz-mini-now');
     miniNow.style.left = (NOW - T0) / TOTAL_MIN * 100 + '%';
-    strip.append(miniNow);
+    miniStrip.append(miniNow);
     miniWin = el('div', 'bz-mini-win');
-    strip.append(miniWin);
+    miniStrip.append(miniWin);
+  }
+
+  function buildMinimap() {
+    mini = el('div', 'bz-mini-map');
+    const strip = el('div', 'bz-mini-strip');
+    miniStrip = strip;
+    fillMiniStrip();
     mini.append(strip);
 
     let drag = false;
@@ -954,17 +1001,53 @@ export function createGantt(root, opts = {}) {
     goTo(iso) { centerOn(toMin(iso)); },
     goToDay(iso) { goToDay(iso); },
     centerDayIso() { return centerDayIso(); },
-    collapseAll() { for (const g of S.gewerke) collapsed.add(g.id); rebuild(); layout(); },
+    collapseAll() { for (const g of VG) collapsed.add(g.id); rebuild(); layout(); },
     expandAll() { collapsed.clear(); rebuild(); layout(); },
+    /**
+     * Ebene wechseln — Bauzeitenplan oder Showablauf, mit ausgeblendeten Bändern.
+     * Der Zoom kommt mit: eine Ansicht über zwei Showtage in der Wochenstufe
+     * zeigte lauter Striche, eine über zwei Wochen in der Stundenstufe nichts.
+     */
+    setEbene(name, aus = new Set(), showTag = null) {
+      const gewechselt = name !== ebene;
+      ebene = name;
+      ausBlend = new Set(aus);
+      tag = name === 'show' ? showTag : null;
+      setCap();
+      syncState();
+      rebuild();
+      layout();
+      if (O.minimap && miniStrip) fillMiniStrip();
+      if (!gewechselt) return;
+      // Beim Ebenenwechsel ist T0 ein anderes Datum — derselbe Scrollstand
+      // bedeutete einen ganz anderen Zeitpunkt, und dieselbe Zoomstufe eine
+      // ganz andere Zeitspanne. Also beides neu setzen: zwei Showtage wollen
+      // Stunden, zwei Projektwochen wollen Tage.
+      // Ein Showtag füllt die Breite («tage» ist die dynamische Stufe, die genau
+      // das tut) — beim Bauzeitenplan ebenso. Die Stufe heißt in beiden Fällen
+      // gleich, sie bedeutet nur je Ebene eine andere Spanne.
+      api.setZoomPreset('tage');
+      // Ist gerade Show, dorthin; sonst an den Anfang der Spanne.
+      if (NOW > T0 && NOW < T1) centerOn(NOW, 0.3);
+      else scroller.scrollLeft = 0;
+    },
+    get ebene() { return ebene; },
     minimapNode: O.minimap ? buildMinimap() : null,
     get zoomName() { return zoomMode ?? nearestPreset(px); },
     stats() {
-      // Nur die UNGEPRÜFTEN kritischen Vorgänge — abgehakte sollen Ruhe geben.
+      // BESTAND zählt, was zu sehen ist — sonst meldete die Kopfzeile im
+      // Showablauf 353 Vorgänge über einem Blatt mit 33 Zeilen.
+      //
+      // WARNUNGEN (kritisch, Konflikte) bleiben planweit. Sie sind Aussagen über
+      // den Plan, nicht über den Ausschnitt; eine Ansicht zu wechseln darf sie
+      // nicht wegdrücken. Und sie müssen zur Prüf-Liste passen, die über
+      // conflicts()/criticals() ebenfalls den ganzen Plan zeigt — zwei Zähler
+      // nebeneinander wären genau der Fehler, den die Regel verbietet.
       const crit = S.tasks.filter((t) => (SCHED.get(t.id) || {}).critical && !t.ackCrit).length;
-      const done = S.tasks.filter((t) => t.status === 'fertig').length;
-      const run = S.tasks.filter((t) => t.status === 'laeuft').length;
-      const crew = S.tasks.filter((t) => t.status === 'laeuft').reduce((a, t) => a + (t.crew || 0), 0);
-      return { total: S.tasks.length, crit, done, run, crew, gewerke: S.gewerke.length, conflicts: CONFLICTS.size };
+      const done = VT.filter((t) => t.status === 'fertig').length;
+      const run = VT.filter((t) => t.status === 'laeuft').length;
+      const crew = VT.filter((t) => t.status === 'laeuft').reduce((a, t) => a + (t.crew || 0), 0);
+      return { total: VT.length, crit, done, run, crew, gewerke: VG.length, conflicts: CONFLICTS.size };
     },
     relayout: layout,
     refresh,
@@ -982,6 +1065,10 @@ export function createGantt(root, opts = {}) {
     get isLive() { return live; },
     tickNow,
     liveInfo: () => ({ now: NOW, running: runningAt(S.tasks, NOW), late: delaysAt(S.tasks, NOW) }),
+    // Die Vorgänge der sichtbaren Ebene — die Live-Kopfzeile des Showablaufs
+    // fragt danach, statt selbst zu filtern. Kopie: niemand soll von außen in
+    // die Auswahl der Engine schreiben.
+    sichtbareTasks: () => VT.slice(),
     conflicts: () => [...CONFLICTS.values()],
     destroy() { unsubscribe(); stopTicking(); document.removeEventListener('visibilitychange', onVis); root.replaceChildren(); },
   };
@@ -1026,7 +1113,21 @@ export function createGantt(root, opts = {}) {
   // Ticken läuft IMMER, nicht nur im Live-Modus: eine Linie, die falsch steht,
   // ist schlimmer als keine.
   startTicking();
-  new ResizeObserver(() => { renderAxis(true); layoutMinimap(); }).observe(scroller);
+  // Die Tagesansicht ist als «ein Kalendertag füllt die Breite» definiert — sie
+  // muss also neu einpassen, wenn sich die Breite ändert. Ohne das blieb sie auf
+  // der Breite stehen, die beim Setzen galt: kam der Ebenenwechsel, während die
+  // Tabelle sichtbar und der Gantt versteckt war, war die gemessene Breite fast
+  // null und der Showtag füllte nur zwei Drittel des Blattes.
+  let letzteBreite = 0;
+  new ResizeObserver(() => {
+    const b = scroller.clientWidth;
+    if (zoomMode === 'tage' && b > 0 && Math.abs(b - letzteBreite) > 1) {
+      letzteBreite = b;
+      fitDay(centerDayIso());
+    }
+    renderAxis(true);
+    layoutMinimap();
+  }).observe(scroller);
 
   return api;
 }

@@ -3,6 +3,67 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.8.0 — 2026-08-25
+
+**Showablauf — der Tagesablauf auf den Bühnen, als zweite Ebene**
+
+Derselbe Plan, zwei Blickrichtungen. Oben im Kopf schaltet man zwischen
+**Bauzeitenplan** (die ganze Veranstaltung: Vorbereitung, Aufbau, Show, Abbau)
+und **Showablauf** (was auf welcher Bühne läuft). Beide Ebenen haben Gantt und
+Tabelle, dieselbe Bedienung, denselben Store — nur sind die Zeilenbänder hier
+Bühnen statt Gewerken.
+
+- **Bühnen, Räume, Hallen** legt man an wie ein Gewerk (`+ Bühne`), benennt und
+  sortiert sie genauso. Technisch ist eine Bühne ein Gewerk mit `art:'buehne'`;
+  damit greifen Anlegen, Umbenennen, Drag & Drop, Undo, Auto-Save und der
+  JSON-Export vom ersten Tag an. Altpläne ohne das Feld sind durchweg Gewerke —
+  der Bauzeitenplan sieht aus wie immer.
+- **Farbplätze werden je Ebene vergeben.** Der Klassentreffen-Plan hat schon 20
+  Gewerke, also genau `MAX_SLOTS`. Zählte man beides zusammen, wäre die Palette
+  mit der ersten Bühne erschöpft — dabei sind Gewerke und Bühnen nie zusammen
+  zu sehen.
+- **Der Showablauf ist tagesbezogen.** Ein Umschalter über dem Gantt wählt den
+  Showtag; die Vorgabe ist der Tag, auf dem «jetzt» liegt, sonst der erste.
+  Ohne ihn standen die Acts des zweiten Tages als zehn Zeilen ohne Balken im Bild.
+- **Vier neue Spalten in der Tabelle**, genau dort, wo man den Zeitstrahl anlegt:
+  Typ (Act · Changeover · Doors · Show-Ende), Soundcheck, Kontakt und die beiden
+  Freitexte **Anforderungen** und **Benötigtes Material**. Sie gehen denselben
+  Weg wie jedes andere Feld: über den Store, also mit ⌘Z, Auto-Save und Export.
+- **Live-Kopfzeile** für den Monitor am FOH: was JETZT läuft, was ALS NÄCHSTES
+  kommt, der Verzug und die Uhr. Ein Changeover wird als Umbau angesagt, nicht
+  als Act. Der Verzug zählt nur, was noch aussteht oder gerade läuft — ein
+  vergangener, nie abgehakter Punkt ist keine Verspätung, sondern eine fehlende
+  Rückmeldung, und stand vorher als «+4 Std» über einem Abend, der pünktlich lief.
+- **Running-Order-Blatt** auf der Druckseite: ein A3 quer je Tag und Bühne, als
+  Liste im Stil des Ablaufplans — `Zeit · Programmpunkt · Anforderungen ·
+  Material`. Leere Felder drucken als **Linien zum Ausfüllen mit dem Stift**.
+  Umbauten treten zurück, verschwinden aber nicht.
+- **Die Running Order des Klassentreffen-Plans ist eingebaut** (Stand 05.08.2026):
+  beide Showtage, 32 Programmpunkte, quellentreu. Anforderungen und Material
+  bleiben leer — die trägt Marco ein.
+
+**PocketBase ist raus**
+
+Die vorbereitete Login- und Rollenschicht lag seit v0.3.0 bewusst uncommittet im
+Arbeitsbaum. Sie griff nur mit `?backend=pb` und tat auf der Seite nichts — lud
+ihre Module aber bei jedem Aufruf mit und machte jeden Commit zur Prozedur. Die
+Seite ist eine reine GitHub-Pages-Auslieferung ohne Nutzerverwaltung; damit ist
+`js/app.js` wieder das, was es sein soll. Der komplette Stand ist im Branch
+`pocketbase-vorbereitung` festgehalten und geht nicht verloren.
+
+**Nebenbei**
+- Achsen-Ticks und das Wochenendband werden auf das Planende geklemmt. Sie
+  ragten darüber hinaus und machten den Scroller um 1400 px breiter, als der
+  Inhalt war — im Bauzeitenplan unsichtbar, im Showablauf rutschte der ganze Tag
+  aus dem Bild.
+- Die Tagesansicht passt sich neu ein, wenn der Container seine Breite ändert.
+  Vorher blieb sie auf der Breite stehen, die beim Setzen galt.
+- `zeitraumFuer` rechnet den nächsten Tagesanfang über den Kalender, nicht mit
+  `+1440` — der 25.10.2026 hat 25 Stunden.
+- Neues Prüfwerkzeug `tools/verify-showablauf.mjs`: Ebenenwechsel, Bühnen- und
+  Tagesfilter, die neuen Spalten samt ⌘Z, die Live-Kopfzeile bei gestellter Uhr,
+  das A3-Blatt, Dunkelmodus und Handybreite.
+
 ## 0.7.1 — 2026-08-25
 
 **Tagesblätter zum Drucken — ein A3 quer je Tag**

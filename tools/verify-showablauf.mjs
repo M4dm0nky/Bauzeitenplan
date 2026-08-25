@@ -1,0 +1,406 @@
+// ── Showablauf: Bühnen, Programmpunkte, Live-Kopfzeile, Running-Order-Blatt ───
+// Die zweite Ebene desselben Plans (js/ebene.js). Geprüft wird das, was die
+// Zahlenprüfungen in tests/ nicht sehen können: dass der Bauzeitenplan nach dem
+// Umschalten UNVERÄNDERT aussieht, dass das Wegklicken einer Bühne den Maßstab
+// bewegt und nicht nur Zeilen versteckt, und dass die Live-Kopfzeile bei
+// gestellter Uhr den richtigen Act ansagt.
+//
+// Die Uhr wird gestellt (page.clock), nicht abgewartet: ein Test, der auf den
+// 29.08.2026 wartet, ist kein Test.
+import { firefox, chromium } from 'playwright-core';
+import { join, dirname, extname, normalize } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, '..');
+mkdirSync(join(here, 'shots'), { recursive: true });
+const cache = join(process.env.HOME, 'Library/Caches/ms-playwright');
+const exe = join(cache, readdirSync(cache).find((d) => d.startsWith('firefox-')), 'firefox/Nightly.app/Contents/MacOS/firefox');
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
+const server = createServer((q, s) => {
+  const rel = normalize(decodeURIComponent(q.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
+  const f = join(root, rel === '/' ? 'index.html' : rel);
+  if (!f.startsWith(root) || !existsSync(f)) { s.writeHead(404); return s.end('x'); }
+  s.writeHead(200, { 'Content-Type': MIME[extname(f)] || 'application/octet-stream' });
+  s.end(readFileSync(f));
+});
+await new Promise((r) => server.listen(0, '127.0.0.1', r));
+const BASE = 'http://127.0.0.1:' + server.address().port;
+
+const b = await firefox.launch({ executablePath: exe });
+const ctx = await b.newContext({ viewport: { width: 1700, height: 1000 } });
+const p = await ctx.newPage();
+const errors = [];
+p.on('pageerror', (e) => errors.push('JS: ' + e.message));
+p.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+
+let bad = 0;
+const check = async (name, fn) => {
+  let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
+  if (r === true) console.log('  ✓ ' + name); else { console.log('  ✗ ' + name + ': ' + r); bad++; }
+};
+
+// Mitten in der Show am Samstag: 15:30 läuft CURSE (15:20–15:55), danach kommt
+// ein Changeover. Genau dieser Zeitpunkt macht die Kopfzeile prüfbar.
+await p.clock.install({ time: new Date('2026-08-29T15:30:00') });
+
+// ── Ebene ───────────────────────────────────────────────────────────────────
+console.log('\nEBENE UMSCHALTEN');
+await p.goto(BASE + '/index.html?plan=klassentreffen');
+await p.waitForSelector('.bz-lab', { timeout: 20000 });
+await p.waitForTimeout(700);
+
+const gruppen = () => p.locator('.bz-lab-group').count();
+const kpi = (name) => p.locator('.kpi', { hasText: name }).locator('.kpi-v').textContent();
+
+await check('der Bauzeitenplan zeigt 20 Gewerke, keine Bühne', async () => {
+  const n = await gruppen();
+  const namen = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
+  if (namen.includes('Hauptbühne')) return 'die Bühne steht im Bauzeitenplan';
+  return n === 20 ? true : n + ' Gewerkzeilen statt 20';
+});
+await check('die Bühnen-Häkchen sind im Bauzeitenplan nicht im Weg', async () =>
+  (await p.locator('#buehnen').isHidden()) ? true : 'Leiste sichtbar');
+
+await p.locator('[data-ebene="show"]').click();
+await p.waitForTimeout(700);
+
+await check('der Showablauf zeigt genau die Bühne', async () => {
+  const namen = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
+  return namen.join('|') === 'Hauptbühne' ? true : namen.join('|');
+});
+await check('die Kopfzeile zählt Bühnen und Programm DES TAGES', async () => {
+  // 17 am Samstag, nicht 32: der Showablauf ist tagesbezogen.
+  const bu = (await kpi('Bühnen')).trim();
+  const pr = (await kpi('Programm')).trim();
+  return bu === '1' && pr === '17' ? true : bu + ' Bühnen / ' + pr + ' Programmpunkte';
+});
+await check('keine Zeile ohne Balken — die Acts des anderen Tages sind weg', async () => {
+  const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
+  if (namen.some((x) => /MAX HERRE|CHEFKET|MEGALOH/.test(x))) return 'Sonntag steht am Samstag im Bild';
+  const leer = await p.locator('.bz-track-task').evaluateAll((ts) =>
+    ts.filter((t) => t.querySelectorAll('.bz-bar, .bz-ms').length === 0).length);
+  return leer === 0 ? true : leer + ' Zeilen ohne einen einzigen Balken';
+});
+await check('der Tages-Umschalter bringt den Sonntag', async () => {
+  const knoepfe = p.locator('#buehnen .seg-tag button');
+  if (await knoepfe.count() !== 2) return (await knoepfe.count()) + ' Tage statt 2';
+  await knoepfe.nth(1).click();
+  await p.waitForTimeout(600);
+  const pr = (await kpi('Programm')).trim();
+  const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
+  if (pr !== '15') return pr + ' Programmpunkte am Sonntag statt 15';
+  if (!namen.some((x) => x.trim() === 'MAX HERRE & JOY DENALANE')) return 'MAX HERRE fehlt';
+  await knoepfe.nth(0).click();          // zurück auf Samstag für die Folgeprüfungen
+  await p.waitForTimeout(600);
+  return true;
+});
+await check('die Zeitachse steht auf den Showtagen, nicht auf zwei Projektwochen', async () => {
+  // Der Bauzeitenplan läuft 21.08.–03.09. Zöge der Showablauf seine Achse
+  // daraus, wären zwei Showtage in vierzehn — jeder Act ein Strich.
+  const ticks = await p.locator('.bz-axis-major .bz-t-major').allTextContents();
+  const text = ticks.join(' ');
+  return /29|30/.test(text) && !/21\.|22\.|01\.09/.test(text) ? true : 'Achse: ' + text.slice(0, 90);
+});
+await check('CURSE steht als eigene Zeile, Changeover als EINE Zeile', async () => {
+  const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
+  const co = namen.filter((x) => x.trim() === 'Changeover').length;
+  if (!namen.some((x) => x.trim() === 'CURSE')) return 'CURSE fehlt';
+  return co === 1 ? true : co + ' Changeover-Zeilen — die Serien greifen nicht';
+});
+await check('keine Zieltermin-Zeile im Showablauf', async () =>
+  (await p.locator('.bz-lab-projekt').count()) === 0 ? true : 'Zieltermine sind mitgekommen');
+
+await p.screenshot({ path: join(here, 'shots', 'showablauf-gantt.png') });
+
+// ── Bühnen-Filter ───────────────────────────────────────────────────────────
+console.log('\nBÜHNEN-FILTER');
+await check('die Häkchenleiste zeigt jede Bühne', async () => {
+  if (await p.locator('#buehnen').isHidden()) return 'Leiste versteckt';
+  const n = await p.locator('#buehnen .buehne-i').count();
+  return n === 1 ? true : n + ' Häkchen statt 1';
+});
+await check('die einzige Bühne wegklicken leert die Ansicht — und füllt sie wieder', async () => {
+  const cb = p.locator('#buehnen .buehne-i input').first();
+  await cb.uncheck();
+  await p.waitForTimeout(400);
+  const leer = await gruppen();
+  await cb.check();
+  await p.waitForTimeout(400);
+  const wieder = await gruppen();
+  if (leer !== 0) return leer + ' Zeilen trotz abgewählter Bühne';
+  return wieder === 1 ? true : 'nach dem Wiedereinschalten ' + wieder + ' Zeilen';
+});
+
+// ── Tabelle ─────────────────────────────────────────────────────────────────
+console.log('\nTABELLE — Anforderungen und Material');
+await p.locator('[data-view="tabelle"]').click();
+await p.waitForTimeout(600);
+
+await check('die Showablauf-Spalten stehen da', async () => {
+  const th = await p.locator('.tb-t th').allTextContents();
+  const soll = ['Bühne', 'Programmpunkt', 'Typ', 'Start', 'Dauer', 'Ende', 'Soundcheck', 'Kontakt', 'Anforderungen', 'Benötigtes Material'];
+  const fehlt = soll.filter((x) => !th.some((y) => y.trim() === x || (x === 'Benötigtes Material' && y.trim() === 'Material')));
+  return fehlt.length ? 'fehlt: ' + fehlt.join(', ') : true;
+});
+await check('die Tabelle scrollt in sich, die Seite nicht', async () => {
+  const seite = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+  return seite ? 'die Seite läuft seitlich über' : true;
+});
+
+// Über die id, nicht über [value="…"]: `input.value` ist eine EIGENSCHAFT, kein
+// Attribut — der Attributselektor findet nie etwas und läuft stumm in den Timeout.
+const idVon = (titel) => p.evaluate((t) => {
+  const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+  return (raw.tasks || []).find((x) => x.title === t)?.id;
+}, titel);
+const zeileVon = async (titel) => p.locator('tr[data-id="' + await idVon(titel) + '"]');
+
+await check('eine Anforderung tippen kommt an — und ⌘Z nimmt sie zurück', async () => {
+  const r = await zeileVon('CURSE');
+  const feld = r.locator('.c-anf input');
+  await feld.fill('2× Wedge, Barrierengasse');
+  await feld.press('Tab');
+  await p.waitForTimeout(1400);        // Auto-Save wartet 800 ms
+  const drin = await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    return (raw.tasks || []).find((t) => t.title === 'CURSE')?.anforderungen;
+  });
+  if (drin !== '2× Wedge, Barrierengasse') return 'gespeichert: ' + JSON.stringify(drin);
+  await p.keyboard.press('Meta+z');
+  await p.waitForTimeout(500);
+  const zurueck = await (await zeileVon('CURSE')).locator('.c-anf input').inputValue();
+  return zurueck === '' ? true : 'nach ⌘Z steht noch «' + zurueck + '» im Feld';
+});
+
+await check('Material und Kontakt gehen denselben Weg', async () => {
+  const r = await zeileVon('SIDO');
+  await r.locator('.c-mat input').fill('1 Riser 2×1 m');
+  await r.locator('.c-mat input').press('Tab');
+  await r.locator('.c-kon input').fill('Tourmanager Ruth');
+  await r.locator('.c-kon input').press('Tab');
+  await p.waitForTimeout(1400);        // Auto-Save wartet 800 ms
+  const t = await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    return (raw.tasks || []).find((x) => x.title === 'SIDO');
+  });
+  return t.material === '1 Riser 2×1 m' && t.kontakt === 'Tourmanager Ruth'
+    ? true : JSON.stringify({ m: t.material, k: t.kontakt });
+});
+
+await check('der Typ ist ein Auswahlfeld und steht auf changeover', async () => {
+  const v = await (await zeileVon('Changeover')).locator('.c-typ select').inputValue();
+  return v === 'changeover' ? true : v;
+});
+
+await p.screenshot({ path: join(here, 'shots', 'showablauf-tabelle.png') });
+
+await check('der Bauzeitenplan hat KEINE der neuen Spalten', async () => {
+  await p.locator('[data-ebene="bau"]').click();
+  await p.waitForTimeout(500);
+  const th = (await p.locator('.tb-t th').allTextContents()).map((x) => x.trim());
+  const zuviel = ['Typ', 'Soundcheck', 'Kontakt', 'Anforderungen', 'Material'].filter((x) => th.includes(x));
+  if (zuviel.length) return 'im Bauzeitenplan sichtbar: ' + zuviel.join(', ');
+  return th.includes('Crew') ? true : 'die Crew-Spalte ist verschwunden: ' + th.join('|');
+});
+
+// ── Live-Kopfzeile ──────────────────────────────────────────────────────────
+console.log('\nLIVE-KOPFZEILE (Uhr auf Sa 29.08.2026, 15:30)');
+await p.locator('[data-ebene="show"]').click();
+await p.locator('[data-view="gantt"]').click();
+await p.waitForTimeout(400);
+await p.locator('#live').click();
+await p.waitForTimeout(800);
+
+const shText = async (cls) => (await p.locator('#showhead .' + cls + ' .sh-v').textContent()).trim();
+
+await check('die Kopfzeile ist da', async () =>
+  (await p.locator('#showhead').isVisible()) ? true : 'versteckt');
+await check('JETZT sagt CURSE an', async () => {
+  const v = await shText('sh-now');
+  return v === 'CURSE' ? true : '«' + v + '»';
+});
+await check('ALS NÄCHSTES sagt den Umbau an, nicht «Act»', async () => {
+  const v = await shText('sh-next');
+  return v === 'Changeover: Changeover' || /Changeover/.test(v) ? true : '«' + v + '»';
+});
+await check('die Uhr zeigt die gestellte Zeit', async () => {
+  // Die gestellte Uhr läuft mit der echten Zeit weiter — geprüft wird die
+  // Viertelstunde, nicht die Minute, sonst hängt der Test an der Laufzeit.
+  const v = await shText('sh-clock');
+  return /^15:3\d$/.test(v) ? true : v;
+});
+await check('die laufende Zeile ist hervorgehoben', async () =>
+  (await p.locator('.bz-bar.is-run, .bz-row.is-run, .is-running').count()) > 0
+    ? true : 'nichts markiert');
+await check('im Bauzeitenplan bleibt die Kopfzeile weg', async () => {
+  await p.locator('[data-ebene="bau"]').click();
+  await p.waitForTimeout(400);
+  return (await p.locator('#showhead').isHidden()) ? true : 'sie steht auch dort';
+});
+await p.locator('[data-ebene="show"]').click();
+await p.waitForTimeout(500);
+await p.screenshot({ path: join(here, 'shots', 'showablauf-live.png') });
+
+// ── Running-Order-Blatt ─────────────────────────────────────────────────────
+console.log('\nRUNNING-ORDER-BLATT (A3 quer)');
+await p.goto(BASE + '/print.html?plan=klassentreffen&ebene=show');
+await p.waitForSelector('.pr-ro', { timeout: 20000 });
+await p.waitForTimeout(700);
+
+await check('zwei Blätter — ein Showtag je Blatt', async () => {
+  const n = await p.locator('.pr-ro').count();
+  return n === 2 ? true : n + ' Blätter statt 2';
+});
+await check('Blatt 1 trägt alle 17 Zeilen des Samstags', async () => {
+  const n = await p.locator('.pr-ro').first().locator('.pr-ro-r:not(.pr-ro-h)').count();
+  return n === 17 ? true : n + ' Zeilen statt 17';
+});
+await check('die Zeiten stehen in der Reihenfolge des PDFs', async () => {
+  const z = await p.locator('.pr-ro').first().locator('.pr-ro-z1').allTextContents();
+  const soll = '12:00,14:00,14:30,14:40,15:10,15:20,15:55,16:05,16:45,16:55,17:35,17:50,18:30,19:00,20:00,20:40,21:50';
+  return z.map((x) => x.trim()).join(',') === soll ? true : z.join(',');
+});
+await check('leere Felder drucken als Ausfülllinie', async () => {
+  const leer = await p.locator('.pr-ro').first().locator('.pr-ro-a.is-leer').count();
+  if (leer < 15) return 'nur ' + leer + ' Linien';
+  const rand = await p.locator('.pr-ro-a.is-leer').first()
+    .evaluate((n) => getComputedStyle(n).borderBottomWidth);
+  return parseFloat(rand) > 0 ? true : 'die Linie hat keine Stärke';
+});
+await check('ausgefüllte Felder drucken ihren Text', async () => {
+  // «1 Riser 2×1 m» wurde oben bei SIDO eingetragen und liegt in localStorage.
+  const t = await p.locator('.pr-ro-r', { hasText: 'SIDO' }).first().locator('.pr-ro-m').textContent();
+  return /Riser/.test(t) ? true : '«' + t.trim() + '»';
+});
+await check('kein Typ steht doppelt — «Changeover / Changeover»', async () => {
+  const t = await p.locator('.pr-ro-r.is-um').first().textContent();
+  const n = (t.match(/Changeover/g) || []).length;
+  if (n > 1) return 'Changeover steht ' + n + '× in derselben Zeile';
+  const ende = await p.locator('.pr-ro-r[data-typ="ende"]').first().textContent();
+  return /Show-Ende/.test(ende) ? 'SHOW END trägt zusätzlich «Show-Ende»' : true;
+});
+await check('die Zeilen füllen das Blatt', async () => {
+  const [hSheet, hBody] = await p.locator('.pr-ro').first().evaluate((s) => [
+    s.getBoundingClientRect().height,
+    s.querySelector('.pr-body').getBoundingClientRect().height,
+  ]);
+  const anteil = hBody / hSheet;
+  return anteil > 0.82 ? true : 'nur ' + Math.round(anteil * 100) + '% des Blattes genutzt';
+});
+await check('Changeover-Zeilen treten zurück, verschwinden aber nicht', async () => {
+  const um = await p.locator('.pr-ro-r.is-um').count();
+  if (um < 12) return um + ' Umbauzeilen';
+  const hUm = await p.locator('.pr-ro-r.is-um').first().evaluate((n) => n.getBoundingClientRect().height);
+  const hAct = await p.locator('.pr-ro-r[data-typ="act"]').first().evaluate((n) => n.getBoundingClientRect().height);
+  return hUm < hAct ? true : `Umbau ${hUm.toFixed(0)}px, Act ${hAct.toFixed(0)}px`;
+});
+await check('nichts läuft über die Blattkante', async () => {
+  const ueber = await p.locator('.pr-ro').first().evaluate((s) => {
+    const r = s.getBoundingClientRect();
+    return [...s.querySelectorAll('.pr-ro-r')].filter((n) => {
+      const q = n.getBoundingClientRect();
+      return q.bottom > r.bottom + 1 || q.right > r.right + 1;
+    }).length;
+  });
+  return ueber === 0 ? true : ueber + ' Zeilen ragen hinaus';
+});
+await check('die Tagesblätter des Bauzeitenplans sind weiter erreichbar', async () => {
+  await p.locator('.pr-seg .pr-btn', { hasText: 'Tagesblätter' }).click();
+  await p.waitForTimeout(900);
+  const ro = await p.locator('.pr-ro').count();
+  const gantt = await p.locator('.pr-sheet:not(.pr-ro)').count();
+  return ro === 0 && gantt > 10 ? true : `${ro} Listen / ${gantt} Gantt-Blätter`;
+});
+await p.locator('.pr-seg .pr-btn', { hasText: 'Running Order' }).click();
+await p.waitForTimeout(700);
+// Die Steuerleiste ist sticky und läge im Element-Screenshot ÜBER dem Blatt —
+// im Druck ist sie weg (display:none). Für das Bild also auch.
+await p.addStyleTag({ content: '.pr-ctl{display:none!important}' });
+await p.waitForTimeout(300);
+await p.locator('.pr-ro').first().screenshot({ path: join(here, 'shots', 'showablauf-blatt.png') });
+
+// ── Dunkel und schmal ───────────────────────────────────────────────────────
+console.log('\nDUNKEL UND SCHMAL');
+await p.goto(BASE + '/index.html?plan=klassentreffen&ebene=show');
+await p.waitForSelector('.bz-lab', { timeout: 20000 });
+await p.waitForTimeout(800);
+
+await check('der Umschalter greift in beide Richtungen (Dunkel über Hell)', async () => {
+  await p.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+  await p.waitForTimeout(300);
+  const bg = await p.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const hell = /255,\s*255,\s*255/.test(bg) || /241,\s*239,\s*233/.test(bg);
+  return hell ? 'im Dunkelmodus bleibt der Grund hell: ' + bg : true;
+});
+await check('die Live-Kopfzeile ist auch dunkel lesbar', async () => {
+  // NICHT blind klicken: der Live-Zustand überlebt das Neuladen (bzp_live), ein
+  // Klick hätte ihn hier ausgeschaltet — und die Farbprüfung liefe an einem
+  // unsichtbaren Element durch. Genau das stand im ersten Dunkel-Bild.
+  if ((await p.locator('#live').getAttribute('aria-pressed')) !== 'true') {
+    await p.locator('#live').click();
+    await p.waitForTimeout(700);
+  }
+  if (await p.locator('#showhead').isHidden()) return 'die Kopfzeile ist gar nicht da';
+  const [fg, bg] = await p.locator('#showhead .sh-now .sh-v').evaluate((n) => {
+    const c = getComputedStyle(n);
+    return [c.color, getComputedStyle(n.closest('.sh-f')).backgroundColor];
+  });
+  if (fg === bg) return 'Schrift und Grund sind dieselbe Farbe';
+  // Auf dunklem Grund muss helle Schrift stehen — ein Theme, das nur die Tokens
+  // der Kopfzeile vergisst, fiele sonst nicht auf.
+  const hell = (c) => (c.match(/\d+/g) || [0, 0, 0]).slice(0, 3).reduce((a, x) => a + +x, 0) / 3;
+  return hell(fg) > hell(bg) ? true : 'dunkle Schrift auf dunklem Grund: ' + fg + ' auf ' + bg;
+});
+await p.screenshot({ path: join(here, 'shots', 'showablauf-dunkel.png') });
+await p.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+
+await check('auf Handybreite läuft die Seite nicht seitlich über', async () => {
+  await p.setViewportSize({ width: 390, height: 844 });
+  await p.waitForTimeout(700);
+  const ueber = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  if (ueber > 1) return ueber + ' px Überlauf im Gantt';
+  await p.locator('[data-view="tabelle"]').click();
+  await p.waitForTimeout(500);
+  const ueber2 = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  return ueber2 > 1 ? ueber2 + ' px Überlauf in der Tabelle' : true;
+});
+await check('Tages- und Bühnenwahl bleiben auf dem Handy bedienbar', async () => {
+  const h = await p.locator('#buehnen .seg-tag button').first()
+    .evaluate((n) => n.getBoundingClientRect().height);
+  return h >= 28 ? true : 'nur ' + Math.round(h) + ' px hoch';
+});
+await p.screenshot({ path: join(here, 'shots', 'showablauf-handy.png') });
+await p.setViewportSize({ width: 1700, height: 1000 });
+
+// ── Echtes A3-PDF ───────────────────────────────────────────────────────────
+console.log('\nPDF (A3 quer)');
+let chromeExe = null;
+try {
+  const d = readdirSync(cache).find((x) => x.startsWith('chromium-'));
+  if (d) chromeExe = join(cache, d, 'chrome-mac/Chromium.app/Contents/MacOS/Chromium');
+} catch { /* nicht da */ }
+if (chromeExe && existsSync(chromeExe)) {
+  const cb = await chromium.launch({ executablePath: chromeExe });
+  const cp = await cb.newPage();
+  await cp.goto(BASE + '/print.html?plan=klassentreffen&ebene=show');
+  await cp.waitForSelector('.pr-ro', { timeout: 20000 });
+  await cp.waitForTimeout(600);
+  const out = join(here, 'shots', 'running-order-a3.pdf');
+  await cp.pdf({ path: out, format: 'A3', landscape: true, printBackground: true });
+  await cb.close();
+  console.log('  ✓ ' + out);
+} else {
+  console.log('  – übersprungen: Chromium nicht installiert.');
+  console.log('    Für echte PDFs einmalig:  npx playwright install chromium');
+}
+
+console.log('');
+await check('keine JS-Fehler', async () => (errors.length ? errors.slice(0, 3).join(' | ') : true));
+
+await b.close();
+server.close();
+console.log(bad ? `\n${bad} Problem(e).\n` : '\nAlle Prüfungen bestanden.\n');
+process.exit(bad ? 1 : 0);

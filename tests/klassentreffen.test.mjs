@@ -1,41 +1,54 @@
 import { plan, ROWS } from '../tools/make-klassentreffen.mjs';
 import { createStore } from '../js/store.js';
 import { findConflicts } from '../js/conflicts.js';
-import { computeSchedule, toMin, seriesRows } from '../js/schedule.js';
+import { computeSchedule, toMin, seriesRows, byStart } from '../js/schedule.js';
+import { PUNKT_TYPEN } from '../js/ebene.js';
 import { gewerkVar, gewerkTexture, slotsExhausted } from '../js/palette.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
 const test = (name, fn) => { try { fn(); pass++; console.log('  ✓ ' + name); } catch (e) { fail++; console.log('  ✗ ' + name + '\n      ' + e.message); } };
-const on = (title, day) => plan.tasks.find((x) => x.title === title && x.start.startsWith(day));
-const allOn = (title, day) => plan.tasks.filter((x) => x.title === title && x.start.startsWith(day));
-const gwOf = (task) => plan.gewerke.find((g) => g.id === task.gewerk)?.name;
+// Zwei Ebenen, ein Plan (js/ebene.js): GEWERKE tragen den Bauzeitenplan, BÜHNEN
+// den Showablauf. Alle V07-Prüfungen unten gelten der Bau-Ebene — die Running
+// Order stammt aus einem anderen Dokument (Stand 05.08.2026) und hat einen
+// eigenen Abschnitt. Ohne die Trennung zählte jede V07-Zahl die Acts mit.
+const bauGewerke = plan.gewerke.filter((g) => g.art !== 'buehne');
+const bauIds = new Set(bauGewerke.map((g) => g.id));
+const bauTasks = plan.tasks.filter((t) => bauIds.has(t.gewerk));
+const buehnen = plan.gewerke.filter((g) => g.art === 'buehne');
+const programm = plan.tasks.filter((t) => !bauIds.has(t.gewerk));
+
+const on = (title, day) => bauTasks.find((x) => x.title === title && x.start.startsWith(day));
+const allOn = (title, day) => bauTasks.filter((x) => x.title === title && x.start.startsWith(day));
+const gwOf = (task) => bauGewerke.find((g) => g.id === task.gewerk)?.name;
 
 const WIN_S = toMin('2026-08-21T00:00');
 const WIN_E = toMin('2026-09-03T23:59');
 
 console.log('\nKlassentreffen V07 — Struktur');
 test('20 Gewerke, «Crew» als letztes', () => {
-  assert.deepEqual(plan.gewerke.map((g) => g.name), [
+  assert.deepEqual(bauGewerke.map((g) => g.name), [
     'Bühne', 'Rigging', 'Licht', 'Ton', 'Video', 'Pyro', 'Catering', 'Sanitär',
     'Produktion', 'Strom', 'Zäune & Absperrung', 'Zelte', 'Security', 'Branding',
     'Artist Care', 'Show', 'Logistik', 'Besucher-Gastro', 'Sanitätsdienst', 'Crew',
   ]);
 });
 test('jedes Gewerk ist belegt', () => {
-  for (const g of plan.gewerke) assert.ok(plan.tasks.some((t) => t.gewerk === g.id), g.name + ' ist leer');
+  for (const g of bauGewerke) assert.ok(bauTasks.some((t) => t.gewerk === g.id), g.name + ' ist leer');
 });
 test('kein Meilenstein — auch V07 hat keinen baufreien Tag', () => {
-  assert.equal(plan.tasks.filter((t) => t.milestone).length, 0);
-  assert.ok(plan.tasks.some((t) => t.start.startsWith('2026-08-23')), '23.08. ist in V07 ein Arbeitstag');
+  // Gilt dem Bauzeitenplan. Der Showablauf HAT einen Meilenstein je Tag: das
+  // Show-Ende ist ein Zeitpunkt, keine Tätigkeit.
+  assert.equal(bauTasks.filter((t) => t.milestone).length, 0);
+  assert.ok(bauTasks.some((t) => t.start.startsWith('2026-08-23')), '23.08. ist in V07 ein Arbeitstag');
 });
 test('der Personal-Block steckt im Gewerk «Crew»', () => {
-  const crew = plan.gewerke.find((g) => g.name === 'Crew');
+  const crew = bauGewerke.find((g) => g.name === 'Crew');
   for (const titel of ['SITECREW', 'STAPLERFAHRER stageco', 'CLIMBER stageco', 'STEELHANDS stageco',
                        'HELFER complete audio', 'TELESTAPLERFAHRER tse', 'SHOW CREW SIDO', 'ABBAU SIDO',
                        'CATERING RUNNER morsh', 'KAMERA SIDO', 'HELFER HypeIT', 'STAPLERFAHRER HypeIT',
                        'CATERING ASSISTANT 1314Productions', 'Sitecrew vor Ort', 'Staplerfahrer vor Ort']) {
-    const t = plan.tasks.find((x) => x.title === titel);
+    const t = bauTasks.find((x) => x.title === titel);
     assert.ok(t, titel + ' fehlt');
     assert.equal(t.gewerk, crew.id, titel);
   }
@@ -47,7 +60,7 @@ test('der Zeitraum stammt aus V07 (21.08.–03.09.2026)', () => {
   assert.equal(plan.project.end, '2026-09-03T23:59');
 });
 test('jeder Vorgang liegt im Fenster', () => {
-  for (const t of plan.tasks) {
+  for (const t of bauTasks) {
     assert.ok(toMin(t.start) >= WIN_S, t.title + ' beginnt vor dem Fenster');
     assert.ok(toMin(t.end) <= WIN_E, t.title + ' endet nach dem Fenster');
   }
@@ -97,8 +110,8 @@ test('nur die Zeilen ohne V07-Uhrzeit sind geschätzt', () => {
   assert.equal(on('Aufbau Einlasschleusen', '2026-08-28').estimated, true);
   assert.equal(on('Gelenk-Teleskop-Bühne vor Ort', '2026-08-27').estimated, true);
   assert.equal(on('Kran vor Ort', '2026-08-25').estimated, false, '25.08. hat eine gedruckte Zeit');
-  assert.equal(plan.tasks.filter((t) => t.estimated).length, 19);
-  for (const t of plan.tasks.filter((x) => x.estimated)) {
+  assert.equal(bauTasks.filter((t) => t.estimated).length, 19);
+  for (const t of bauTasks.filter((x) => x.estimated)) {
     assert.match(t.notes, /nicht angegeben|«open»/, t.title + ' sagt nicht, warum geschätzt');
   }
 });
@@ -125,7 +138,7 @@ test('Container-Zeilen tragen die volle Stückliste in der Notiz', () => {
   assert.match(on('Anlieferung Container', '2026-08-25').notes, /12x Raketen/);
   assert.match(on('Abholung Container', '2026-08-31').notes, /alle Kabinen/);
   assert.match(on('Anlieferung Kabinen', '2026-08-26').notes, /86x Toilettenkabine/);
-  for (const t of plan.tasks.filter((x) => /^(Anlieferung|Abholung) (Container|Kabinen)$/.test(x.title))) {
+  for (const t of bauTasks.filter((x) => /^(Anlieferung|Abholung) (Container|Kabinen)$/.test(x.title))) {
     assert.match(t.notes, /^Wölkchen · /, t.title + ' @ ' + t.start);
   }
 });
@@ -138,7 +151,7 @@ test('die in V07 vergessene Klammer am 03.09. ist gesetzt und vermerkt', () => {
   assert.match(t.notes, /schließende Klammer in V07 nicht gedruckt/, 'Eingriff nicht vermerkt');
 });
 test('jede Klammer in den Stücklisten ist ausgeglichen', () => {
-  for (const t of plan.tasks) {
+  for (const t of bauTasks) {
     const auf = (t.notes.match(/\(/g) || []).length;
     const zu = (t.notes.match(/\)/g) || []).length;
     assert.equal(auf, zu, '«' + t.title + '» @ ' + t.start + ': ' + auf + ' auf, ' + zu + ' zu');
@@ -195,8 +208,8 @@ test('am 22.08. kommt eine Container-Anlieferung dazu', () => {
 
 console.log('\nKlassentreffen V07 — eine Zeile je Vorgang');
 const serienVon = (gewerkName) => {
-  const g = plan.gewerke.find((x) => x.name === gewerkName);
-  return seriesRows(plan.tasks.filter((t) => t.gewerk === g.id));
+  const g = bauGewerke.find((x) => x.name === gewerkName);
+  return seriesRows(bauTasks.filter((t) => t.gewerk === g.id));
 };
 test('die Bühne hat drei Zeilen statt sechs', () => {
   const s = serienVon('Bühne');
@@ -207,19 +220,19 @@ test('die Bühne hat drei Zeilen statt sechs', () => {
 test('«Tag N» steht in der Notiz, nicht im Titel', () => {
   // Der 24.08. IST Tag 1 — das sagt schon das Datum. Im Namen erzwänge es
   // drei Zeilen für eine Tätigkeit.
-  assert.equal(plan.tasks.filter((t) => /Tag \d+$/.test(t.title)).length, 0);
-  const auf = plan.tasks.filter((t) => t.title === 'Aufbau Bühne').sort((a, b) => (a.start < b.start ? -1 : 1));
+  assert.equal(bauTasks.filter((t) => /Tag \d+$/.test(t.title)).length, 0);
+  const auf = bauTasks.filter((t) => t.title === 'Aufbau Bühne').sort((a, b) => (a.start < b.start ? -1 : 1));
   assert.deepEqual(auf.map((t) => t.start.slice(0, 10)), ['2026-08-24', '2026-08-25', '2026-08-26']);
   assert.deepEqual(auf.map((t) => t.notes), ['StageCo · Tag 1 von 3', 'StageCo · Tag 2 von 3', 'StageCo · Tag 3 von 3']);
 });
 test('353 Vorgänge werden zu 153 Zeilen', () => {
-  const alle = plan.gewerke.flatMap((g) => seriesRows(plan.tasks.filter((t) => t.gewerk === g.id)));
+  const alle = bauGewerke.flatMap((g) => seriesRows(bauTasks.filter((t) => t.gewerk === g.id)));
   assert.equal(alle.length, 153);
   assert.equal(alle.reduce((n, s) => n + s.tasks.length, 0), 353, 'kein Vorgang verschwindet');
 });
 test('nur SITECREW und STAPLERFAHRER stageco brauchen zwei Spuren', () => {
-  const mehr = plan.gewerke
-    .flatMap((g) => seriesRows(plan.tasks.filter((t) => t.gewerk === g.id)))
+  const mehr = bauGewerke
+    .flatMap((g) => seriesRows(bauTasks.filter((t) => t.gewerk === g.id)))
     .filter((s) => s.lanes > 1);
   assert.deepEqual(mehr.map((s) => s.title).sort(), ['SITECREW', 'STAPLERFAHRER stageco']);
   assert.deepEqual(mehr.map((s) => s.lanes), [2, 2], 'nie mehr als zwei Spuren');
@@ -234,13 +247,13 @@ test('was sich berührt, wird EIN Balken', () => {
   const rig = on('Ausbau Rigging', '2026-08-30');
   assert.equal(rig.end, '2026-08-31T03:00');
   // Objektbewachung 29.08. 23:00–00:00 + 30.08. 00:00–08:00
-  const wache = plan.tasks.find((t) => t.title === 'Sicherheitsdienst / Objektbewachung' && t.start === '2026-08-29T23:00');
+  const wache = bauTasks.find((t) => t.title === 'Sicherheitsdienst / Objektbewachung' && t.start === '2026-08-29T23:00');
   assert.equal(wache.end, '2026-08-30T08:00');
 });
 test('die Nachtschichten der Objektbewachung sind alle verschmolzen', () => {
   for (const [start, end] of [['2026-08-29T23:00', '2026-08-30T08:00'], ['2026-08-30T23:00', '2026-08-31T08:00'],
                               ['2026-08-31T18:00', '2026-09-01T08:00'], ['2026-09-01T18:00', '2026-09-02T08:00']]) {
-    const t = plan.tasks.find((x) => x.title === 'Sicherheitsdienst / Objektbewachung' && x.start === start);
+    const t = bauTasks.find((x) => x.title === 'Sicherheitsdienst / Objektbewachung' && x.start === start);
     assert.ok(t, 'keine Schicht ab ' + start);
     assert.equal(t.end, end, start);
   }
@@ -253,7 +266,7 @@ test('eine Wiederholung am Folgetag ist KEINE Fortsetzung', () => {
   assert.equal(allOn('Produktion vor Ort', '2026-08-25')[0].end, '2026-08-25T18:00');
 });
 test('wechselnde Kopfzahlen bleiben getrennte Zeilen', () => {
-  const sc = plan.tasks.filter((t) => t.title === 'SITECREW');
+  const sc = bauTasks.filter((t) => t.title === 'SITECREW');
   for (const n of ['Michael + 2 Helfer', 'Michael + 4 Helfer', 'Michael + 6 Helfer']) {
     assert.ok(sc.some((t) => t.notes.includes(n)), n + ' fehlt');
   }
@@ -267,7 +280,7 @@ test('wechselnde Kopfzahlen bleiben getrennte Zeilen', () => {
 // unterscheidet sie; identisch bis in die Notiz wäre dagegen eine Dopplung.
 test('kein (Gewerk, Titel, Start, Notiz) kommt zweimal vor', () => {
   const seen = new Set(); const dups = [];
-  for (const t of plan.tasks) {
+  for (const t of bauTasks) {
     const k = [t.gewerk, t.title, t.start, t.notes].join('|');
     if (seen.has(k)) dups.push(t.title + ' @ ' + t.start);
     seen.add(k);
@@ -279,10 +292,10 @@ console.log('\nKlassentreffen V07 — nichts erfunden, nichts vergessen');
 test('keine Abhängigkeiten — V07 ist ein terminierter Kalender', () => assert.equal(plan.deps.length, 0));
 test('353 Vorgänge aus 361 V07-Zeilen (8 echte Fortsetzungen verschmolzen)', () => {
   assert.equal(ROWS.length, 361);
-  assert.equal(plan.tasks.length, 353);
+  assert.equal(bauTasks.length, 353);
 });
 test('alle 14 Tage sind belegt', () => {
-  const tage = new Set(plan.tasks.map((t) => t.start.slice(0, 10)));
+  const tage = new Set(bauTasks.map((t) => t.start.slice(0, 10)));
   for (const d of ['2026-08-21', '2026-08-22', '2026-08-23', '2026-08-24', '2026-08-25', '2026-08-26',
                    '2026-08-27', '2026-08-28', '2026-08-29', '2026-08-30', '2026-08-31', '2026-09-01',
                    '2026-09-02', '2026-09-03']) {
@@ -292,15 +305,26 @@ test('alle 14 Tage sind belegt', () => {
 
 console.log('\nKlassentreffen V07 — Palette am Limit');
 test('20 Gewerke passen gerade noch (MAX_SLOTS = 20)', () => {
-  assert.equal(slotsExhausted(plan.gewerke.length), false);
-  assert.equal(slotsExhausted(plan.gewerke.length + 1), true, 'ein 21. Gewerk verlangt eine neue Farbsuche');
+  assert.equal(slotsExhausted(bauGewerke.length), false);
+  assert.equal(slotsExhausted(bauGewerke.length + 1), true, 'ein 21. Gewerk verlangt eine neue Farbsuche');
+});
+test('die Bühne verbraucht keinen Gewerk-Farbplatz', () => {
+  // Farbplätze werden je Ebene vergeben (freeSlot in store.js): Gewerke und
+  // Bühnen sind nie zusammen zu sehen. Zählte man alles zusammen, wäre die
+  // Palette mit der ersten Bühne erschöpft.
+  assert.equal(slotsExhausted(bauGewerke.length + buehnen.length), true, 'zusammen sind es 21');
+  assert.equal(slotsExhausted(buehnen.length), false);
 });
 test('jedes Gewerk hat eine eindeutige Farbton-Schraffur-Kombination', () => {
-  const ids = plan.gewerke.map((g) => gewerkVar(g.slot) + '|' + gewerkTexture(g.slot));
-  assert.equal(new Set(ids).size, plan.gewerke.length, 'zwei Gewerke sehen gleich aus');
+  const ids = bauGewerke.map((g) => gewerkVar(g.slot) + '|' + gewerkTexture(g.slot));
+  assert.equal(new Set(ids).size, bauGewerke.length, 'zwei Gewerke sehen gleich aus');
+});
+test('auch die Bühnen sind untereinander unterscheidbar', () => {
+  const ids = buehnen.map((g) => gewerkVar(g.slot) + '|' + gewerkTexture(g.slot));
+  assert.equal(new Set(ids).size, buehnen.length);
 });
 test('zehn Gewerke tragen Schraffur (Plätze 10–19)', () => {
-  assert.equal(plan.gewerke.filter((g) => gewerkTexture(g.slot)).length, 10);
+  assert.equal(bauGewerke.filter((g) => gewerkTexture(g.slot)).length, 10);
 });
 
 console.log('\nKlassentreffen V07 — in sich stimmig');
@@ -311,7 +335,8 @@ test('jeder Vorgang zeigt auf ein vorhandenes Gewerk', () => {
 test('Ende nie vor Start', () => {
   for (const t of plan.tasks) {
     const d = toMin(t.end) - toMin(t.start);
-    assert.ok(d > 0, t.title + ' @ ' + t.start + ': ' + d);
+    // Ein Meilenstein hat per Definition keine Dauer (Show-Ende).
+    assert.ok(t.milestone ? d === 0 : d > 0, t.title + ' @ ' + t.start + ': ' + d);
   }
 });
 test('keine Ringe', () => assert.doesNotThrow(() => computeSchedule(plan.tasks, plan.deps)));
@@ -334,6 +359,106 @@ test('WIDERSPRUCHSFREI — der Plan startet nicht rot', () => {
     const t = plan.tasks.find((y) => y.id === x.taskId);
     return '«' + (t && t.title) + '» ' + x.message;
   }).join(' | '));
+});
+
+console.log('\nRunning Order — die Showablauf-Ebene');
+
+const roTag = (tag) => programm.filter((t) => t.start.startsWith(tag)).sort(byStart);
+const zeile = (t) => [t.start.slice(11, 16), t.title].join(' ');
+
+test('eine Bühne, und sie heißt wie im Haus', () => {
+  assert.deepEqual(buehnen.map((g) => g.name), ['Hauptbühne']);
+  assert.equal(buehnen[0].art, 'buehne');
+});
+
+test('jeder Programmpunkt liegt auf der Bühne, nicht in einem Gewerk', () => {
+  for (const t of programm) assert.equal(t.gewerk, buehnen[0].id, t.title);
+});
+
+// Quellentreu gegen «RUNNING ORDER Samstag 29.08.2026», Stand 05.08.2026.
+test('Samstag 29.08. steht Zeile für Zeile im Plan', () => {
+  assert.deepEqual(roTag('2026-08-29').map(zeile), [
+    '12:00 DOORS', '14:00 CREUTZFELD & JAKOB', '14:30 Changeover', '14:40 OLLI BANJO',
+    '15:10 Changeover', '15:20 CURSE', '15:55 Changeover', '16:05 STIEBER TWINS & CORA E',
+    '16:45 Changeover', '16:55 TORCH FEAT. TONI L', '17:35 Changeover + FLYING STEPS',
+    '17:50 EKO FRESH', '18:30 Changeover', '19:00 KOOL SAVAS', '20:00 Changeover',
+    '20:40 SIDO', '21:50 SHOW END',
+  ]);
+});
+
+test('Sonntag 30.08. steht Zeile für Zeile im Plan', () => {
+  assert.deepEqual(roTag('2026-08-30').map(zeile), [
+    '12:00 DOORS', '14:30 CHEFKET', '15:00 Changeover', '15:10 FÜNF STERNE DELUXE',
+    '15:55 Changeover', '16:05 MEGALOH', '16:45 Changeover', '17:00 MASSIVE TÖNE',
+    '17:45 Changeover', '18:00 AFROB & FERRIS MC', '18:45 Changeover', '19:15 SAMY DELUXE',
+    '20:15 Changeover', '20:45 MAX HERRE & JOY DENALANE', '21:45 SHOW END',
+  ]);
+});
+
+test('jeder Punkt endet, wo der nächste beginnt — keine Lücke, keine Überlappung', () => {
+  for (const tag of ['2026-08-29', '2026-08-30']) {
+    const l = roTag(tag);
+    for (let i = 0; i < l.length - 1; i++) {
+      assert.equal(l[i].end, l[i + 1].start, tag + ' nach «' + l[i].title + '»');
+    }
+  }
+});
+
+test('das Show-Ende ist ein Meilenstein, kein Balken', () => {
+  const enden = programm.filter((t) => t.punktTyp === 'ende');
+  assert.equal(enden.length, 2);
+  for (const t of enden) {
+    assert.equal(t.milestone, true, t.start);
+    assert.equal(t.start, t.end, 'ein Meilenstein hat keine Dauer');
+  }
+});
+
+test('alle reinen Umbauten heißen gleich — eine Zeile, viele Balken', () => {
+  // Sonst hätte die Bühne acht Zeilen für dasselbe Ding. «Changeover + FLYING
+  // STEPS» bleibt bewusst eigen: dort wird gespielt.
+  const s29 = seriesRows(roTag('2026-08-29'));
+  const co = s29.find((x) => x.title === 'Changeover');
+  assert.equal(co.tasks.length, 6);   // 17:35 ist «+ FLYING STEPS» und zählt eigen
+  assert.equal(co.lanes, 1, 'Umbauten überlappen sich nie');
+  assert.ok(s29.some((x) => x.title === 'Changeover + FLYING STEPS'));
+});
+
+test('17 Punkte am Samstag ergeben 12 Zeilen, 15 am Sonntag ergeben 10', () => {
+  assert.equal(seriesRows(roTag('2026-08-29')).length, 12);
+  assert.equal(seriesRows(roTag('2026-08-30')).length, 10);
+});
+
+test('jeder Punkt hat einen Typ, und nur bekannte', () => {
+  const erlaubt = new Set(PUNKT_TYPEN.map(([k]) => k));
+  for (const t of programm) assert.ok(erlaubt.has(t.punktTyp), t.title + ': ' + t.punktTyp);
+  assert.deepEqual(programm.filter((t) => t.punktTyp === 'doors').map((t) => t.start),
+    ['2026-08-29T12:00', '2026-08-30T12:00']);
+});
+
+test('Anforderungen und Material bleiben leer — die trägt Marco ein', () => {
+  // Sie stehen in keinem Dokument. Etwas hineinzuschreiben wäre erfunden.
+  for (const t of programm) {
+    assert.equal(t.anforderungen, '', t.title);
+    assert.equal(t.material, '', t.title);
+    assert.equal(t.kontakt, '', t.title);
+    assert.equal(t.soundcheck, '', t.title);
+  }
+});
+
+test('der Stand des Dokuments steht im Plan, nicht nur im Kopf des Autors', () => {
+  const doors = programm.filter((t) => t.punktTyp === 'doors');
+  for (const t of doors) assert.match(t.notes, /Stand 05\.08\.2026/);
+});
+
+test('kein Titel trägt eine Tagesnummer', () => {
+  assert.equal(programm.filter((t) => /Tag \d+$/.test(t.title)).length, 0);
+});
+
+test('die Running Order liegt im Projektzeitraum und an den Showtagen', () => {
+  for (const t of programm) {
+    assert.ok(toMin(t.start) >= WIN_S && toMin(t.end) <= WIN_E, t.title);
+    assert.match(t.start, /^2026-08-(29|30)/, t.title);
+  }
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

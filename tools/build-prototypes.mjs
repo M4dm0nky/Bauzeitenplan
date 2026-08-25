@@ -17,7 +17,7 @@ const read = (...p) => readFileSync(join(root, ...p), 'utf8');
 // Die Reihenfolge ist die Bauanleitung: Abhängigkeit vor Verwender. Diese Liste
 // gibt es genau EINMAL — sie dreimal zu pflegen wäre selbst eine Fehlerquelle.
 const FILES = ['version.js', 'dom.js', 'schedule.js', 'timeaxis.js', 'palette.js',
-               'conflicts.js', 'live.js', 'store.js', 'templates.js', 'gantt.js'];
+               'conflicts.js', 'ebene.js', 'live.js', 'store.js', 'templates.js', 'gantt.js'];
 
 // ES-Module zu einem inline-Skript zusammenziehen: Importe zwischen den eigenen
 // Modulen fallen weg, die Reihenfolge oben macht den Rest.

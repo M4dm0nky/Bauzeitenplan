@@ -553,5 +553,84 @@ test('parent lässt sich nicht über setTaskField umbiegen', () => {
   assert.equal(s.apply({ type: 'setTaskField', id: r.id, field: 'parent', value: null }).ok, false);
 });
 
+console.log('\nBühnen — die Showablauf-Ebene');
+
+const mitBuehne = () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addGewerk', gewerk: { name: 'Hauptbühne', art: 'buehne' } });
+  return { s, id: r.id };
+};
+
+test('eine Bühne wird als Bühne angelegt', () => {
+  const { s, id } = mitBuehne();
+  const g = s.state.gewerke.find((x) => x.id === id);
+  assert.equal(g.art, 'buehne');
+  assert.equal(g.name, 'Hauptbühne');
+});
+
+test('Farbplätze werden je Ebene vergeben — die erste Bühne bekommt Platz 0', () => {
+  const { s, id } = mitBuehne();
+  // Die zwei Gewerke belegen 0 und 1. Zählte man alles zusammen, käme hier 2
+  // heraus — und im Klassentreffen-Plan (20 Gewerke) wäre die Palette erschöpft.
+  assert.equal(s.state.gewerke.find((x) => x.id === id).slot, 0);
+});
+
+test('zwei Bühnen bekommen verschiedene Plätze', () => {
+  const { s } = mitBuehne();
+  const r = s.apply({ type: 'addGewerk', gewerk: { name: 'Zeltbühne', art: 'buehne' } });
+  assert.equal(s.state.gewerke.find((x) => x.id === r.id).slot, 1);
+});
+
+test('derselbe Name darf in beiden Ebenen stehen', () => {
+  const s = createStore(seed());
+  // «Bühne» gibt es schon als Gewerk — als Spielstätte ist das etwas anderes.
+  assert.equal(s.apply({ type: 'addGewerk', gewerk: { name: 'Bühne', art: 'buehne' } }).ok, true);
+});
+
+test('zwei Bühnen gleichen Namens werden abgelehnt', () => {
+  const { s } = mitBuehne();
+  const r = s.apply({ type: 'addGewerk', gewerk: { name: 'hauptbühne', art: 'buehne' } });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Bühne gibt es schon/);
+});
+
+test('ein Gewerk wird nicht nachträglich zur Bühne', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'setGewerkField', id: 'buehne', field: 'art', value: 'buehne' });
+  assert.equal(r.ok, false);
+  assert.equal(s.state.gewerke.find((g) => g.id === 'buehne').art, undefined);
+});
+
+test('erfundene Arten werden zu Gewerken, nicht zu einer dritten Ebene', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addGewerk', gewerk: { name: 'Quatsch', art: 'ufo' } });
+  assert.equal(s.state.gewerke.find((g) => g.id === r.id).art, 'gewerk');
+});
+
+console.log('\nShowablauf-Felder am Vorgang');
+
+test('Anforderungen und Material laufen über den Store', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'anforderungen', value: '2× Wedge' }).ok, true);
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'material', value: '1 Riser' }).ok, true);
+  assert.equal(taskById(s, 'a').anforderungen, '2× Wedge');
+  assert.equal(taskById(s, 'a').material, '1 Riser');
+});
+
+test('⌘Z nimmt eine Anforderung zurück', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'setTaskField', id: 'a', field: 'anforderungen', value: '2× Wedge' });
+  s.undo();
+  assert.equal(taskById(s, 'a').anforderungen, undefined);
+});
+
+test('Programmpunkt-Typ und Soundcheck sind normale Felder', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'setTaskField', id: 'a', field: 'punktTyp', value: 'changeover' });
+  s.apply({ type: 'setTaskField', id: 'a', field: 'soundcheck', value: '2026-07-13T09:30' });
+  assert.equal(taskById(s, 'a').punktTyp, 'changeover');
+  assert.equal(taskById(s, 'a').soundcheck, '2026-07-13T09:30');
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

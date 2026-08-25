@@ -485,8 +485,68 @@ const ROWS = [
   r('Sanitär', 'Auslesen Wasserzähler', S03, '08:00', '12:00', N(CL)),
 ];
 
+// ── Running Order · die Showablauf-Ebene ─────────────────────────────────────
+// Quelle: «RUNNING ORDER Samstag 29.08.2026 / Sonntag 30.08.2026», Stand
+// 05.08.2026. Das ist ein ANDERES Dokument als der Bauzeitenplan V07 und eine
+// andere Ebene im Plan (js/ebene.js): Bühnen statt Gewerke, Programmpunkte
+// statt Aufbauschritten. Beides lebt im selben Projekt, aber nie im selben Bild.
+//
+// «C/O» heißt Changeover. Alle reinen Umbauten heißen deshalb gleich, damit der
+// Gantt sie zu EINER Zeile mit vielen Balken bündelt (seriesRows) — sonst hätte
+// die Bühne acht Zeilen für dasselbe Ding. «C/O + FLYING STEPS» ist bewusst ein
+// eigener Titel: dort wird gespielt, das ist kein reiner Umbau.
+//
+// Die Endzeit eines Programmpunkts ist der Beginn des nächsten — genau so liest
+// man eine Running Order. Nichts erfunden, nichts geschätzt.
+const RO_BUEHNE = 'Hauptbühne';
+const RO_STAND = 'Running Order · Stand 05.08.2026';
+
+// [Uhrzeit, Titel, Typ] — die letzte Zeile jedes Tages ist das Show-Ende und
+// hat keine Dauer (Meilenstein).
+const RUNNING_ORDER = {
+  '2026-08-29': [
+    ['12:00', 'DOORS', 'doors'],
+    ['14:00', 'CREUTZFELD & JAKOB', 'act'],
+    ['14:30', 'Changeover', 'changeover'],
+    ['14:40', 'OLLI BANJO', 'act'],
+    ['15:10', 'Changeover', 'changeover'],
+    ['15:20', 'CURSE', 'act'],
+    ['15:55', 'Changeover', 'changeover'],
+    ['16:05', 'STIEBER TWINS & CORA E', 'act'],
+    ['16:45', 'Changeover', 'changeover'],
+    ['16:55', 'TORCH FEAT. TONI L', 'act'],
+    ['17:35', 'Changeover + FLYING STEPS', 'changeover'],
+    ['17:50', 'EKO FRESH', 'act'],
+    ['18:30', 'Changeover', 'changeover'],
+    ['19:00', 'KOOL SAVAS', 'act'],
+    ['20:00', 'Changeover', 'changeover'],
+    ['20:40', 'SIDO', 'act'],
+    ['21:50', 'SHOW END', 'ende'],
+  ],
+  '2026-08-30': [
+    ['12:00', 'DOORS', 'doors'],
+    ['14:30', 'CHEFKET', 'act'],
+    ['15:00', 'Changeover', 'changeover'],
+    ['15:10', 'FÜNF STERNE DELUXE', 'act'],
+    ['15:55', 'Changeover', 'changeover'],
+    ['16:05', 'MEGALOH', 'act'],
+    ['16:45', 'Changeover', 'changeover'],
+    ['17:00', 'MASSIVE TÖNE', 'act'],
+    ['17:45', 'Changeover', 'changeover'],
+    ['18:00', 'AFROB & FERRIS MC', 'act'],
+    ['18:45', 'Changeover', 'changeover'],
+    ['19:15', 'SAMY DELUXE', 'act'],
+    ['20:15', 'Changeover', 'changeover'],
+    ['20:45', 'MAX HERRE & JOY DENALANE', 'act'],
+    ['21:45', 'SHOW END', 'ende'],
+  ],
+};
+
 // ── Rohvorgänge ──────────────────────────────────────────────────────────────
-const gewerke = GEWERKE.map((name, i) => ({ id: 'g' + i, name, sort: i, slot: i }));
+const gewerke = GEWERKE.map((name, i) => ({ id: 'g' + i, name, sort: i, slot: i, art: 'gewerk' }));
+// Die Bühne bekommt Farbplatz 0: Plätze werden JE EBENE vergeben (freeSlot in
+// store.js), weil Gewerke und Bühnen nie zusammen zu sehen sind.
+const BUEHNE = { id: 'b0', name: RO_BUEHNE, sort: gewerke.length, slot: 0, art: 'buehne' };
 const gid = new Map(gewerke.map((g) => [g.name, g.id]));
 
 const raw = ROWS.map((x) => {
@@ -539,6 +599,34 @@ const tasks = merged.map((t, i) => ({
   milestone: false, progress: 0, status: 'geplant', crew: null, notes: t.notes, estimated: t.estimated,
 }));
 
+// ── Programmpunkte anhängen ──────────────────────────────────────────────────
+// NACH dem Verschmelzen: die Zusammenführung gleicher Titel gilt dem
+// Bauzeitenplan (mehrtägige Tätigkeiten). Zwei Changeover am selben Abend sind
+// zwei Umbauten und dürfen nie zu einem Balken werden.
+//
+// Anforderungen, Material, Kontakt und Soundcheck bleiben LEER. Sie stehen so
+// in keinem Dokument — sie von Hand einzutragen ist der Zweck der Ansicht.
+const programm = [];
+for (const [tag, zeilen] of Object.entries(RUNNING_ORDER)) {
+  zeilen.forEach(([zeit, titel, typ], i) => {
+    const naechste = zeilen[i + 1];
+    const ende = naechste ? naechste[0] : zeit;   // Show-Ende hat keine Dauer
+    programm.push({
+      id: 'ro' + programm.length,
+      gewerk: BUEHNE.id,
+      title: titel,
+      start: tag + 'T' + zeit,
+      end: tag + 'T' + ende,
+      milestone: typ === 'ende',
+      progress: 0, status: 'geplant', crew: null,
+      notes: typ === 'doors' ? RO_STAND : '',
+      estimated: false,
+      punktTyp: typ,
+      anforderungen: '', material: '', soundcheck: '', kontakt: '',
+    });
+  });
+}
+
 const deps = [];   // V07 ist ein terminierter Kalender — keine erfundenen Verknüpfungen.
 
 const plan = {
@@ -550,12 +638,12 @@ const plan = {
     end: '2026-09-03T23:59',
     timezone: 'Europe/Berlin',
   },
-  gewerke,
-  tasks,
+  gewerke: [...gewerke, BUEHNE],
+  tasks: [...tasks, ...programm],
   deps,
 };
 
-export { plan, ROWS };
+export { plan, ROWS, RUNNING_ORDER, BUEHNE };
 
 if (process.argv[1] && process.argv[1].endsWith('make-klassentreffen.mjs')) {
   writeFileSync(join(here, '..', 'klassentreffen-festival.json'), serialize(plan));
@@ -563,5 +651,6 @@ if (process.argv[1] && process.argv[1].endsWith('make-klassentreffen.mjs')) {
   const used = new Set(tasks.map((t) => t.gewerk));
   console.log('  ✓ klassentreffen-festival.json (aus V07)');
   console.log(`    ${gewerke.length} Gewerke (${used.size} belegt) · ${ROWS.length} V07-Zeilen → ${tasks.length} Vorgänge · ${deps.length} Verknüpfungen`);
+  console.log(`    1 Bühne «${BUEHNE.name}» · ${programm.length} Programmpunkte an ${Object.keys(RUNNING_ORDER).length} Showtagen (Running Order, Stand 05.08.2026)`);
   console.log(`    ${est} Vorgänge mit geschätzter Uhrzeit (Rest quellentreu aus V07)`);
 }
