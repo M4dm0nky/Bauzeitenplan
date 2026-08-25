@@ -253,6 +253,23 @@ body { margin: 0; }
    Nur Geometrie. Farben und Schrift kommen aus der Theme-Ebene.               */
 
 .hd-zoom { display: flex; align-items: center; gap: 8px; }
+
+/* Bühnen-Häkchen (nur Showablauf). Umbrechend, damit acht Bühnen die
+   Werkzeugzeile nicht aus dem Fenster schieben. */
+.buehnen { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.seg-tag { flex: none; }
+.buehne-i { display: flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
+.buehne-i .bz-dot { width: 9px; height: 9px; }
+
+/* Live-Kopfzeile des Showablaufs: vier Felder nebeneinander, groß genug für
+   einen Monitor. Auf schmalen Geräten brechen sie um, statt zu schrumpfen —
+   eine unlesbare Ansage ist schlechter als eine zweite Zeile. */
+.showhead { display: flex; flex-wrap: wrap; align-items: stretch; gap: 1px; }
+.sh-f { flex: 1 1 220px; min-width: 0; padding: 8px 14px; }
+.sh-f.sh-clock { flex: 0 0 auto; }
+.sh-k { text-transform: uppercase; letter-spacing: .09em; }
+.sh-v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sh-z { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hd-right { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .save-state { white-space: nowrap; }
 
@@ -275,6 +292,22 @@ body { margin: 0; }
 .c-crew { width: 62px; }
 .c-st { width: 96px; }
 .c-act { width: 56px; white-space: nowrap; }
+
+/* Showablauf-Spalten. Die Tabelle wird dadurch breiter als das Fenster — sie
+   scrollt in ihrem EIGENEN Container (.tb hat overflow:auto), die Seite nicht.
+   Ohne die Mindestbreite quetschte width:100% zwölf Spalten ins Bild und aus
+   «Anforderungen» würde ein Feld für drei Zeichen. */
+/* Breiten großzügig: ein datetime-local zeigt «08/29/2026, 12:00 PM» und wird
+   bei 175 px abgeschnitten — auf dem Probebild stand «Tourmanage» und «Chang».
+   Lieber scrollen als abschneiden; die Seite selbst scrollt weiterhin nicht. */
+.tb-t[data-tb-ebene="show"] { min-width: 1980px; }
+.tb-t[data-tb-ebene="show"] .c-gw { width: 152px; }
+.tb-t[data-tb-ebene="show"] .c-start,
+.tb-t[data-tb-ebene="show"] .c-end { width: 205px; }
+.c-typ { width: 142px; }
+.c-sc { width: 205px; }
+.c-kon { width: 176px; }
+.c-anf, .c-mat { width: auto; min-width: 230px; }
 .tb-group td { padding: 8px 8px 5px; }
 .tb-group .bz-dot { display: inline-block; vertical-align: middle; margin-right: 6px; }
 .tb-gname { vertical-align: middle; }

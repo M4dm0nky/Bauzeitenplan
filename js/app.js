@@ -5,6 +5,10 @@
 
 import { createStore } from './store.js';
 import { createRepo, serialize, deserialize } from './persistence.js';
+import { createRepoPB } from './persistence-pb.js';
+import { isLoggedIn, resolveSession } from './auth.js';
+import { setSession, getSession } from './session.js';
+import { canEditStructure } from './roles.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
@@ -12,13 +16,40 @@ import { resolveConflictsCmd, local } from './conflicts.js';
 import { slotsExhausted, MAX_SLOTS, gewerkVar, gewerkTexture } from './palette.js';
 import { createInspector } from './inspector.js';
 import { openMenu } from './menu.js';
-import { liveStats } from './live.js';
+import { liveStats, runningAt, nextUp, delaysAt } from './live.js';
+import { sichtGewerke, sichtTasks, typHinweis, programmTage } from './ebene.js';
 import { toMin, toDate } from './schedule.js';
 import { $, el, escapeHtml } from './dom.js';
 import { VERSION } from './version.js';
 
-const repo = createRepo(window.localStorage);
+// Der Speicher wird beim Start gewählt (localStorage per Vorgabe; PocketBase nur
+// mit Flag). Bis dahin null — nichts greift vor main() darauf zu.
+let repo = null;
 let store = null, gantt = null, table = null, inspector = null, view = 'gantt';
+
+// ── Ebene ───────────────────────────────────────────────────────────────────
+// «bau» = die ganze Veranstaltung (Gewerke), «show» = der Ablauf auf den Bühnen
+// (js/ebene.js). Anzeige-Zustand, nicht Plandaten: er lebt in localStorage und
+// ist über ?ebene=show übersteuerbar — die Prüfwerkzeuge hängen daran.
+//
+// EIN Besitzer: setEbene() ist der einzige Schreiber. Gantt und Tabelle
+// bekommen sie gereicht, sie entscheiden nichts selbst.
+let ebene = 'bau';
+const ausBlend = new Set();   // ausgeblendete Bühnen (nur in der Show-Ebene)
+// Der gezeigte Showtag. Eine Running Order ist tagesbezogen: beide Showtage
+// nebeneinander ergäben zehn Zeilen ohne Balken — genau die Fehlerart, die in
+// diesem Projekt schon dreimal erst auf dem Screenshot aufgefallen ist.
+let showTag = null;
+
+const startEbene = () => {
+  const q = new URLSearchParams(location.search).get('ebene');
+  if (q === 'show' || q === 'bau') return q;
+  return localStorage.getItem('bzp_ebene') === 'show' ? 'show' : 'bau';
+};
+
+// PocketBase-Modus? Nur wenn ausdrücklich verlangt — Vorgabe ist localStorage.
+const pbMode = () => new URLSearchParams(location.search).get('backend') === 'pb'
+  || localStorage.getItem('bzp_backend') === 'pb';
 
 // ── Mitgelieferte Pläne ─────────────────────────────────────────────────────
 // Der Plan liegt als JSON neben der App und wird beim Start automatisch geholt.
@@ -92,7 +123,10 @@ function neuer(datei, lokal) {
 // ── Erststart ───────────────────────────────────────────────────────────────
 async function boot() {
   const wunsch = new URLSearchParams(location.search).get('plan');
-  if (wunsch !== 'leer' && await openBundled(wunsch || START)) return;
+  // Im PocketBase-Modus KEIN Autostart: open() schriebe den mitgelieferten Plan
+  // über repo.save() in die Instanz — jeder Anmeldung ein Beispielprojekt.
+  // Dort entscheidet die Mitgliedschaft, was jemand sieht, nicht eine Datei.
+  if (!pbMode() && wunsch !== 'leer' && await openBundled(wunsch || START)) return;
 
   const activeId = repo.getActive();
   const plan = activeId && repo.load(activeId);
@@ -115,6 +149,18 @@ function open(plan) {
   repo.setActive(plan.project.id);
   refreshChrome();
   save();
+  // Im PocketBase-Modus die Rolle/Scopes fürs (evtl. neue) Projekt auflösen und
+  // die Ansichten neu sperren. Ohne Login bleibt die Session null → alles frei.
+  if (pbMode()) resolveSession(plan.project.id).then((s) => { setSession(s); relock(); });
+}
+
+// Tabelle und Panel neu zeichnen, damit die Feldsperren greifen; Struktur-
+// Knöpfe im Kopf für Nicht-Admins sperren. Ohne Session bleibt alles frei.
+function relock() {
+  const s = getSession();
+  $('add-gewerk').disabled = !!s && !canEditStructure(s);
+  if (view === 'tabelle' && table) renderTable();
+  if (inspector) inspector.render();
 }
 
 // ── Aufbau ──────────────────────────────────────────────────────────────────
@@ -144,6 +190,7 @@ function mount() {
 
   store.subscribe(() => {
     refreshChrome();
+    syncBuehnen();          // eine neue oder gelöschte Bühne gehört in die Leiste
     refreshLive();
     scheduleSave();
     if (view === 'tabelle') renderTable();
@@ -165,6 +212,7 @@ function mount() {
 
   const segs = [...document.querySelectorAll('[data-z]')];
   const syncSeg = () => segs.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.z === gantt.zoomName)));
+  syncZoomSeg = syncSeg;
   const afterNav = () => { syncSeg(); syncDate(); };
   segs.forEach((b) => { b.onclick = () => { gantt.setZoomPreset(b.dataset.z); afterNav(); }; });
   $('zin').onclick = () => { gantt.zoomIn(); afterNav(); };
@@ -193,6 +241,12 @@ function mount() {
   document.querySelectorAll('[data-view]').forEach((b) => {
     b.onclick = () => setView(b.dataset.view);
   });
+
+  // ── Ebene ──
+  document.querySelectorAll('button[data-ebene]').forEach((b) => {
+    b.onclick = () => setEbene(b.dataset.ebene);
+  });
+  setEbene(startEbene());
 
   // ── Projekt ──
   $('proj-menu').onclick = () => showProjectDialog({});
@@ -234,8 +288,98 @@ function setView(v) {
   $('tb').hidden = v !== 'tabelle';
   syncPanel();
   document.querySelector('.hd-zoom').hidden = v !== 'gantt';
+  syncBuehnen();
   if (v === 'tabelle') renderTable();
   else gantt.relayout();
+}
+
+// ── Ebene wechseln ──────────────────────────────────────────────────────────
+// Der EINZIGE Ort, der über die Ebene entscheidet. Gantt und Tabelle bekommen
+// sie gereicht; der Rest der Kopfzeile richtet sich danach aus.
+function setEbene(name) {
+  ebene = name === 'show' ? 'show' : 'bau';
+  localStorage.setItem('bzp_ebene', ebene);
+  document.querySelectorAll('button[data-ebene]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ebene === ebene)));
+  // Eine Bühne, die es nicht mehr gibt, darf nicht ewig ausgeblendet bleiben.
+  const da = new Set(sichtGewerke(store.state, 'show').map((g) => g.id));
+  for (const id of [...ausBlend]) if (!da.has(id)) ausBlend.delete(id);
+
+  // Vorgabe-Showtag: der, auf dem «jetzt» liegt — sonst der erste. Beim Aufbau
+  // steht man vor dem Festival, dann ist der erste Showtag die richtige Antwort.
+  const tage = programmTage(sichtTasks(store.state, 'show'));
+  if (ebene === 'show' && (!showTag || !tage.includes(showTag))) {
+    const jetzt = local(toDate(gantt.liveInfo().now)).slice(0, 10);
+    showTag = tage.includes(jetzt) ? jetzt : (tage[0] || null);
+  }
+  if (ebene !== 'show') showTag = null;
+
+  gantt.setEbene(ebene, ausBlend, showTag);
+  table.setEbene(ebene, ausBlend, showTag);
+  // Die Auswahl gehört der anderen Ebene und zeigt ins Leere.
+  gantt.select(null);
+  syncPanel();
+  syncBuehnen();
+  $('add-gewerk').textContent = ebene === 'show' ? '+ Bühne' : '+ Gewerk';
+  $('fold').hidden = ebene === 'show';   // wenige Zeilen brauchen kein Zuklappen
+  if (view === 'tabelle') renderTable();
+  refreshChrome();
+  refreshLive();
+  // Die Zoom-Markierung gehört zum Bild: setEbene stellt die Stufe neu, ohne
+  // das blieb «Tage» gedrückt, während der Gantt längst anders stand.
+  if (syncZoomSeg) syncZoomSeg();
+}
+
+// Wird in mount() gesetzt — setEbene läuft auch von dort und darf die
+// Markierung nicht anfassen, bevor es die Knöpfe gibt.
+let syncZoomSeg = null;
+
+// Häkchenleiste der Bühnen. Nur im Showablauf und nur in der Gantt-Ansicht —
+// in der Tabelle steht ohnehin jede Bühne als Gruppenkopf da.
+function syncBuehnen() {
+  const box = $('buehnen');
+  const zeigen = ebene === 'show';
+  box.hidden = !zeigen;
+  if (!zeigen) return;
+  const buehnen = sichtGewerke(store.state, 'show');
+  box.replaceChildren();
+
+  // Showtag zuerst: er entscheidet, WELCHER Ablauf gezeigt wird. Die Bühnen
+  // darunter entscheiden, WESSEN.
+  const tage = programmTage(sichtTasks(store.state, 'show'));
+  if (tage.length > 1) {
+    const seg = el('div', 'seg seg-tag');
+    for (const t of tage) {
+      const btn = el('button', null, new Date(t + 'T12:00')
+        .toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }));
+      btn.setAttribute('aria-pressed', String(t === showTag));
+      btn.onclick = () => { showTag = t; setEbene('show'); };
+      seg.append(btn);
+    }
+    box.append(seg);
+  }
+
+  for (const g of buehnen) {
+    const lab = el('label', 'buehne-i');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.checked = !ausBlend.has(g.id);
+    cb.onchange = () => {
+      cb.checked ? ausBlend.delete(g.id) : ausBlend.add(g.id);
+      gantt.setEbene(ebene, ausBlend, showTag);
+      table.setEbene(ebene, ausBlend, showTag);
+      if (view === 'tabelle') renderTable();
+      refreshChrome();
+    };
+    const dot = el('span', 'bz-dot');
+    dot.style.setProperty('--gw', gewerkVar(g.slot));
+    if (gewerkTexture(g.slot)) dot.dataset.tex = '1';
+    lab.append(cb, dot, el('span', null, g.name));
+    box.append(lab);
+  }
+  if (!buehnen.length) {
+    const hint = el('span', 'buehnen-leer', 'Noch keine Bühne — «+ Bühne» legt eine an.');
+    box.append(hint);
+  }
 }
 
 // Der EINZIGE Ort, der über die Sichtbarkeit des Panels entscheidet.
@@ -263,10 +407,14 @@ function setLive(on) {
 
 function refreshLive() {
   if (!store || !gantt) return;
+  refreshShowhead();
   const st = liveStats(store.state.tasks, gantt.liveInfo().now);
   const n = $('live-bar');
-  n.hidden = !gantt.isLive;
-  if (!gantt.isLive) return;
+  // Im Showablauf trägt die große Kopfzeile dieselbe Aussage, nur genauer und
+  // auf den Tag bezogen. Beides nebeneinander widerspräche sich sichtbar: hier
+  // «23 laufen», dort «CURSE».
+  n.hidden = !gantt.isLive || ebene === 'show';
+  if (n.hidden) return;
   const parts = [];
   parts.push(st.running + (st.running === 1 ? ' läuft' : ' laufen'));
   if (st.late) parts.push(st.late + ' im Verzug');
@@ -278,6 +426,75 @@ function refreshLive() {
 }
 
 const fmtMin = (m) => (m < 60 ? m + ' Min' : Math.round(m / 60) + ' Std');
+
+// ── Live-Kopfzeile des Showablaufs ──────────────────────────────────────────
+// Was läuft, was kommt als Nächstes, wie weit hängen wir. Sie rechnet über die
+// Vorgänge der SICHTBAREN Ebene (gantt.sichtbareTasks) — sonst meldete sie den
+// Aufbau, während auf der Bühne jemand spielt.
+//
+// Der Status wird dabei nie automatisch gesetzt. Der Verzug entsteht genau
+// daraus, dass die menschliche Aussage «geplant» der Uhr widerspricht.
+function refreshShowhead() {
+  const n = $('showhead');
+  const an = ebene === 'show' && gantt.isLive;
+  n.hidden = !an;
+  if (!an) return;
+
+  const now = gantt.liveInfo().now;
+  const punkte = gantt.sichtbareTasks();   // schon auf Ebene UND Showtag gefiltert
+  const laeuft = runningAt(punkte, now);
+  const jetzt = punkte.filter((t) => laeuft.has(t.id)).sort((a, b) => toMin(a.start) - toMin(b.start));
+  const naechst = nextUp(punkte, now);
+
+  // Verzug NUR aus dem, was noch aussteht oder gerade läuft.
+  //
+  // delaysAt meldet auch längst vergangene, nie abgehakte Punkte — bei DOORS
+  // (12:00–14:00, Status «geplant») stand um 15:30 groß und rot «+4 Std», und
+  // das an einem Abend, der exakt nach Plan lief. Das ist kein Verzug, sondern
+  // fehlende Rückmeldung, und es überdeckte den Verzug, auf den es ankommt.
+  // Die Regel bleibt unberührt: der Status wird nie automatisch gesetzt.
+  const offen = new Set(punkte.filter((t) => toMin(t.end) >= now).map((t) => t.id));
+  const verzug = delaysAt(punkte, now).filter((d) => offen.has(d.taskId));
+
+  // Ein Changeover ist kein Auftritt — er wird als Umbau angesagt, sonst stünde
+  // «JETZT: Changeover» da, wo das Publikum einen Namen erwartet. Trägt der
+  // Titel das Wort schon, bleibt es bei einem: «Changeover: Changeover» war das
+  // erste, was auf dem Probebild auffiel.
+  const ansage = (t) => {
+    const typ = typHinweis(t);
+    return typ ? typ + ': ' + t.title : t.title;
+  };
+  const titelVon = (id) => punkte.find((t) => t.id === id);
+
+  n.replaceChildren();
+  const feld = (klasse, kopf, inhalt, zusatz) => {
+    const d = el('div', 'sh-f ' + klasse);
+    d.append(el('div', 'sh-k', kopf), el('div', 'sh-v', inhalt));
+    if (zusatz) d.append(el('div', 'sh-z', zusatz));
+    n.append(d);
+  };
+
+  feld('sh-now', 'Jetzt',
+    jetzt.length ? jetzt.map(ansage).join(' · ') : 'nichts auf der Bühne',
+    jetzt.length ? 'bis ' + jetzt.map((t) => t.end.slice(11, 16)).join(' / ') : null);
+
+  const nt = naechst && titelVon(naechst.taskId);
+  feld('sh-next', 'Als Nächstes',
+    nt ? ansage(nt) : 'Show zu Ende',
+    nt ? 'in ' + fmtMin(naechst.inMin) + ' · ' + nt.start.slice(11, 16) : null);
+
+  const schlimm = verzug[0];
+  const d = el('div', 'sh-f sh-late');
+  d.classList.toggle('is-late', !!schlimm);
+  d.append(el('div', 'sh-k', 'Verzug'),
+    el('div', 'sh-v', schlimm ? '+' + fmtMin(schlimm.byMin) : 'im Plan'));
+  if (schlimm) d.append(el('div', 'sh-z', schlimm.title + ' — ' + schlimm.message));
+  n.append(d);
+
+  const uhr = el('div', 'sh-f sh-clock');
+  uhr.append(el('div', 'sh-k', 'Uhr'), el('div', 'sh-v', local(toDate(now)).slice(11, 16)));
+  n.append(uhr);
+}
 
 // ── Kontextmenü ─────────────────────────────────────────────────────────────
 function showContext(sel, x, y) {
@@ -354,9 +571,11 @@ function scheduleSave() {
   setSaveState('dirty');
   saveTimer = setTimeout(save, 800);
 }
-function save(loud = false) {
+async function save(loud = false) {
   if (!store) return;
-  const r = repo.save(store.state);
+  // await ist für localStorage folgenlos (synchrones Objekt) und lässt den
+  // PocketBase-Durchschrieb (Promise) sein Ergebnis melden.
+  const r = await repo.save(store.state);
   if (r.ok) {
     store.markSaved();
     setSaveState('saved');
@@ -386,8 +605,8 @@ function refreshChrome() {
 
   const st = gantt.stats();
   $('kpis').innerHTML = [
-    ['Gewerke', st.gewerke],
-    ['Vorgänge', st.total],
+    [ebene === 'show' ? 'Bühnen' : 'Gewerke', st.gewerke],
+    [ebene === 'show' ? 'Programm' : 'Vorgänge', st.total],
     ['läuft', st.run],
     ['Crew', st.crew],
     ['kritisch', st.crit, 'kritisch'],
@@ -402,7 +621,9 @@ function refreshChrome() {
   // Farbton und Schraffur kommen aus palette.js — nie hier zweitverdrahten,
   // sonst weicht die Legende von den Balken ab (genau das ist passiert, als die
   // Palette von 8 auf 9 Töne wuchs).
-  $('legend').innerHTML = [...S.gewerke].sort((a, b) => a.sort - b.sort)
+  // Nur die Bänder der sichtbaren Ebene: eine Legende mit zwanzig Gewerken über
+  // einem Blatt mit zwei Bühnen erklärt nichts, sie verdeckt.
+  $('legend').innerHTML = sichtGewerke(S, ebene, ausBlend)
     .map((g) => `<span class="legend-i"><span class="bz-dot" style="--gw:${gewerkVar(g.slot)}"${gewerkTexture(g.slot) ? ' data-tex="1"' : ''}></span>${escapeHtml(g.name)}</span>`)
     .join('');
 
@@ -412,13 +633,19 @@ function refreshChrome() {
 
 // ── Gewerk anlegen ──────────────────────────────────────────────────────────
 function addGewerk() {
-  if (slotsExhausted(store.state.gewerke.length + 1)) {
-    toast(`Mehr als ${MAX_SLOTS} Gewerke: ab hier trägt die Farbe die Zuordnung nicht mehr, nur noch der Name.`, 'warn', 7000);
+  const buehne = ebene === 'show';
+  const wort = buehne ? 'Bühne' : 'Gewerk';
+  // Je Ebene gezählt: Gewerke und Bühnen teilen sich die Palette nicht, weil sie
+  // nie zusammen zu sehen sind (freeSlot in store.js rechnet ebenso).
+  const da = sichtGewerke(store.state, ebene).length;
+  if (slotsExhausted(da + 1)) {
+    toast(`Mehr als ${MAX_SLOTS} ${wort}e: ab hier trägt die Farbe die Zuordnung nicht mehr, nur noch der Name.`, 'warn', 7000);
   }
-  const name = prompt('Name des Gewerks:');
+  const name = prompt(buehne ? 'Name der Bühne (z. B. Hauptbühne, Zelt, Halle 3):' : 'Name des Gewerks:');
   if (!name) return;
-  const r = store.apply({ type: 'addGewerk', gewerk: { name } });
-  if (r.ok === false) toast(r.error, 'bad');
+  const r = store.apply({ type: 'addGewerk', gewerk: { name, art: buehne ? 'buehne' : 'gewerk' } });
+  if (r.ok === false) return toast(r.error, 'bad');
+  syncBuehnen();
 }
 
 // ── Export / Import ─────────────────────────────────────────────────────────
@@ -777,4 +1004,23 @@ $('theme-toggle').onclick = () => {
 };
 paintModeToggle();
 
-boot();
+// ── Start ─────────────────────────────────────────────────────────────────────
+// Vorgabe: localStorage — exakt wie bisher. Nur mit Flag `?backend=pb` (oder
+// gemerkt in localStorage) wird PocketBase gewählt; dann ist ein Login Pflicht.
+async function main() {
+  if (pbMode()) {
+    localStorage.setItem('bzp_backend', 'pb');
+    if (!isLoggedIn()) return void location.replace('login.html');
+    try {
+      repo = await createRepoPB();
+    } catch (e) {
+      toast('PocketBase nicht erreichbar: ' + (e.message || e), 'bad', 10000);
+      return;
+    }
+    setSession(await resolveSession(repo.getActive()));
+  } else {
+    repo = createRepo(window.localStorage);
+  }
+  boot();
+}
+main();

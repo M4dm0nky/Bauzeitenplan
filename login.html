@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anmelden — Bauzeitenplan</title>
+<link rel="stylesheet" href="styles/base.css?v=0.1.2">
+<link rel="stylesheet" href="styles/themes/console.css?v=0.1.2" id="theme-css" data-theme-name="console">
+<style>
+  body { display: grid; place-items: center; min-height: 100vh; }
+  .auth { width: min(92vw, 360px); background: var(--panel); border: 1px solid var(--rule-2); border-top: 5px solid var(--accent-b); padding: 22px 22px 24px; }
+  .auth h1 { font-family: 'Avenir Next Condensed','Archivo',system-ui,sans-serif; font-size: calc(22px*var(--fs)); text-transform: uppercase; margin: 0 0 2px; }
+  .auth .sub { color: var(--muted); font-size: calc(10px*var(--fs)); margin-bottom: 16px; }
+  .auth label { display: block; font-size: calc(8.5px*var(--fs)); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 10px 0 3px; }
+  .auth input { width: 100%; background: var(--panel2); border: 1px solid var(--rule-2); color: var(--ink); font: inherit; font-size: calc(11px*var(--fs)); padding: 6px 8px; }
+  .auth input:focus { outline: none; border-color: var(--accent); }
+  .auth button { width: 100%; margin-top: 16px; background: var(--accent-b); color: #1b1a17; border: 1px solid var(--accent); font: inherit; font-size: calc(10px*var(--fs)); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; padding: 8px; cursor: pointer; }
+  .auth button:disabled { opacity: .5; cursor: default; }
+  .auth .toggle { margin-top: 14px; text-align: center; font-size: calc(9.5px*var(--fs)); color: var(--accent); cursor: pointer; }
+  .auth .msg { margin-top: 12px; font-size: calc(9.5px*var(--fs)); padding: 6px 8px; display: none; }
+  .auth .msg.bad { display: block; background: color-mix(in srgb, var(--crit) 12%, transparent); color: var(--crit); border: 1px solid var(--crit); }
+  .auth .msg.ok { display: block; background: color-mix(in srgb, var(--accent-b) 14%, transparent); color: var(--accent); }
+  .hd-kicker { font-size: calc(9px*var(--fs)); letter-spacing: .17em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+</style>
+</head>
+<body>
+  <form class="auth" id="form" autocomplete="on">
+    <div class="hd-kicker">Bauzeitenplan</div>
+    <h1 id="title">Anmelden</h1>
+    <div class="sub" id="subtitle">Mit E-Mail und Passwort einloggen.</div>
+
+    <label id="nameLbl" for="name" hidden>Name</label>
+    <input id="name" type="text" autocomplete="name" hidden>
+
+    <label for="email">E-Mail</label>
+    <input id="email" type="email" autocomplete="username" required>
+
+    <label for="password">Passwort</label>
+    <input id="password" type="password" autocomplete="current-password" required minlength="8">
+
+    <button id="submit" type="submit">Anmelden</button>
+    <div class="toggle" id="toggle">Noch kein Konto? Registrieren</div>
+    <div class="msg" id="msg"></div>
+  </form>
+
+<script type="module">
+import { login, isLoggedIn } from './js/auth.js?v=0.1.2';
+import { pbPost, normEmail } from './js/pb.js?v=0.1.2';
+
+// Schon eingeloggt → direkt in die App (PB-Modus).
+if (isLoggedIn()) location.replace('index.html?backend=pb');
+
+const $ = (id) => document.getElementById(id);
+let mode = 'login';
+const msg = (text, kind) => { const m = $('msg'); m.textContent = text; m.className = 'msg ' + (kind || ''); };
+
+$('toggle').onclick = () => {
+  mode = mode === 'login' ? 'register' : 'login';
+  const reg = mode === 'register';
+  $('title').textContent = reg ? 'Konto anlegen' : 'Anmelden';
+  $('subtitle').textContent = reg ? 'Mit der eingeladenen E-Mail registrieren.' : 'Mit E-Mail und Passwort einloggen.';
+  $('submit').textContent = reg ? 'Registrieren' : 'Anmelden';
+  $('toggle').textContent = reg ? 'Schon ein Konto? Anmelden' : 'Noch kein Konto? Registrieren';
+  $('name').hidden = !reg; $('nameLbl').hidden = !reg;
+  $('password').autocomplete = reg ? 'new-password' : 'current-password';
+  msg('', '');
+};
+
+$('form').onsubmit = async (e) => {
+  e.preventDefault();
+  $('submit').disabled = true;
+  const email = normEmail($('email').value);
+  const password = $('password').value;
+  try {
+    if (mode === 'register') {
+      await pbPost('/api/collections/users/records', {
+        email, password, passwordConfirm: password, name: $('name').value.trim(), emailVisibility: true,
+      });
+    }
+    await login(email, password);
+    location.href = 'index.html?backend=pb';
+  } catch (err) {
+    msg(err.status === 400 ? 'E-Mail oder Passwort stimmt nicht (oder E-Mail schon vergeben).' : ('Fehler: ' + err.message), 'bad');
+    $('submit').disabled = false;
+  }
+};
+</script>
+</body>
+</html>

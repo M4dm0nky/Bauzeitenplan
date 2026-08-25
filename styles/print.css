@@ -43,6 +43,12 @@
 }
 .pr-btn-p { background: var(--pr-ink); color: #fff; border-color: var(--pr-ink); font-weight: 600; }
 .pr-hint { font-size: 11px; color: var(--pr-mute); max-width: 300px; line-height: 1.35; }
+.pr-seg { display: flex; gap: 0; }
+.pr-seg .pr-btn { border-radius: 0; }
+.pr-seg .pr-btn:first-child { border-radius: 4px 0 0 4px; }
+.pr-seg .pr-btn:last-child { border-radius: 0 4px 4px 0; border-left: 0; }
+.pr-seg .pr-btn.is-on { background: var(--pr-ink); color: #fff; border-color: var(--pr-ink); font-weight: 600; }
+.pr-seg .pr-btn:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ── Ein Blatt ───────────────────────────────────────────────────────────── */
 .pr-sheets { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 14px; }
@@ -123,4 +129,56 @@
   .pr-sheets { padding: 0; gap: 0; }
   .pr-sheet { box-shadow: none; break-after: page; }
   .pr-sheet:last-child { break-after: auto; }
+}
+
+
+/* ── Running-Order-Blatt ─────────────────────────────────────────────────────
+   Eine Liste, kein Zeitstrahl: Uhrzeit, Programmpunkt, und zwei breite Felder
+   zum Ausfüllen mit dem Stift. Die Zeilenhöhe (--pr-ro-h) rechnet print.js je
+   Blatt, damit siebzehn Zeilen das Papier füllen und fünf keine handbreiten
+   Balken bekommen.
+
+   Leere Felder drucken als LINIE. Ein leerer Kasten sieht aus wie ein Fehler im
+   Satz; eine Linie sagt: hier wird geschrieben. */
+.pr-ro { --pr-ro-h: 12mm; }
+.pr-ro .pr-body { display: flex; flex-direction: column; padding-top: 2mm; }
+.pr-ro-r {
+  display: grid;
+  grid-template-columns: 26mm 92mm 1fr 1fr;
+  gap: 0 4mm;
+  align-items: center;
+  min-height: var(--pr-ro-h);
+  padding: 1mm 0;
+  border-bottom: .2mm solid var(--pr-line);
+  break-inside: avoid;
+}
+.pr-ro-h {
+  min-height: 0; padding: 0 0 1.4mm; border-bottom: .4mm solid var(--pr-ink);
+  font-size: 2.6mm; text-transform: uppercase; letter-spacing: .08em; color: var(--pr-mute);
+}
+
+.pr-ro-z { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.pr-ro-z1 { font-size: 4.6mm; font-weight: 700; line-height: 1.1; }
+.pr-ro-z2 { font-size: 2.6mm; color: var(--pr-mute); }
+.pr-ro-t1 { font-size: 4.2mm; font-weight: 600; line-height: 1.15; }
+.pr-ro-t2 { font-size: 2.6mm; color: var(--pr-mute); margin-top: .4mm; }
+.pr-ro-w { font-size: 3mm; line-height: 1.25; }
+
+/* Ein Umbau ist kein Auftritt — er tritt zurück, verschwindet aber nicht:
+   ohne ihn stünde im Ablauf eine unerklärte Lücke. */
+.pr-ro-r.is-um { min-height: calc(var(--pr-ro-h) * .62); }
+.pr-ro-r.is-um .pr-ro-z1 { font-size: 3.4mm; font-weight: 600; }
+.pr-ro-r.is-um .pr-ro-t1 { font-size: 3.2mm; font-weight: 500; color: var(--pr-mute); }
+
+/* Die Ausfülllinie sitzt auf der Grundlinie der Zeile, nicht mittig — sonst
+   schriebe man drüber. */
+.pr-ro-a.is-leer, .pr-ro-m.is-leer {
+  align-self: stretch;
+  border-bottom: .25mm solid var(--pr-line);
+  margin-bottom: 1.2mm;
+}
+.pr-ro .pr-foot { margin-top: auto; }
+
+@media print {
+  .pr-ro-r { border-bottom-color: #b9bfc8; }
 }

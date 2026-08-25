@@ -10,10 +10,43 @@ import { parseDuration, fmtDuration, local } from './conflicts.js';
 import { toMin, toDate, byStart } from './schedule.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, toInput, STATUS } from './dom.js';
+import { sichtGewerke, PUNKT_TYPEN, amTag } from './ebene.js';
+import { getSession } from './session.js';
+import { canEditTask, canEditField } from './roles.js';
+
+// Ohne Session (localStorage) gibt roles.js alles frei → nichts wird gesperrt.
+function lockRow(tr, t) {
+  const s = getSession();
+  if (!canEditTask(s, t)) {
+    tr.querySelectorAll('input, select, button').forEach((n) => { n.disabled = true; });
+    tr.classList.add('is-locked');
+  } else if (s && !canEditField(s, t, 'gewerk')) {
+    const g = tr.querySelector('.c-gw select'); if (g) g.disabled = true;
+  }
+}
+
+// Die Spalten hängen an der Ebene (js/ebene.js). Sie stehen an EINER Stelle und
+// bestimmen zugleich die Breite der Gruppenköpfe — zwei Listen liefen sonst
+// auseinander und der Kopf säße schief.
+//
+// Der Showablauf trägt vier Spalten mehr: Typ, Soundcheck, Kontakt und die
+// beiden Freitexte, die beim Anlegen des Zeitstrahls direkt mitgetippt werden.
+const SPALTEN = {
+  bau: [['Gewerk', 'c-gw'], ['Vorgang', 'c-title'], ['Start', 'c-start'],
+    ['Dauer', 'c-dur'], ['Ende', 'c-end'], ['Crew', 'c-crew'], ['Status', 'c-st'], ['', 'c-act']],
+  show: [['Bühne', 'c-gw'], ['Programmpunkt', 'c-title'], ['Typ', 'c-typ'], ['Start', 'c-start'],
+    ['Dauer', 'c-dur'], ['Ende', 'c-end'], ['Soundcheck', 'c-sc'], ['Kontakt', 'c-kon'],
+    ['Anforderungen', 'c-anf'], ['Material', 'c-mat'], ['Status', 'c-st'], ['', 'c-act']],
+};
 
 export function createTable(root, { store, onConflicts } = {}) {
   root.classList.add('tb');
   let conflicts = new Map();
+  // Welche Ebene die Tabelle zeigt. Anzeige-Zustand wie `collapsed` — die App
+  // setzt ihn über setEbene(), die Tabelle entscheidet ihn nicht selbst.
+  let ebene = 'bau';
+  let ausBlend = new Set();
+  let tag = null;      // Showablauf: der gezeigte Kalendertag (null = alle)
   // Eingeklappte Elternvorgänge (deren Untervorgänge verborgen sind). Tabellen-
   // eigener Anzeige-Zustand — kein Store-Belang, überlebt das render() hier.
   const collapsed = new Set();
@@ -24,20 +57,25 @@ export function createTable(root, { store, onConflicts } = {}) {
     root.replaceChildren();
 
     const table = el('table', 'tb-t');
+    // Eigener Attributname: `data-ebene` gehört dem Umschalter in der Kopfzeile.
+    // Mit demselben Namen setzte app.js hier ein `aria-pressed` auf die Tabelle,
+    // und jeder Selektor auf den Umschalter traf zwei Knoten.
+    table.dataset.tbEbene = ebene;
+    const spalten = SPALTEN[ebene] || SPALTEN.bau;
+    const breite = spalten.length;
     const thead = el('thead');
     const hr = el('tr');
-    for (const [label, cls] of [['Gewerk', 'c-gw'], ['Vorgang', 'c-title'], ['Start', 'c-start'],
-      ['Dauer', 'c-dur'], ['Ende', 'c-end'], ['Crew', 'c-crew'], ['Status', 'c-st'], ['', 'c-act']]) {
-      hr.append(el('th', cls, label));
-    }
+    for (const [label, cls] of spalten) hr.append(el('th', cls, label));
     thead.append(hr);
     table.append(thead);
 
     const tbody = el('tbody');
-    const gewerke = [...S.gewerke].sort((a, b) => a.sort - b.sort);
+    const gewerke = sichtGewerke(S, ebene, ausBlend);
 
     for (const g of gewerke) {
-      const all = S.tasks.filter((t) => t.gewerk === g.id);
+      // Denselben Tagesausschnitt wie der Gantt — sonst zeigt derselbe Plan in
+      // zwei Ansichten zwei verschiedene Tage.
+      const all = amTag(S.tasks.filter((t) => t.gewerk === g.id), ebene === 'show' ? tag : null);
       const tops = all.filter((t) => t.parent == null).sort(byStart);
       const kidsOf = (id) => all.filter((t) => t.parent === id).sort(byStart);
 
@@ -45,16 +83,21 @@ export function createTable(root, { store, onConflicts } = {}) {
       const gr = el('tr', 'tb-group');
       gr.dataset.gewerk = g.id;
       const gc = el('td');
-      gc.colSpan = 8;
+      gc.colSpan = breite;
       const grip = el('span', 'tb-drag', '⠿');
-      grip.title = 'Ziehen, um das Gewerk umzusortieren';
+      grip.title = ebene === 'show' ? 'Ziehen, um die Bühne umzusortieren' : 'Ziehen, um das Gewerk umzusortieren';
       grip.setAttribute('aria-hidden', 'true');
       const dot = el('span', 'bz-dot');
       dot.style.setProperty('--gw', gewerkVar(g.slot));
       if (gewerkTexture(g.slot)) dot.dataset.tex = '1';
-      gc.append(grip, dot, el('span', 'tb-gname', g.name), el('span', 'tb-gcount', all.length + (all.length === 1 ? ' Vorgang' : ' Vorgänge')));
-      const add = el('button', 'tb-add', '+ Vorgang');
+      const wort = ebene === 'show'
+        ? (all.length === 1 ? ' Programmpunkt' : ' Programmpunkte')
+        : (all.length === 1 ? ' Vorgang' : ' Vorgänge');
+      gc.append(grip, dot, el('span', 'tb-gname', g.name), el('span', 'tb-gcount', all.length + wort));
+      const add = el('button', 'tb-add', ebene === 'show' ? '+ Programmpunkt' : '+ Vorgang');
       add.onclick = () => addRow(g.id, tops[tops.length - 1]);
+      // Neue Vorgänge nur, wo man dieses Gewerk bearbeiten darf.
+      if (!canEditTask(getSession(), { gewerk: g.id })) add.disabled = true;
       gc.append(add);
       gr.append(gc);
       tbody.append(gr);
@@ -70,17 +113,30 @@ export function createTable(root, { store, onConflicts } = {}) {
       }
       if (!tops.length) {
         const er = el('tr', 'tb-empty');
-        const ec = el('td'); ec.colSpan = 8;
+        const ec = el('td'); ec.colSpan = breite;
         ec.textContent = 'Noch nichts eingetragen.';
         er.append(ec); tbody.append(er);
       }
     }
 
-    // Projekt-Meilensteine
-    const proj = S.tasks.filter((t) => t.gewerk === 'projekt').sort(byStart);
+    // Ohne ein einziges Band ist die Tabelle kein Editor, sondern eine leere
+    // Seite ohne Ausweg. Im Showablauf ist das der Normalfall beim ersten
+    // Öffnen — die Bühne muss erst angelegt werden.
+    if (!gewerke.length) {
+      const er = el('tr', 'tb-empty');
+      const ec = el('td'); ec.colSpan = breite;
+      ec.textContent = ebene === 'show'
+        ? 'Noch keine Bühne angelegt.'
+        : 'Noch kein Gewerk angelegt.';
+      er.append(ec); tbody.append(er);
+    }
+
+    // Projekt-Meilensteine. Sie gehören zum Bauzeitenplan; im Showablauf hat der
+    // Tag seine eigenen Marken (Doors, Show-Ende).
+    const proj = ebene === 'bau' ? S.tasks.filter((t) => t.gewerk === 'projekt').sort(byStart) : [];
     if (proj.length) {
       const gr = el('tr', 'tb-group');
-      const gc = el('td'); gc.colSpan = 8;
+      const gc = el('td'); gc.colSpan = breite;
       gc.append(el('span', 'tb-gname', 'Zieltermine'));
       gr.append(gc); tbody.append(gr);
       for (const t of proj) tbody.append(row(t, gewerke));
@@ -163,6 +219,24 @@ export function createTable(root, { store, onConflicts } = {}) {
     }
     tr.append(ti);
 
+    // ── Typ (nur Showablauf) ──
+    // Steuert allein die Darstellung und die Live-Ansage: ein Changeover wird
+    // als «Umbau» angesagt, nicht als Act. An den Zeiten ändert er nie etwas.
+    if (ebene === 'show') {
+      const ty = el('td', 'c-typ');
+      const tsel = el('select');
+      for (const [v, label] of PUNKT_TYPEN) {
+        const o = el('option', null, label);
+        o.value = v;
+        if (v === (t.punktTyp || 'act')) o.selected = true;
+        tsel.append(o);
+      }
+      tsel.setAttribute('aria-label', 'Art des Programmpunkts');
+      tsel.onchange = () => send({ type: 'setTaskField', id: t.id, field: 'punktTyp', value: tsel.value });
+      ty.append(tsel);
+      tr.append(ty);
+    }
+
     // ── Start ──
     const st = el('td', 'c-start');
     const sin = el('input');
@@ -221,22 +295,67 @@ export function createTable(root, { store, onConflicts } = {}) {
     en.append(ein);
     tr.append(en);
 
-    // ── Crew ──
-    const cr = el('td', 'c-crew');
-    const cin = el('input');
-    cin.type = 'number';
-    cin.min = '0';
-    cin.value = t.crew ?? '';
-    cin.setAttribute('aria-label', 'Crew');
-    commitOn(cin, () => {
-      const now = cur(t.id);
-      if (!now) return;
-      const v = cin.value === '' ? null : Math.max(0, parseInt(cin.value, 10) || 0);
-      if (v === now.crew) return;
-      send({ type: 'setTaskField', id: t.id, field: 'crew', value: v });
-    });
-    cr.append(cin);
-    tr.append(cr);
+    if (ebene === 'show') {
+      // ── Soundcheck ──
+      // Als volle Zeitangabe, nicht als blanke Uhrzeit: ein Soundcheck um 09:30
+      // ohne Datum ist an einem zweitägigen Festival mehrdeutig.
+      const sc = el('td', 'c-sc');
+      const scin = el('input');
+      scin.type = 'datetime-local';
+      scin.value = toInput(t.soundcheck || '');
+      scin.setAttribute('aria-label', 'Soundcheck');
+      commitOn(scin, () => {
+        const now = cur(t.id);
+        if (!now || scin.value === toInput(now.soundcheck || '')) return;
+        send({ type: 'setTaskField', id: t.id, field: 'soundcheck', value: scin.value });
+      });
+      sc.append(scin);
+      tr.append(sc);
+
+      // ── Kontakt · Anforderungen · Material ──
+      // Drei Freitexte, die beim Anlegen des Zeitstrahls direkt mitgetippt
+      // werden. Sie gehen denselben Weg wie jedes andere Feld: über den Store,
+      // also mit ⌘Z, Auto-Save und JSON-Export.
+      //
+      // OHNE Platzhaltertext. Ein «z. B. 2× Wedge» in siebzehn Zeilen sieht aus
+      // wie siebzehnmal eingetragener Inhalt — auf dem ersten Probebild war
+      // SIDOs echtes «1 Riser 2×1 m» zwischen den Beispielen nicht zu finden.
+      // Was die Spalte will, sagt ihre Überschrift.
+      for (const [feld, cls, aria] of [
+        ['kontakt', 'c-kon', 'Kontakt'],
+        ['anforderungen', 'c-anf', 'Anforderungen'],
+        ['material', 'c-mat', 'Benötigtes Material'],
+      ]) {
+        const td = el('td', cls);
+        const inp = el('input');
+        inp.value = t[feld] || '';
+        inp.setAttribute('aria-label', aria);
+        commitOn(inp, () => {
+          const now = cur(t.id);
+          if (!now || inp.value === (now[feld] || '')) return;
+          send({ type: 'setTaskField', id: t.id, field: feld, value: inp.value });
+        });
+        td.append(inp);
+        tr.append(td);
+      }
+    } else {
+      // ── Crew ──
+      const cr = el('td', 'c-crew');
+      const cin = el('input');
+      cin.type = 'number';
+      cin.min = '0';
+      cin.value = t.crew ?? '';
+      cin.setAttribute('aria-label', 'Crew');
+      commitOn(cin, () => {
+        const now = cur(t.id);
+        if (!now) return;
+        const v = cin.value === '' ? null : Math.max(0, parseInt(cin.value, 10) || 0);
+        if (v === now.crew) return;
+        send({ type: 'setTaskField', id: t.id, field: 'crew', value: v });
+      });
+      cr.append(cin);
+      tr.append(cr);
+    }
 
     // ── Status ──
     const stt = el('td', 'c-st');
@@ -280,11 +399,13 @@ export function createTable(root, { store, onConflicts } = {}) {
       sub.title = 'Untervorgang hinzufügen';
       sub.setAttribute('aria-label', 'Untervorgang hinzufügen');
       sub.onclick = () => addSub(t.id, kidsOfLast(t.id));
+      if (!canEditTask(getSession(), { gewerk: t.gewerk })) sub.disabled = true;
       ac.append(sub);
     }
     ac.append(msb, del);
     tr.append(ac);
 
+    lockRow(tr, t);
     return tr;
   }
 
@@ -316,12 +437,17 @@ export function createTable(root, { store, onConflicts } = {}) {
   // Neue Zeile unter dem letzten Vorgang des Gewerks: schließt zeitlich an,
   // 2h Vorgabe. So tippt man eine Kette runter, ohne Daten einzugeben.
   function addRow(gewerkId, after) {
-    if (gewerkId === 'projekt') gewerkId = store.state.gewerke[0] && store.state.gewerke[0].id;
+    const sichtbar = sichtGewerke(store.state, ebene, ausBlend);
+    if (gewerkId === 'projekt') gewerkId = sichtbar[0] && sichtbar[0].id;
     if (!gewerkId) return;
     const start = after ? after.end : defaultStart();
     const r = send({
       type: 'addTask',
-      task: { gewerk: gewerkId, title: 'Neuer Vorgang', start, end: local(toDate(toMin(start) + 120)) },
+      task: {
+        gewerk: gewerkId,
+        title: ebene === 'show' ? 'Neuer Programmpunkt' : 'Neuer Vorgang',
+        start, end: local(toDate(toMin(start) + 120)),
+      },
     });
     if (r && r.id) {
       requestAnimationFrame(() => {
@@ -333,6 +459,14 @@ export function createTable(root, { store, onConflicts } = {}) {
 
   function defaultStart() {
     const S = store.state;
+    if (ebene === 'show') {
+      // Eine neue Bühne soll am Showtag beginnen, nicht am Projektanfang zwei
+      // Wochen davor. Also am letzten schon eingetragenen Programmpunkt
+      // anschließen — egal auf welcher Bühne; die Showtage sind dieselben.
+      const letzte = sichtGewerke(S, 'show').map((g) => g.id);
+      const punkte = S.tasks.filter((t) => letzte.includes(t.gewerk)).sort(byStart).pop();
+      if (punkte) return toInput(punkte.start);
+    }
     const ph = (S.phases || []).find((p) => /aufbau|load/i.test(p.name));
     return toInput(ph ? ph.start : S.project.start);
   }
@@ -410,7 +544,10 @@ export function createTable(root, { store, onConflicts } = {}) {
     try { root.releasePointerCapture(e.pointerId); } catch (_) { /* egal */ }
     // Nur schicken, wenn es die Reihenfolge wirklich ändert — sonst gäbe der
     // Store ein „Steht schon dort." zurück und würde als Fehler getoastet.
-    const list = [...store.state.gewerke].sort((a, b) => a.sort - b.sort).map((g) => g.id);
+    // Nur die Bänder DIESER Ebene: die Gruppenköpfe zeigen nur sie, und ein
+    // Gewerk aus der anderen Ebene als „steht schon dort" mitzuzählen ergäbe
+    // eine falsche Nachbarschaft.
+    const list = sichtGewerke(store.state, ebene, ausBlend).map((g) => g.id);
     const curBefore = list[list.indexOf(id) + 1] ?? null;
     if (before !== id && before !== curBefore) send({ type: 'moveGewerk', id, before });
   });
@@ -419,6 +556,14 @@ export function createTable(root, { store, onConflicts } = {}) {
 
   return {
     render,
+    /** Ebene wechseln — die App entscheidet, die Tabelle zeigt. */
+    setEbene(name, aus = new Set(), showTag = null) {
+      ebene = name;
+      ausBlend = new Set(aus);
+      tag = name === 'show' ? showTag : null;
+      collapsed.clear();   // Eingeklapptes der anderen Ebene sagt hier nichts
+    },
+    get ebene() { return ebene; },
     setConflicts(list) { conflicts = new Map(list.map((c) => [c.taskId, c])); },
     get lastError() { return lastError; },
     focusFirst() {

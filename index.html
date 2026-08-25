@@ -74,10 +74,21 @@
     </div>
 
     <div class="hd-row hd-bar">
+      <!-- Ebene vor Ansicht: erst WAS man plant (die ganze Veranstaltung oder
+           den Ablauf auf den Bühnen), dann WIE man es ansieht. -->
+      <div class="seg seg-ebene" role="group" aria-label="Ebene">
+        <button data-ebene="bau">Bauzeitenplan</button>
+        <button data-ebene="show">Showablauf</button>
+      </div>
+
       <div class="seg" role="group" aria-label="Ansicht">
         <button data-view="gantt">Gantt</button>
         <button data-view="tabelle">Tabelle</button>
       </div>
+
+      <!-- Bühnen-Häkchen. Nur im Showablauf sichtbar; das Wegklicken ändert
+           Zeilen UND Maßstab, nicht bloß die Sichtbarkeit. -->
+      <div class="buehnen" id="buehnen" hidden></div>
 
       <div class="hd-zoom">
         <div class="seg" role="group" aria-label="Zoomstufe">
@@ -125,6 +136,11 @@
 
     <div class="legend" id="legend"></div>
   </header>
+
+  <!-- Live-Kopfzeile des Showablaufs: was läuft, was kommt, wie weit hängen wir.
+       Groß genug für einen Monitor am FOH — die schmale Live-Leiste oben in der
+       Werkzeugzeile trägt dieselbe Information für den Bauzeitenplan. -->
+  <div class="showhead" id="showhead" hidden></div>
 
   <div class="work">
     <div class="bz" id="bz" tabindex="-1"></div>

@@ -39,7 +39,10 @@ export function migrate(plan) {
 
   // Der Farbplatz ist Identität und muss stabil sein — beim Umsortieren darf
   // sich nichts umfärben. Bestandsdaten bekommen ihn aus der Reihenfolge.
-  p.gewerke.forEach((g, i) => { g.slot ??= i; g.sort ??= i; });
+  // `art` trennt die beiden Ebenen (js/ebene.js): Gewerke tragen den
+  // Bauzeitenplan, Bühnen den Showablauf. Altpläne kennen das Feld nicht und
+  // sind deshalb durchweg Gewerke — der Bauzeitenplan sieht aus wie immer.
+  p.gewerke.forEach((g, i) => { g.slot ??= i; g.sort ??= i; g.art = g.art === 'buehne' ? 'buehne' : 'gewerk'; });
 
   for (const t of p.tasks) {
     t.milestone = !!t.milestone;
@@ -59,6 +62,19 @@ export function migrate(plan) {
     // drei Wochen niemand mehr, welcher Balken eine Zahl aus dem Plan ist und
     // welcher eine Annahme.
     t.estimated = !!t.estimated;
+    // Showablauf-Felder. Sie stehen an JEDEM Vorgang, gezeigt werden sie nur in
+    // der Showablauf-Ebene — ein Aufbauschritt hat halt keine Anforderungen.
+    // Hier normalisiert, damit kein `undefined` in den Export gerät: ein Feld,
+    // das mal da ist und mal nicht, ist beim Diff zweier Sicherungen Rauschen.
+    //
+    // `kontakt` ist bewusst NICHT das vorhandene `crew`: das ist eine Zahl und
+    // wird in den Kennzahlen aufsummiert. Ein Tourmanager namens «Max» hätte
+    // dort still eine NaN-Summe erzeugt.
+    t.punktTyp ??= 'act';
+    t.anforderungen ??= '';
+    t.material ??= '';
+    t.soundcheck ??= '';
+    t.kontakt ??= '';
   }
   for (const d of p.deps) {
     d.type ??= 'FS';

@@ -8,6 +8,8 @@ import { toMin, toDate, computeSchedule, candidateGroups } from './schedule.js';
 import { gewerkVar, gewerkTexture, HUES, MAX_SLOTS } from './palette.js';
 import { fmtFloat } from './timeaxis.js';
 import { el, toInput, STATUS } from './dom.js';
+import { getSession } from './session.js';
+import { canEditTask, canEditField, canEditStructure } from './roles.js';
 
 const DEP_TYPES = [
   ['FS', 'Ende → Start'], ['SS', 'Start → Start'],
@@ -49,6 +51,24 @@ export function createInspector(root, { store, onError, onClose } = {}) {
 
     if (sel.kind === 'gewerk') renderGewerk();
     else renderTask();
+    lockPanel();
+  }
+
+  // UI-Sperre nach Rolle. Ohne Session (localStorage) gibt roles.js alles frei.
+  function lockPanel() {
+    const s = getSession();
+    if (!s || !sel) return;
+    const disableAll = (root) => root.querySelectorAll('input, select, textarea, button')
+      .forEach((n) => { if (!n.classList.contains('ins-x')) n.disabled = true; });
+
+    if (sel.kind === 'gewerk') { if (!canEditStructure(s)) disableAll(root); return; }
+    const t = cur(sel.id);
+    if (!t) return;
+    if (!canEditTask(s, t)) { disableAll(root); return; }
+    if (!canEditField(s, t, 'gewerk')) { const g = root.querySelector('select'); if (g) g.disabled = true; }
+    // Verknüpfungen sind Struktur → für Leads gesperrt.
+    if (!canEditStructure(s)) root.querySelectorAll('.ins-dep-t, .ins-dep-l, .ins-dep-x, .ins-dep-add')
+      .forEach((n) => { n.disabled = true; });
   }
 
   // ── Gewerk ────────────────────────────────────────────────────────────────

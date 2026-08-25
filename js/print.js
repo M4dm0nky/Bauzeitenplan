@@ -17,6 +17,7 @@ import { ticksFor, fmtDay } from './timeaxis.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { local } from './conflicts.js';
 import { el, $ } from './dom.js';
+import { sichtGewerke, typHinweis } from './ebene.js';
 import { VERSION } from './version.js';
 
 // Mitgelieferte Pläne — dieselben Kennungen wie in app.js.
@@ -82,7 +83,10 @@ const p2 = (n) => String(n).padStart(2, '0');
 const hhmm = (h) => p2(Math.floor(h)) + ':' + p2(Math.round((h % 1) * 60));
 
 let PLAN = null;
-const wahl = { gewerke: new Set(), von: null, bis: null, fenster: null, autoFenster: true };
+// `ebene` entscheidet, WAS gedruckt wird: das Gantt-Tagesblatt des
+// Bauzeitenplans oder die Running-Order-Liste einer Bühne (js/ebene.js).
+// Beide teilen sich Tagesauswahl und Blattformat, sonst nichts.
+const wahl = { ebene: 'bau', gewerke: new Set(), von: null, bis: null, fenster: null, autoFenster: true };
 
 async function ladePlan() {
   const key = new URLSearchParams(location.search).get('plan');
@@ -106,14 +110,50 @@ async function ladePlan() {
 
 const gewaehlteTasks = () => PLAN.tasks.filter((t) => wahl.gewerke.has(t.gewerk));
 
+/** Die Bänder der aktiven Ebene — Gewerke oder Bühnen. */
+const baender = () => sichtGewerke(PLAN, wahl.ebene);
+
+/**
+ * Beim Ebenenwechsel den Tagesbereich neu setzen: der Bauzeitenplan läuft über
+ * zwei Wochen, die Running Order über zwei Tage. Bliebe der Bereich stehen,
+ * druckte man zwölf leere Blätter.
+ */
+function ebeneWechseln(name) {
+  wahl.ebene = name;
+  wahl.gewerke = new Set(baender().map((g) => g.id));
+  const drin = gewaehlteTasks();
+  if (drin.length) {
+    wahl.von = local(toDate(Math.min(...drin.map((t) => toMin(t.start))))).slice(0, 10);
+    wahl.bis = local(toDate(Math.max(...drin.map((t) => toMin(t.end))))).slice(0, 10);
+  }
+  wahl.autoFenster = true;
+  zeichne();
+}
+
 function baueSteuerung() {
   const c = $('ctl');
   c.replaceChildren();
 
+  const show = wahl.ebene === 'show';
   const kopf = el('div', 'pr-f');
   kopf.append(el('h1', null, PLAN.project.name),
-    el('div', 'pr-sub', 'Tagesblätter · A3 quer · ein Blatt je Tag'));
+    el('div', 'pr-sub', show
+      ? 'Running Order · A3 quer · ein Blatt je Tag und Bühne'
+      : 'Tagesblätter · A3 quer · ein Blatt je Tag'));
   c.append(kopf);
+
+  // Ebene zuerst: sie entscheidet, was die Regler darunter überhaupt bedeuten.
+  const seg = el('div', 'pr-seg');
+  for (const [key, label] of [['bau', 'Tagesblätter'], ['show', 'Running Order']]) {
+    const b = el('button', 'pr-btn' + (wahl.ebene === key ? ' is-on' : ''), label);
+    b.disabled = key === 'show' && !sichtGewerke(PLAN, 'show').length;
+    if (b.disabled) b.title = 'Dieser Plan hat noch keine Bühne.';
+    b.onclick = () => ebeneWechseln(key);
+    seg.append(b);
+  }
+  const segWrap = el('div', 'pr-f');
+  segWrap.append(el('span', null, 'Ebene'), seg);
+  c.append(segWrap);
 
   const feld = (label, node) => { const w = el('label', 'pr-f'); w.append(el('span', null, label), node); return w; };
 
@@ -125,7 +165,7 @@ function baueSteuerung() {
 
   // Gewerke wegklicken — der wichtigste Regler: er bestimmt auch den Maßstab.
   const box = el('div', 'pr-gw');
-  for (const g of [...PLAN.gewerke].sort((a, b) => a.sort - b.sort)) {
+  for (const g of baender()) {
     const l = el('label');
     const cb = el('input'); cb.type = 'checkbox'; cb.checked = wahl.gewerke.has(g.id);
     cb.onchange = () => { cb.checked ? wahl.gewerke.add(g.id) : wahl.gewerke.delete(g.id); zeichne(); };
@@ -135,14 +175,28 @@ function baueSteuerung() {
     box.append(l);
   }
   const alle = el('button', 'pr-btn', 'alle');
-  alle.onclick = () => { PLAN.gewerke.forEach((g) => wahl.gewerke.add(g.id)); zeichne(); };
+  alle.onclick = () => { baender().forEach((g) => wahl.gewerke.add(g.id)); zeichne(); };
   const keins = el('button', 'pr-btn', 'keins');
   keins.onclick = () => { wahl.gewerke.clear(); zeichne(); };
   const gwWrap = el('div', 'pr-f');
-  gwWrap.append(el('span', null, 'Gewerke'), box);
+  gwWrap.append(el('span', null, show ? 'Bühnen' : 'Gewerke'), box);
   c.append(gwWrap, feld(' ', (() => { const d = el('div'); d.append(alle, ' ', keins); return d; })()));
 
   // Zeitfenster: Vorgabe automatisch aus der Auswahl, von Hand übersteuerbar.
+  // Die Running-Order-Liste kennt keinen Maßstab — sie ist eine Liste, kein
+  // Zeitstrahl. Die Regler wären dort ohne Wirkung und damit irreführend.
+  if (!show) baueFenster(c, feld);
+
+  const drucken = el('button', 'pr-btn pr-btn-p', 'Drucken');
+  drucken.onclick = () => window.print();
+  c.append(feld(' ', drucken));
+  c.append(el('div', 'pr-hint', show
+    ? 'Im Druckdialog A3 · Querformat wählen. Leere Felder drucken als Linien zum Ausfüllen mit dem Stift.'
+    : 'Im Druckdialog A3 · Querformat wählen und „Hintergrundgrafiken" einschalten — '
+      + 'sonst drucken die Balken weiß. Ränder: Standard.'));
+}
+
+function baueFenster(c, feld) {
   const f = wahl.fenster;
   const tv = el('input'); tv.type = 'time'; tv.step = 3600; tv.value = hhmm(f.von);
   const tb = el('input'); tb.type = 'time'; tb.step = 3600; tb.value = f.bis === 24 ? '23:59' : hhmm(f.bis);
@@ -155,13 +209,6 @@ function baueSteuerung() {
   const auto = el('button', 'pr-btn', 'automatisch');
   auto.onclick = () => { wahl.autoFenster = true; zeichne(); };
   c.append(feld('Zeitfenster ab', tv), feld('bis', tb), feld(' ', auto));
-
-  const drucken = el('button', 'pr-btn pr-btn-p', 'Drucken');
-  drucken.onclick = () => window.print();
-  c.append(feld(' ', drucken));
-  c.append(el('div', 'pr-hint',
-    'Im Druckdialog A3 · Querformat wählen und „Hintergrundgrafiken" einschalten — '
-    + 'sonst drucken die Balken weiß. Ränder: Standard.'));
 }
 
 function zeichne() {
@@ -172,7 +219,123 @@ function zeichne() {
 
   const wrap = $('sheets');
   wrap.replaceChildren();
+
+  if (wahl.ebene === 'show') {
+    // Ein Blatt je Tag UND Bühne: zwei Bühnen an zwei Tagen sind vier Blätter.
+    // Leere Kombinationen fallen weg — ein Blatt für eine Bühne, die an diesem
+    // Tag nicht bespielt wird, ist Papierverschwendung.
+    const blaetter = [];
+    for (const tag of tage) {
+      for (const b of baender()) {
+        if (!wahl.gewerke.has(b.id)) continue;
+        const drauf = tagesScheiben(tasks.filter((t) => t.gewerk === b.id), tag);
+        if (drauf.length) blaetter.push({ tag, b, drauf });
+      }
+    }
+    if (!blaetter.length) {
+      wrap.append(el('div', 'pr-sheet', '')).lastChild
+        .append(el('div', 'pr-leer', 'Für die gewählten Bühnen und Tage ist nichts eingetragen.'));
+      return;
+    }
+    blaetter.forEach((x, i) => wrap.append(roBlatt(x, i + 1, blaetter.length)));
+    return;
+  }
+
   tage.forEach((tag, i) => wrap.append(blatt(tag, tasks, i + 1, tage.length)));
+}
+
+// ── Running-Order-Blatt ─────────────────────────────────────────────────────
+// Eine LISTE, kein Zeitstrahl. Genau so liest man einen Showablauf: von oben
+// nach unten, Uhrzeit voran. Ein Gantt über zehn Stunden mit siebzehn Zeilen
+// wäre auf Papier nur ein Streifenmuster — und die Felder, die von Hand
+// ausgefüllt werden sollen, hätten keinen Platz.
+//
+// Anforderungen und Material sind der Zweck des Blattes. Sind sie leer, drucken
+// sie als Linien: das Blatt geht mit auf die Bühne und wird dort beschrieben.
+function roBlatt({ tag, b, drauf }, nr, gesamt) {
+  const sheet = el('section', 'pr-sheet pr-ro');
+  sheet.dataset.tag = tag;
+  sheet.dataset.buehne = b.id;
+
+  const head = el('div', 'pr-head');
+  const d = new Date(tag + 'T12:00');
+  head.append(el('span', 'pr-head-t', PLAN.project.name + ' · ' + b.name));
+  head.append(el('span', 'pr-head-d', fmtDay(d) + ' ' + d.getFullYear()));
+  head.append(el('span', 'pr-head-n', 'Blatt ' + nr + ' von ' + gesamt));
+  sheet.append(head);
+
+  const body = el('div', 'pr-body');
+
+  const kopf = el('div', 'pr-ro-r pr-ro-h');
+  for (const [label, cls] of [['Zeit', 'pr-ro-z'], ['Programmpunkt', 'pr-ro-t'],
+    ['Anforderungen', 'pr-ro-a'], ['Benötigtes Material', 'pr-ro-m']]) {
+    kopf.append(el('div', cls, label));
+  }
+  body.append(kopf);
+
+  // Zeilenhöhe füllt das Blatt — aber nur bis zu einer Höhe, in der Handschrift
+  // Platz hat, und nicht unter die Lesbarkeitsgrenze. Der Rest unten bleibt frei
+  // für Notizen; das ist gewollt, kein Fehler im Satz.
+  //
+  // Gewichtet gerechnet: eine Umbauzeile ist 0,62 hoch (siehe print.css). Zählte
+  // man nur Zeilen, blieb bei siebzehn Punkten ein Viertel des Blattes leer,
+  // weil die Hälfte davon Umbauten sind.
+  const platzMM = 277 - 10 - 6 - 12;
+  const UM = 0.62;
+  const gewicht = drauf.reduce((n, s) => n + ((s.task.punktTyp || 'act') === 'changeover' ? UM : 1), 1);
+  const hoehe = Math.max(6, Math.min(18, platzMM / gewicht));
+  sheet.style.setProperty('--pr-ro-h', hoehe.toFixed(2) + 'mm');
+
+  for (const s of drauf) {
+    const t = s.task;
+    const r = el('div', 'pr-ro-r');
+    r.dataset.typ = t.punktTyp || 'act';
+    // Umbauten treten zurück: auf dem Blatt zählt, wer spielt.
+    if ((t.punktTyp || 'act') === 'changeover') r.classList.add('is-um');
+
+    const a = toDate(s.von), e = toDate(s.bis);
+    const zeit = el('div', 'pr-ro-z');
+    zeit.append(el('span', 'pr-ro-z1', p2(a.getHours()) + ':' + p2(a.getMinutes())));
+    if (!t.milestone) {
+      zeit.append(el('span', 'pr-ro-z2',
+        'bis ' + (s.schnittRechts ? '›' : '') + p2(e.getHours()) + ':' + p2(e.getMinutes())));
+    }
+    r.append(zeit);
+
+    const titel = el('div', 'pr-ro-t');
+    titel.append(el('div', 'pr-ro-t1', t.title));
+    // Typ, Kontakt und Soundcheck stehen klein unter dem Namen — je eine Zeile
+    // mehr wäre eine Spalte, die meistens leer ist.
+    const unten = [];
+    const typ = typHinweis(t);
+    if (typ) unten.push(typ);
+    if (t.kontakt) unten.push(t.kontakt);
+    if (t.soundcheck) unten.push('SC ' + String(t.soundcheck).slice(11, 16));
+    const no = notizFuerDruck(t.notes);
+    if (no) unten.push(no);
+    if (unten.length) titel.append(el('div', 'pr-ro-t2', unten.join(' · ')));
+    r.append(titel);
+
+    for (const [feld, cls] of [['anforderungen', 'pr-ro-a'], ['material', 'pr-ro-m']]) {
+      const c = el('div', cls);
+      const wert = (t[feld] || '').trim();
+      if (wert) c.append(el('span', 'pr-ro-w', wert));
+      else c.classList.add('is-leer');   // druckt als Linie zum Ausfüllen
+      r.append(c);
+    }
+    body.append(r);
+  }
+
+  sheet.append(body, roFuss(b));
+  return sheet;
+}
+
+function roFuss(b) {
+  const f = el('div', 'pr-foot');
+  const q = PLAN.project.quelle || {};
+  f.append(el('div', 'pr-leg', b.name),
+    el('div', null, 'CallBoard · v' + VERSION + (q.exported ? ' · Stand ' + q.exported.slice(0, 10) : '')));
+  return f;
 }
 
 function blatt(tag, tasks, nr, gesamt) {
@@ -221,7 +384,7 @@ function blatt(tag, tasks, nr, gesamt) {
   // ── Zeilen ──
   const body = el('div', 'pr-body');
   const zeilen = [];       // {kind:'grp'|'row', …}
-  for (const g of [...PLAN.gewerke].sort((a, b) => a.sort - b.sort)) {
+  for (const g of baender()) {
     const scheiben = tagesScheiben(tasks.filter((t) => t.gewerk === g.id), tag)
       // Zweiter Zuschnitt auf das gewählte Fenster: wer es von Hand enger stellt,
       // soll keine Balken außerhalb des Blattes erzeugen.
@@ -342,7 +505,7 @@ function zeitText(zeile) {
 function fuss() {
   const f = el('div', 'pr-foot');
   const leg = el('div', 'pr-leg');
-  for (const g of [...PLAN.gewerke].sort((a, b) => a.sort - b.sort)) {
+  for (const g of baender()) {
     if (!wahl.gewerke.has(g.id)) continue;
     const s = el('span', 'pr-leg-i');
     const i = el('i');
@@ -358,10 +521,12 @@ function fuss() {
 // ── Start ───────────────────────────────────────────────────────────────────
 ladePlan().then((plan) => {
   PLAN = plan;
-  PLAN.gewerke.forEach((g) => wahl.gewerke.add(g.id));
-  const alle = PLAN.tasks.map((t) => toMin(t.start));
+  const q = new URLSearchParams(location.search).get('ebene');
+  if (q === 'show' && sichtGewerke(PLAN, 'show').length) wahl.ebene = 'show';
+  baender().forEach((g) => wahl.gewerke.add(g.id));
+  const alle = gewaehlteTasks().map((t) => toMin(t.start));
   const min = alle.length ? Math.min(...alle) : toMin(PLAN.project.start);
-  const max = alle.length ? Math.max(...PLAN.tasks.map((t) => toMin(t.end))) : toMin(PLAN.project.end);
+  const max = alle.length ? Math.max(...gewaehlteTasks().map((t) => toMin(t.end))) : toMin(PLAN.project.end);
   wahl.von = local(toDate(min)).slice(0, 10);
   wahl.bis = local(toDate(max)).slice(0, 10);
   wahl.fenster = { von: 0, bis: 24 };
