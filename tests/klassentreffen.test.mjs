@@ -129,6 +129,21 @@ test('Container-Zeilen tragen die volle Stückliste in der Notiz', () => {
     assert.match(t.notes, /^Wölkchen · /, t.title + ' @ ' + t.start);
   }
 });
+test('die in V07 vergessene Klammer am 03.09. ist gesetzt und vermerkt', () => {
+  // V07 druckt «… stagecrew, IT, ME» ohne schließende Klammer. Sechs Namen für
+  // 6x Solocontainer, alle vorher angeliefert (21.08. fünf, 22.08. ME) — es
+  // fehlt also nichts, die Klammer wurde vergessen. Auf Ansage geschlossen.
+  const t = on('Abholung Container', '2026-09-03');
+  assert.match(t.notes, /IT, ME\)/, 'Klammer nicht geschlossen');
+  assert.match(t.notes, /schließende Klammer in V07 nicht gedruckt/, 'Eingriff nicht vermerkt');
+});
+test('jede Klammer in den Stücklisten ist ausgeglichen', () => {
+  for (const t of plan.tasks) {
+    const auf = (t.notes.match(/\(/g) || []).length;
+    const zu = (t.notes.match(/\)/g) || []).length;
+    assert.equal(auf, zu, '«' + t.title + '» @ ' + t.start + ': ' + auf + ' auf, ' + zu + ' zu');
+  }
+});
 test('abgestimmte Zuordnungen', () => {
   assert.equal(gwOf(on('Einbau SFX', '2026-08-28')), 'Pyro');
   assert.equal(gwOf(on('Aufbau Besuchergastro', '2026-08-26')), 'Besucher-Gastro');

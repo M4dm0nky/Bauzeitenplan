@@ -57,9 +57,10 @@ const EST = 'Uhrzeit in V07 nicht angegeben';
 const r = (gw, t, day, s, e, note = '', est = false) => ({ gw, t, day, s, e, note, est });
 // e08(Gewerk, Titel, Tag, Notiz) — Zeile ohne V07-Uhrzeit → Tagesfenster, geschätzt
 const e08 = (gw, t, day, note = '') => r(gw, t, day, '08:00', '18:00', N(note, EST), true);
-// cont(Titel, Tag, Beginn, Ende, Stückliste) — Container-/Kabinenzeile: kurzer
-// Titel, vollständige gedruckte Liste in der Notiz.
-const cont = (t, day, s, e, liste) => r('Logistik', t, day, s, e, N('Wölkchen', liste));
+// cont(Titel, Tag, Beginn, Ende, Stückliste, Hinweis?) — Container-/Kabinenzeile:
+// kurzer Titel, vollständige gedruckte Liste in der Notiz. Der Hinweis vermerkt
+// Abweichungen vom Druckbild.
+const cont = (t, day, s, e, liste, hinweis = '') => r('Logistik', t, day, s, e, N('Wölkchen', liste, hinweis));
 
 // Tage
 const [D21, D22, D23, D24, D25, D26, D27, D28, D29, D30, D31, S01, S02, S03] = [
@@ -470,9 +471,13 @@ const ROWS = [
   r('Produktion', 'Produktion vor Ort', S03, '08:00', '12:00', N('Produktion')),
   e08('Sanitätsdienst', 'Sanitäter vor Ort', S03),
   r('Logistik', 'Abholung Fahrzeuge', S03, '08:00', '12:00', N('Trafö')),
-  // Die Klammer schließt in V07 nicht — so gedruckt, so übernommen.
+  // In V07 fehlt hier die schließende Klammer — vergessen, nicht abgeschnitten:
+  // sechs Namen für 6x Solocontainer, und alle sechs sind vorher angeliefert
+  // worden (21.08.: STM, Stageco, Dienstleister, stagecrew, IT · 22.08.: ME).
+  // Die Klammer ist auf Ansage gesetzt, der Eingriff steht in der Notiz.
   cont('Abholung Container', S03, '14:00', '18:00',
-    '1x Duo Anlage (AvS), 6x Solocontainer (STM, Stageco, Dienstleister, stagecrew, IT, ME'),
+    '1x Duo Anlage (AvS), 6x Solocontainer (STM, Stageco, Dienstleister, stagecrew, IT, ME)',
+    'schließende Klammer in V07 nicht gedruckt'),
   r('Logistik', 'Abholung Müllpresse', S03, '08:00', '12:00', N('ALBA')),
   r('Logistik', 'Abholung Mülltonnen', S03, '08:00', '12:00', N('ALBA')),
   r('Produktion', 'Geländerückgabe', S03, '08:00', '12:00', N(CL)),

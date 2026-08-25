@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "exported": "2026-08-25T09:24:28.261Z",
+  "exported": "2026-08-25T09:51:45.238Z",
   "app": "Bauzeitenplan",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "project": {
     "id": "klassentreffen-festival-2026",
     "name": "Klassentreffen Festival 2026",
@@ -4720,7 +4720,7 @@
       "progress": 0,
       "status": "geplant",
       "crew": null,
-      "notes": "Wölkchen · 1x Duo Anlage (AvS), 6x Solocontainer (STM, Stageco, Dienstleister, stagecrew, IT, ME",
+      "notes": "Wölkchen · 1x Duo Anlage (AvS), 6x Solocontainer (STM, Stageco, Dienstleister, stagecrew, IT, ME) · schließende Klammer in V07 nicht gedruckt",
       "estimated": false
     }
   ],
