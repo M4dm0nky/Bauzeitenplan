@@ -19,6 +19,55 @@ export const byStart = (a, b) =>
   || (a.title || '').localeCompare(b.title || '');
 
 /**
+ * Vorgänge gleichen Namens zu SERIEN bündeln — die Zeile sagt WAS, die Balken
+ * sagen WANN. Ein Bauzeitenplan wird tageweise gedruckt, deshalb steht dieselbe
+ * Tätigkeit dort mehrfach untereinander («Aufbau Bühne» an drei Tagen). Im Gantt
+ * ist das EINE Zeile mit drei Balken, sonst hat die Bühne fünf Zeilen für zwei
+ * Tätigkeiten und die Crew 113 für 28.
+ *
+ * Überlappen sich zwei Balken derselben Serie (am 29.08. laufen zwei SITECREW-
+ * Trupps parallel), bekommen sie SPUREN: jeder Balken kommt in die erste Spur,
+ * die frei ist, sonst in eine neue. Klassische Intervall-Partitionierung, greedy
+ * über die nach Start sortierte Liste — das ist nachweislich optimal.
+ *
+ * Erwartet bereits gefilterte Geschwister (ein Gewerk bzw. ein Elternvorgang);
+ * die Gruppierung läuft über den EXAKTEN Titel, nicht über Ähnlichkeit — geraten
+ * wird hier nichts.
+ *
+ * @param {object[]} tasks
+ * @returns {{title:string, tasks:object[], lanes:number, laneOf:Map<string,number>}[]}
+ *          in derselben Reihenfolge wie byStart, damit Gantt und Tabelle
+ *          denselben Plan in derselben Folge zeigen.
+ */
+export function seriesRows(tasks) {
+  const groups = new Map();
+  for (const t of tasks) {
+    if (!groups.has(t.title)) groups.set(t.title, []);
+    groups.get(t.title).push(t);
+  }
+
+  const out = [];
+  for (const [title, list] of groups) {
+    list.sort(byStart);
+    const frei = [];                 // Ende je Spur, in Minuten
+    const laneOf = new Map();
+    for (const t of list) {
+      const s = toMin(t.start);
+      // Ein Meilenstein hat keine Dauer. Ohne die Mindestbreite teilten sich zwei
+      // Rauten am selben Termin eine Spur und lägen exakt übereinander.
+      const e = Math.max(toMin(t.end), s + 1);
+      let lane = frei.findIndex((ende) => ende <= s);
+      if (lane < 0) { frei.push(e); lane = frei.length - 1; }
+      else frei[lane] = e;
+      laneOf.set(t.id, lane);
+    }
+    out.push({ title, tasks: list, lanes: frei.length, laneOf });
+  }
+  // Serien untereinander wie Einzelvorgänge: nach dem frühesten Termin.
+  return out.sort((a, b) => byStart(a.tasks[0], b.tasks[0]));
+}
+
+/**
  * Kandidaten fürs Verknüpfen, gruppiert nach Gewerk und je Gewerk nach Start
  * (byStart). Ohne den Vorgang selbst (`selfId`) und ohne die bereits mit ihm
  * Verknüpften. `query` filtert groß/klein-egal auf Titel ODER Gewerkname; leer =

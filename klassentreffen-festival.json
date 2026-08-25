@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "exported": "2026-08-25T09:51:45.238Z",
+  "exported": "2026-08-25T13:27:06.626Z",
   "app": "Bauzeitenplan",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "project": {
     "id": "klassentreffen-festival-2026",
     "name": "Klassentreffen Festival 2026",
@@ -1060,14 +1060,14 @@
     {
       "id": "t71",
       "gewerk": "g0",
-      "title": "Aufbau Bühne Tag 1",
+      "title": "Aufbau Bühne",
       "start": "2026-08-24T08:00",
       "end": "2026-08-24T18:00",
       "milestone": false,
       "progress": 0,
       "status": "geplant",
       "crew": null,
-      "notes": "StageCo",
+      "notes": "StageCo · Tag 1 von 3",
       "estimated": false
     },
     {
@@ -1333,14 +1333,14 @@
     {
       "id": "t92",
       "gewerk": "g0",
-      "title": "Aufbau Bühne Tag 2",
+      "title": "Aufbau Bühne",
       "start": "2026-08-25T08:00",
       "end": "2026-08-25T18:00",
       "milestone": false,
       "progress": 0,
       "status": "geplant",
       "crew": null,
-      "notes": "StageCo",
+      "notes": "StageCo · Tag 2 von 3",
       "estimated": false
     },
     {
@@ -1606,14 +1606,14 @@
     {
       "id": "t113",
       "gewerk": "g0",
-      "title": "Aufbau Bühne Tag 3",
+      "title": "Aufbau Bühne",
       "start": "2026-08-26T08:00",
       "end": "2026-08-26T18:00",
       "milestone": false,
       "progress": 0,
       "status": "geplant",
       "crew": null,
-      "notes": "StageCo",
+      "notes": "StageCo · Tag 3 von 3",
       "estimated": false
     },
     {
@@ -3920,14 +3920,14 @@
     {
       "id": "t291",
       "gewerk": "g0",
-      "title": "Abbau Bühne Tag 1",
+      "title": "Abbau Bühne",
       "start": "2026-08-31T08:00",
       "end": "2026-08-31T18:00",
       "milestone": false,
       "progress": 0,
       "status": "geplant",
       "crew": null,
-      "notes": "StageCo",
+      "notes": "StageCo · Tag 1 von 2",
       "estimated": false
     },
     {
@@ -4271,14 +4271,14 @@
     {
       "id": "t318",
       "gewerk": "g0",
-      "title": "Abbau Bühne Tag 2",
+      "title": "Abbau Bühne",
       "start": "2026-09-01T08:00",
       "end": "2026-09-01T18:00",
       "milestone": false,
       "progress": 0,
       "status": "geplant",
       "crew": null,
-      "notes": "StageCo",
+      "notes": "StageCo · Tag 2 von 2",
       "estimated": false
     },
     {

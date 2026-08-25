@@ -5,7 +5,7 @@
 // Das Raster im Canvas ist ein CSS-Gradient (kostenlos, beliebig breit); nur die
 // Beschriftungen im Viewport landen im DOM und werden beim Scrollen recycelt.
 
-import { computeSchedule, toMin, toDate, byStart } from './schedule.js';
+import { computeSchedule, toMin, toDate, byStart, seriesRows } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
 import { runningAt, delaysAt } from './live.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
@@ -127,6 +127,13 @@ export function createGantt(root, opts = {}) {
   // ── Zeilenmodell ────────────────────────────────────────────────────────────
   // Flache Liste aus Gruppen- und Vorgangszeilen. y wird bei jedem Rebuild neu
   // gerechnet, damit Pfeile und Balken garantiert dieselbe Geometrie sehen.
+  //
+  // Eine Vorgangszeile trägt eine SERIE (siehe seriesRows in schedule.js): alle
+  // Vorgänge gleichen Namens, je einer als Balken. Damit hat die Bühne zwei
+  // Zeilen statt fünf. Ein einzelner Vorgang ist eine Serie aus einem — so kennt
+  // der Rest der Engine nur einen Fall.
+  const solo = (t) => ({ title: t.title, tasks: [t], lanes: 1, laneOf: new Map([[t.id, 0]]) });
+
   let rows = [];
   function buildRows() {
     rows = [];
@@ -141,17 +148,27 @@ export function createGantt(root, opts = {}) {
       rows.push({ kind: 'group', g, y, h: O.groupH, gStart, gEnd, tasks, done, spans });
       y += O.groupH;
       if (!collapsed.has(g.id)) {
-        // Erst die obersten Vorgänge (nach Start), darunter je Elternvorgang seine
-        // Untervorgänge — eingerückt und über collapsed[parentId] einklappbar.
-        for (const t of tasks.filter((x) => x.parent == null)) {
-          const kids = tasks.filter((k) => k.parent === t.id);
-          rows.push({ kind: 'task', t, g, y, h: O.rowH, parent: kids.length > 0 });
-          y += O.rowH;
-          if (kids.length && !collapsed.has(t.id)) {
-            for (const k of kids) {
-              rows.push({ kind: 'task', t: k, g, y, h: O.rowH, child: true });
-              y += O.rowH;
-            }
+        // Eine Zeile je VORGANGSNAME, ein Balken je Termin (seriesRows). Darunter
+        // je Elternvorgang seine Untervorgänge — eingerückt und über
+        // collapsed[parentId] einklappbar.
+        const kidsOf = (id) => tasks.filter((k) => k.parent === id);
+        const tops = tasks.filter((x) => x.parent == null);
+        // Sammelvorgänge behalten ihre eigene Zeile: ihre Lage ist die HÜLLE der
+        // Kinder, sie gehören in keine Serie. Als Serie aus einem Vorgang geführt,
+        // damit der Rest der Engine nur EINEN Fall kennt.
+        const eintraege = [
+          ...seriesRows(tops.filter((t) => kidsOf(t.id).length === 0)).map((s) => ({ rep: s.tasks[0], s })),
+          ...tops.filter((t) => kidsOf(t.id).length > 0)
+            .map((t) => ({ rep: t, s: solo(t), huelle: t })),
+        ].sort((a, b) => byStart(a.rep, b.rep));
+
+        for (const e of eintraege) {
+          rows.push({ kind: 'task', g, y, h: O.rowH * e.s.lanes, s: e.s, t: e.rep, parent: !!e.huelle });
+          y += O.rowH * e.s.lanes;
+          if (!e.huelle || collapsed.has(e.huelle.id)) continue;
+          for (const ks of seriesRows(kidsOf(e.huelle.id))) {
+            rows.push({ kind: 'task', g, y, h: O.rowH * ks.lanes, s: ks, t: ks.tasks[0], child: true });
+            y += O.rowH * ks.lanes;
           }
         }
       }
@@ -206,7 +223,13 @@ export function createGantt(root, opts = {}) {
         lab.append(el('span', 'bz-lab-name', 'Zieltermin'));
       } else {
         lab.style.setProperty('--gw', gewerkVar(r.g.slot));
-        const s = SCHED.get(r.t.id) || { critical: false, float: 0 };
+        // Die Zeile trägt eine Serie — die Marken gelten für sie ALS GANZES:
+        // eine Marke, sobald irgendein Balken betroffen ist. Sonst hinge an einer
+        // Zeile mit vierzehn Balken die Aussage des ersten.
+        const alle = r.s.tasks;
+        const konflikte = alle.filter((x) => CONFLICTS.has(x.id));
+        const kritisch = alle.filter((x) => (SCHED.get(x.id) || {}).critical);
+        const offenKrit = kritisch.filter((x) => !x.ackCrit);
         if (r.child) lab.classList.add('is-child');
         // Elternvorgang: Ein-/Ausklapp-Pfeil, wie beim Gewerk (collapsed[taskId]).
         if (r.parent) {
@@ -219,27 +242,39 @@ export function createGantt(root, opts = {}) {
           tw.onclick = () => { collapsed.has(r.t.id) ? collapsed.delete(r.t.id) : collapsed.add(r.t.id); rebuild(); layout(); };
           lab.append(tw);
         }
-        const nm = el('span', 'bz-lab-name', r.t.title);
-        nm.title = r.t.title;
+        const nm = el('span', 'bz-lab-name', r.s.title);
+        nm.title = alle.length > 1 ? r.s.title + ' — ' + alle.length + ' Termine' : r.s.title;
         lab.append(nm);
-        const conf = CONFLICTS.get(r.t.id);
+        const conf = konflikte.length ? CONFLICTS.get(konflikte[0].id) : null;
         if (conf) {
           const c = el('span', 'bz-conf-tag', '!');
-          c.title = '«' + r.t.title + '» ' + conf.message;
+          c.title = konflikte.length === 1
+            ? '«' + konflikte[0].title + '» ' + conf.message
+            : konflikte.length + ' Termine im Konflikt';
           lab.append(c);
-        } else if (s.critical && r.t.ackCrit) {
+        } else if (kritisch.length && !offenKrit.length) {
           // Kritisch, aber abgehakt — ruhige Marke statt rotem KRIT.
           const c = el('span', 'bz-crit-tag is-ack', '✓');
           c.title = 'Kritisch, als gesehen abgehakt';
           lab.append(c);
-        } else if (s.critical) {
+        } else if (offenKrit.length) {
           const c = el('span', 'bz-crit-tag', 'KRIT');
           c.title = 'Auf dem kritischen Pfad — kein Puffer';
           lab.append(c);
+        }
+        // Wie viele Termine traegt die Zeile? Bei einem einzelnen bleibt der Platz
+        // fuer die Crew-Zahl, wie bisher.
+        if (alle.length > 1) {
+          const m = el('span', 'bz-lab-meta', alle.length + '×');
+          m.title = alle.length + ' Termine' + (r.s.lanes > 1 ? ', zeitweise parallel' : '');
+          lab.append(m);
         } else if (r.t.crew) lab.append(el('span', 'bz-lab-meta', r.t.crew + ' P'));
-        lab.dataset.task = r.t.id;
-        labById.set(r.t.id, lab);
-        bindRow(lab, { kind: 'task', id: r.t.id }, nm);
+        // ALLE ids der Serie: app.js sucht die Zeile zu einem Vorgang über
+        // [data-task~="id"], nicht über Gleichheit — sonst fände das Umbenennen
+        // aus dem Kontextmenü nur den ersten Balken einer Serie.
+        lab.dataset.task = alle.map((x) => x.id).join(' ');
+        for (const x of alle) labById.set(x.id, lab);
+        bindRow(lab, { kind: 'task', id: r.t.id }, nm, r.s);
       }
       side.append(lab);
 
@@ -276,48 +311,72 @@ export function createGantt(root, opts = {}) {
           rowById.set('task:' + t.id, d);
         }
       } else {
-        const t = r.t, s = SCHED.get(t.id) || { critical: false, float: 0 };
-        if (t.milestone) {
-          const d = el('div', 'bz-ms');
-          d.style.setProperty('--gw', gewerkVar(r.g.slot));
-          d.classList.toggle('is-crit', s.critical);
-          d.dataset.at = toMin(t.start);
-          d.append(el('span', 'bz-ms-d'), el('span', 'bz-ms-t', t.title));
-          bindTip(d, t);
-          bindMark(d, { kind: 'task', id: t.id });
-          track.append(d);
-          rowById.set('task:' + t.id, d);
-        } else {
-          const b = el('div', 'bz-bar bz-st-' + t.status + (r.parent ? ' is-summary' : ''));
-          b.style.setProperty('--gw', gewerkVar(r.g.slot));
-          if (gewerkTexture(r.g.slot)) b.dataset.tex = '1';
-          b.classList.toggle('is-crit', s.critical);
-          b.classList.toggle('is-conflict', CONFLICTS.has(t.id));
-          b.classList.toggle('is-estimated', !!t.estimated);
-          b.dataset.from = toMin(t.start); b.dataset.to = toMin(t.end);
-          b.tabIndex = 0;
-          if (t.progress > 0 && t.progress < 100) {
-            const p = el('div', 'bz-prog');
-            p.style.width = t.progress + '%';
-            b.append(p);
+        // Alle Termine der Serie in DIESE eine Spur. Überlappende sitzen auf
+        // einer eigenen Spur (--lane), sonst lägen sie übereinander.
+        //
+        // Je Balken merken, wann der NÄCHSTE derselben Spur beginnt. Ist ein
+        // Balken zu schmal für seinen Text, liegt die Beschriftung rechts daneben
+        // — und dort steht in einer Serie der nächste Balken. Ohne diese Zahl
+        // liefe der Text quer darüber (updateLabels blendet ihn dann aus).
+        const naechster = new Map();
+        {
+          const letzte = new Map();
+          for (const t of r.s.tasks) {          // bereits nach Start sortiert
+            const l = r.s.laneOf.get(t.id) || 0;
+            const v = letzte.get(l);
+            if (v) naechster.set(v.id, toMin(t.start));
+            letzte.set(l, t);
           }
-          // Relief-Regel: Balkenfarben unter 3:1 tragen die Identität nicht
-          // allein — jeder Balken bekommt sichtbare Direktbeschriftung.
-          b.append(el('span', 'bz-bar-t', t.title));
-          // Puffer nur zeichnen, solange er disponierbar ist. Ein Planungsvorgang
-          // mit 45 Tagen Luft ergäbe ein Schraffurband quer über den ganzen
-          // Aufbau — reines Rauschen. Die genaue Zahl steht im Tooltip.
-          if (s.float > 0 && s.float <= SLACK_MAX_MIN) {
-            const f = el('div', 'bz-slack');
-            f.dataset.from = toMin(t.end); f.dataset.to = toMin(t.end) + s.float;
-            f.title = fmtFloat(s.float);
-            track.append(f);
-            rowById.set('slack:' + t.id, f);
+        }
+        for (const t of r.s.tasks) {
+          const lane = r.s.laneOf.get(t.id) || 0;
+          const s = SCHED.get(t.id) || { critical: false, float: 0 };
+          if (t.milestone) {
+            const d = el('div', 'bz-ms');
+            d.style.setProperty('--gw', gewerkVar(r.g.slot));
+            d.style.setProperty('--lane', lane);
+            d.classList.toggle('is-crit', s.critical);
+            d.dataset.at = toMin(t.start);
+            d.append(el('span', 'bz-ms-d'), el('span', 'bz-ms-t', t.title));
+            bindTip(d, t);
+            bindMark(d, { kind: 'task', id: t.id });
+            track.append(d);
+            rowById.set('task:' + t.id, d);
+          } else {
+            const b = el('div', 'bz-bar bz-st-' + t.status + (r.parent ? ' is-summary' : ''));
+            b.style.setProperty('--gw', gewerkVar(r.g.slot));
+            b.style.setProperty('--lane', lane);
+            if (gewerkTexture(r.g.slot)) b.dataset.tex = '1';
+            b.classList.toggle('is-crit', s.critical);
+            b.classList.toggle('is-conflict', CONFLICTS.has(t.id));
+            b.classList.toggle('is-estimated', !!t.estimated);
+            b.dataset.from = toMin(t.start); b.dataset.to = toMin(t.end);
+            if (naechster.has(t.id)) b.dataset.next = naechster.get(t.id);
+            b.tabIndex = 0;
+            if (t.progress > 0 && t.progress < 100) {
+              const p = el('div', 'bz-prog');
+              p.style.width = t.progress + '%';
+              b.append(p);
+            }
+            // Relief-Regel: Balkenfarben unter 3:1 tragen die Identität nicht
+            // allein — jeder Balken bekommt sichtbare Direktbeschriftung.
+            b.append(el('span', 'bz-bar-t', t.title));
+            // Puffer nur zeichnen, solange er disponierbar ist. Ein Planungsvorgang
+            // mit 45 Tagen Luft ergäbe ein Schraffurband quer über den ganzen
+            // Aufbau — reines Rauschen. Die genaue Zahl steht im Tooltip.
+            if (s.float > 0 && s.float <= SLACK_MAX_MIN) {
+              const f = el('div', 'bz-slack');
+              f.style.setProperty('--lane', lane);
+              f.dataset.from = toMin(t.end); f.dataset.to = toMin(t.end) + s.float;
+              f.title = fmtFloat(s.float);
+              track.append(f);
+              rowById.set('slack:' + t.id, f);
+            }
+            bindTip(b, t);
+            bindMark(b, { kind: 'task', id: t.id });
+            track.append(b);
+            rowById.set('task:' + t.id, b);
           }
-          bindTip(b, t);
-          bindMark(b, { kind: 'task', id: t.id });
-          track.append(b);
-          rowById.set('task:' + t.id, b);
         }
       }
     }
@@ -337,7 +396,7 @@ export function createGantt(root, opts = {}) {
     });
   }
 
-  function bindRow(lab, sel, nameNode) {
+  function bindRow(lab, sel, nameNode, serie) {
     lab.addEventListener('click', (e) => {
       if (e.target.closest('.bz-tw')) return;   // Aufklappen ist keine Auswahl
       select(sel);
@@ -350,12 +409,14 @@ export function createGantt(root, opts = {}) {
     lab.addEventListener('dblclick', (e) => {
       if (e.target.closest('.bz-tw')) return;
       e.preventDefault();
-      editName(sel, nameNode);
+      editName(sel, nameNode, serie);
     });
   }
 
-  // Umbenennen direkt in der Zeile.
-  function editName(sel, nameNode) {
+  // Umbenennen direkt in der Zeile. Trägt die Zeile eine SERIE, werden alle ihre
+  // Termine umbenannt — die Zeile heißt ja als Ganzes so. Nur den ersten Balken
+  // umzubenennen risse ihn aus der Serie heraus und erzeugte eine zweite Zeile.
+  function editName(sel, nameNode, serie) {
     if (nameNode.querySelector('input')) return;
     const old = nameNode.textContent;
     const inp = el('input', 'bz-lab-edit');
@@ -370,9 +431,13 @@ export function createGantt(root, opts = {}) {
       const v = inp.value.trim();
       nameNode.textContent = old;   // erst zurück; der Neuaufbau setzt den Rest
       if (!save || !v || v === old) return;
+      const ids = serie && serie.tasks.length > 1 ? serie.tasks.map((x) => x.id) : [sel.id];
       const cmd = sel.kind === 'gewerk'
         ? { type: 'setGewerkField', id: sel.id, field: 'name', value: v }
-        : { type: 'setTaskField', id: sel.id, field: 'title', value: v };
+        : ids.length > 1
+          ? { type: 'batch', label: 'Serie umbenennen',
+              cmds: ids.map((id) => ({ type: 'setTaskField', id, field: 'title', value: v })) }
+          : { type: 'setTaskField', id: sel.id, field: 'title', value: v };
       const r = store.apply(cmd);
       if (r.ok === false && O.onError) O.onError(r.error);
     };
@@ -446,10 +511,20 @@ export function createGantt(root, opts = {}) {
     }
   }
 
+  // Die Zeile, in der ein Vorgang zu sehen ist. Seit es Serien gibt, ist das die
+  // Zeile, die ihn ENTHÄLT — nicht mehr die, deren einziger Vorgang er ist.
   function visualRow(task) {
     if (task.gewerk === 'projekt') return rows.find((r) => r.kind === 'projekt');
     if (collapsed.has(task.gewerk)) return rows.find((r) => r.kind === 'group' && r.g.id === task.gewerk);
-    return rows.find((r) => r.kind === 'task' && r.t.id === task.id);
+    return rows.find((r) => r.kind === 'task' && r.s.laneOf.has(task.id));
+  }
+
+  // Höhe der Zeilenmitte für einen Vorgang — bei mehrspurigen Serien die Mitte
+  // SEINER Spur, sonst zeigte der Pfeil zwischen zwei Balken ins Leere.
+  function markY(row, task) {
+    if (row.kind !== 'task' || !row.s) return row.y + row.h / 2;
+    const lane = row.s.laneOf.get(task.id) || 0;
+    return row.y + lane * O.rowH + O.rowH / 2;
   }
 
   function depAnchors(d, ra, rb) {
@@ -462,7 +537,7 @@ export function createGantt(root, opts = {}) {
     const x1 = x(d.type === 'SS' || d.type === 'SF' ? aFrom : aTo);
     // FS/SS enden am Start des Nachfolgers, FF/SF an dessen Ende.
     const x2 = x(d.type === 'FF' || d.type === 'SF' ? bTo : bFrom);
-    return { x1, x2, y1: ra.y + ra.h / 2, y2: rb.y + rb.h / 2 };
+    return { x1, x2, y1: markY(ra, a), y2: markY(rb, b) };
   }
 
   function layoutDeps() {
@@ -542,9 +617,12 @@ export function createGantt(root, opts = {}) {
       if (!lab || n._textW === undefined) continue;
       const a = x(+n.dataset.from), b = x(+n.dataset.to);
       if (n.classList.contains('is-narrow')) {
-        // Beschriftung liegt rechts neben dem Balken → nur weg, wenn der
-        // Balken selbst komplett aus dem Bild ist.
-        n.classList.toggle('lab-hide', b <= s);
+        // Beschriftung liegt rechts NEBEN dem Balken. Weg damit, wenn der Balken
+        // aus dem Bild ist — oder wenn in einer Serie der nächste Balken so dicht
+        // folgt, dass der Text quer über ihn liefe. Den Namen trägt dann die
+        // Zeilenbeschriftung links, die immer stehen bleibt.
+        const naechster = n.dataset.next ? x(+n.dataset.next) : Infinity;
+        n.classList.toggle('lab-hide', b <= s || naechster - b < n._textW);
         lab.style.transform = '';
         continue;
       }

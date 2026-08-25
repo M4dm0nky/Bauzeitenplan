@@ -3,6 +3,33 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.7.0 — 2026-08-25
+
+**Eine Zeile je Vorgang, ein Balken je Termin**
+- Der Gantt zeigte bisher **eine Zeile je Eintrag** — und weil ein Bauzeitenplan
+  tageweise gedruckt wird, stand dieselbe Tätigkeit mehrfach untereinander. Die
+  Bühne hatte sechs Zeilen für drei Dinge, die Crew **113 Zeilen**. Jetzt gilt:
+  die Zeile sagt **was**, die Balken sagen **wann**. Aus 353 Zeilen werden **153**.
+- „Aufbau Bühne" ist eine Zeile mit drei Balken (24./25./26.08.), jeder Balken
+  beschriftet. Die Zeilenbeschriftung nennt die Zahl der Termine («3×»).
+- **Überlappende Termine bekommen eine zweite Spur** in derselben Zeile — am
+  29.08. laufen zwei SITECREW-Trupps parallel, die dürfen nicht übereinanderliegen.
+  Im ganzen Plan betrifft das genau zwei Zeilen.
+- Konflikt- und KRIT-Marken gelten jetzt für die Zeile **als Ganzes**: eine Marke,
+  sobald irgendein Termin betroffen ist. Eine Zeile umzubenennen benennt alle ihre
+  Termine um — sonst risse einer aus der Zeile heraus.
+- Ist ein Balken zu schmal für seinen Text, steht die Beschriftung rechts daneben.
+  Folgt dort schon der nächste Balken, wird sie **ausgeblendet** statt quer
+  darüberzulaufen; den Namen trägt dann die Zeile links, die immer stehen bleibt.
+- Die **Tabelle bleibt flach** — eine Zeile je Vorgang. Sie ist der Editor: Start,
+  Dauer, Crew und Notiz gehören zum einzelnen Termin, nicht zur Serie.
+
+**Daten: „Tag 1/2/3" ist keine Vorgangsbezeichnung**
+- `Aufbau Bühne Tag 1/2/3` und `Abbau Bühne Tag 1/2` heißen jetzt schlicht
+  `Aufbau Bühne` bzw. `Abbau Bühne`. Der 24.08. **ist** Tag 1 — das sagt das
+  Datum. Die Tagesnummer steht weiterhin in der Notiz («Tag 1 von 3»), es geht
+  also nichts verloren.
+
 ## 0.6.0 — 2026-08-25
 
 **Der Plan steht sofort da — Adresse weitergeben genügt**

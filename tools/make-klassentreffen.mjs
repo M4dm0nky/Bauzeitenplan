@@ -162,7 +162,7 @@ const ROWS = [
   cont('Anlieferung Container', D24, '08:00', '18:00',
     '2x Duo Anlage (Channel, Trinity), 4x Solocontainer (Office Sido, Artist Hospitality, Booking, Dressing Rooms), 1x WC Container (Produktion), 1x Maxi WC Container (Artist)'),
   r('Bühne', 'Anlieferung Stahl', D24, '08:00', '10:00', N('StageCo')),
-  r('Bühne', 'Aufbau Bühne Tag 1', D24, '08:00', '18:00', N('StageCo')),
+  r('Bühne', 'Aufbau Bühne', D24, '08:00', '18:00', N('StageCo', 'Tag 1 von 3')),
   r('Produktion', 'Einrichten Internet Gelände', D24, '10:00', '18:00'),
 
   // ── Di 25.08. (Seite 5) ────────────────────────────────────────────────────
@@ -184,7 +184,7 @@ const ROWS = [
   r('Strom', 'Verstromung Container', D25, '14:00', '18:00', N('Mobile Energy')),
   cont('Anlieferung Container', D25, '08:00', '18:00',
     '2x Duo Anlage (Sido/MJ, Savas/Samy), 2x Solocontainer (2x Büro), 1x Maxi Dusche (Artist), 3x WC Container (2x VIP, 1x Artist), 2x Kassencontainer, 14x Toilettenkabine, 8x Kabine Gastro, 12x Raketen'),
-  r('Bühne', 'Aufbau Bühne Tag 2', D25, '08:00', '18:00', N('StageCo')),
+  r('Bühne', 'Aufbau Bühne', D25, '08:00', '18:00', N('StageCo', 'Tag 2 von 3')),
   r('Logistik', 'Abholung Schiri-Hochstuhl TC Blau-Weiß', D25, '10:00', '15:00', N(SX, '1x Patrick mit Sprinter')),
   r('Zäune & Absperrung', 'Aufbau Zäune / Infrastruktur', D25, '08:00', '18:00', N('SiteCrew')),
 
@@ -205,7 +205,7 @@ const ROWS = [
   r('Artist Care', 'Anlieferung Backstagemöbel', D26, '08:00', '10:00', N('Japo')),
   r('Besucher-Gastro', 'Aufbau Besuchergastro', D26, '08:00', '18:00', N('Trinity F&B')),
   r('Sanitär', 'Aufbau Wasser Infrastruktur', D26, '08:00', '18:00'),
-  r('Bühne', 'Aufbau Bühne Tag 3', D26, '08:00', '18:00', N('StageCo')),
+  r('Bühne', 'Aufbau Bühne', D26, '08:00', '18:00', N('StageCo', 'Tag 3 von 3')),
   cont('Anlieferung Kabinen', D26, '08:00', '18:00', '86x Toilettenkabine, 5x CAP Kabine, 8x Rakete'),
   r('Branding', 'Anbringen Banner Look & Feel', D26, '08:00', '18:00', N('Site')),
   r('Branding', 'Anbringen Banner Notausgänge', D26, '08:00', '18:00', N('Site')),
@@ -406,7 +406,7 @@ const ROWS = [
   r('Video', 'Ausbau Video', D31, '00:00', '03:00', N('TSE')),
   r('Ton', 'Ausbau PA', D31, '00:00', '03:00', N('TSE')),
   r('Rigging', 'Ausbau Rigging', D31, '00:00', '03:00', N('BigRig')),
-  r('Bühne', 'Abbau Bühne Tag 1', D31, '08:00', '18:00', N('StageCo')),
+  r('Bühne', 'Abbau Bühne', D31, '08:00', '18:00', N('StageCo', 'Tag 1 von 2')),
   r('Zäune & Absperrung', 'Abbau Barriers Bühne / 2nd Barrier', D31, '08:00', '15:00', N('EPS')),
   r('Besucher-Gastro', 'Abbau Ticketing', D31, '08:00', '18:00', N('Trinity')),
   // Neu in V07 — Gegenstück zum Aufbau am 27.
@@ -437,7 +437,7 @@ const ROWS = [
   r('Crew', 'STEELHANDS stageco', S01, '08:00', '18:00', N(SX, '10 Steelhands')),
   r('Catering', 'Catering Zeiten', S01, '12:00', '14:00', N('Morsh')),
   r('Besucher-Gastro', 'Abbau Besuchergastro', S01, '08:00', '18:00', N('Trinity F&B')),
-  r('Bühne', 'Abbau Bühne Tag 2', S01, '08:00', '18:00', N('StageCo')),
+  r('Bühne', 'Abbau Bühne', S01, '08:00', '18:00', N('StageCo', 'Tag 2 von 2')),
   r('Zelte', 'Abbau Zelte Einlass, BEST / UG Aufenthalt, Artist', S01, '08:00', '18:00', N('Zelte Bereit')),
   r('Strom', 'Abbau Strom', S01, '08:00', '18:00', N('Mobile Energy')),
   cont('Abholung Container', S01, '08:00', '18:00',

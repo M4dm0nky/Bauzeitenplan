@@ -1,7 +1,7 @@
 import { plan, ROWS } from '../tools/make-klassentreffen.mjs';
 import { createStore } from '../js/store.js';
 import { findConflicts } from '../js/conflicts.js';
-import { computeSchedule, toMin } from '../js/schedule.js';
+import { computeSchedule, toMin, seriesRows } from '../js/schedule.js';
 import { gewerkVar, gewerkTexture, slotsExhausted } from '../js/palette.js';
 import assert from 'node:assert/strict';
 
@@ -55,8 +55,8 @@ test('jeder Vorgang liegt im Fenster', () => {
 test('Uhrzeiten sind unverändert aus V07 übernommen', () => {
   assert.equal(on('Übergabe Gelände', '2026-08-21').start, '2026-08-21T08:00');
   assert.equal(on('Übergabe Gelände', '2026-08-21').end, '2026-08-21T09:00');
-  assert.equal(on('Aufbau Bühne Tag 1', '2026-08-24').start, '2026-08-24T08:00');
-  assert.equal(on('Aufbau Bühne Tag 1', '2026-08-24').end, '2026-08-24T18:00');
+  assert.equal(on('Aufbau Bühne', '2026-08-24').start, '2026-08-24T08:00');
+  assert.equal(on('Aufbau Bühne', '2026-08-24').end, '2026-08-24T18:00');
   assert.equal(on('Behördliche Abnahme', '2026-08-28').start, '2026-08-28T16:00');
   assert.equal(on('Behördliche Abnahme', '2026-08-28').end, '2026-08-28T17:30');
   assert.equal(on('Geländerückgabe', '2026-09-03').start, '2026-09-03T08:00');
@@ -86,8 +86,8 @@ test('Über-Nacht-Zeiten rollen in den Folgetag', () => {
   assert.equal(on('Sanitäter vor Ort', '2026-08-29').end, '2026-08-30T03:00');
 });
 test('Vorgänge mit V07-Zeit sind NICHT als geschätzt markiert', () => {
-  for (const [t, d] of [['Aufbau Bühne Tag 1', '2026-08-24'], ['Fahrverbot auf dem Gelände', '2026-08-29'],
-                        ['Einbau / Restarbeiten Licht', '2026-08-28'], ['Abbau Bühne Tag 2', '2026-09-01'],
+  for (const [t, d] of [['Aufbau Bühne', '2026-08-24'], ['Fahrverbot auf dem Gelände', '2026-08-29'],
+                        ['Einbau / Restarbeiten Licht', '2026-08-28'], ['Abbau Bühne', '2026-09-01'],
                         ['Test Sicherheitsbeleuchtung', '2026-08-28']]) {
     assert.equal(on(t, d).estimated, false, t);
   }
@@ -111,7 +111,7 @@ test('der Sanitätsdienst hat in V07 an fast allen Tagen echte Zeiten', () => {
   assert.equal(on('Sanitäter vor Ort', '2026-08-30').notes.includes('Abbaubegleitung'), true);
 });
 test('Dienstleister, Anmerkung und Kopfzahl stehen in der Notiz', () => {
-  assert.match(on('Aufbau Bühne Tag 1', '2026-08-24').notes, /StageCo/);
+  assert.match(on('Aufbau Bühne', '2026-08-24').notes, /StageCo/);
   assert.match(on('Übergabe Gelände', '2026-08-21').notes, /Carsten Langenfeld/);
   assert.match(on('Fahrverbot auf dem Gelände', '2026-08-29').notes, /ALLE/);
   assert.match(on('CLIMBER stageco', '2026-08-25').notes, /36StageXL · 10 Climber/);
@@ -191,6 +191,38 @@ test('am 22.08. kommt eine Container-Anlieferung dazu', () => {
   const t = on('Anlieferung Container', '2026-08-22');
   assert.ok(t, 'fehlt');
   assert.match(t.notes, /1x Duo Anlage \(Security\)/);
+});
+
+console.log('\nKlassentreffen V07 — eine Zeile je Vorgang');
+const serienVon = (gewerkName) => {
+  const g = plan.gewerke.find((x) => x.name === gewerkName);
+  return seriesRows(plan.tasks.filter((t) => t.gewerk === g.id));
+};
+test('die Bühne hat drei Zeilen statt sechs', () => {
+  const s = serienVon('Bühne');
+  assert.deepEqual(s.map((x) => x.title), ['Anlieferung Stahl', 'Aufbau Bühne', 'Abbau Bühne']);
+  assert.deepEqual(s.map((x) => x.tasks.length), [1, 3, 2]);
+  assert.deepEqual(s.map((x) => x.lanes), [1, 1, 1], 'nichts überlappt sich');
+});
+test('«Tag N» steht in der Notiz, nicht im Titel', () => {
+  // Der 24.08. IST Tag 1 — das sagt schon das Datum. Im Namen erzwänge es
+  // drei Zeilen für eine Tätigkeit.
+  assert.equal(plan.tasks.filter((t) => /Tag \d+$/.test(t.title)).length, 0);
+  const auf = plan.tasks.filter((t) => t.title === 'Aufbau Bühne').sort((a, b) => (a.start < b.start ? -1 : 1));
+  assert.deepEqual(auf.map((t) => t.start.slice(0, 10)), ['2026-08-24', '2026-08-25', '2026-08-26']);
+  assert.deepEqual(auf.map((t) => t.notes), ['StageCo · Tag 1 von 3', 'StageCo · Tag 2 von 3', 'StageCo · Tag 3 von 3']);
+});
+test('353 Vorgänge werden zu 153 Zeilen', () => {
+  const alle = plan.gewerke.flatMap((g) => seriesRows(plan.tasks.filter((t) => t.gewerk === g.id)));
+  assert.equal(alle.length, 153);
+  assert.equal(alle.reduce((n, s) => n + s.tasks.length, 0), 353, 'kein Vorgang verschwindet');
+});
+test('nur SITECREW und STAPLERFAHRER stageco brauchen zwei Spuren', () => {
+  const mehr = plan.gewerke
+    .flatMap((g) => seriesRows(plan.tasks.filter((t) => t.gewerk === g.id)))
+    .filter((s) => s.lanes > 1);
+  assert.deepEqual(mehr.map((s) => s.title).sort(), ['SITECREW', 'STAPLERFAHRER stageco']);
+  assert.deepEqual(mehr.map((s) => s.lanes), [2, 2], 'nie mehr als zwei Spuren');
 });
 
 console.log('\nKlassentreffen V07 — nur echte Fortsetzungen verschmolzen');

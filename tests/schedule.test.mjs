@@ -1,4 +1,4 @@
-import { computeSchedule, topoSort, toMin, byStart, candidateGroups } from '../js/schedule.js';
+import { computeSchedule, topoSort, toMin, byStart, candidateGroups, seriesRows } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -257,6 +257,82 @@ test('leeres Query = alle Kandidaten', () => {
 test('Projekt-Zieltermine als eigene Gruppe am Ende', () => {
   const g = cg();
   assert.equal(g[g.length - 1].gewerk.id, 'projekt');
+});
+
+// ── Serien: eine Zeile je Vorgangsname, ein Balken je Termin ─────────────────
+console.log('\nSerien & Spuren');
+
+const s = (id, title, start, end) => ({ id, title, start, end });
+
+test('gleicher Titel = eine Serie, ein Balken je Termin', () => {
+  const r = seriesRows([
+    s('a', 'Aufbau Bühne', '2026-08-24T08:00', '2026-08-24T18:00'),
+    s('b', 'Aufbau Bühne', '2026-08-25T08:00', '2026-08-25T18:00'),
+    s('c', 'Aufbau Bühne', '2026-08-26T08:00', '2026-08-26T18:00'),
+  ]);
+  assert.equal(r.length, 1, 'drei Tage, eine Zeile');
+  assert.equal(r[0].title, 'Aufbau Bühne');
+  assert.equal(r[0].tasks.length, 3);
+  assert.equal(r[0].lanes, 1, 'aufeinanderfolgende Tage brauchen keine zweite Spur');
+});
+
+test('verschiedene Titel bleiben getrennt', () => {
+  const r = seriesRows([
+    s('a', 'Aufbau Bühne', '2026-08-24T08:00', '2026-08-24T18:00'),
+    s('b', 'Abbau Bühne', '2026-08-31T08:00', '2026-08-31T18:00'),
+  ]);
+  assert.deepEqual(r.map((x) => x.title), ['Aufbau Bühne', 'Abbau Bühne']);
+});
+
+test('Serien stehen nach dem frühesten Termin — wie byStart', () => {
+  const r = seriesRows([
+    s('spaet', 'Abbau', '2026-08-31T08:00', '2026-08-31T18:00'),
+    s('frueh2', 'Aufbau', '2026-08-25T08:00', '2026-08-25T18:00'),
+    s('frueh1', 'Aufbau', '2026-08-24T08:00', '2026-08-24T18:00'),
+  ]);
+  assert.deepEqual(r.map((x) => x.title), ['Aufbau', 'Abbau']);
+  assert.deepEqual(r[0].tasks.map((t) => t.id), ['frueh1', 'frueh2'], 'innerhalb der Serie nach Start');
+});
+
+test('überlappende Balken bekommen eine zweite Spur', () => {
+  // Der echte Fall: am 29.08. laufen zwei SITECREW-Trupps parallel.
+  const r = seriesRows([
+    s('lang', 'SITECREW', '2026-08-29T08:00', '2026-08-29T23:00'),
+    s('kurz', 'SITECREW', '2026-08-29T08:00', '2026-08-29T14:00'),
+  ]);
+  assert.equal(r[0].lanes, 2);
+  assert.notEqual(r[0].laneOf.get('lang'), r[0].laneOf.get('kurz'), 'dürfen nicht übereinanderliegen');
+});
+
+test('Balken, die sich nur berühren, teilen sich eine Spur', () => {
+  const r = seriesRows([
+    s('a', 'Schicht', '2026-08-29T08:00', '2026-08-29T14:00'),
+    s('b', 'Schicht', '2026-08-29T14:00', '2026-08-29T20:00'),
+  ]);
+  assert.equal(r[0].lanes, 1, 'Ende = Start ist keine Überlappung');
+  assert.equal(r[0].laneOf.get('a'), r[0].laneOf.get('b'));
+});
+
+test('die Spur wird wiederverwendet, sobald sie frei ist', () => {
+  const r = seriesRows([
+    s('a', 'X', '2026-08-24T08:00', '2026-08-24T18:00'),
+    s('b', 'X', '2026-08-24T09:00', '2026-08-24T12:00'),   // überlappt a → Spur 1
+    s('c', 'X', '2026-08-25T08:00', '2026-08-25T18:00'),   // frei → wieder Spur 0
+  ]);
+  assert.equal(r[0].lanes, 2, 'nicht drei Spuren für drei Balken');
+  assert.equal(r[0].laneOf.get('c'), r[0].laneOf.get('a'));
+});
+
+test('zwei Meilensteine am selben Termin liegen nicht übereinander', () => {
+  const r = seriesRows([
+    s('a', 'Abnahme', '2026-08-28T16:00', '2026-08-28T16:00'),
+    s('b', 'Abnahme', '2026-08-28T16:00', '2026-08-28T16:00'),
+  ]);
+  assert.equal(r[0].lanes, 2, 'Rauten ohne Dauer brauchen trotzdem getrennte Spuren');
+});
+
+test('leere Eingabe liefert keine Zeilen statt zu werfen', () => {
+  assert.deepEqual(seriesRows([]), []);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

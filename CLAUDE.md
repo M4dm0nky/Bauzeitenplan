@@ -87,7 +87,7 @@ noch Pages einschalten (nur `push`, kein `admin`).
 
 ## Version
 
-**Aktuell: 0.6.0** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
+**Aktuell: 0.7.0** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
 
 **Die Version wird NIE von Hand geändert.** Ein Befehl stempelt sie in alle
 sechs Stellen zugleich:
@@ -241,6 +241,29 @@ Ebene** (in `addTask` erzwungen), sonst genügte ein reflow-Durchlauf nicht.
 Elternvorgang löschen kaskadiert auf die Kinder; Gewerkwechsel zieht sie mit.
 `findConflicts` nimmt Sammelvorgänge AUS — ihre Lage ist abgeleitet, nicht direkt
 verschiebbar, und ein Konflikt an ihnen risse den Auflösen-Sammelbefehl.
+
+**Der Gantt zeigt eine Zeile je VORGANGSNAME, einen Balken je Termin**
+(`seriesRows` in schedule.js, DOM-frei und getestet). Ein Bauzeitenplan wird
+tageweise gedruckt, deshalb steht dieselbe Tätigkeit mehrfach in der Quelle —
+das sind keine verschiedenen Vorgänge. Ohne die Bündelung hatte die Bühne sechs
+Zeilen für drei Dinge und die Crew 113 für 28; 353 Vorgänge ergeben **153 Zeilen**.
+Überlappen sich zwei Termine einer Serie, bekommen sie **Spuren** (`--lane`,
+Zeilenhöhe `rowH × lanes`) — sonst lägen sie übereinander. Marken (Konflikt, KRIT)
+gelten für die Zeile als Ganzes, Umbenennen benennt die ganze Serie um. **Die
+Tabelle bleibt flach**: sie ist der Editor, dort gehört jeder Termin einzeln
+bearbeitbar. Beide Ansichten sortieren weiter über `byStart`.
+
+**„Tag 1/2/3" gehört nicht in den Titel.** Der 24.08. IST Tag 1 — das sagt das
+Datum. Im Namen erzwingt es eine Zeile je Tag und macht aus einer Tätigkeit drei.
+Die Tagesnummer gehört in die Notiz. Ein Test hält fest, dass kein Titel auf
+`Tag N` endet.
+
+**Beschriftung neben einem Balken darf nie über den nächsten laufen.** Ist ein
+Balken zu schmal für seinen Text, steht dieser rechts daneben — in einer Serie
+also dort, wo der nächste Balken beginnt. `updateLabels()` blendet ihn dann aus
+(`data-next` trägt den Start des nächsten Balkens derselben Spur). Der Name steht
+weiterhin links in der Zeile. Eine Prüfung in `verify-klassentreffen.mjs` fängt
+Rückfälle — die Zahlenprüfungen sahen diesen Fehler nicht.
 
 **Eine Reihenfolge für beide Ansichten: `byStart` (schedule.js).** Gantt und
 Tabelle sortieren Vorgänge eines Gewerks über DENSELBEN Vergleicher (Start, dann

@@ -332,7 +332,10 @@ function showContext(sel, x, y) {
 function renameInPlace(kind, id) {
   const lab = kind === 'gewerk'
     ? document.querySelector(`.bz-lab[data-gewerk="${id}"] .bz-lab-name`)
-    : document.querySelector(`.bz-lab[data-task="${id}"] .bz-lab-name`);
+    // ~= statt =: eine Zeile trägt seit den Serien ALLE ids ihrer Termine
+    // («t5 t9 t14»). Mit Gleichheit fände das Umbenennen nur einzelne Vorgänge
+    // und täte bei jeder Serie stillschweigend nichts.
+    : document.querySelector(`.bz-lab[data-task~="${id}"] .bz-lab-name`);
   if (lab) lab.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
 }
 

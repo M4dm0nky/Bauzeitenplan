@@ -81,6 +81,68 @@ await check('Balken sind im Bild', async () => {
 });
 await p.screenshot({ path: join(here, 'shots', 'klassentreffen-wochen.png') });
 
+// ── Eine Zeile je Vorgang, ein Balken je Termin ─────────────────────────────
+// Der Fehlertyp, den nur das Bild zeigt: Balken auf der falschen Spur oder
+// zwei übereinander. Deshalb hier Geometrie messen, nicht nur zählen.
+await check('353 Balken auf 153 Vorgangszeilen', async () => {
+  const zeilen = await p.locator('.bz-lab-task').count();
+  const balken = await p.locator('.bz-bar, .bz-ms').count();
+  if (balken !== 353) return balken + ' Balken statt 353';
+  return zeilen === 153 ? true : zeilen + ' Zeilen statt 153';
+});
+await check('genau zwei Zeilen sind zweispurig (SITECREW, STAPLERFAHRER stageco)', async () => {
+  const hoehen = await p.locator('.bz-lab-task').evaluateAll((ns) => ns.map((n) => n.getBoundingClientRect().height));
+  const einfach = Math.min(...hoehen);
+  const doppelt = hoehen.filter((h) => h > einfach * 1.5);
+  return doppelt.length === 2 ? true : doppelt.length + ' hohe Zeilen statt 2';
+});
+await check('Bühne: drei Zeilen, «Aufbau Bühne» mit drei Balken', async () => {
+  const namen = await p.locator('.bz-lab-task .bz-lab-name').evaluateAll((ns) => ns.map((n) => n.textContent));
+  const b = namen.slice(0, 3);
+  if (b.join('|') !== 'Anlieferung Stahl|Aufbau Bühne|Abbau Bühne') return 'Zeilen: ' + b.join(' | ');
+  const n = await p.locator('.bz-track-task').nth(1).locator('.bz-bar').count();
+  return n === 3 ? true : n + ' Balken in der Aufbau-Zeile statt 3';
+});
+await check('kein Balken verdeckt einen anderen derselben Zeile', async () => {
+  const kollision = await p.locator('.bz-track-task').evaluateAll((tracks) => {
+    for (const tr of tracks) {
+      const bs = [...tr.querySelectorAll('.bz-bar')].map((b) => b.getBoundingClientRect());
+      for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
+        const a = bs[i], c = bs[j];
+        const x = a.left < c.right - 1 && c.left < a.right - 1;
+        const y = a.top < c.bottom - 1 && c.top < a.bottom - 1;
+        if (x && y) return tr.previousSibling ? 'überlappend' : 'überlappend';
+      }
+    }
+    return null;
+  });
+  return kollision ? 'zwei Balken liegen übereinander' : true;
+});
+await check('keine Beschriftung läuft über den nächsten Balken', async () => {
+  // Der Fehler, den die Zahlenprüfungen NICHT sehen: bei schmalen Balken steht
+  // der Text rechts daneben — in einer Serie also über dem nächsten Balken.
+  const bad = await p.evaluate(() => {
+    for (const tr of document.querySelectorAll('.bz-track-task')) {
+      const balken = [...tr.querySelectorAll('.bz-bar')];
+      for (const n of balken) {
+        const lab = n.querySelector('.bz-bar-t');
+        if (!lab || !lab.offsetWidth) continue;
+        const l = lab.getBoundingClientRect();
+        for (const m of balken) {
+          if (m === n) continue;
+          const b = m.getBoundingClientRect();
+          if (l.left < b.right - 2 && b.left < l.right - 2 && l.top < b.bottom - 2 && b.top < l.bottom - 2) {
+            return lab.textContent + ' läuft über einen Nachbarbalken';
+          }
+        }
+      }
+    }
+    return null;
+  });
+  return bad || true;
+});
+await p.screenshot({ path: join(here, 'shots', 'klassentreffen-serien.png') });
+
 // Zugeklappt: alle 20 Gewerke auf einen Blick — die Palette ist am Limit,
 // hier muss man sehen, dass sich benachbarte Zeilen noch unterscheiden.
 await p.locator('#fold').click();

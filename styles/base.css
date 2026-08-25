@@ -126,8 +126,13 @@ body { margin: 0; }
 .bz-rows { position: relative; z-index: 1; }
 .bz-track { position: relative; }
 
+/* Balken sitzen in der Mitte IHRER Spur. Eine Zeile trägt eine Serie gleichnamiger
+   Vorgänge; überlappen zwei davon, bekommt der zweite --lane: 1 und die Zeile ist
+   doppelt so hoch. Bei einer Spur ist das rechnerisch identisch zu top: 50%. */
 .bz-bar {
-  position: absolute; top: 50%; transform: translateY(-50%);
+  position: absolute;
+  top: calc(var(--lane, 0) * var(--row-h) + var(--row-h) / 2);
+  transform: translateY(-50%);
   height: var(--bar-h); background: var(--gw);
   display: flex; align-items: center; overflow: hidden;
   cursor: pointer; outline: none;
@@ -153,7 +158,10 @@ body { margin: 0; }
 }
 
 /* Puffer als Geisterspur hinter dem Balken */
-.bz-slack { position: absolute; top: 50%; transform: translateY(-50%); height: var(--bar-h); pointer-events: none; }
+.bz-slack {
+  position: absolute; transform: translateY(-50%); height: var(--bar-h); pointer-events: none;
+  top: calc(var(--lane, 0) * var(--row-h) + var(--row-h) / 2);
+}
 
 /* Sammelbalken der Gruppe */
 .bz-sum { position: absolute; top: 50%; transform: translateY(-50%); height: 7px; background: var(--gw); }
@@ -163,7 +171,13 @@ body { margin: 0; }
 .bz-mini { position: absolute; top: 50%; transform: translateY(-50%); height: 13px; pointer-events: none; }
 
 /* Meilenstein */
-.bz-ms { position: absolute; top: 50%; height: 0; display: flex; align-items: center; cursor: pointer; }
+.bz-ms {
+  position: absolute; height: 0; display: flex; align-items: center; cursor: pointer;
+  top: calc(var(--lane, 0) * var(--row-h) + var(--row-h) / 2);
+}
+/* Zieltermine stehen in einer Zeile mit Gruppenhöhe, nicht in einer Vorgangszeile —
+   dort greift die Spur-Rechnung nicht. */
+.bz-ms-projekt { top: 50%; }
 .bz-ms-d {
   flex: none; width: 11px; height: 11px; margin-left: -5.5px;
   background: var(--gw, currentColor); transform: rotate(45deg);
