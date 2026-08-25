@@ -15,7 +15,7 @@ der Load-In läuft stundengenau.
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
 mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
-**Dazugekommen (bis v0.7.0):** Gewerke per Drag & Drop umsortieren · Gantt und
+**Dazugekommen (bis v0.7.1):** Gewerke per Drag & Drop umsortieren · Gantt und
 Tabelle in gleicher Reihenfolge (nach Startzeit) · **Untervorgänge** (einklappbar,
 Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für kritische
 Vorgänge und Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
@@ -40,6 +40,20 @@ git commit -am "Plan auf V08" && git push origin main
 `?plan=amk` öffnet stattdessen den AMK-Plan, **`?plan=leer`** überspringt den
 Autostart und zeigt den Projektdialog für eigene Projekte. Beide Pläne stehen
 auch im Dialog unter „Mitgelieferte Pläne".
+
+**Drucken: ein A3 quer je Tag.** Der Knopf **Drucken** im Kopf öffnet
+`print.html` — die Tagesblätter für die Wand im Produktionsbüro. Dort wählst du
+Zeitraum und **Gewerke** (Catering weg, Security weg …) und siehst die Blätter am
+Bildschirm so, wie sie aus dem Drucker kommen.
+
+Das Wegklicken ist mehr als Aufräumen: es bestimmt den **Maßstab**. An einem
+normalen Aufbautag zwingt allein die Objektbewachung (00:01–23:59) das Blatt auf
+24 Stunden; ohne sie schrumpft das Zeitfenster auf 08:00–18:00 und die Balken
+werden dreimal so breit. Das Fenster gilt für alle Blätter gemeinsam, damit sie
+vergleichbar bleiben — von Hand übersteuerbar.
+
+Im Druckdialog **A3 · Querformat** wählen und **Hintergrundgrafiken einschalten**,
+sonst drucken die Balken weiß.
 
 **Deine Daten liegen im Browser.** Privater Modus, Verlauf löschen, anderer
 Rechner — und sie sind weg. Bis PocketBase steht, ist der **JSON-Export die
@@ -111,6 +125,7 @@ node tools/verify-browser.mjs # Darstellung: App + 4 Theme-Prototypen im Browser
 node tools/verify-edit.mjs    # Bearbeiten: anlegen, tippen, Undo, Konflikte, Panel, Menü
 node tools/verify-live.mjs    # Live-Modus mit gestellter Uhr (page.clock)
 node tools/verify-amk.mjs     # AMK-Plan importieren und prüfen
+node tools/verify-print.mjs   # Tagesblätter: Zuschnitt, Filter, Maßstab, PDF
 node tools/make-amk.mjs       # amk-singleshow.json aus den PDF-Daten neu bauen
 
 # gegen die veröffentlichte Seite statt lokal:
@@ -160,6 +175,7 @@ alles danach.
 
 ```
 index.html              Die App
+print.html              Tagesblätter zum Drucken
 js/
   app.js                Einstieg: Projektverwaltung, Speichern, Ansichten
   store.js              Zustand + Befehle + Undo/Redo — DOM-frei
@@ -174,8 +190,10 @@ js/
   live.js               Verzug + laufende Vorgänge — DOM-frei
   inspector.js          Seitenpanel (mit Verknüpfungs-Suche)
   menu.js               Kontextmenü
+  print.js              Tagesblätter (A3 quer) — eigene Seite, print.html
 styles/
   base.css              Nur Geometrie + Verhalten. Dazu die Gewerk-Farben.
+  print.css             Blattgeometrie in mm, @page A3 quer
   themes/*.css          Fünf Gestaltungsebenen; callboard ist aktiv
 tests/                  Unit-Tests + statische Prüfungen
 tools/

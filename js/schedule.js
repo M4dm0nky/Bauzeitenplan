@@ -19,6 +19,41 @@ export const byStart = (a, b) =>
   || (a.title || '').localeCompare(b.title || '');
 
 /**
+ * Vorgänge auf einen Kalendertag zuschneiden — die Grundlage der Tagesblätter
+ * (ein A3 quer je Tag). Ein Vorgang, der über Mitternacht läuft, erscheint auf
+ * BEIDEN Blättern, jeweils angeschnitten; im Klassentreffen-Plan trifft das 40
+ * Balken (Nachtschichten, Objektbewachung). Ohne den Zuschnitt verschwänden sie
+ * entweder oder sprengten das Blatt.
+ *
+ * Rückgabe in MINUTEN seit Epoche, wie überall im Rechenteil — wer ISO braucht,
+ * formatiert selbst. Nach Beginn sortiert, bei Gleichstand nach Titel.
+ *
+ * @param {object[]} tasks
+ * @param {string} tagISO  «2026-08-30»
+ * @returns {{task:object, von:number, bis:number, schnittLinks:boolean, schnittRechts:boolean}[]}
+ */
+export function tagesScheiben(tasks, tagISO) {
+  const a = toMin(tagISO + 'T00:00');
+  const b = a + 1440;
+  const out = [];
+  for (const t of tasks) {
+    const s = toMin(t.start), e = toMin(t.end);
+    // Meilensteine haben keine Dauer: `e > a` allein ließe eine Raute um 00:00
+    // durchs Raster fallen. Deshalb der eigene Fall.
+    const drin = s === e ? (s >= a && s < b) : (e > a && s < b);
+    if (!drin) continue;
+    out.push({
+      task: t,
+      von: Math.max(s, a),
+      bis: Math.min(e, b),
+      schnittLinks: s < a,
+      schnittRechts: e > b,
+    });
+  }
+  return out.sort((x, y) => x.von - y.von || (x.task.title || '').localeCompare(y.task.title || ''));
+}
+
+/**
  * Vorgänge gleichen Namens zu SERIEN bündeln — die Zeile sagt WAS, die Balken
  * sagen WANN. Ein Bauzeitenplan wird tageweise gedruckt, deshalb steht dieselbe
  * Tätigkeit dort mehrfach untereinander («Aufbau Bühne» an drei Tagen). Im Gantt

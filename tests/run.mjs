@@ -145,8 +145,11 @@ const versionStellen = () => {
     const m = raw(p).match(re);
     return { wo: was, wert: m ? m[1] : null };
   };
-  const html = raw('index.html');
-  const vs = [...html.matchAll(/\?v=([^"']+)["']/g)].map((m, i) => ({ wo: `index.html ?v= #${i + 1}`, wert: m[1] }));
+  // JEDE ausgelieferte HTML-Seite, nicht nur index.html — eine zweite Seite mit
+  // eigenen ?v= liefe sonst still auseinander (siehe tools/version.mjs).
+  const vs = ['index.html', 'print.html'].flatMap((datei) =>
+    [...raw(datei).matchAll(/\?v=([^"']+)["']/g)]
+      .map((m, i) => ({ wo: `${datei} ?v= #${i + 1}`, wert: m[1] })));
   return [
     holen('js/version.js', /export const VERSION = '([^']+)'/, 'js/version.js'),
     holen('package.json', /"version":\s*"([^"]+)"/, 'package.json'),

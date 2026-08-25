@@ -74,14 +74,16 @@ ersetze('js/version.js', /export const VERSION = '[^']+'/, `export const VERSION
 ersetze('package.json', /"version":\s*"[^"]+"/, `"version": "${neu}"`, '"version"');
 ersetze('sw.js', /const SW_VERSION = 'v[^']+'/, `const SW_VERSION = 'v${neu}'`, 'SW_VERSION');
 
-// ALLE ?v= in index.html — nicht nur das erste. Genau dort entsteht sonst der
-// Drift: eine Stelle wandert, zwei bleiben stehen.
-{
-  const s = read('index.html');
+// ALLE ?v= in JEDER ausgelieferten HTML-Datei — nicht nur das erste, und nicht
+// nur index.html. Genau dort entsteht sonst der Drift: eine Stelle wandert, zwei
+// bleiben stehen. Kommt eine Seite dazu, gehört sie in diese Liste UND in die
+// Versionsprüfung in tests/run.mjs.
+for (const datei of ['index.html', 'print.html']) {
+  const s = read(datei);
   const treffer = [...s.matchAll(/\?v=[^"']+(["'])/g)].length;
-  if (!treffer) { console.error('\n  ✗ index.html: kein ?v= gefunden.\n'); process.exit(1); }
-  writeFileSync(P('index.html'), s.replace(/\?v=[^"']+(["'])/g, `?v=${neu}$1`));
-  stempel.push('index.html'.padEnd(20) + `${treffer}× ?v=`);
+  if (!treffer) { console.error(`\n  ✗ ${datei}: kein ?v= gefunden.\n`); process.exit(1); }
+  writeFileSync(P(datei), s.replace(/\?v=[^"']+(["'])/g, `?v=${neu}$1`));
+  stempel.push(datei.padEnd(20) + `${treffer}× ?v=`);
 }
 
 // ── CHANGELOG ───────────────────────────────────────────────────────────────

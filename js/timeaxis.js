@@ -78,9 +78,13 @@ export function ticksFor(unit, from, to) {
   const out = [];
   let cur;
   switch (unit) {
+    // «hour» = jede Stunde. Am Bildschirm zu dicht, auf dem A3-Tagesblatt aber
+    // richtig: dort sind 34 mm je Stunde Platz, und wer vor dem Blatt steht,
+    // sucht «14 Uhr», nicht «zwischen 12 und 15».
+    case 'hour':
     case 'hour3':
     case 'hour6': {
-      const step = unit === 'hour3' ? 3 : 6;
+      const step = unit === 'hour' ? 1 : unit === 'hour3' ? 3 : 6;
       cur = startOfDay(from);
       while (cur <= to) {
         if (cur >= from) out.push({ t: new Date(cur), label: String(cur.getHours()).padStart(2, '0') });

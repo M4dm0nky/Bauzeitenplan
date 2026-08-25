@@ -115,6 +115,12 @@ test('3-Stunden-Ticks rasten auf 00:00 ein, nicht auf der Fensterkante', () => {
   const t = ticksFor('hour3', new Date('2026-07-15T04:30'), new Date('2026-07-15T13:00'));
   assert.deepEqual(t.map((x) => x.label), ['06', '09', '12'], 'kein Tick um 04:30');
 });
+test('Stunden-Ticks liefern jede Stunde — für das A3-Tagesblatt', () => {
+  const t = ticksFor('hour', new Date('2026-08-30T00:00'), new Date('2026-08-30T23:59'));
+  assert.equal(t.length, 24, '00 bis 23');
+  assert.deepEqual(t.slice(0, 4).map((x) => x.label), ['00', '01', '02', '03']);
+  assert.equal(t[t.length - 1].label, '23');
+});
 test('Monats-Ticks decken den Rand mit ab', () => {
   const t = ticksFor('month', new Date('2026-05-04T00:00'), new Date('2026-07-22T00:00'));
   assert.deepEqual(t.map((x) => x.label), ['Mai 2026', 'Jun 2026', 'Jul 2026']);

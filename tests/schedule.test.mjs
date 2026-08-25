@@ -1,4 +1,4 @@
-import { computeSchedule, topoSort, toMin, byStart, candidateGroups, seriesRows } from '../js/schedule.js';
+import { computeSchedule, topoSort, toMin, byStart, candidateGroups, seriesRows, tagesScheiben } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -333,6 +333,78 @@ test('zwei Meilensteine am selben Termin liegen nicht übereinander', () => {
 
 test('leere Eingabe liefert keine Zeilen statt zu werfen', () => {
   assert.deepEqual(seriesRows([]), []);
+});
+
+// ── Tageszuschnitt für die Druckblätter ─────────────────────────────────────
+console.log('\nTagesscheiben');
+
+const TAG = '2026-08-30';
+const A = toMin(TAG + 'T00:00');
+const ts = (id, start, end, title = id) => ({ id, title, start, end });
+
+test('ein Vorgang mitten am Tag bleibt unangetastet', () => {
+  const r = tagesScheiben([ts('a', '2026-08-30T08:00', '2026-08-30T18:00')], TAG);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].von, A + 8 * 60);
+  assert.equal(r[0].bis, A + 18 * 60);
+  assert.equal(r[0].schnittLinks, false);
+  assert.equal(r[0].schnittRechts, false);
+});
+
+test('was in die Nacht läuft, wird rechts angeschnitten', () => {
+  // HELFER tse am 30.08.: 22:00 bis 04:00 am Folgetag
+  const r = tagesScheiben([ts('a', '2026-08-30T22:00', '2026-08-31T04:00')], TAG);
+  assert.equal(r[0].von, A + 22 * 60);
+  assert.equal(r[0].bis, A + 1440, 'endet an der Blattkante');
+  assert.equal(r[0].schnittRechts, true);
+  assert.equal(r[0].schnittLinks, false);
+});
+
+test('derselbe Vorgang erscheint am Folgetag links angeschnitten', () => {
+  const r = tagesScheiben([ts('a', '2026-08-30T22:00', '2026-08-31T04:00')], '2026-08-31');
+  const B = toMin('2026-08-31T00:00');
+  assert.equal(r[0].von, B, 'beginnt an der Blattkante');
+  assert.equal(r[0].bis, B + 4 * 60);
+  assert.equal(r[0].schnittLinks, true);
+  assert.equal(r[0].schnittRechts, false);
+});
+
+test('ein Vorgang über den ganzen Tag ist beidseitig angeschnitten', () => {
+  const r = tagesScheiben([ts('a', '2026-08-29T23:00', '2026-08-31T08:00')], TAG);
+  assert.equal(r[0].von, A);
+  assert.equal(r[0].bis, A + 1440);
+  assert.equal(r[0].schnittLinks, true);
+  assert.equal(r[0].schnittRechts, true);
+});
+
+test('was den Tag nicht berührt, fällt weg', () => {
+  const r = tagesScheiben([
+    ts('davor', '2026-08-29T08:00', '2026-08-29T18:00'),
+    ts('danach', '2026-08-31T08:00', '2026-08-31T18:00'),
+  ], TAG);
+  assert.deepEqual(r, []);
+});
+
+test('Mitternacht gehört dem Folgetag, nicht dem Vortag', () => {
+  // Ein Balken, der um 00:00 endet, gehört NICHT mehr auf das Blatt des Vortags —
+  // sonst hinge an dessen rechter Kante ein Strich ohne Dauer.
+  assert.deepEqual(tagesScheiben([ts('a', '2026-08-29T22:00', '2026-08-30T00:00')], TAG), []);
+  const r = tagesScheiben([ts('a', '2026-08-30T00:00', '2026-08-30T08:00')], TAG);
+  assert.equal(r.length, 1, 'der um 00:00 beginnt, gehört auf dieses Blatt');
+});
+
+test('ein Meilenstein ohne Dauer fällt nicht durchs Raster', () => {
+  const r = tagesScheiben([ts('m', '2026-08-30T00:00', '2026-08-30T00:00')], TAG);
+  assert.equal(r.length, 1, 'Raute um 00:00');
+  assert.equal(r[0].von, r[0].bis);
+});
+
+test('nach Beginn sortiert', () => {
+  const r = tagesScheiben([
+    ts('spaet', '2026-08-30T18:00', '2026-08-30T20:00'),
+    ts('frueh', '2026-08-30T08:00', '2026-08-30T10:00'),
+  ], TAG);
+  assert.deepEqual(r.map((x) => x.task.id), ['frueh', 'spaet']);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

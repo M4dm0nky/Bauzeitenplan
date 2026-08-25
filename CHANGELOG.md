@@ -3,6 +3,30 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.7.1 — 2026-08-25
+
+**Tagesblätter zum Drucken — ein A3 quer je Tag**
+- Neuer Knopf **Drucken** im Kopf: `print.html` zeigt den Plan als Blätter für die
+  Wand im Produktionsbüro, ein Blatt je Kalendertag. Am Bildschirm sehen sie aus
+  wie im Druck, damit man vorher prüft statt danach.
+- **Gewerke wegklicken** — der wichtigste Regler. Er räumt nicht nur auf, er
+  bestimmt den **Maßstab**: an einem Aufbautag zwingt allein die Objektbewachung
+  (00:01–23:59) das Blatt auf 24 Stunden. Ohne sie schrumpft das Zeitfenster auf
+  08:00–18:00 und die Balken werden dreimal so breit.
+- Das Zeitfenster wird **automatisch aus der Auswahl** gerechnet und gilt für alle
+  Blätter gemeinsam, damit sie vergleichbar bleiben — von Hand übersteuerbar.
+- Vorgänge über Mitternacht (Nachtschichten, Objektbewachung — 40 im Plan) stehen
+  auf **beiden** Blättern, angeschnitten und als solche markiert.
+- Die Zeilenhöhe füllt das Blatt: ein Tag mit 17 Zeilen sieht nicht aus wie einer
+  mit 64. Was unten frei bleibt, ist Platz für Notizen von Hand.
+- An der App selbst ändert sich nichts — sie bekommt einen Link.
+
+**Nebenbei**
+- `tools/version.mjs` und der Testlauf stempeln und prüfen jetzt **jede**
+  ausgelieferte HTML-Seite. Vorher kannten beide nur `index.html`; eine zweite
+  Seite mit eigenen `?v=` wäre still auseinandergelaufen.
+- `ticksFor` kennt eine Stundenstufe (bisher nur 3- und 6-Stunden-Schritte).
+
 ## 0.7.0 — 2026-08-25
 
 **Eine Zeile je Vorgang, ein Balken je Termin**

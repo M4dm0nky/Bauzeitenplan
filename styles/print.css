@@ -1,0 +1,126 @@
+/* ── Tagesblätter: ein A3 quer je Kalendertag ────────────────────────────────
+   Nur Geometrie und Druckverhalten. Die Gewerk-Farben kommen wie überall aus
+   base.css (--gw-0 … --gw-9) — hier wird keine einzige neu definiert.
+
+   Maße in mm, nicht in px: das Blatt ist ein Blatt. 420 × 297 mm minus 10 mm
+   Rand ergibt 400 × 277 mm Satzspiegel. Am Bildschirm sieht man dieselbe Fläche
+   auf grauem Grund, damit vor dem Drucken geprüft wird und nicht danach. */
+
+@page { size: A3 landscape; margin: 10mm; }
+
+.pr {
+  --pr-name-w: 60mm;      /* Namensspalte */
+  --pr-row-h: 6mm;        /* je Blatt gerechnet, hier nur der Ausgangswert */
+  --pr-bar-h: 3.6mm;
+  --pr-ink: #14181f;
+  --pr-line: #c9ced6;
+  --pr-mute: #5d6672;
+  margin: 0;
+  background: #6f757e;
+  color: var(--pr-ink);
+  font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 10px;
+}
+
+/* ── Steuerleiste (nie im Druck) ─────────────────────────────────────────── */
+.pr-ctl {
+  position: sticky; top: 0; z-index: 5;
+  background: #fff; border-bottom: 1px solid var(--pr-line);
+  padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-end;
+}
+.pr-ctl h1 { font-size: 15px; margin: 0; font-weight: 600; }
+.pr-ctl .pr-sub { color: var(--pr-mute); font-size: 11px; }
+.pr-f { display: flex; flex-direction: column; gap: 3px; }
+.pr-f > span { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--pr-mute); }
+.pr-ctl input[type="date"], .pr-ctl input[type="time"] {
+  font: inherit; padding: 3px 5px; border: 1px solid var(--pr-line); border-radius: 3px;
+}
+.pr-gw { display: flex; flex-wrap: wrap; gap: 4px 10px; max-width: 620px; }
+.pr-gw label { display: flex; align-items: center; gap: 5px; font-size: 11px; cursor: pointer; }
+.pr-btn {
+  font: inherit; padding: 6px 12px; border: 1px solid var(--pr-line);
+  background: #fff; border-radius: 4px; cursor: pointer;
+}
+.pr-btn-p { background: var(--pr-ink); color: #fff; border-color: var(--pr-ink); font-weight: 600; }
+.pr-hint { font-size: 11px; color: var(--pr-mute); max-width: 300px; line-height: 1.35; }
+
+/* ── Ein Blatt ───────────────────────────────────────────────────────────── */
+.pr-sheets { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 14px; }
+.pr-sheet {
+  width: 400mm; height: 277mm; box-sizing: border-box;
+  background: #fff; display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+}
+
+.pr-head { display: flex; align-items: baseline; gap: 8mm; padding-bottom: 2mm; border-bottom: .5mm solid var(--pr-ink); }
+.pr-head-t { font-size: 5mm; font-weight: 700; }
+.pr-head-d { font-size: 5mm; font-weight: 600; margin-left: auto; }
+.pr-head-n { font-size: 3.2mm; color: var(--pr-mute); font-variant-numeric: tabular-nums; }
+
+/* Zeitachse */
+.pr-axis { display: flex; height: 5mm; align-items: flex-end; }
+.pr-axis-pad { width: var(--pr-name-w); flex: none; }
+.pr-axis-scale { position: relative; flex: 1; height: 100%; }
+.pr-tick { position: absolute; bottom: 0; font-size: 2.6mm; color: var(--pr-mute); transform: translateX(-50%); font-variant-numeric: tabular-nums; }
+
+/* Zeilen */
+.pr-body { flex: 1; min-height: 0; }
+.pr-grp {
+  display: flex; align-items: center; height: var(--pr-row-h);
+  font-size: 2.9mm; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  border-top: .35mm solid var(--pr-ink); padding-top: .3mm;
+}
+.pr-grp .pr-dot { width: 2.4mm; height: 2.4mm; border-radius: 50%; background: var(--gw); margin-right: 1.6mm; flex: none; }
+.pr-row { display: flex; height: var(--pr-row-h); border-bottom: .2mm solid #e6e9ee; }
+.pr-name { width: var(--pr-name-w); flex: none; padding-right: 2mm; overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
+/* Kopfzeile der Namensspalte: Name links (kuerzt sich), Zeit rechts (kuerzt nie —
+   sie ist die Information, wegen der jemand aufs Blatt schaut). */
+.pr-name-t { display: flex; align-items: baseline; gap: 1.5mm; font-size: var(--pr-titel, 2.9mm); line-height: 1.12; overflow: hidden; }
+.pr-name-x { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-name-z { flex: none; font-size: calc(var(--pr-titel, 2.9mm) * .86); color: var(--pr-mute); font-variant-numeric: tabular-nums; }
+.pr-name-n { font-size: var(--pr-notiz, 2.3mm); line-height: 1.12; color: var(--pr-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-track { position: relative; flex: 1; }
+
+/* Stundenraster als Verlauf — kostet kein Element, egal wie fein */
+.pr-track { background-image: repeating-linear-gradient(to right, #e6e9ee 0 .2mm, transparent .2mm var(--pr-grid)); }
+
+.pr-bar {
+  position: absolute; height: var(--pr-bar-h);
+  top: calc(var(--lane, 0) * var(--pr-row-h) + var(--pr-row-h) / 2);
+  transform: translateY(-50%);
+  background: var(--gw); border-radius: .4mm;
+  display: flex; align-items: center; overflow: hidden;
+  print-color-adjust: exact; -webkit-print-color-adjust: exact;
+}
+.pr-bar[data-tex]::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: repeating-linear-gradient(45deg, rgba(255,255,255,.6) 0 .5mm, transparent .5mm 1.2mm);
+}
+/* Geschätzte Zeit: gestrichelte rechte Kante, wie am Bildschirm */
+.pr-bar.is-est { border-right: .6mm dashed rgba(0, 0, 0, .55); }
+/* Angeschnitten: die Kante bleibt offen, damit man sieht, dass es weitergeht */
+.pr-bar.is-cut-l { border-left: .6mm solid #fff; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.pr-bar.is-cut-r { border-right: .6mm solid #fff; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+
+.pr-ms { position: absolute; top: calc(var(--pr-row-h) / 2); width: 0; height: 0; }
+.pr-ms::before {
+  content: ''; position: absolute; width: 2.6mm; height: 2.6mm; margin: -1.3mm 0 0 -1.3mm;
+  background: var(--gw); transform: rotate(45deg); print-color-adjust: exact;
+}
+
+.pr-foot {
+  border-top: .35mm solid var(--pr-ink); padding-top: 1.4mm; margin-top: 1.4mm;
+  display: flex; gap: 4mm; align-items: baseline; font-size: 2.5mm; color: var(--pr-mute);
+}
+.pr-leg { display: flex; flex-wrap: wrap; gap: 1mm 3mm; flex: 1; }
+.pr-leg-i { display: flex; align-items: center; gap: 1mm; }
+.pr-leg i { width: 2.2mm; height: 2.2mm; border-radius: 50%; background: var(--gw); print-color-adjust: exact; }
+.pr-leer { padding: 10mm; font-size: 4mm; color: var(--pr-mute); }
+
+@media print {
+  .pr { background: #fff; }
+  .pr-ctl { display: none; }
+  .pr-sheets { padding: 0; gap: 0; }
+  .pr-sheet { box-shadow: none; break-after: page; }
+  .pr-sheet:last-child { break-after: auto; }
+}

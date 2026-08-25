@@ -14,6 +14,7 @@ node tools/verify-edit.mjs      # Bearbeiten: anlegen, tippen, Undo, Panel, Men�
 node tools/verify-live.mjs      # Live-Modus mit gestellter Uhr
 node tools/verify-amk.mjs       # AMK-Plan importieren
 node tools/verify-klassentreffen.mjs   # V07-Plan + Autostart über die Adresse
+node tools/verify-print.mjs     # Tagesblätter A3: Zuschnitt, Filter, Maßstab
 ```
 
 Beides muss grün sein, bevor etwas als fertig gilt. `verify-browser.mjs` braucht
@@ -87,7 +88,7 @@ noch Pages einschalten (nur `push`, kein `admin`).
 
 ## Version
 
-**Aktuell: 0.7.0** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
+**Aktuell: 0.7.1** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
 
 **Die Version wird NIE von Hand geändert.** Ein Befehl stempelt sie in alle
 sechs Stellen zugleich:
@@ -97,8 +98,11 @@ node tools/version.mjs          # zeigt die aktuelle
 node tools/version.mjs 0.2.0    # setzt sie überall + Changelog-Abschnitt
 ```
 
-Betroffen: `js/version.js` (Quelle) · `package.json` · `index.html` (alle `?v=`)
-· `sw.js` (`SW_VERSION`) · `CHANGELOG.md`. **Die Nummer entscheidet Marco**, nicht
+Betroffen: `js/version.js` (Quelle) · `package.json` · `index.html` **und
+`print.html`** (alle `?v=`) · `sw.js` (`SW_VERSION`) · `CHANGELOG.md`. Kommt eine
+weitere HTML-Seite dazu, gehört sie in `tools/version.mjs` UND in die
+Versionsprüfung in `tests/run.mjs`. **Die Nummer entscheidet Marco** — und zwar
+VOR dem Stempeln gefragt, nicht danach mitgeteilt —, nicht
 die Automatik. Rückschritte und Nicht-SemVer lehnt der Befehl ab — eine Version
 zurückzudrehen bricht den Cache-Schutz.
 
@@ -241,6 +245,28 @@ Ebene** (in `addTask` erzwungen), sonst genügte ein reflow-Durchlauf nicht.
 Elternvorgang löschen kaskadiert auf die Kinder; Gewerkwechsel zieht sie mit.
 `findConflicts` nimmt Sammelvorgänge AUS — ihre Lage ist abgeleitet, nicht direkt
 verschiebbar, und ein Konflikt an ihnen risse den Auflösen-Sammelbefehl.
+
+**Die Tagesblätter sind eine eigene Seite, kein Druckmodus der App.**
+`print.html` + `js/print.js` + `styles/print.css` rendern ein A3 quer je Tag. Der
+Gantt ist EIN Scroll-Container; ihn zu zerschneiden hieße, gantt.js umzubauen.
+Reihenfolge der Entscheidungen: **Auswahl → Zeitfenster → Blatt.** Das Wegklicken
+von Gewerken steuert auch den MASSSTAB — an einem Aufbautag zwingt allein die
+Objektbewachung (00:01–23:59) das Blatt auf 24 h, ohne sie sind es 08:00–18:00.
+Das Fenster gilt über alle gewählten Blätter gemeinsam, sonst sind sie nicht
+vergleichbar. Der Zuschnitt (`tagesScheiben`) liegt DOM-frei in `schedule.js`;
+über Mitternacht laufende Vorgänge stehen auf beiden Blättern, angeschnitten.
+
+**Auf dem Blatt steht kein Text IM Balken.** Er läge über der Schraffur, stünde
+bei dunklen Gewerkfarben schwarz auf dunkel und würde bei schmalen Balken
+abgeschnitten — alles drei auf dem ersten Probedruck gesehen. Name, Zeit und
+Notiz stehen in der Namensspalte, die auf Papier ohnehin immer daneben liegt.
+Schriftgrößen hängen an der Zeilenhöhe (`--pr-titel`/`--pr-notiz`); die Notizzeile
+fällt weg, bevor sie unlesbar wird, statt die Zeile darüber anzuschneiden.
+
+**Jede ausgelieferte HTML-Seite gehört in `tools/version.mjs` UND in die
+Versionsprüfung in `tests/run.mjs`.** Beide kannten anfangs nur `index.html` —
+eine zweite Seite mit eigenen `?v=` wäre still auseinandergelaufen. Genau der
+Crewplaner-Fehler, der weiter unten als Gegenbeispiel steht.
 
 **Der Gantt zeigt eine Zeile je VORGANGSNAME, einen Balken je Termin**
 (`seriesRows` in schedule.js, DOM-frei und getestet). Ein Bauzeitenplan wird

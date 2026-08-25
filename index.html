@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CallBoard — Bauzeitenplan</title>
-<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.7.0">
+<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.7.1">
 
 <script>
   // Hell/Dunkel VOR dem CSS festlegen, damit beim Laden nichts aufblitzt.
@@ -40,8 +40,8 @@
      Der Theme-Link wählt die Gestaltungsebene: styles/themes/ enthält fünf
      fertige Ebenen (callboard = aktiv). Hell/Dunkel schaltet der Betrachter
      über data-theme (Knopf im Kopf). Siehe docs/themes.md. -->
-<link rel="stylesheet" href="styles/base.css?v=0.7.0">
-<link rel="stylesheet" href="styles/themes/callboard.css?v=0.7.0" id="theme-css" data-theme-name="callboard">
+<link rel="stylesheet" href="styles/base.css?v=0.7.1">
+<link rel="stylesheet" href="styles/themes/callboard.css?v=0.7.1" id="theme-css" data-theme-name="callboard">
 </head>
 <body>
 
@@ -111,6 +111,10 @@
       <div class="hd-right">
         <span class="save-state" id="save-state" data-state="saved">gesichert</span>
         <button class="btn" id="add-gewerk">+ Gewerk</button>
+        <!-- Bewusst ein Link ohne id: der Testlauf verlangt für jede id in
+             index.html eine Entsprechung in app.js, und print.html braucht
+             keine Verdrahtung — es lädt das aktive Projekt selbst. -->
+        <a class="btn" href="print.html" title="Tagesblätter drucken (A3 quer)">Drucken</a>
         <button class="btn" id="export" title="Sicherung herunterladen">Export</button>
         <button class="btn" id="import">Import</button>
         <button class="btn" id="new-proj">Neu</button>
@@ -146,6 +150,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="import-file" accept="application/json,.json" hidden>
 
-<script type="module" src="js/app.js?v=0.7.0"></script>
+<script type="module" src="js/app.js?v=0.7.1"></script>
 </body>
 </html>
