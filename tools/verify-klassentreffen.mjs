@@ -32,7 +32,7 @@ const check = async (name, fn) => {
   if (r === true) console.log('  ✓ ' + name); else { console.log('  ✗ ' + name + ': ' + r); bad++; }
 };
 
-await p.goto('http://127.0.0.1:' + server.address().port + '/index.html');
+await p.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
 await p.waitForTimeout(700);
 
 console.log('\nKLASSENTREFFEN IMPORTIEREN');
@@ -96,6 +96,46 @@ await p.waitForTimeout(400);
 await p.locator('[data-z="monate"]').click();
 await p.waitForTimeout(400);
 await p.screenshot({ path: join(here, 'shots', 'klassentreffen-monate.png'), fullPage: false });
+
+// ── Autostart: die Adresse allein muss den Plan zeigen ───────────────────────
+// Das ist der eigentliche Zweck der Weitergabe — wer den Link öffnet, sieht den
+// Plan, ohne etwas zu importieren. Frischer Kontext = leerer localStorage, also
+// genau die Lage eines fremden Besuchers.
+console.log('\nAUTOSTART (frischer Browser, ohne Kennung)');
+const frisch = await b.newContext({ viewport: { width: 1600, height: 950 } });
+const fp = await frisch.newPage();
+const ferr = [];
+fp.on('pageerror', (e) => ferr.push('JS: ' + e.message));
+await fp.goto('http://127.0.0.1:' + server.address().port + '/index.html');
+await fp.waitForTimeout(1500);
+await check('der Plan ist ohne Import da', async () =>
+  (await fp.locator('#proj-name').textContent()).includes('Klassentreffen') ? true : 'kein Plan geladen');
+await check('kein Projektdialog im Weg', async () =>
+  (await fp.locator('#dlg').isHidden()) ? true : 'Dialog verdeckt den Plan');
+await check('353 Vorgänge', async () => {
+  const t = await fp.locator('.kpi', { hasText: 'Vorgänge' }).locator('.kpi-v').textContent();
+  return t.trim() === '353' ? true : t;
+});
+await fp.screenshot({ path: join(here, 'shots', 'klassentreffen-autostart.png') });
+
+// Der zweite Aufruf holt NICHT neu: derselbe Stempel, also bleibt die lokale
+// Fassung stehen — sonst verlöre der Betrachter bei jedem Laden seine Änderungen.
+await check('zweiter Aufruf öffnet die lokale Fassung', async () => {
+  await fp.goto('http://127.0.0.1:' + server.address().port + '/index.html');
+  await fp.waitForTimeout(1200);
+  return (await fp.locator('#proj-name').textContent()).includes('Klassentreffen') ? true : 'Plan weg';
+});
+
+// ?plan=leer im WIRKLICH frischen Browser (leerer Speicher) — so starten die
+// Erststart-Prüfungen. Im Kontext oben liegt der Plan schon, dort öffnet die App
+// dann richtigerweise das vorhandene Projekt statt eines Dialogs.
+const leerCtx = await b.newContext({ viewport: { width: 1400, height: 900 } });
+const lp = await leerCtx.newPage();
+await lp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
+await lp.waitForTimeout(1000);
+await check('?plan=leer zeigt im leeren Browser den Projektdialog', async () =>
+  (await lp.locator('#dlg').isVisible()) ? true : 'Dialog fehlt');
+if (ferr.length) { console.log('  ✗ JS-Fehler beim Autostart: ' + ferr[0]); bad++; }
 
 if (errors.length) { console.log('\n  ✗ Fehler:'); errors.slice(0, 5).forEach((e) => console.log('      ' + e)); bad += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');

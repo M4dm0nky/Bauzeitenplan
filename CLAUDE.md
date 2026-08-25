@@ -13,6 +13,7 @@ node tools/verify-browser.mjs   # Darstellung: App + 4 Prototypen
 node tools/verify-edit.mjs      # Bearbeiten: anlegen, tippen, Undo, Panel, Menü
 node tools/verify-live.mjs      # Live-Modus mit gestellter Uhr
 node tools/verify-amk.mjs       # AMK-Plan importieren
+node tools/verify-klassentreffen.mjs   # V07-Plan + Autostart über die Adresse
 ```
 
 Beides muss grün sein, bevor etwas als fertig gilt. `verify-browser.mjs` braucht
@@ -86,7 +87,7 @@ noch Pages einschalten (nur `push`, kein `admin`).
 
 ## Version
 
-**Aktuell: 0.5.0** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
+**Aktuell: 0.6.0** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
 
 **Die Version wird NIE von Hand geändert.** Ein Befehl stempelt sie in alle
 sechs Stellen zugleich:
@@ -179,6 +180,16 @@ etwas automatisch um, sähe der Plan immer nach Plan aus — und das Signal wär
 **`reorderGewerk` darf `slot` nicht anfassen.** Farbe gehört dem Gewerk, nicht
 seiner Position; sonst färbt sich beim Sortieren der halbe Plan um. Ein Test
 prüft das.
+
+**Der Autostart lädt die JSON, die JSON ist die Wahrheit.** `boot()` holt beim
+Start `klassentreffen-festival.json` (`BUNDLED`/`START` in app.js). Neuer Planstand
+= Datei austauschen und pushen, sonst nichts. Ob nachgeladen wird, entscheidet der
+`exported`-Stempel aus `serialize()`, mitgeführt in `project.quelle`: Datei neuer →
+Datei gewinnt, gleich → lokale Fassung bleibt (sonst verlöre der Betrachter bei
+jedem Laden seine Änderungen), nicht erreichbar → lokal. **`?plan=leer` schaltet
+den Autostart ab** — ohne diesen Schalter hätten `verify-browser`, `verify-edit`,
+`verify-live` und `verify-amk` keinen Erststart-Dialog mehr, an dem sie alle hängen.
+Wer am Autostart dreht, muss die vier Werkzeuge mitdenken.
 
 **Was der erste Start braucht, gehört auf Modulebene — nicht in `mount()`.**
 `mount()` läuft erst, wenn ein Projekt offen ist. Der Import hing dort und war

@@ -44,7 +44,7 @@ const check = async (name, fn) => {
   else { console.log('  ✗ ' + name + ': ' + r); problems++; }
 };
 
-await page.goto(BASE + '/index.html');
+await page.goto(BASE + '/index.html?plan=leer');
 await page.waitForTimeout(900);
 
 console.log('\nERSTSTART');

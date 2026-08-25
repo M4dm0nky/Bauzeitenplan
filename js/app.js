@@ -20,8 +20,80 @@ import { VERSION } from './version.js';
 const repo = createRepo(window.localStorage);
 let store = null, gantt = null, table = null, inspector = null, view = 'gantt';
 
+// ── Mitgelieferte Pläne ─────────────────────────────────────────────────────
+// Der Plan liegt als JSON neben der App und wird beim Start automatisch geholt.
+// Wer die Adresse aufruft, sieht ihn sofort — kein Import, keine Datei im Anhang.
+//
+// DIE DATEI IM REPO IST DIE WAHRHEIT. Kommt ein neuer Stand (V08, V09 …), wird
+// nur die JSON ausgetauscht und gepusht; jeder Betrachter zieht sie beim nächsten
+// Laden von selbst nach. Erkannt wird das am `exported`-Stempel, den serialize()
+// mitschreibt: ist der in der Datei neuer als der zuletzt geladene, gewinnt die
+// Datei. Sonst bliebe die lokale Kopie ewig stehen und niemand merkte es.
+//
+// `?plan=leer` überspringt das und zeigt den Projektdialog — für eigene Projekte
+// und für die Erststart-Prüfungen (verify-edit, verify-live, verify-amk), die
+// genau diesen Dialog brauchen.
+const START = 'klassentreffen';
+const BUNDLED = {
+  klassentreffen: { file: 'klassentreffen-festival.json', name: 'Klassentreffen Festival 2026' },
+  amk: { file: 'amk-singleshow.json', name: 'AMK Singleshow' },
+};
+
+/**
+ * Mitgelieferten Plan öffnen. Die Datei gewinnt, wenn sie neuer ist als die
+ * lokale Kopie; sonst wird die lokale geöffnet (die kann Änderungen des
+ * Betrachters tragen). Ist die Datei nicht erreichbar — offline, `file://` —
+ * bleibt es bei der lokalen Kopie.
+ * @returns {Promise<boolean>} ob ein Plan offen ist
+ */
+async function openBundled(key) {
+  const b = BUNDLED[key];
+  if (!b) { toast('Unbekannter Plan: ' + key, 'bad', 6000); return false; }
+  const da = repo.list().find((p) => p.name === b.name);
+  const lokal = da ? repo.load(da.id) : null;
+
+  let datei = null;
+  try {
+    // ?v= wie in index.html: sonst liefert Pages bis zu zehn Minuten den alten Stand.
+    const res = await fetch('./' + b.file + '?v=' + VERSION, { cache: 'no-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const r = deserialize(text);
+    if (r.ok === false) throw new Error(r.error);
+    // Den Stempel der Datei mitführen, sonst ist beim nächsten Start nicht
+    // feststellbar, welcher Stand hier liegt.
+    const roh = JSON.parse(text);
+    r.plan.project.quelle = { datei: b.file, version: roh.version || null, exported: roh.exported || null };
+    datei = r.plan;
+  } catch (e) {
+    if (!lokal) { toast('«' + b.name + '» konnte nicht geladen werden: ' + (e.message || e), 'bad', 8000); return false; }
+  }
+
+  if (datei && neuer(datei, lokal)) {
+    open(datei);
+    if (lokal) toast('Neuer Stand geladen: ' + b.name);
+    return true;
+  }
+  if (lokal) { open(lokal); return true; }
+  if (datei) { open(datei); return true; }
+  return false;
+}
+
+// Ist die Datei neuer als die lokale Kopie? Ohne lokale Kopie: ja. Ohne Stempel
+// auf einer der beiden Seiten: ja — dann ist die Datei die verlässlichere Quelle.
+function neuer(datei, lokal) {
+  if (!lokal) return true;
+  const a = (datei.project.quelle || {}).exported;
+  const b = (lokal.project.quelle || {}).exported;
+  if (!a || !b) return true;
+  return a > b;
+}
+
 // ── Erststart ───────────────────────────────────────────────────────────────
-function boot() {
+async function boot() {
+  const wunsch = new URLSearchParams(location.search).get('plan');
+  if (wunsch !== 'leer' && await openBundled(wunsch || START)) return;
+
   const activeId = repo.getActive();
   const plan = activeId && repo.load(activeId);
   if (plan) return open(plan);
@@ -427,6 +499,20 @@ function showProjectDialog({ firstRun = false }) {
     }
     box.append(ul);
   }
+
+  // Mitgelieferte Pläne — auch erreichbar, wenn man schon eigene Projekte hat.
+  box.append(el('h3', 'dlg-h3', 'Mitgelieferte Pläne'));
+  const bl = el('div', 'dlg-list');
+  for (const [key, b] of Object.entries(BUNDLED)) {
+    const row = el('div', 'dlg-row');
+    const btn = el('button', 'dlg-open');
+    btn.append(el('span', 'dlg-open-n', b.name));
+    btn.append(el('span', 'dlg-open-m', 'aus ' + b.file + ' · Direktlink: ?plan=' + key));
+    btn.onclick = async () => { if (await openBundled(key)) close(); };
+    row.append(btn);
+    bl.append(row);
+  }
+  box.append(bl);
 
   // Neu anlegen
   box.append(el('h3', 'dlg-h3', 'Neues Projekt'));

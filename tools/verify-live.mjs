@@ -42,7 +42,7 @@ const check = async (name, fn) => {
 // Uhr auf einen Zeitpunkt MITTEN im Aufbau stellen — dort ist etwas los.
 const AUFBAU = new Date('2026-08-05T09:00:00');
 await page.clock.install({ time: AUFBAU });
-await page.goto(BASE + '/index.html');
+await page.goto(BASE + '/index.html?plan=leer');
 await page.waitForTimeout(600);
 
 // Projekt anlegen: Aufbaubeginn = heute (die gestellte Uhr) minus nichts

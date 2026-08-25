@@ -3,6 +3,25 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.6.0 — 2026-08-25
+
+**Der Plan steht sofort da — Adresse weitergeben genügt**
+- Beim Start lädt die App den Klassentreffen-Plan **automatisch** aus
+  `klassentreffen-festival.json`. Wer die Adresse aufruft, sieht ihn ohne Import
+  und ohne Datei im Anhang. Bisher landete jeder Besucher auf einer leeren App
+  und musste erst eine JSON importieren, die man ihm mitschicken musste.
+- **Die Datei im Repo ist die Wahrheit.** Kommt ein neuer Stand (V08, V09 …),
+  wird nur die JSON ausgetauscht und gepusht — jeder Betrachter zieht sie beim
+  nächsten Laden von selbst nach. Erkannt wird das am `exported`-Stempel, den
+  der Export ohnehin mitschreibt: ist der in der Datei neuer als der zuletzt
+  geladene, gewinnt die Datei.
+- Ist der Stempel gleich, bleibt die **lokale Fassung** stehen — sonst verlöre
+  man bei jedem Neuladen seine eigenen Änderungen. Ist die Datei nicht
+  erreichbar (offline), wird ebenfalls lokal geöffnet.
+- `?plan=amk` öffnet den AMK-Plan, `?plan=leer` überspringt den Autostart und
+  zeigt den Projektdialog — für eigene Projekte. Beide Pläne stehen jetzt auch
+  im Projektdialog unter **„Mitgelieferte Pläne"**.
+
 ## 0.5.0 — 2026-08-25
 
 **Klassentreffen-Beispieldaten auf V07 (Stand 25.08.2026)**

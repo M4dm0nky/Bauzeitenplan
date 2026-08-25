@@ -32,7 +32,7 @@ const check = async (name, fn) => {
   if (r === true) console.log('  ✓ ' + name); else { console.log('  ✗ ' + name + ': ' + r); bad++; }
 };
 
-await p.goto('http://127.0.0.1:' + server.address().port + '/index.html');
+await p.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
 await p.waitForTimeout(700);
 
 console.log('\nAMK IMPORTIEREN');

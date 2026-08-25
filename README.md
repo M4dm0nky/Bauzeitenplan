@@ -15,11 +15,31 @@ der Load-In läuft stundengenau.
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
 mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
-**Dazugekommen (bis v0.5.0):** Gewerke per Drag & Drop umsortieren · Gantt und
+**Dazugekommen (bis v0.6.0):** Gewerke per Drag & Drop umsortieren · Gantt und
 Tabelle in gleicher Reihenfolge (nach Startzeit) · **Untervorgänge** (einklappbar,
 Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für kritische
 Vorgänge und Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
 statt endlosem Dropdown · Hell/Dunkel-Umschalter im Kopf · CallBoard-Marke.
+
+**Weitergeben: einfach die Adresse schicken.** Wer
+[die Seite](https://m4dm0nky.github.io/Bauzeitenplan/) öffnet, sieht den
+Klassentreffen-Plan **sofort** — kein Import, keine Datei im Anhang. Die App holt
+ihn beim Start aus `klassentreffen-festival.json`.
+
+**Neuer Planstand? Nur die JSON austauschen.** Kommt V08, V09 …, wird die Datei
+neu gebaut und gepusht — jeder Betrachter zieht sie beim nächsten Laden von
+selbst nach. Erkannt wird das am `exported`-Stempel: ist der in der Datei neuer
+als der zuletzt geladene, gewinnt die Datei. Ist er gleich, bleibt die lokale
+Fassung stehen, damit eigene Änderungen nicht verlorengehen.
+
+```bash
+node tools/make-klassentreffen.mjs   # JSON aus der Quelle neu bauen
+git commit -am "Plan auf V08" && git push origin main
+```
+
+`?plan=amk` öffnet stattdessen den AMK-Plan, **`?plan=leer`** überspringt den
+Autostart und zeigt den Projektdialog für eigene Projekte. Beide Pläne stehen
+auch im Dialog unter „Mitgelieferte Pläne".
 
 **Deine Daten liegen im Browser.** Privater Modus, Verlauf löschen, anderer
 Rechner — und sie sind weg. Bis PocketBase steht, ist der **JSON-Export die

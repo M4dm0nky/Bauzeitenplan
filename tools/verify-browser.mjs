@@ -69,7 +69,10 @@ if (argBase) {
 // Die App selbst zuerst — sie ist das Produkt; die Prototypen sind Entwürfe.
 // Live sind nur die App und der Service Worker im Deploy, die Prototypen nicht.
 const PAGES = [
-  { name: 'APP (index.html)', url: BASE + '/index.html', app: true },
+  // ?plan=leer: ohne den Schalter lüde die App den mitgelieferten Klassentreffen-
+  // Plan und die Darstellungsprüfungen liefen gegen andere Daten (der hat z.B.
+  // keine Phasen). Geprüft wird hier weiter die Festival-Vorlage.
+  { name: 'APP (index.html)', url: BASE + '/index.html?plan=leer', app: true },
   ...(argBase ? [] : ['console', 'blueprint', 'studio', 'board'].map((v) =>
     ({ name: 'Prototyp ' + v, url: BASE + '/tools/out/' + v + '.html', key: v }))),
 ];
