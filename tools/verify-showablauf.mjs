@@ -121,20 +121,46 @@ await check('die Namensspalte IST der Ablaufplan — Zeile für Zeile wie im PDF
   // Gelesen wird, was in der Seitenspalte steht — nicht, was der Store meint.
   const zeilen = await p.locator('.bz-lab-task').evaluateAll((ns) => ns.map((n) => [
     n.querySelector('.bz-lab-zeit')?.textContent.trim() || '',
+    n.querySelector('.bz-lab-dauer')?.textContent.trim() || '',
     n.querySelector('.bz-lab-name')?.textContent.trim() || '',
   ].join(' ')));
   const soll = [
-    '12:00 DOORS', '14:00 CREUTZFELD & JAKOB', '14:30 Changeover', '14:40 OLLI BANJO',
-    '15:10 Changeover', '15:20 CURSE', '15:55 Changeover', '16:05 STIEBER TWINS & CORA E',
-    '16:45 Changeover', '16:55 TORCH FEAT. TONI L', '17:35 Changeover + FLYING STEPS',
-    '17:50 EKO FRESH', '18:30 Changeover', '19:00 KOOL SAVAS', '20:00 Changeover',
-    '20:40 SIDO', '21:50 SHOW END',
+    '12:00 Uhr (120 min) DOORS', '14:00 Uhr (30 min) CREUTZFELD & JAKOB',
+    '14:30 Uhr (10 min) Changeover', '14:40 Uhr (30 min) OLLI BANJO',
+    '15:10 Uhr (10 min) Changeover', '15:20 Uhr (35 min) CURSE',
+    '15:55 Uhr (10 min) Changeover', '16:05 Uhr (40 min) STIEBER TWINS & CORA E',
+    '16:45 Uhr (10 min) Changeover', '16:55 Uhr (40 min) TORCH FEAT. TONI L',
+    '17:35 Uhr (15 min) Changeover + FLYING STEPS', '17:50 Uhr (40 min) EKO FRESH',
+    '18:30 Uhr (30 min) Changeover', '19:00 Uhr (60 min) KOOL SAVAS',
+    '20:00 Uhr (40 min) Changeover', '20:40 Uhr (70 min) SIDO',
+    '21:50 Uhr — SHOW END',
   ];
   if (zeilen.length !== soll.length) return zeilen.length + ' Zeilen statt ' + soll.length;
   for (let i = 0; i < soll.length; i++) {
     if (zeilen[i] !== soll[i]) return 'Zeile ' + (i + 1) + ': «' + zeilen[i] + '» statt «' + soll[i] + '»';
   }
   return true;
+});
+await check('die Achse beschriftet JEDE Stunde', async () => {
+  // Ein Ablauf wird nach Uhrzeiten gelesen; «zwischen 12 und 15» hilft nicht.
+  const ticks = (await p.locator('.bz-axis-minor .bz-t-n').allTextContents()).map((x) => x.trim());
+  const zahlen = ticks.map(Number).filter((n) => !Number.isNaN(n));
+  if (zahlen.length < 8) return 'nur ' + zahlen.length + ' Stundenmarken: ' + ticks.join(' ');
+  const lueckig = zahlen.slice(1).some((n, i) => (n - zahlen[i] + 24) % 24 !== 1);
+  return lueckig ? 'Marken springen: ' + zahlen.join(' ') : true;
+});
+await check('Zeit, Dauer und Name stehen auf EINER Zeile', async () => {
+  // «12:00 Uhr» in einer zu schmalen Spalte brach um und schob das «Uhr» unter
+  // die Zahl. Die Namensprüfung sah das nicht — sie misst nur die linke Kante.
+  const kaputt = await p.locator('.bz-lab-task').evaluateAll((ns) => ns
+    .map((n) => {
+      const t = (s) => Math.round(n.querySelector(s).getBoundingClientRect().top);
+      return [n.querySelector('.bz-lab-name').textContent.trim(),
+        t('.bz-lab-zeit'), t('.bz-lab-dauer'), t('.bz-lab-name')];
+    })
+    .filter(([, a, b, c]) => Math.abs(a - b) > 1 || Math.abs(a - c) > 1)
+    .map(([name]) => name));
+  return kaputt.length ? 'umgebrochen bei: ' + kaputt.slice(0, 3).join(' · ') : true;
 });
 await check('die Uhrzeiten stehen tabellarisch untereinander', async () => {
   // Ohne feste Breite und tabular-nums beginnen die Namen auf fünf Höhen.
@@ -404,11 +430,30 @@ await check('auf Handybreite läuft die Seite nicht seitlich über', async () =>
   const ueber2 = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   return ueber2 > 1 ? ueber2 + ' px Überlauf in der Tabelle' : true;
 });
+await check('auf dem Handy bricht die Dauer unter die Zeile, statt den Namen zu drücken', async () => {
+  await p.locator('[data-view="gantt"]').click();
+  await p.waitForTimeout(600);
+  const [zeitTop, dauerTop, nameTop] = await p.locator('.bz-lab-task').first()
+    .evaluate((n) => ['.bz-lab-zeit', '.bz-lab-dauer', '.bz-lab-name']
+      .map((s) => Math.round(n.querySelector(s).getBoundingClientRect().top)));
+  if (dauerTop <= zeitTop) return 'die Dauer steht noch in derselben Zeile';
+  if (Math.abs(nameTop - zeitTop) > 2) return 'der Name ist mit umgebrochen';
+  // Und die Zeile darf dabei nicht aus ihrer Höhe laufen.
+  const [h, inhalt] = await p.locator('.bz-lab-task').first()
+    .evaluate((n) => [n.getBoundingClientRect().height, n.scrollHeight]);
+  return inhalt <= h + 1 ? true : 'Inhalt ' + inhalt + ' px in einer ' + Math.round(h) + ' px hohen Zeile';
+});
 await check('Tages- und Bühnenwahl bleiben auf dem Handy bedienbar', async () => {
   const h = await p.locator('#buehnen .seg-tag button').first()
     .evaluate((n) => n.getBoundingClientRect().height);
   return h >= 28 ? true : 'nur ' + Math.round(h) + ' px hoch';
 });
+// Fürs BILD ein höheres Fenster bei gleicher Breite: bei 390×844 füllt die
+// Werkzeugzeile samt Live-Kopfzeile den Viewport, und der Ablauf — worum es hier
+// geht — bliebe unter dem Rand. Die Prüfungen oben liefen bei echter Handyhöhe.
+await p.setViewportSize({ width: 390, height: 1400 });
+await p.locator('[data-view="gantt"]').click();
+await p.waitForTimeout(700);
 await p.screenshot({ path: join(here, 'shots', 'showablauf-handy.png') });
 await p.setViewportSize({ width: 1700, height: 1000 });
 

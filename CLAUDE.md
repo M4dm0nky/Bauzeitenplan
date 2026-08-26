@@ -26,9 +26,14 @@ diesem Projekt die automatischen Prüfungen passiert und wurden erst im Bild sic
 Pfeile quer über die Gewerk-Spalte, unsichtbare Phasennamen, Beschriftungen ohne
 Balken, eine auf „J" zusammengeschnurrte JETZT-Fahne, zehn Zeilen ohne Balken im
 Showablauf, „Changeover: Changeover", ein Platzhaltertext in siebzehn Tabellenzeilen,
-der wie eingetragener Inhalt aussah, und ein Showtag, der nur zwei Drittel des Bildes
-füllte. Für jeden gibt es jetzt eine Prüfung — der nächste Fehler dieser Art hat aber
-noch keine.
+der wie eingetragener Inhalt aussah, ein Showtag, der nur zwei Drittel des Bildes
+füllte, eine links angeschnittene Datumszeile und ein «12:00 Uhr», bei dem das
+«Uhr» in eine zweite Zeile rutschte. Für jeden gibt es jetzt eine Prüfung — der
+nächste Fehler dieser Art hat aber noch keine.
+
+**Neue Bausteine gehören in die `needed`-Liste in `tests/run.mjs`.** Sonst kennt
+sie nur das Theme, in dem sie entstanden sind, und in den vier anderen fehlen sie
+unsichtbar. Genau das ist der Showablauf-Ebene passiert.
 
 Zum Starten: `python3 -m http.server 8080`. Ohne Server blockiert der Browser die
 ES-Module per CORS.
@@ -255,11 +260,29 @@ und den liest man von oben nach unten. Gebündelt entstand daraus eine Zeile
 «Changeover» mit sechs Balken, die zwischen den Acts hing, und die Zeilenfolge
 richtete sich nach dem frühesten Termin jeder Serie statt nach dem Abend. Jeder
 Programmpunkt trägt seine eigene Zeile, `lanes` ist immer 1: zwei gleichzeitige
-Dinge auf einer Bühne sind zwei Zeilen, keine Spuren. **Die Startzeit steht links
-vor dem Namen** (`bz-lab-zeit`, feste Breite, `tabular-nums`) — damit ist die
-Seitenspalte allein schon der Ablaufplan. Im Bauzeitenplan wäre sie falsch: dort
-stünde eine Uhrzeit stellvertretend für mehrere Termine. `seriesRows` bleibt
-unangetastet — die Funktion ist richtig, der Showablauf ruft sie nur nicht auf.
+Dinge auf einer Bühne sind zwei Zeilen, keine Spuren. **Uhrzeit und Dauer stehen
+links vor dem Namen** (`bz-lab-zeit`/`bz-lab-dauer`, beide mit fester Breite und
+`tabular-nums`, damit die Namen auf einer Kante beginnen) — damit ist die
+Seitenspalte allein schon der Ablaufplan: `14:00 Uhr (30 min) CREUTZFELD & JAKOB`.
+**Die Dauer in MINUTEN**, nicht in «0,5 h»: bei einem Ablauf zählt man Minuten.
+Ein Meilenstein bekommt einen Strich, keine Null. Im Bauzeitenplan wäre beides
+falsch: dort stünde eine Uhrzeit stellvertretend für mehrere Termine.
+`seriesRows` bleibt unangetastet — die Funktion ist richtig, der Showablauf ruft
+sie nur nicht auf.
+
+**Die Seitenspalte ist im Showablauf breiter** (390 px statt 296). Drei Angaben
+nebeneinander brauchen Platz, und 17 Zeilen brauchen weniger Zeitstrahl als 153.
+Auf Handybreite erzwingt `base.css` 168 px und die Dauer bricht UNTER die Zeile
+— beide Textzeilen passen in die vorhandene Zeilenhöhe, die Geometrie ändert
+sich nicht. **Deshalb wird die Spaltenbreite am DOM gemessen** (`sideWNow()`),
+nicht aus `O.sideW` genommen: sonst rechnet die Tagesansicht auf dem Handy um
+über hundert Pixel daneben.
+
+**Die Achse beschriftet im Showablauf JEDE Stunde.** `ticksFor` kennt `'hour'`
+längst; `tickScale` wählt es am Bildschirm nie, weil 24 Stunden im Bauzeitenplan
+zu dicht stehen. Über zehn Showstunden ist es genau richtig — ein Ablauf wird
+nach Uhrzeiten gelesen, nicht nach «zwischen 12 und 15». Erst ab `px >= 0.5`,
+sonst kleben die Zahlen aneinander.
 
 **„Tag 1/2/3" gehört nicht in den Titel.** Der 24.08. IST Tag 1 — das sagt das
 Datum. Im Namen erzwingt es eine Zeile je Tag und macht aus einer Tätigkeit drei.

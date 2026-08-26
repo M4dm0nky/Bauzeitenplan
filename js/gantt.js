@@ -119,6 +119,10 @@ export function createGantt(root, opts = {}) {
 
   // ── DOM-Gerüst ──────────────────────────────────────────────────────────────
   root.classList.add('bz');
+  // Die Seitenspalte ist im Showablauf breiter: dort steht neben dem Namen die
+  // Uhrzeit UND die Dauer, und es sind 17 Zeilen statt 153 — der Zeitstrahl
+  // braucht die Breite weniger dringend als die Ablauf-Spalte.
+  const SIDE_SHOW = Math.max(O.sideW, 390);
   root.style.setProperty('--side-w', O.sideW + 'px');
   root.style.setProperty('--row-h', O.rowH + 'px');
   root.style.setProperty('--group-h', O.groupH + 'px');
@@ -292,7 +296,14 @@ export function createGantt(root, opts = {}) {
         // schon der Ablaufplan und man liest ihn, ohne nach rechts zu den Balken
         // zu schauen. Im Bauzeitenplan wäre sie falsch: dort trägt eine Zeile
         // mehrere Termine, und einer davon stünde stellvertretend für alle.
-        if (ebene === 'show') lab.append(el('span', 'bz-lab-zeit', String(r.t.start).slice(11, 16)));
+        if (ebene === 'show') {
+          lab.append(el('span', 'bz-lab-zeit', String(r.t.start).slice(11, 16) + ' Uhr'));
+          // Dauer in MINUTEN — bei einem Ablauf zählt man in Minuten, nicht in
+          // «1,2 h». Ein Meilenstein hat keine Dauer und sagt das mit einem
+          // Strich, statt eine Null zu behaupten.
+          const min = toMin(r.t.end) - toMin(r.t.start);
+          lab.append(el('span', 'bz-lab-dauer', r.t.milestone || min === 0 ? '—' : '(' + min + ' min)'));
+        }
         const nm = el('span', 'bz-lab-name', r.s.title);
         nm.title = alle.length > 1 ? r.s.title + ' — ' + alle.length + ' Termine' : r.s.title;
         lab.append(nm);
@@ -727,7 +738,13 @@ export function createGantt(root, opts = {}) {
     const pad = 400;
     const vFrom = T0 + Math.max(0, scroller.scrollLeft - pad) / px;
     const vTo = T0 + (scroller.scrollLeft + scroller.clientWidth + pad) / px;
-    const sc = tickScale(px);
+    // Im Showablauf JEDE Stunde beschriften. `ticksFor` kennt 'hour' längst — es
+    // wird am Bildschirm nur nie gewählt, weil 24 Stunden im Bauzeitenplan zu
+    // dicht stehen. Über einem Abend von zehn Stunden ist es genau richtig.
+    // Erst ab einer Stundenbreite, die Zahlen trägt (px >= 0.5 → 30 px/Stunde);
+    // wer im Showablauf auf «Monate» zoomt, bekommt wieder die normale Staffel.
+    const roh = tickScale(px);
+    const sc = ebene === 'show' && px >= 0.5 ? { major: roh.major, minor: 'hour' } : roh;
     const key = sc.major + '|' + sc.minor + '|' + Math.round(vFrom / 60) + '|' + Math.round(vTo / 60) + '|' + px;
     if (key === lastKey && !force) return;
     lastKey = key;
@@ -946,7 +963,11 @@ export function createGantt(root, opts = {}) {
   }
 
   // Sichtbare Timeline-Breite = Viewport minus die feste Seitenspalte.
-  const timelineW = () => scroller.clientWidth - O.sideW;
+  // Die WIRKLICHE Breite der Seitenspalte, nicht die eingestellte: sie hängt an
+  // der Ebene und wird auf Handybreite von base.css überschrieben (168px). Mit
+  // O.sideW gerechnet passte die Tagesansicht dort um über hundert Pixel daneben.
+  const sideWNow = () => side.getBoundingClientRect().width || O.sideW;
+  const timelineW = () => scroller.clientWidth - sideWNow();
 
   // Ein Kalendertag füllt die Breite: px so wählen, dass 1440 min == Timeline,
   // und den Tag linksbündig auf 00:00 stellen. Der Canvas beginnt bei sideW,
@@ -1020,7 +1041,7 @@ export function createGantt(root, opts = {}) {
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     const r = scroller.getBoundingClientRect();
-    setZoom(px * Math.exp(-e.deltaY * 0.0022), e.clientX - r.left - O.sideW);
+    setZoom(px * Math.exp(-e.deltaY * 0.0022), e.clientX - r.left - sideWNow());
   }, { passive: false });
 
   // Shift+Rad scrollt horizontal (Trackpad-freie Mäuse)
@@ -1065,6 +1086,7 @@ export function createGantt(root, opts = {}) {
       ausBlend = new Set(aus);
       tag = name === 'show' ? showTag : null;
       setCap();
+      root.style.setProperty('--side-w', (ebene === 'show' ? SIDE_SHOW : O.sideW) + 'px');
       syncState();
       rebuild();
       layout();

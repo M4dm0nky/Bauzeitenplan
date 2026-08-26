@@ -110,6 +110,7 @@ body {
 /* ── Showablauf-Ebene ─────────────────────────────────────────────────────── */
 /* Der Name führt, die Zeit ordnet. */
 .bz-lab-zeit { font-size: calc(9px * var(--fs)); color: var(--muted); }
+.bz-lab-dauer { font-size: calc(8.5px * var(--fs)); color: var(--muted); }
 .buehnen { font-size: calc(9.5px * var(--fs)); color: var(--ink-2); }
 .buehne-i:has(input:not(:checked)) { color: var(--muted); opacity: .6; }
 .buehnen-leer { font-size: calc(9px * var(--fs)); color: var(--muted); }

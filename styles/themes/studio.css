@@ -110,6 +110,7 @@ body {
 
 /* ── Showablauf-Ebene ─────────────────────────────────────────────────────── */
 .bz-lab-zeit { font-size: 10px; color: var(--ink-3); }
+.bz-lab-dauer { font-size: 10px; color: var(--ink-3); }
 .buehnen { font-size: 11px; color: var(--ink-2); }
 .buehne-i:has(input:not(:checked)) { color: var(--ink-3); opacity: .6; }
 .buehnen-leer { font-size: 10px; color: var(--ink-3); }

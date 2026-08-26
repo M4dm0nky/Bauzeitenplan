@@ -3,6 +3,48 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.8.2 — 2026-08-26
+
+**Die Show-Ansicht sagt jetzt auch, wie lange etwas dauert**
+
+- **Jede Stunde ist beschriftet.** Die Achse zeigt 12, 13, 14 … statt alle drei
+  Stunden eine Marke. Ein Ablauf wird nach Uhrzeiten gelesen; «zwischen 12 und
+  15» hilft niemandem. `ticksFor` kannte `'hour'` längst — am Bildschirm wurde es
+  nur nie gewählt, weil 24 Stunden im Bauzeitenplan zu dicht stehen. Über einem
+  Abend von zehn Stunden ist es genau richtig. Wer im Showablauf weit
+  herauszoomt, bekommt wieder die normale Staffel.
+- **Die Dauer steht in Minuten neben der Uhrzeit:**
+  `14:00 Uhr  (30 min)  CREUTZFELD & JAKOB`. Bei einem Ablauf zählt man in
+  Minuten, nicht in «0,5 h». Ein Meilenstein hat keine Dauer und sagt das mit
+  einem Strich, statt eine Null zu behaupten.
+- **Die Seitenspalte ist im Showablauf breiter** (390 statt 296 px). Dort stehen
+  drei Angaben nebeneinander und es sind 17 Zeilen statt 153 — der Zeitstrahl
+  braucht die Breite weniger dringend als der Ablauf. Der Bauzeitenplan bleibt
+  bei 296 px.
+- **Auf dem Handy bricht die Dauer unter die Zeile**, statt den Actnamen
+  wegzudrücken:
+
+  ```
+  14:00 Uhr  OLLI BANJO
+  (30 min)
+  ```
+
+  Beide Textzeilen passen in die vorhandene Zeilenhöhe; an der Geometrie ändert
+  sich nichts.
+
+**Nebenbei**
+- Die Breite der Seitenspalte wird jetzt am DOM gemessen statt aus der Option
+  genommen. Auf Handybreite erzwingt `base.css` 168 px, und die Tagesansicht
+  rechnete dort mit dem eingestellten Wert — also um über hundert Pixel daneben.
+- Die Bausteine der Showablauf-Ebene fehlten in vier der fünf Themes; nur das
+  aktive `callboard` kannte sie. Die Prüfung «jedes Theme gestaltet alle
+  Bausteine» schwieg, weil ihre Liste die neuen Namen nicht kannte — genau der
+  Fall, für den sie gebaut wurde. Alle Themes tragen sie jetzt, die Liste kennt
+  sie, und `docs/themes.md` sagt es beim Anlegen eines Themes.
+- `README.md` und `docs/entscheidungen.md` standen noch auf v0.7.1 und verwiesen
+  auf `pocketbase/README.md`, die es seit v0.8.0 nicht mehr gibt. Beide sind auf
+  Stand, inklusive der Begründungen zur Ebenen-Trennung.
+
 ## 0.8.1 — 2026-08-26
 
 **Der Showablauf liest sich jetzt als Ablauf**

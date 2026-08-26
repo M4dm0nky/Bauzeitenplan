@@ -136,6 +136,7 @@ body {
 .bz-lab-meta { font-family: var(--mono); font-size: calc(8.5px * var(--fs)); color: var(--muted); }
 /* Der Name führt, die Zeit ordnet: gleiche Zeile, aber ruhiger gesetzt. */
 .bz-lab-zeit { font-family: var(--mono); font-size: calc(9px * var(--fs)); color: var(--muted); }
+.bz-lab-dauer { font-family: var(--mono); font-size: calc(8.5px * var(--fs)); color: var(--muted); }
 .bz-lab-projekt { background: var(--panel2); color: var(--muted); font-family: var(--mono); text-transform: uppercase; letter-spacing: .11em; font-size: calc(9px * var(--fs)); }
 .bz-crit-tag { flex: none; font-family: var(--mono); font-size: calc(7px * var(--fs)); letter-spacing: .08em; padding: 1px 3px; background: var(--crit); color: #fff; font-weight: 600; }
 /* Kritisch, aber abgehakt: ruhig statt rot. */

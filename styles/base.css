@@ -107,12 +107,14 @@ body { margin: 0; }
 .bz-lab-task.has-sub { padding-left: 10px; }
 .bz-lab-task.is-child { padding-left: 46px; }
 .bz-lab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
-/* Startzeit im Showablauf. Feste Breite und tabellarische Ziffern, damit die
-   Zeiten untereinander stehen — sonst tanzt die Spalte und die Namen beginnen
-   auf fünf verschiedenen Höhen. Der Einzug der Vorgangszeile fällt dafür
-   kleiner aus: die Zeit übernimmt, was sonst der Leerraum leistet. */
-.bz-lab-zeit { flex: none; width: 40px; font-variant-numeric: tabular-nums; }
-.bz-lab-task:has(.bz-lab-zeit) { padding-left: 12px; }
+/* Uhrzeit und Dauer im Showablauf. BEIDE mit fester Breite und tabellarischen
+   Ziffern, damit die Namen dahinter auf einer Kante beginnen — ohne das tanzt
+   die Spalte und der Ablauf ist nicht mehr auf einen Blick zu lesen.
+   Der Einzug der Vorgangszeile fällt dafür kleiner aus: die Zeit übernimmt,
+   was sonst der Leerraum leistet. */
+.bz-lab-zeit { flex: none; width: 78px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bz-lab-dauer { flex: none; width: 66px; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.bz-lab-task:has(.bz-lab-zeit) { padding-left: 12px; gap: 8px; }
 .bz-lab-task.is-child:has(.bz-lab-zeit) { padding-left: 28px; }
 .bz-lab-meta { flex: none; font-variant-numeric: tabular-nums; }
 .bz-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--gw); }
@@ -483,6 +485,25 @@ body { margin: 0; }
      als Inline-Style auf .bz (aus gantt.js) → nur !important schlägt ihn. Namen
      kürzen sich per ellipsis (bz-lab-name). */
   .bz { --side-w: 168px !important; }
+
+  /* Showablauf auf Handybreite: die Dauer bricht UNTER die Zeile um, statt den
+     Actnamen wegzudrücken. Zwei Textzeilen passen in die Zeilenhöhe, weil beide
+     kleiner gesetzt sind — die Geometrie der Zeile ändert sich nicht.
+
+         14:00 Uhr  OLLI BANJO
+         (30 min)
+
+     `order` sortiert um: im DOM steht die Dauer vor dem Namen (dort gehört sie
+     nebeneinander hin), hier hinter ihn und auf eine eigene Zeile. */
+  .bz-lab-task:has(.bz-lab-dauer) {
+    flex-wrap: wrap;
+    align-content: center;
+    row-gap: 0;
+    line-height: 1.15;
+  }
+  .bz-lab-task .bz-lab-zeit { width: auto; order: 0; }
+  .bz-lab-task .bz-lab-name { order: 1; }
+  .bz-lab-task .bz-lab-dauer { order: 2; flex-basis: 100%; width: auto; text-align: left; }
 
   /* Arbeitsfläche einspaltig: das Panel ist keine Spalte mehr, sondern ein
      Overlay-Drawer von rechts. Hintergrund bringt das Theme (.ins → --panel). */
