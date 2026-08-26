@@ -10,6 +10,7 @@
 // geschenkt ab.
 
 import { topoSort, toMin } from './schedule.js';
+import { MAX_SLOTS } from './palette.js';
 
 // Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
 // Ablage die äußere Schicht — diese Abhängigkeit liefe verkehrt herum. Für eine
@@ -148,6 +149,14 @@ const HANDLERS = {
     }
     if (cmd.field === 'title' && !String(cmd.value || '').trim()) return 'Der Vorgang braucht einen Namen.';
     if (cmd.field === 'gewerk' && !state.gewerke.some((g) => g.id === cmd.value)) return 'Unbekanntes Gewerk.';
+    // Farbplatz: null (erbt von der Bühne) oder ein Platz AUS der Palette.
+    // Ohne die Prüfung landete ein Vertipper still im Export und der Balken
+    // zeigte auf `var(--gw-NaN)` — also auf gar keine Farbe.
+    if (cmd.field === 'slot' && cmd.value !== null) {
+      const n = cmd.value;
+      if (!Number.isInteger(n) || n < 0 || n >= MAX_SLOTS)
+        return 'Farbplatz muss zwischen 1 und ' + MAX_SLOTS + ' liegen (oder leer für «wie Bühne»).';
+    }
     t[cmd.field] = cmd.value;
     // Wechselt ein Elternvorgang das Gewerk, ziehen seine Untervorgänge mit —
     // sonst blieben sie im alten Gewerk zurück.

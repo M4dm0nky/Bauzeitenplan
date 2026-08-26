@@ -27,6 +27,25 @@ export const gewerkVar = (slot) => 'var(--gw-' + (((slot % HUES) + HUES) % HUES)
 export const gewerkTexture = (slot) => Math.floor((slot % MAX_SLOTS) / HUES) > 0;
 
 /**
+ * Die Gegenrichtung, für die Farbauswahl: welcher Farbton steckt in einem Platz,
+ * und wie baut man aus Farbton + Schraffur wieder einen Platz?
+ *
+ * Ein Platz ist genau das Paar (Farbton, Schraffur) — deshalb reichen zehn
+ * Punkte und ein Schalter, um alle zwanzig zu erreichen. Gewählt wird AUS der
+ * Palette; keine Farbe wird dabei umdefiniert (siehe docs/farbsuche.md).
+ */
+export const hueVon = (slot) => (((slot | 0) % HUES) + HUES) % HUES;
+
+/**
+ * Die Schriftfarbe AUF diesem Farbton. Sie steht in base.css neben der Farbe
+ * selbst und ist dort gerechnet: je Ton die Tinte, die in hell UND dunkel über
+ * 3:1 bleibt. Hier wird sie nur benannt — eine zweite Wahrheit über Farben wäre
+ * genau die Sorte Fehler, die niemand bemerkt.
+ */
+export const gewerkInkVar = (slot) => 'var(--gw-t-' + hueVon(slot) + ')';
+export const slotAus = (hue, schraffur) => hueVon(hue) + (schraffur ? HUES : 0);
+
+/**
  * Reicht die Palette noch? Ab 21 Gewerken trägt Farbe die Identität nicht mehr —
  * dann muss die Beschriftung sie allein tragen, und das ist eine Warnung wert.
  */

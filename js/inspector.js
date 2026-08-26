@@ -5,7 +5,8 @@
 
 import { parseDuration, fmtDuration, local } from './conflicts.js';
 import { toMin, toDate, computeSchedule, candidateGroups } from './schedule.js';
-import { gewerkVar, gewerkTexture, HUES, MAX_SLOTS } from './palette.js';
+import { gewerkVar, gewerkTexture, hueVon, slotAus, HUES, MAX_SLOTS } from './palette.js';
+import { artOf } from './ebene.js';
 import { fmtFloat } from './timeaxis.js';
 import { el, toInput, STATUS } from './dom.js';
 
@@ -224,6 +225,18 @@ export function createInspector(root, { store, onError, onClose } = {}) {
       root.append(field('Status', stt, 'Wird nie automatisch gesetzt — sonst sieht der Plan immer nach Plan aus.'));
     }
 
+    // ── Farbe (nur Programmpunkte) ──
+    // Nur auf einer BÜHNE wählbar. Im Bauzeitenplan gehört die Farbe dem Gewerk,
+    // und ihre Reihenfolge ist gerechnet (docs/farbsuche.md): sie maximiert die
+    // Unterscheidbarkeit benachbarter Zeilen bei Farbenblindheit. Bei 20 Gewerken
+    // untereinander trägt das echte Last — auf einer Bühne stehen selten mehr als
+    // zwei, drei Bänder.
+    //
+    // Der Inspector führt dafür KEINEN eigenen Ebenen-Zustand: ein Programmpunkt
+    // liegt per Definition auf einer Bühne, das steht in den Daten.
+    const band = store.state.gewerke.find((g) => g.id === t.gewerk);
+    if (band && artOf(band) === 'buehne') root.append(field('Farbe', farbwahl(t, band)));
+
     const nt = el('textarea');
     nt.rows = 2;
     nt.value = t.notes || '';
@@ -372,6 +385,58 @@ export function createInspector(root, { store, onError, onClose } = {}) {
   }
 
   // ── Bausteine ─────────────────────────────────────────────────────────────
+  /**
+   * Zehn Farbpunkte, ein Schalter für Schraffur, ein Weg zurück.
+   *
+   * Ein Farbplatz IST das Paar (Farbton, Schraffur) — deshalb reichen zehn
+   * Punkte und ein Häkchen, um alle zwanzig zu erreichen (slotAus in palette.js).
+   * Gewählt wird AUS der Palette; keine Farbe wird umdefiniert.
+   */
+  function farbwahl(t, band) {
+    const box = el('div', 'ins-farbe');
+    const eigen = t.slot != null;
+    const aktiv = eigen ? t.slot : band.slot;
+    const setz = (slot) => send({ type: 'setTaskField', id: t.id, field: 'slot', value: slot });
+
+    const toene = el('div', 'ins-toene');
+    for (let h = 0; h < HUES; h++) {
+      const b = el('button', 'ins-ton');
+      b.type = 'button';
+      b.style.setProperty('--gw', gewerkVar(h));
+      // Die Schraffur des aktuellen Standes mitzeigen, damit der Punkt aussieht
+      // wie der Balken, den er setzt.
+      if (gewerkTexture(aktiv)) b.dataset.tex = '1';
+      const gewaehlt = eigen && hueVon(aktiv) === h;
+      b.setAttribute('aria-pressed', String(gewaehlt));
+      b.classList.toggle('is-on', gewaehlt);
+      b.title = 'Farbton ' + (h + 1) + ' von ' + HUES;
+      b.setAttribute('aria-label', b.title);
+      b.onclick = () => setz(slotAus(h, gewerkTexture(aktiv)));
+      toene.append(b);
+    }
+    box.append(toene);
+
+    const zeile = el('div', 'ins-farbe-r');
+    const tex = el('label', 'ins-tex');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.checked = gewerkTexture(aktiv);
+    cb.onchange = () => setz(slotAus(hueVon(aktiv), cb.checked));
+    tex.append(cb, el('span', null, 'Schraffur'));
+    zeile.append(tex);
+
+    const zurueck = el('button', 'btn ins-farbe-x', 'wie Bühne');
+    zurueck.type = 'button';
+    zurueck.title = 'Eigene Farbe aufheben — der Punkt erbt wieder die Farbe von «' + band.name + '»';
+    zurueck.disabled = !eigen;
+    zurueck.onclick = () => setz(null);
+    zeile.append(zurueck);
+    box.append(zeile);
+
+    if (!eigen) box.append(el('div', 'ins-hint', 'Erbt die Farbe von «' + band.name + '». Ein Klick auf einen Ton gibt dem Punkt eine eigene.'));
+    return box;
+  }
+
   function field(label, node, hint) {
     const w = el('label', 'ins-f');
     w.append(el('span', 'ins-l', label), node);

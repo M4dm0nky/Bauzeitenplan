@@ -9,7 +9,7 @@ import { computeSchedule, toMin, toDate, byStart, seriesRows } from './schedule.
 import { findConflicts, local } from './conflicts.js';
 import { runningAt, delaysAt } from './live.js';
 import { sichtGewerke, programmFenster, amTag } from './ebene.js';
-import { gewerkVar, gewerkTexture } from './palette.js';
+import { gewerkVar, gewerkTexture, gewerkInkVar } from './palette.js';
 import { el, svgEl } from './dom.js';
 import {
   ZOOM, clampZoom, zoomAnchored, nearestPreset, fitPx, tickScale, ticksFor,
@@ -119,6 +119,7 @@ export function createGantt(root, opts = {}) {
 
   // ── DOM-Gerüst ──────────────────────────────────────────────────────────────
   root.classList.add('bz');
+  root.dataset.ebene = ebene;
   // Die Seitenspalte ist im Showablauf breiter: dort steht neben dem Namen die
   // Uhrzeit UND die Dauer, und es sind 17 Zeilen statt 153 — der Zeitstrahl
   // braucht die Breite weniger dringend als die Ablauf-Spalte.
@@ -169,6 +170,13 @@ export function createGantt(root, opts = {}) {
   // Zeilen statt fünf. Ein einzelner Vorgang ist eine Serie aus einem — so kennt
   // der Rest der Engine nur einen Fall, auch dort, wo gar nicht gebündelt wird.
   const solo = (t) => ({ title: t.title, tasks: [t], lanes: 1, laneOf: new Map([[t.id, 0]]) });
+
+  // Welcher Farbplatz gilt für DIESEN Balken? Im Showablauf darf ein
+  // Programmpunkt eine eigene Farbe tragen; ohne eigene erbt er die seiner
+  // Bühne. Im Bauzeitenplan gibt es das nicht — dort gehört die Farbe dem
+  // Gewerk, und eine Zeile trägt ohnehin mehrere Termine, für die eine einzelne
+  // Farbe stellvertretend stünde.
+  const slotVon = (t, g) => (ebene === 'show' && t && t.slot != null ? t.slot : g.slot);
 
   // Im SHOWABLAUF wird NICHT gebündelt. Dort ist die Reihenfolge der Zeilen der
   // Ablauf selbst — Einlass, Band, Umbau, Band, Umbau —, und die liest man von
@@ -272,7 +280,7 @@ export function createGantt(root, opts = {}) {
       } else if (r.kind === 'projekt') {
         lab.append(el('span', 'bz-lab-name', 'Zieltermin'));
       } else {
-        lab.style.setProperty('--gw', gewerkVar(r.g.slot));
+        lab.style.setProperty('--gw', gewerkVar(slotVon(r.t, r.g)));
         // Die Zeile trägt eine Serie — die Marken gelten für sie ALS GANZES:
         // eine Marke, sobald irgendein Balken betroffen ist. Sonst hinge an einer
         // Zeile mit vierzehn Balken die Aussage des ersten.
@@ -395,7 +403,7 @@ export function createGantt(root, opts = {}) {
           const s = SCHED.get(t.id) || { critical: false, float: 0 };
           if (t.milestone) {
             const d = el('div', 'bz-ms');
-            d.style.setProperty('--gw', gewerkVar(r.g.slot));
+            d.style.setProperty('--gw', gewerkVar(slotVon(t, r.g)));
             d.style.setProperty('--lane', lane);
             d.classList.toggle('is-crit', s.critical);
             d.dataset.at = toMin(t.start);
@@ -406,9 +414,12 @@ export function createGantt(root, opts = {}) {
             rowById.set('task:' + t.id, d);
           } else {
             const b = el('div', 'bz-bar bz-st-' + t.status + (r.parent ? ' is-summary' : ''));
-            b.style.setProperty('--gw', gewerkVar(r.g.slot));
+            const bslot = slotVon(t, r.g);
+            b.style.setProperty('--gw', gewerkVar(bslot));
+            // Die Schrift auf der Farbe hängt am Ton, nicht am Theme (base.css).
+            b.style.setProperty('--gw-t', gewerkInkVar(bslot));
             b.style.setProperty('--lane', lane);
-            if (gewerkTexture(r.g.slot)) b.dataset.tex = '1';
+            if (gewerkTexture(bslot)) b.dataset.tex = '1';
             b.classList.toggle('is-crit', s.critical);
             b.classList.toggle('is-conflict', CONFLICTS.has(t.id));
             b.classList.toggle('is-estimated', !!t.estimated);
@@ -849,6 +860,9 @@ export function createGantt(root, opts = {}) {
       lane.style.setProperty('--gw', gewerkVar(g.slot));
       for (const t of VT.filter((x) => x.gewerk === g.id && !x.milestone)) {
         const m = el('div', 'bz-mini-b');
+        // Eigene Farbe auch in der Karte — sonst zeigt sie einen anderen Abend
+        // als der Plan darüber.
+        m.style.setProperty('--gw', gewerkVar(slotVon(t, g)));
         const a = (toMin(t.start) - T0) / TOTAL_MIN * 100;
         const b = (toMin(t.end) - T0) / TOTAL_MIN * 100;
         m.style.left = a + '%'; m.style.width = Math.max(0.3, b - a) + '%';
@@ -1086,6 +1100,7 @@ export function createGantt(root, opts = {}) {
       ausBlend = new Set(aus);
       tag = name === 'show' ? showTag : null;
       setCap();
+      root.dataset.ebene = ebene;   // das CSS entscheidet über Füllung, nicht JS
       root.style.setProperty('--side-w', (ebene === 'show' ? SIDE_SHOW : O.sideW) + 'px');
       syncState();
       rebuild();

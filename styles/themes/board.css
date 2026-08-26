@@ -132,6 +132,19 @@ body {
 .bz-st-fertig { opacity: .32; }
 .bz-st-geplant { background: transparent; box-shadow: inset 0 0 0 3px var(--gw), 0 0 0 2px var(--panel); }
 .bz-st-geplant .bz-bar-t { color: var(--ink); text-shadow: none; }
+
+/* Im SHOWABLAUF sind die Balken GEFÜLLT. Der Grundzustand .bz-bar ist das
+   ohnehin; nur bz-st-geplant macht ihn transparent, und im Showablauf steht
+   alles auf «geplant», weil dort niemand den Status pflegt. Was gerade läuft,
+   sagen die Jetzt-Linie und die Live-Kopfzeile.
+   Die Schrift-auf-Farbe-Lösung ist nicht neu — genau so sehen «läuft» und
+   «fertig» im Bauzeitenplan seit jeher aus. */
+.bz[data-ebene="show"] .bz-st-geplant { background: var(--gw); box-shadow: 0 0 0 2px var(--panel), 2px 2px 0 0 rgba(0,0,0,.16); }
+/* Die Schrift AUF dem gefüllten Balken kommt aus der Palette (--gw-t-*,
+   base.css): je Ton die Tinte, die in beiden Modi über 3:1 bleibt. Ein fester
+   Wert — weiß auf Gelb erreicht nur 2,17:1. */
+.bz[data-ebene="show"] .bz-st-geplant .bz-bar-t { color: var(--gw-t); text-shadow: none; }
+.bz[data-ebene="show"] .bz-bar.is-narrow .bz-bar-t { color: var(--ink); text-shadow: none; }
 .bz-conf-tag { background: var(--crit); color: #fff; font-size: 10px; }
 .bz-bar:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .bz-bar.is-crit { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--crit), 2px 2px 0 4px rgba(0,0,0,.12); }

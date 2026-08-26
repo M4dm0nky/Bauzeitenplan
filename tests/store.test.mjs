@@ -632,5 +632,40 @@ test('Programmpunkt-Typ und Soundcheck sind normale Felder', () => {
   assert.equal(taskById(s, 'a').soundcheck, '2026-07-13T09:30');
 });
 
+console.log('\nFarbplatz am Programmpunkt');
+
+test('ein Programmpunkt darf eine eigene Farbe tragen', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'slot', value: 13 }).ok, true);
+  assert.equal(taskById(s, 'a').slot, 13);
+});
+
+test('null bedeutet «wie Bühne» und ist erlaubt', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'setTaskField', id: 'a', field: 'slot', value: 5 });
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'slot', value: null }).ok, true);
+  assert.equal(taskById(s, 'a').slot, null);
+});
+
+test('ein Platz außerhalb der Palette wird abgelehnt', () => {
+  // Ohne die Prüfung landete er still im Export und der Balken zeigte auf
+  // `var(--gw-NaN)` — also auf gar keine Farbe.
+  const s = createStore(seed());
+  for (const wert of [20, -1, 1.5, '3', NaN, undefined]) {
+    const r = s.apply({ type: 'setTaskField', id: 'a', field: 'slot', value: wert });
+    assert.equal(r.ok, false, JSON.stringify(wert) + ' wurde angenommen');
+  }
+  assert.equal(taskById(s, 'a').slot, undefined, 'nichts hinterlassen');
+  assert.equal(s.canUndo, false, 'nichts auf dem Undo-Stapel');
+  assert.equal(s.dirty, false, 'nicht als ungesichert markiert');
+});
+
+test('⌘Z nimmt eine Farbe zurück', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'setTaskField', id: 'a', field: 'slot', value: 7 });
+  s.undo();
+  assert.equal(taskById(s, 'a').slot, undefined);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

@@ -29,6 +29,21 @@
   --gw-7: #008300;  /* grün    */
   --gw-8: #8a5a2b;  /* ocker   */
   --gw-9: #0e9aa7;  /* türkis  */
+
+  /* Schrift AUF der Farbe. Gerechnet, nicht ausgesucht: je Ton die Tinte, die in
+     BEIDEN Modi (hell und dunkel) über 3:1 Kontrast bleibt. Weiß trägt nur auf
+     violett, grün und ocker; auf den übrigen sieben ist Dunkel deutlich besser —
+     auf Gelb erreicht Weiß nur 2,17:1, Dunkel dagegen 8,23:1.
+     Das sind KEINE neuen Gewerkfarben, sondern die zugehörige Textfarbe: die
+     Balkenbeschriftung ist die vorgeschriebene sekundäre Kodierung und muss
+     lesbar sein. Feste Werte, absichtlich ohne Dunkel-Scope — der Balken ist in
+     beiden Modi kräftig, und die Wahl trägt in beiden.
+     Wer an --gw-* dreht, muss hier mitrechnen; die statische Prüfung
+     «Schrift auf Gewerkfarbe hält 3:1» in tests/run.mjs schlägt sonst an. */
+  --gw-t-0: #10172A;  --gw-t-1: #10172A;  --gw-t-2: #10172A;
+  --gw-t-3: #10172A;  --gw-t-4: #10172A;  --gw-t-5: #10172A;
+  --gw-t-6: #FFFFFF;  --gw-t-7: #FFFFFF;  --gw-t-8: #FFFFFF;
+  --gw-t-9: #10172A;
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
@@ -404,6 +419,31 @@ body { margin: 0; }
 .ins-f textarea { resize: vertical; }
 .ins-row { display: flex; gap: 5px; }
 .ins-row .btn { flex: 1; }
+
+/* Farbwahl eines Programmpunkts: zehn Töne, ein Schalter, ein Weg zurück.
+   Die Punkte sind fingergroß (28 px) — das Panel öffnet auch auf dem Handy.
+   `--gw` setzt js/inspector.js je Punkt; die Schraffur kommt aus derselben
+   Regel wie am Balken (.bz-dot[data-tex] weiter oben), damit der Punkt aussieht
+   wie das, was er setzt. */
+.ins-farbe { display: flex; flex-direction: column; gap: 6px; }
+.ins-toene { display: flex; flex-wrap: wrap; gap: 5px; }
+.ins-ton {
+  width: 28px; height: 28px; flex: none; padding: 0; cursor: pointer;
+  background: var(--gw); position: relative; overflow: hidden;
+}
+.ins-ton[data-tex]::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(45deg,
+    rgba(255,255,255,.55) 0 2px, transparent 2px 5px);
+}
+/* Welcher Ton gewählt ist, darf NICHT an der Farbe hängen — die zehn Punkte
+   unterscheiden sich ja gerade nur darin. Deshalb hier eine Markierung, die
+   ohne Theme funktioniert: drei von fünf Themes gestalten das Panel gar nicht. */
+.ins-ton.is-on { outline: 2px solid currentColor; outline-offset: 1px; }
+.ins-farbe-r { display: flex; align-items: center; gap: 10px; }
+.ins-tex { display: flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
+.ins-tex input { width: auto; flex: none; }
+.ins-farbe-x { margin-left: auto; }
 .ins-check { display: flex; align-items: center; gap: 7px; cursor: pointer; }
 .ins-hint { display: block; }
 .ins-dep { display: grid; grid-template-columns: auto 1fr auto auto auto; align-items: center; gap: 4px; }

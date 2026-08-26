@@ -24,7 +24,7 @@ const fakeStorage = () => {
 const plan = (name = 'Test') => ({
   project: { id: 'p1', name, venue: 'Halle', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin' },
   gewerke: [{ id: 'g1', name: 'Bühne', sort: 0, slot: 0, art: 'gewerk' }],
-  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null, punktTyp: 'act', anforderungen: '', material: '', soundcheck: '', kontakt: '' }],
+  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null, punktTyp: 'act', anforderungen: '', material: '', soundcheck: '', kontakt: '', slot: null }],
   deps: [],
 });
 
@@ -218,19 +218,25 @@ test('erfundene Arten fallen auf Gewerk zurück, statt unsichtbar zu werden', ()
 });
 test('Vorgänge ohne die Showablauf-Felder bekommen leere', () => {
   const raw = plan();
-  for (const f of ['punktTyp', 'anforderungen', 'material', 'soundcheck', 'kontakt']) delete raw.tasks[0][f];
+  for (const f of ['punktTyp', 'anforderungen', 'material', 'soundcheck', 'kontakt', 'slot']) delete raw.tasks[0][f];
   const t = migrate(raw).tasks[0];
   assert.equal(t.punktTyp, 'act');
   assert.equal(t.anforderungen, '');
   assert.equal(t.material, '');
   assert.equal(t.soundcheck, '');
   assert.equal(t.kontakt, '');
+  assert.equal(t.slot, null, 'ohne eigenen Platz erbt der Punkt die Farbe seiner Bühne');
+});
+test('der eigene Farbplatz überlebt Export → Import', () => {
+  const raw = plan();
+  raw.tasks[0].slot = 13;                  // roter Ton mit Schraffur
+  assert.equal(deserialize(serialize(raw)).plan.tasks[0].slot, 13);
 });
 test('Anforderungen und Material überleben Export → Import', () => {
   const raw = plan();
   Object.assign(raw.tasks[0], {
     punktTyp: 'changeover', anforderungen: '2× Wedge, Drehleiter',
-    material: '1 Riser 2×1 m', soundcheck: '2026-07-13T09:30', kontakt: 'Max Mustermann',
+    material: '1 Riser 2×1 m', soundcheck: '2026-07-13T09:30', kontakt: 'Max Mustermann', slot: 13,
   });
   const back = deserialize(serialize(raw));
   assert.deepEqual(back.plan.tasks[0], raw.tasks[0]);

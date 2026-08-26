@@ -3,6 +3,51 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.0 — 2026-08-26
+
+**Farbige Balken im Showablauf — mit wählbarer Farbe und Schraffur**
+
+Bisher war der ganze Abend orange und die Balken sahen leer aus. Zwei Ursachen,
+die sich überlagerten: eine Bühne ist EIN Gewerk mit EINEM Farbplatz, den jeder
+Programmpunkt erbt — und `status: 'geplant'` wird als transparenter Balken mit
+farbigem Rand dargestellt, während im Showablauf niemand den Status pflegt.
+
+- **Jeder Programmpunkt darf eine eigene Farbe tragen.** Neues Feld `slot` am
+  Vorgang; `null` heißt «erbt die Farbe seiner Bühne», und genau so verhalten
+  sich alle bestehenden Pläne.
+- **Die Auswahl steht im Panel rechts:** zehn Farbtöne, ein Schalter **Schraffur**
+  und **«wie Bühne»** zum Zurücksetzen. Ein Farbplatz IST das Paar aus Ton und
+  Schraffur — deshalb reichen zehn Punkte und ein Häkchen für alle zwanzig
+  Kombinationen. Aus Rot wird so Rot-mit-Schraffur.
+- **Die Balken sind gefüllt**, im Bauzeitenplan bleiben sie umrandet. Was gerade
+  läuft, sagen dort die Jetzt-Linie und die Live-Kopfzeile.
+- Gewählt wird **aus der Palette**, nie eine freie Farbe. Im Bauzeitenplan bleibt
+  die Zuordnung gerechnet: dort stehen 20 Gewerke untereinander, und genau dafür
+  ist die Farbsuche gemacht.
+
+**Die Schrift auf der Farbe ist jetzt ebenfalls gerechnet**
+
+Gefüllte Balken tragen ihre Beschriftung auf der Farbe, und die Beschriftung ist
+die vorgeschriebene sekundäre Kodierung — sie muss lesbar sein. Weiß erreicht auf
+Gelb nur **2,17:1**; auf drei der zehn Töne lag der Kontrast unter der Grenze.
+Neben jedem Farbton steht deshalb eine Schriftfarbe (`--gw-t-*` in `base.css`),
+gewählt als die Tinte, die in **hell UND dunkel** über 3:1 bleibt: dunkel auf
+sieben Tönen, weiß auf Violett, Grün und Ocker.
+
+Eine neue statische Prüfung **«Schrift auf Gewerkfarbe hält 3:1 — in hell UND
+dunkel»** rechnet das bei jedem Testlauf nach. Wer künftig an `--gw-*` dreht,
+ohne die Tinte mitzurechnen, erfährt es sofort.
+
+**Nebenbei**
+- `js/palette.js` bekommt die Gegenrichtung zur Farbwahl: `hueVon` und `slotAus`,
+  DOM-frei und mit eigenem Test (`tests/palette.test.mjs`), inklusive der
+  Randfälle — negative, zu große und gebrochene Werte landen wieder in der
+  Palette, statt auf `var(--gw-NaN)` zu zeigen.
+- `setTaskField` validiert `slot`: `null` oder ein ganzer Platz aus der Palette.
+  Ohne die Prüfung wäre ein Vertipper still in den Export gewandert.
+- `js/inspector.js` war von der ganzen Showablauf-Arbeit bisher unberührt — das
+  ist die erste Änderung dort.
+
 ## 0.8.2 — 2026-08-26
 
 **Die Show-Ansicht sagt jetzt auch, wie lange etwas dauert**

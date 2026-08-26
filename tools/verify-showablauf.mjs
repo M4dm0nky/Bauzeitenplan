@@ -178,6 +178,134 @@ await check('keine Zieltermin-Zeile im Showablauf', async () =>
 
 await p.screenshot({ path: join(here, 'shots', 'showablauf-gantt.png') });
 
+// ── Farbe ───────────────────────────────────────────────────────────────────
+console.log('\nFARBE UND SCHRAFFUR');
+
+const balken = (titel) => p.locator('.bz-bar').filter({ hasText: titel }).first();
+const gwVon = (loc) => loc.evaluate((n) => n.style.getPropertyValue('--gw').trim());
+
+await check('die Balken sind GEFÜLLT, nicht nur umrandet', async () => {
+  // «geplant» wird sonst transparent mit farbigem Innenrand dargestellt — im
+  // Showablauf pflegt den Status niemand, also sähe der ganze Abend leer aus.
+  const bg = await balken('CURSE').evaluate((n) => getComputedStyle(n).backgroundColor);
+  if (/transparent|rgba\(0, 0, 0, 0\)/.test(bg)) return 'transparent: ' + bg;
+  return true;
+});
+
+await check('im Bauzeitenplan bleiben sie umrandet', async () => {
+  await p.locator('[data-ebene="bau"]').click();
+  await p.waitForTimeout(700);
+  const bg = await p.locator('.bz-bar.bz-st-geplant').first()
+    .evaluate((n) => getComputedStyle(n).backgroundColor);
+  const leer = /transparent|rgba\(0, 0, 0, 0\)/.test(bg);
+  await p.locator('[data-ebene="show"]').click();
+  await p.waitForTimeout(700);
+  return leer ? true : 'auch dort gefüllt: ' + bg;
+});
+
+await check('ohne eigene Farbe tragen alle Punkte die der Bühne', async () => {
+  const alle = await p.locator('.bz-bar').evaluateAll((ns) =>
+    [...new Set(ns.map((n) => n.style.getPropertyValue('--gw').trim()))]);
+  return alle.length === 1 ? true : alle.length + ' Farben, erwartet 1: ' + alle.join(' ');
+});
+
+await check('ein Ton im Panel färbt genau diesen Balken um', async () => {
+  await balken('CURSE').click();
+  await p.waitForTimeout(500);
+  if (await p.locator('#ins .ins-farbe').isHidden()) return 'keine Farbwahl im Panel';
+  const vorher = await gwVon(balken('CURSE'));
+  const nachbar = await gwVon(balken('OLLI BANJO'));
+  // Ton 4 — irgendeiner, der nicht der geerbte ist.
+  await p.locator('#ins .ins-ton').nth(3).click();
+  await p.waitForTimeout(600);
+  const nachher = await gwVon(balken('CURSE'));
+  if (nachher === vorher) return 'die Farbe hat sich nicht geändert (' + nachher + ')';
+  if ((await gwVon(balken('OLLI BANJO'))) !== nachbar) return 'der Nachbar hat sich mitgefärbt';
+  return true;
+});
+
+await check('der gewählte Ton ist im Panel markiert', async () => {
+  const an = await p.locator('#ins .ins-ton.is-on').count();
+  if (an !== 1) return an + ' markierte Töne';
+  const i = await p.locator('#ins .ins-ton').evaluateAll((ns) => ns.findIndex((n) => n.classList.contains('is-on')));
+  return i === 3 ? true : 'markiert ist Ton ' + (i + 1) + ', geklickt war 4';
+});
+
+await check('Schraffur macht aus dem Ton denselben Ton mit Muster', async () => {
+  const farbe = await gwVon(balken('CURSE'));
+  await p.locator('#ins .ins-tex input').check();
+  await p.waitForTimeout(600);
+  if ((await gwVon(balken('CURSE'))) !== farbe) return 'der Farbton hat sich mitgeändert';
+  const tex = await balken('CURSE').getAttribute('data-tex');
+  return tex === '1' ? true : 'keine Schraffur am Balken';
+});
+
+await check('die Farbe überlebt das Neuladen', async () => {
+  const vorher = await gwVon(balken('CURSE'));
+  await p.waitForTimeout(1200);          // Auto-Save wartet 800 ms
+  await p.reload();
+  await p.waitForSelector('.bz-lab', { timeout: 20000 });
+  await p.waitForTimeout(900);
+  const nachher = await gwVon(balken('CURSE'));
+  if (nachher !== vorher) return 'nach dem Neuladen ' + nachher + ' statt ' + vorher;
+  return (await balken('CURSE').getAttribute('data-tex')) === '1' ? true : 'Schraffur ist weg';
+});
+
+await check('die Beschriftung bleibt auf JEDEM der zehn Töne lesbar', async () => {
+  // Der Punkt, der bei gefüllten Balken wirklich zählt. Drei Töne (Rigging,
+  // Licht, Ton) liegen auf hellem Grund unter 3:1 — auf ihnen steht weiße
+  // Schrift mit Schatten, genau wie bei «läuft» im Bauzeitenplan. Geprüft wird
+  // an DOORS, weil dieser Balken breit genug ist, dass der Text IM Balken steht.
+  await balken('DOORS').click();
+  await p.waitForTimeout(400);
+  const schlecht = [];
+  for (let i = 0; i < 10; i++) {
+    await p.locator('#ins .ins-ton').nth(i).click();
+    await p.waitForTimeout(250);
+    const v = await balken('DOORS').evaluate((n) => {
+      const t = n.querySelector('.bz-bar-t');
+      if (!t || getComputedStyle(t).position === 'absolute') return null;  // steht daneben
+      const lum = (c) => {
+        const [r, g, b] = (c.match(/[\d.]+/g) || [0, 0, 0]).slice(0, 3).map(Number)
+          .map((x) => { const u = x / 255; return u <= 0.03928 ? u / 12.92 : ((u + 0.055) / 1.055) ** 2.4; });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const a = lum(getComputedStyle(t).color), b = lum(getComputedStyle(n).backgroundColor);
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    });
+    if (v !== null && v < 3) schlecht.push('Ton ' + (i + 1) + ': ' + v.toFixed(2) + ':1');
+  }
+  if (schlecht.length) return schlecht.join(' · ');
+  // Zum Schluss einen hellen Ton stehen lassen — das Bild soll den harten Fall zeigen.
+  await p.locator('#ins .ins-ton').nth(2).click();
+  await p.waitForTimeout(400);
+  return true;
+});
+
+await p.screenshot({ path: join(here, 'shots', 'showablauf-farbe.png') });
+
+await check('«wie Bühne» nimmt die eigene Farbe zurück', async () => {
+  const geerbt = await gwVon(balken('OLLI BANJO'));   // hat nie eine eigene bekommen
+  await balken('CURSE').click();
+  await p.waitForTimeout(500);
+  await p.locator('#ins .ins-farbe-x').click();
+  await p.waitForTimeout(600);
+  if ((await gwVon(balken('CURSE'))) !== geerbt) return 'CURSE trägt weiter eine eigene Farbe';
+  return (await balken('CURSE').getAttribute('data-tex')) === null ? true : 'Schraffur blieb hängen';
+});
+
+await check('im Bauzeitenplan gibt es keine Farbwahl', async () => {
+  // Dort ist die Zuordnung gerechnet (docs/farbsuche.md) und bleibt es.
+  await p.locator('[data-ebene="bau"]').click();
+  await p.waitForTimeout(600);
+  await p.locator('.bz-bar').first().click();
+  await p.waitForTimeout(500);
+  const da = await p.locator('#ins .ins-farbe').count();
+  await p.locator('[data-ebene="show"]').click();
+  await p.waitForTimeout(700);
+  return da === 0 ? true : 'die Farbwahl steht auch im Bauzeitenplan';
+});
+
 // ── Bühnen-Filter ───────────────────────────────────────────────────────────
 console.log('\nBÜHNEN-FILTER');
 await check('die Häkchenleiste zeigt jede Bühne', async () => {

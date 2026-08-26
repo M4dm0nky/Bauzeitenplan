@@ -109,6 +109,23 @@ Reihenfolge und Zuordnung sind das Ergebnis eines Suchlaufs über 720 Varianten
 (`tools/farbsuche.mjs`), der die CVD-Unterscheidbarkeit benachbarter Zeilen maximiert.
 Handanlegen macht die Validierung wertlos. Neu rechnen statt raten.
 
+**Neben jedem Farbton steht seine SCHRIFTFARBE (`--gw-t-*`), und die ist ebenfalls
+gerechnet.** Gefüllte Balken tragen ihre Beschriftung auf der Farbe, und die
+Beschriftung ist die vorgeschriebene sekundäre Kodierung — sie muss lesbar sein.
+Weiß erreicht auf Gelb nur **2,17:1**, dunkle Tinte dagegen 8,23:1; auf Violett,
+Grün und Ocker ist es umgekehrt. Gewählt ist je Ton die Tinte, die in **hell UND
+dunkel** über 3:1 bleibt — deshalb feste Werte ohne Dunkel-Scope. Wer an `--gw-*`
+dreht, muss hier mitrechnen; die statische Prüfung «Schrift auf Gewerkfarbe hält
+3:1» in `tests/run.mjs` schlägt sonst an.
+
+**Die Farbe eines PROGRAMMPUNKTS ist wählbar, die eines GEWERKS nicht.** Im
+Showablauf trägt ein Vorgang ein eigenes `slot` (null = erbt die Farbe seiner
+Bühne); die Auswahl im Panel bietet zehn Töne und einen Schalter für Schraffur —
+ein Farbplatz IST das Paar aus beidem (`slotAus`/`hueVon` in palette.js), deshalb
+reichen zehn Punkte für zwanzig Kombinationen. Gewählt wird AUS der Palette, nie
+eine freie Farbe. Im Bauzeitenplan bleibt die Zuordnung gerechnet: dort stehen 20
+Gewerke untereinander, und genau dafür ist die Farbsuche gemacht.
+
 **Balkenbeschriftung nicht entfernen.** Rigging, Licht und Ton liegen auf hellem
 Grund unter 3:1 Kontrast. Die Beschriftung ist die vorgeschriebene sekundäre
 Kodierung — ohne sie hängt Identität an der Farbe allein.
@@ -253,6 +270,14 @@ Zeilenhöhe `rowH × lanes`) — sonst lägen sie übereinander. Marken (Konflik
 gelten für die Zeile als Ganzes, Umbenennen benennt die ganze Serie um. **Die
 Tabelle bleibt flach**: sie ist der Editor, dort gehört jeder Termin einzeln
 bearbeitbar. Beide Ansichten sortieren weiter über `byStart`.
+
+**Im SHOWABLAUF sind die Balken GEFÜLLT**, im Bauzeitenplan umrandet. Der
+Grundzustand `.bz-bar` ist ohnehin gefüllt; nur `bz-st-geplant` macht ihn
+transparent, und im Showablauf steht alles auf «geplant», weil dort niemand den
+Status pflegt — der ganze Abend sähe leer aus. Was gerade läuft, sagen die
+Jetzt-Linie und die Live-Kopfzeile. Umgesetzt über `.bz[data-ebene="show"]` in
+den Themes (Füllung ist Gestaltung, gehört nicht in base.css); `gantt.js` setzt
+nur `data-ebene` und die beiden Variablen `--gw`/`--gw-t`.
 
 **Im SHOWABLAUF wird NICHT gebündelt** (`buendeln` in gantt.js). Dort ist die
 Reihenfolge der Zeilen der ABLAUF selbst — Einlass, Band, Umbau, Band, Umbau —,

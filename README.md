@@ -48,6 +48,13 @@ aus. In der **Tabelle** kommen vier Spalten dazu, genau dort wo du den Zeitstrah
 anlegst: Typ (Act · Changeover · Doors · Show-Ende), Soundcheck, Kontakt und die
 Freitexte **Anforderungen** und **Benötigtes Material**.
 
+**Farben je Programmpunkt:** Klick auf einen Balken öffnet das Panel rechts, dort
+gibt es zehn Farbtöne und einen Schalter für **Schraffur** — aus Rot wird so
+Rot-mit-Schraffur, insgesamt zwanzig unterscheidbare Kombinationen. «Wie Bühne»
+nimmt eine eigene Farbe wieder zurück. Die Balken sind im Showablauf **gefüllt**;
+die Schrift darauf ist je Farbton so gewählt, dass sie in Hell und Dunkel über
+3:1 Kontrast bleibt (auf Gelb steht sie dunkel, auf Violett weiß).
+
 Für den Monitor am FOH gibt es eine **Live-Kopfzeile**: was JETZT läuft, was ALS
 NÄCHSTES kommt, der Verzug und die Uhr. Ein Changeover wird als Umbau angesagt,
 nicht als Act.

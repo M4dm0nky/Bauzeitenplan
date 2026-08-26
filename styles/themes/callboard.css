@@ -162,6 +162,19 @@ body {
 .bz-st-fertig { opacity: .42; }
 .bz-st-geplant { background: transparent; box-shadow: inset 0 0 0 1.5px var(--gw), 0 0 0 1.5px var(--panel2); }
 .bz-st-geplant .bz-bar-t { color: var(--ink); text-shadow: none; }
+
+/* Im SHOWABLAUF sind die Balken GEFÜLLT. Der Grundzustand .bz-bar ist das
+   ohnehin; nur bz-st-geplant macht ihn transparent, und im Showablauf steht
+   alles auf «geplant», weil dort niemand den Status pflegt. Was gerade läuft,
+   sagen die Jetzt-Linie und die Live-Kopfzeile.
+   Die Schrift-auf-Farbe-Lösung ist nicht neu — genau so sehen «läuft» und
+   «fertig» im Bauzeitenplan seit jeher aus. */
+.bz[data-ebene="show"] .bz-st-geplant { background: var(--gw); box-shadow: 0 0 0 1.5px var(--panel2); }
+/* Die Schrift AUF dem gefüllten Balken kommt aus der Palette (--gw-t-*,
+   base.css): je Ton die Tinte, die in beiden Modi über 3:1 bleibt. Ein fester
+   Wert — weiß auf Gelb erreicht nur 2,17:1. */
+.bz[data-ebene="show"] .bz-st-geplant .bz-bar-t { color: var(--gw-t); text-shadow: none; }
+.bz[data-ebene="show"] .bz-bar.is-narrow .bz-bar-t { color: var(--ink-2); text-shadow: none; }
 .bz-conf-tag { background: var(--crit); color: #fff; font-size: calc(9px * var(--fs)); }
 .bz-bar:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 .bz-bar.is-crit { box-shadow: 0 0 0 1.5px var(--panel2), 0 0 0 2.5px var(--crit); }
@@ -334,6 +347,11 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .ins-f input:focus, .ins-f select:focus, .ins-f textarea:focus { outline: none; border-color: var(--ink); }
 .ins-hint { font-size: calc(8.5px * var(--fs)); color: var(--muted); line-height: 1.4; }
 .ins-ro { font-size: calc(10.5px * var(--fs)); color: var(--ink-2); padding: 3px 0; }
+/* Der gewählte Ton trägt einen kräftigen Rahmen — Farbe allein unterscheidet
+   ihn nicht von den neun anderen, und genau das ist der Punkt der Palette. */
+.ins-ton { border: 1px solid var(--rule-2); border-radius: 2px; }
+.ins-ton.is-on { border: 2px solid var(--ink); box-shadow: 0 0 0 1px var(--panel); }
+.ins-tex { font-size: calc(10px * var(--fs)); color: var(--ink-2); }
 .ins-ro.is-crit { color: var(--crit); font-weight: 600; }
 .ins-check { font-size: calc(10.5px * var(--fs)); color: var(--ink-2); }
 .ins-h4 { margin: 8px 0 5px; font-family: var(--mono); font-size: calc(8.5px * var(--fs)); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 500; }

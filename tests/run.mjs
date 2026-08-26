@@ -82,6 +82,39 @@ check('Gewerk-Farben stehen nur in base.css, nicht in den Themes', () => {
   return bad.length ? 'Theme definiert Gewerk-Farben neu: ' + bad.join(', ') : true;
 });
 
+check('Schrift auf Gewerkfarbe hält 3:1 — in hell UND dunkel', () => {
+  // Gefüllte Balken tragen ihre Beschriftung AUF der Farbe, und die Beschriftung
+  // ist die vorgeschriebene sekundäre Kodierung (docs/entscheidungen.md) — sie
+  // muss lesbar sein. Weiß auf Gelb erreicht nur 2,17:1, deshalb steht neben
+  // jedem Ton in base.css eine gerechnete Textfarbe (--gw-t-*).
+  // Diese Prüfung schlägt an, sobald jemand an --gw-* dreht, ohne mitzurechnen.
+  const css = readFileSync(join(root, 'styles/base.css'), 'utf8');
+  const lum = (hex) => {
+    const n = hex.replace('#', '');
+    const v = [0, 2, 4].map((i) => parseInt(n.slice(i, i + 2), 16) / 255)
+      .map((u) => (u <= 0.03928 ? u / 12.92 : ((u + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  };
+  const kontrast = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  const tinte = {};
+  for (const m of css.matchAll(/--gw-t-(\d):\s*(#[0-9a-fA-F]{6})/g)) tinte[m[1]] = m[2];
+  // Alle Vorkommen je Ton: der erste Satz ist hell, die weiteren sind dunkel.
+  const toene = {};
+  for (const m of css.matchAll(/--gw-(\d):\s*(#[0-9a-fA-F]{6})/g)) (toene[m[1]] ||= []).push(m[2]);
+
+  const fehlt = [...Array(10).keys()].filter((i) => !tinte[i] || !toene[i]);
+  if (fehlt.length) return 'ohne Farbe oder Tinte: Ton ' + fehlt.join(', ');
+
+  const schlecht = [];
+  for (const i of Object.keys(toene)) {
+    for (const farbe of toene[i]) {
+      const k = kontrast(lum(farbe), lum(tinte[i]));
+      if (k < 3) schlecht.push(`--gw-${i} ${farbe} auf ${tinte[i]}: ${k.toFixed(2)}:1`);
+    }
+  }
+  return schlecht.length ? schlecht.join(' | ') : true;
+});
+
 check('jedes Theme gestaltet alle Bausteine der Engine', () => {
   // Fängt den Fall, dass ein neuer Baustein in gantt.js entsteht und ein Theme
   // ihn nicht kennt — dann fehlt er dort unsichtbar.

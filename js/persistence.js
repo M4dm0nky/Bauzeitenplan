@@ -75,6 +75,10 @@ export function migrate(plan) {
     t.material ??= '';
     t.soundcheck ??= '';
     t.kontakt ??= '';
+    // Eigener Farbplatz des Programmpunkts. null = erbt die Farbe seiner Bühne
+    // (so verhalten sich alle Altpläne). Gewählt wird AUS der Palette, nie eine
+    // freie Farbe — sonst wäre die Farbsuche aus docs/farbsuche.md wertlos.
+    t.slot ??= null;
   }
   for (const d of p.deps) {
     d.type ??= 'FS';

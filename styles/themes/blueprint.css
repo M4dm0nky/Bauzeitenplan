@@ -169,6 +169,15 @@ body {
 .bz-prog { background: var(--gw); opacity: .55; }
 .bz-st-fertig { border-style: solid; opacity: .82; }
 .bz-st-geplant { background: transparent; }
+
+/* Im SHOWABLAUF sind die Balken GEFÜLLT. Der Grundzustand .bz-bar ist das
+   ohnehin; nur bz-st-geplant macht ihn transparent, und im Showablauf steht
+   alles auf «geplant», weil dort niemand den Status pflegt. Was gerade läuft,
+   sagen die Jetzt-Linie und die Live-Kopfzeile.
+   Die Schrift-auf-Farbe-Lösung ist nicht neu — genau so sehen «läuft» und
+   «fertig» im Bauzeitenplan seit jeher aus. */
+.bz[data-ebene="show"] .bz-st-geplant { background: color-mix(in srgb, var(--gw) 26%, var(--sheet)); }
+.bz[data-ebene="show"] .bz-st-geplant .bz-bar-t { color: var(--ink); }
 .bz-conf-tag { background: var(--crit); color: #fff; font-size: 9px; }
 .bz-bar:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
 .bz-bar.is-crit { border-width: 1.75px; border-color: var(--crit); box-shadow: 0 0 0 2px color-mix(in srgb, var(--crit) 14%, transparent); }
