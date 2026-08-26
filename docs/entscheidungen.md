@@ -7,8 +7,8 @@ Warum Dinge so sind, wie sie sind. Nur das, was sich aus dem Code nicht ablesen 
 | Frage | Entscheidung | Warum |
 |---|---|---|
 | Zeitachse | Vier Zoomstufen: Monate / Wochen / Tage / Stunden | Der Zeitraum spannt Monate, der Load-In läuft stundengenau. Ein Raster kann beides nicht. |
-| Backend | **Eigene** PocketBase-Instanz, keine Kopplung an Crewplaner | Ausdrücklich so gewollt. Übernommen werden die Muster und Erfahrungen, nicht die Daten. |
-| Gantt-Zeilen | Zwei Ebenen: Gewerk (aufklappbar) → Vorgänge | Entspricht dem klassischen Bauzeitenplan. |
+| Backend | **Keines.** Reine statische Auslieferung, localStorage + JSON-Export | Eine vorbereitete PocketBase-Schicht wurde in v0.8.0 aus `main` entfernt (siehe unten). Kommt der Bedarf zurück, wird es eine **eigene** Instanz, keine Kopplung an Crewplaner: übernommen werden Muster und Erfahrungen, nicht die Daten. |
+| Gantt-Zeilen | Zwei Ebenen: Band (aufklappbar) → Vorgänge | Entspricht dem klassischen Bauzeitenplan. Das Band ist je nach Plan-Ebene ein Gewerk oder eine Bühne. |
 | Abhängigkeiten | Von Anfang an, alle vier Typen + kritischer Pfad | — |
 | Build-Step | Keiner. Native ES-Module. | Konsistent zu Crewplaner und Personalplan. `tools/build-prototypes.mjs` ist **nur** für die Design-Artifacts (CSP verlangt dort alles inline). |
 
@@ -106,11 +106,56 @@ Zeitstempeln — nie aus Ziffernarithmetik auf Datumsstrings. Sonst ist die Daue
 den Sommerzeit-Sprung falsch, und dieser Bug schlägt genau einmal im Jahr zu.
 Ein Test deckt den DST-Übergang ab.
 
+## Zwei Ebenen statt zweier Anwendungen
+
+Ein Bauzeitenplan und ein Showablauf sehen verschieden aus, haben aber dieselbe
+**Form**: eine benannte, sortierbare, eingefärbte Spur mit Vorgängen darin. Deshalb
+ist eine **Bühne technisch ein Gewerk mit `art:'buehne'`** und ein Programmpunkt ein
+normaler Vorgang darin (`js/ebene.js`). Der Preis der Alternative wäre ein zweiter
+Store, ein zweites Undo und eine zweite Persistenz gewesen — für dasselbe Verhalten.
+
+Altpläne kennen das Feld nicht und sind deshalb durchweg Gewerke; der Bauzeitenplan
+sieht aus wie immer. **Ein Gewerk wird nie nachträglich zur Bühne**: alle Vorgänge
+darin sprängen die Ebene mit.
+
+Die **Farbplätze werden je Ebene vergeben**. Der Klassentreffen-Plan hat 20 Gewerke,
+also genau `MAX_SLOTS`. Zusammengezählt wäre die Palette mit der ersten Bühne
+erschöpft — dabei sind Gewerke und Bühnen nie zusammen zu sehen.
+
+**Gebündelt wird nur im Bauzeitenplan.** Dort ist «Aufbau Bühne» an drei Tagen EINE
+Tätigkeit (`seriesRows`); ohne die Bündelung hätte die Crew 113 Zeilen für 28 Dinge.
+Im Showablauf ist die Reihenfolge der Zeilen dagegen der **Ablauf selbst** — Einlass,
+Band, Umbau, Band —, und den liest man von oben nach unten. Gebündelt entstand daraus
+eine Zeile «Changeover» mit sechs Balken, die zwischen den Acts hing.
+
+**Der Verzug in der Live-Kopfzeile zählt nur, was noch aussteht oder läuft.**
+`delaysAt` meldet auch längst vergangene, nie abgehakte Punkte; bei Doors (12:00–14:00,
+Status «geplant») stand um 15:30 groß und rot «+4 Std» — an einem Abend, der exakt
+nach Plan lief. Das ist keine Verspätung, sondern eine fehlende Rückmeldung. Die Regel
+«Status wird nie automatisch gesetzt» bleibt unberührt: gefiltert wird die Anzeige,
+nicht die Rechnung.
+
+## PocketBase liegt auf Eis
+
+Eine fertige Login- und Rollenschicht lag von v0.3.0 bis v0.7.1 **bewusst uncommittet**
+im Arbeitsbaum. Sie griff nur mit `?backend=pb` und tat auf der veröffentlichten Seite
+nichts — lud ihre Module aber bei jedem Aufruf mit und machte jeden Feature-Commit zu
+einer Isolationsprozedur (sichern, auf HEAD zurücksetzen, Feature neu auftragen,
+zurückkopieren).
+
+In v0.8.0 wurde sie aus `main` entfernt. Die Seite ist eine reine
+GitHub-Pages-Auslieferung ohne Nutzerverwaltung; ein Backend, das niemand benutzt,
+ist kein Vorsprung, sondern Ballast. Der vollständige Stand — `pb.js`, `auth.js`,
+`session.js`, `roles.js`, `persistence-pb.js`, `login.html`, `admin.html`, das
+PocketBase-Schema samt Hooks und `setup.mjs`, die zugehörigen Tests und die
+Integrationspunkte — liegt im Branch **`pocketbase-vorbereitung`**. Er wird nicht
+deployt und nicht gemergt. Wer Online + Rollen wieder aufnimmt, macht dort weiter;
+die Crewplaner-Lehren weiter oben in dieser Datei gelten dann wieder.
+
 ## Was bewusst noch fehlt
 
-Online-Backend, Login und Rollen (die PocketBase-Schicht ist vorbereitet, liegt aber
-noch uncommittet — siehe `CLAUDE.md` und `pocketbase/README.md`) sowie Ansichten &
-Export (Tagesplan, öffentlicher Link, PDF/ICS). Darstellung, Bearbeiten, Live-Modus,
-Untervorgänge, Prüf-Liste und die Verknüpfungs-Suche stehen (Stand v0.4.1). Startdaten
-kommen aus den Vorlagen (`js/templates.js`) bzw. importierten JSON-Plänen — einen
+Drag & Drop der Balken im Gantt sowie Ansichten & Export (öffentlicher Link, PDF/ICS).
+Darstellung, Bearbeiten, Live-Modus, Untervorgänge, Prüf-Liste, Verknüpfungs-Suche,
+Tagesblätter und die Showablauf-Ebene stehen (Stand v0.8.1). Startdaten kommen aus den
+Vorlagen (`js/templates.js`) bzw. importierten JSON-Plänen — einen
 `js/data.js`-Demo-Datensatz gibt es nicht mehr.

@@ -113,6 +113,20 @@ body {
 }
 .bz-lab-task { position: relative; }
 .bz-lab-meta { font-size: 9px; color: var(--ink-3); }
+
+/* ── Showablauf-Ebene ─────────────────────────────────────────────────────── */
+.bz-lab-zeit { font-size: 9px; color: var(--ink-3); }
+.buehnen { font-size: 10px; color: var(--ink-2); }
+.buehne-i:has(input:not(:checked)) { color: var(--ink-3); opacity: .6; }
+.buehnen-leer { font-size: 9px; color: var(--ink-3); }
+.showhead { background: var(--panel); border-bottom: 1px solid var(--rule); }
+.sh-f { background: var(--panel2); }
+.sh-k { font-size: 9px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-3); }
+.sh-v { font-size: 17px; font-weight: 600; color: var(--ink); line-height: 1.25; }
+.sh-z { font-size: 10px; color: var(--ink-2); }
+.sh-next .sh-v { color: var(--ink-2); }
+.sh-clock .sh-v { font-variant-numeric: tabular-nums; }
+.sh-late.is-late .sh-v, .sh-late.is-late .sh-z { color: var(--crit); }
 .bz-lab-projekt { background: var(--paper); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--cyan); }
 .bz-crit-tag {
   flex: none; font-size: 7.5px; letter-spacing: .1em; padding: 1px 3px;

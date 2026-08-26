@@ -107,6 +107,20 @@ body {
 }
 .bz-lab-task { color: var(--ink-2); font-size: 12px; }
 .bz-lab-meta { font-size: 10px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* ── Showablauf-Ebene ─────────────────────────────────────────────────────── */
+.bz-lab-zeit { font-size: 10px; color: var(--ink-3); }
+.buehnen { font-size: 11px; color: var(--ink-2); }
+.buehne-i:has(input:not(:checked)) { color: var(--ink-3); opacity: .6; }
+.buehnen-leer { font-size: 10px; color: var(--ink-3); }
+.showhead { background: var(--panel); border-bottom: 1px solid var(--rule); }
+.sh-f { background: var(--panel2); }
+.sh-k { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-3); }
+.sh-v { font-size: 19px; font-weight: 600; color: var(--ink); line-height: 1.25; }
+.sh-z { font-size: 11px; color: var(--ink-2); }
+.sh-next .sh-v { color: var(--ink-2); }
+.sh-clock .sh-v { font-variant-numeric: tabular-nums; }
+.sh-late.is-late .sh-v, .sh-late.is-late .sh-z { color: var(--crit); }
 .bz-lab-projekt { background: var(--card-2); font-weight: 600; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .bz-crit-tag {
   flex: none; font-size: 8px; font-weight: 700; letter-spacing: .09em;

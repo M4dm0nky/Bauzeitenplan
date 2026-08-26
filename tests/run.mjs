@@ -85,7 +85,10 @@ check('Gewerk-Farben stehen nur in base.css, nicht in den Themes', () => {
 check('jedes Theme gestaltet alle Bausteine der Engine', () => {
   // Fängt den Fall, dass ein neuer Baustein in gantt.js entsteht und ein Theme
   // ihn nicht kennt — dann fehlt er dort unsichtbar.
-  const needed = ['bz-bar', 'bz-ms-d', 'bz-sum', 'bz-now', 'bz-dep', 'bz-tip', 'bz-ph-t', 'bz-slack', 'bz-corner-cap'];
+  const needed = ['bz-bar', 'bz-ms-d', 'bz-sum', 'bz-now', 'bz-dep', 'bz-tip', 'bz-ph-t', 'bz-slack', 'bz-corner-cap',
+    // Showablauf-Ebene (v0.8.0). Sie fehlten hier zunächst — nur das aktive
+    // Theme kannte sie, die vier anderen hätten die Ebene ungestaltet gezeigt.
+    'bz-lab-zeit', 'showhead', 'sh-v', 'buehne-i'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

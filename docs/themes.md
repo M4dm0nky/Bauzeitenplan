@@ -86,6 +86,13 @@ Zwei Dinge dabei beachten:
 5. `node tests/run.mjs` — die statischen Prüfungen fangen fehlende Bausteine.
 6. `node tools/verify-browser.mjs` — fährt das Theme im Browser hoch.
 
+**Kommt ein neuer Baustein in die Engine, gehört er in die `needed`-Liste in
+`tests/run.mjs`** — sonst kennt ihn nur das Theme, in dem er entstanden ist, und
+in den anderen fehlt er unsichtbar. Genau das ist mit der Showablauf-Ebene
+(v0.8.0) passiert: `bz-lab-zeit`, `showhead`, `sh-*` und `buehne-i` gab es
+zunächst nur in `callboard.css`, und die Prüfung schwieg, weil ihre Liste die
+Namen nicht kannte.
+
 ## Farbpalette der Gewerke
 
 Die ersten **acht Farben sind gerechnet, nicht ausgesucht** (`docs/entscheidungen.md`).

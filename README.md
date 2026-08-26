@@ -15,11 +15,46 @@ der Load-In läuft stundengenau.
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
 mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
-**Dazugekommen (bis v0.7.1):** Gewerke per Drag & Drop umsortieren · Gantt und
+**Dazugekommen (bis v0.8.1):** Gewerke per Drag & Drop umsortieren · Gantt und
 Tabelle in gleicher Reihenfolge (nach Startzeit) · **Untervorgänge** (einklappbar,
 Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für kritische
 Vorgänge und Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
-statt endlosem Dropdown · Hell/Dunkel-Umschalter im Kopf · CallBoard-Marke.
+statt endlosem Dropdown · Hell/Dunkel-Umschalter im Kopf · **Tagesblätter zum
+Drucken** · **Showablauf-Ebene** (siehe unten) · CallBoard-Marke.
+
+## Zwei Ebenen: Bauzeitenplan und Showablauf
+
+Derselbe Plan, zwei Blickrichtungen. Oben im Kopf schaltest du um:
+
+**Bauzeitenplan** — die ganze Veranstaltung über **Gewerke**: Vorbereitung,
+Aufbau, Show, Abbau. Vorgänge gleichen Namens werden zu einer Zeile mit mehreren
+Balken gebündelt; 353 Vorgänge ergeben 153 Zeilen.
+
+**Showablauf** — der Tagesablauf auf den **Bühnen**: Bands, Redner, Umbauten.
+Hier wird **nicht** gebündelt: jeder Programmpunkt trägt seine eigene Zeile,
+chronologisch von oben nach unten, mit der Startzeit vor dem Namen. Die
+Seitenspalte ist damit allein schon der Ablaufplan.
+
+```
+12:00  DOORS
+14:00  CREUTZFELD & JAKOB
+14:30  Changeover
+14:40  OLLI BANJO
+```
+
+Bühnen legst du an wie ein Gewerk (`+ Bühne`), benennst und sortierst sie genauso.
+Ein Umschalter über dem Gantt wählt den Showtag, Häkchen blenden einzelne Bühnen
+aus. In der **Tabelle** kommen vier Spalten dazu, genau dort wo du den Zeitstrahl
+anlegst: Typ (Act · Changeover · Doors · Show-Ende), Soundcheck, Kontakt und die
+Freitexte **Anforderungen** und **Benötigtes Material**.
+
+Für den Monitor am FOH gibt es eine **Live-Kopfzeile**: was JETZT läuft, was ALS
+NÄCHSTES kommt, der Verzug und die Uhr. Ein Changeover wird als Umbau angesagt,
+nicht als Act.
+
+**Running-Order-Blatt:** Unter *Drucken → Running Order* kommt ein A3 quer je Tag
+und Bühne — als Liste (`Zeit · Programmpunkt · Anforderungen · Material`). Leere
+Felder drucken als **Linien zum Ausfüllen mit dem Stift**.
 
 **Weitergeben: einfach die Adresse schicken.** Wer
 [die Seite](https://m4dm0nky.github.io/Bauzeitenplan/) öffnet, sieht den
@@ -56,18 +91,22 @@ Im Druckdialog **A3 · Querformat** wählen und **Hintergrundgrafiken einschalte
 sonst drucken die Balken weiß.
 
 **Deine Daten liegen im Browser.** Privater Modus, Verlauf löschen, anderer
-Rechner — und sie sind weg. Bis PocketBase steht, ist der **JSON-Export die
-einzige Sicherung**. Nutze ihn.
+Rechner — und sie sind weg. Es gibt kein Backend und keine Anmeldung: der
+**JSON-Export ist die einzige Sicherung**. Nutze ihn.
 
 **Live-Modus** für den Aufbau: Zeitlinie läuft mit, Ansicht folgt, laufende
 Vorgänge leuchten, Verzug wird benannt («sollte seit 20m laufen»). Der Status
 wird dabei **nie** automatisch gesetzt — sonst sähe der Plan immer nach Plan aus
 und das Signal «wir hängen» wäre weg.
 
-**Als Nächstes:** Drag & Drop der Balken im Gantt, danach PocketBase mit Login und
-Rollen. Die PocketBase-Schicht ist bereits vorbereitet, liegt aber bewusst noch
-uncommittet im Arbeitsbaum (greift nur mit `?backend=pb`) — Details in `CLAUDE.md`
-und `pocketbase/README.md`.
+**Als Nächstes:** Drag & Drop der Balken im Gantt, danach Ansichten & Export
+(öffentlicher Link, PDF/ICS).
+
+**PocketBase liegt auf Eis.** Eine Login- und Rollenschicht war vorbereitet,
+wurde aber in v0.8.0 aus `main` entfernt: die Seite ist eine reine
+GitHub-Pages-Auslieferung ohne Nutzerverwaltung, und die Schicht kostete bei
+jedem Commit eine Isolationsprozedur. Der vollständige Stand liegt im Branch
+`pocketbase-vorbereitung` und wird weder deployt noch gemergt.
 
 ## Starten
 
@@ -126,6 +165,8 @@ node tools/verify-edit.mjs    # Bearbeiten: anlegen, tippen, Undo, Konflikte, Pa
 node tools/verify-live.mjs    # Live-Modus mit gestellter Uhr (page.clock)
 node tools/verify-amk.mjs     # AMK-Plan importieren und prüfen
 node tools/verify-print.mjs   # Tagesblätter: Zuschnitt, Filter, Maßstab, PDF
+node tools/verify-klassentreffen.mjs  # V07-Plan + Autostart über die Adresse
+node tools/verify-showablauf.mjs      # Showablauf: Ebene, Bühnen, Live-Kopfzeile, Blatt
 node tools/make-amk.mjs       # amk-singleshow.json aus den PDF-Daten neu bauen
 
 # gegen die veröffentlichte Seite statt lokal:
@@ -136,8 +177,10 @@ node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
 Er prüft Verhalten (Sticky-Spalten, Zoomstufen, Pfeilgeometrie, Beschriftungen,
 Jetzt-Linie, Service Worker) und legt Screenshots unter `tools/shots/` ab.
 
-**Screenshots ansehen, nicht nur Häkchen zählen.** Vier echte Fehler haben in diesem
-Projekt die automatischen Prüfungen passiert und wurden erst im Bild sichtbar.
+**Screenshots ansehen, nicht nur Häkchen zählen.** Zehn echte Fehler haben in diesem
+Projekt die automatischen Prüfungen passiert und wurden erst im Bild sichtbar —
+zuletzt eine Datumszeile, die links angeschnitten war, und ein «SHOW END», das
+über die Blattkante lief.
 
 ## Deploy
 
@@ -163,8 +206,8 @@ Gegenmaßnahme kämen Änderungen an den Untermodulen bis zu zehn Minuten lang n
 beim Entwickeln erst nach manuellem Cache-Leeren.
 
 `sw.js` erzwingt deshalb für eigene JS/CSS/HTML eine Revalidierung und **cacht selbst
-nichts** — er kann also nie eine alte Version einsperren. Fremde Origins (ab Phase 1
-die PocketBase-API) fasst er nicht an. Ein Kill-Switch steht in der Datei.
+nichts** — er kann also nie eine alte Version einsperren. Fremde Origins fasst er
+nicht an. Ein Kill-Switch steht in der Datei.
 
 Das `?v=` in `index.html` setzt `tools/version.mjs` mit — von Hand hochzählen
 ist nicht nötig. Beides zusammen, weil der Service Worker erst ab dem zweiten
@@ -187,6 +230,7 @@ js/
   templates.js          Vier Vorlagen (Festival, Tour, Corporate, Messe)
   persistence.js        localStorage, Export/Import, Migration — DOM-frei
   palette.js            Gewerk-Farben: 10 Töne × 2 Schraffuren = 20 Plätze
+  ebene.js              Bauzeitenplan ↔ Showablauf: Bänder, Showtage, Fenster — DOM-frei
   live.js               Verzug + laufende Vorgänge — DOM-frei
   inspector.js          Seitenpanel (mit Verknüpfungs-Suche)
   menu.js               Kontextmenü
@@ -236,9 +280,11 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | Gewerke per Drag & Drop · gleiche Reihenfolge Gantt = Tabelle (nach Start) |
 | ✅ | Untervorgänge (Eltern = Hülle, einklappbar) · Handy/Tablet-tauglich |
 | ✅ | Prüf-Liste (kritisch & Konflikte sehen/zeigen/abhaken) · Verknüpfungs-Suche |
+| ✅ | Tagesblätter zum Drucken (ein A3 quer je Tag) |
+| ✅ | Showablauf-Ebene: Bühnen, Anforderungen/Material, Live-Kopfzeile, Running-Order-Blatt |
 | → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen, Verknüpfungen ziehen |
-| | PocketBase, Login, Rollen (vorbereitet, noch uncommittet) — `admin`/`lead`/`viewer` |
-| | Ansichten & Export: Tagesplan, öffentlicher Link ohne Login, PDF/ICS |
+| | Ansichten & Export: öffentlicher Link, PDF/ICS |
+| ❄️ | PocketBase, Login, Rollen — auf Eis, Stand im Branch `pocketbase-vorbereitung` |
 
 **Zu den Vorlagen:** «Festival» ist abgenommener Praxisstand. Tour, Corporate und
 Messe sind entworfene Gerüste — richtige Gewerke und Meilensteine, aber keine
@@ -251,3 +297,7 @@ sind (gestrichelte Kante, Grund in der Notiz). Neu gebaut wird er mit
 `node tools/make-klassentreffen.mjs`; die Quelle steht Zeile für Zeile in
 diesem Werkzeug. **Keine Verknüpfungen** — V07 ist ein terminierter Kalender,
 und erfundene Abhängigkeiten erzeugten rote Konflikte ohne Wirklichkeitsbezug.
+
+Dazu die **Running Order** beider Showtage (Stand 05.08.2026, 32 Programmpunkte
+auf der Hauptbühne) für die Showablauf-Ebene. Anforderungen und Material bleiben
+dort leer — die trägt man von Hand ein, dafür ist die Ansicht da.
