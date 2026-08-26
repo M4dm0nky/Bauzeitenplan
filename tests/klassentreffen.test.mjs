@@ -413,19 +413,40 @@ test('das Show-Ende ist ein Meilenstein, kein Balken', () => {
   }
 });
 
-test('alle reinen Umbauten heißen gleich — eine Zeile, viele Balken', () => {
-  // Sonst hätte die Bühne acht Zeilen für dasselbe Ding. «Changeover + FLYING
-  // STEPS» bleibt bewusst eigen: dort wird gespielt.
-  const s29 = seriesRows(roTag('2026-08-29'));
-  const co = s29.find((x) => x.title === 'Changeover');
-  assert.equal(co.tasks.length, 6);   // 17:35 ist «+ FLYING STEPS» und zählt eigen
-  assert.equal(co.lanes, 1, 'Umbauten überlappen sich nie');
-  assert.ok(s29.some((x) => x.title === 'Changeover + FLYING STEPS'));
+test('im Showablauf wird NICHT gebündelt — jeder Punkt eine eigene Zeile', () => {
+  // Der Bauzeitenplan bündelt Vorgänge gleichen Namens zu einer Serie; hier wäre
+  // das falsch. Gebündelt entstünde EINE Zeile «Changeover» mit sechs Balken,
+  // und die Zeilenfolge richtete sich nach dem frühesten Termin jeder Serie
+  // statt nach dem Abend. Ein Ablaufplan wird von oben nach unten gelesen.
+  //
+  // Geprüft wird die Quelle der Zeilen: die nach byStart sortierten Punkte des
+  // Tages. Der Gantt baut daraus je eine Zeile (buendeln in gantt.js).
+  assert.equal(roTag('2026-08-29').length, 17);
+  assert.equal(roTag('2026-08-30').length, 15);
+  const co = roTag('2026-08-29').filter((t) => t.title === 'Changeover');
+  assert.equal(co.length, 6, 'sechs getrennte Umbauten, nicht einer');
 });
 
-test('17 Punkte am Samstag ergeben 12 Zeilen, 15 am Sonntag ergeben 10', () => {
-  assert.equal(seriesRows(roTag('2026-08-29')).length, 12);
-  assert.equal(seriesRows(roTag('2026-08-30')).length, 10);
+test('die Zeilenfolge ist der Ablauf: Einlass · Band · Umbau · Band · Umbau', () => {
+  // Genau die Form aus dem PDF — das ist der Zweck der ganzen Ansicht.
+  const anfang = roTag('2026-08-29').slice(0, 6).map((t) => t.title);
+  assert.deepEqual(anfang, [
+    'DOORS', 'CREUTZFELD & JAKOB', 'Changeover', 'OLLI BANJO', 'Changeover', 'CURSE',
+  ]);
+  // Und die Zeiten steigen monoton — keine Zeile springt zurück.
+  const zeiten = roTag('2026-08-29').map((t) => toMin(t.start));
+  for (let i = 1; i < zeiten.length; i++) {
+    assert.ok(zeiten[i] >= zeiten[i - 1], 'Zeile ' + i + ' springt in der Zeit zurück');
+  }
+});
+
+test('seriesRows bündelt weiterhin — der Bauzeitenplan braucht das', () => {
+  // Die Funktion bleibt richtig und unangetastet; der Showablauf ruft sie nur
+  // nicht mehr auf. Ein Test, der das verwechselt, hätte den Bauzeitenplan
+  // stillschweigend mitgeändert.
+  const s29 = seriesRows(roTag('2026-08-29'));
+  assert.equal(s29.find((x) => x.title === 'Changeover').tasks.length, 6);
+  assert.equal(s29.length, 12);
 });
 
 test('jeder Punkt hat einen Typ, und nur bekannte', () => {

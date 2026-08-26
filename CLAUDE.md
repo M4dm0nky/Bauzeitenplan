@@ -238,9 +238,9 @@ Versionsprüfung in `tests/run.mjs`.** Beide kannten anfangs nur `index.html` �
 eine zweite Seite mit eigenen `?v=` wäre still auseinandergelaufen. Genau der
 Crewplaner-Fehler, der weiter unten als Gegenbeispiel steht.
 
-**Der Gantt zeigt eine Zeile je VORGANGSNAME, einen Balken je Termin**
-(`seriesRows` in schedule.js, DOM-frei und getestet). Ein Bauzeitenplan wird
-tageweise gedruckt, deshalb steht dieselbe Tätigkeit mehrfach in der Quelle —
+**Im BAUZEITENPLAN zeigt der Gantt eine Zeile je VORGANGSNAME, einen Balken je
+Termin** (`seriesRows` in schedule.js, DOM-frei und getestet). Ein Bauzeitenplan
+wird tageweise gedruckt, deshalb steht dieselbe Tätigkeit mehrfach in der Quelle —
 das sind keine verschiedenen Vorgänge. Ohne die Bündelung hatte die Bühne sechs
 Zeilen für drei Dinge und die Crew 113 für 28; 353 Vorgänge ergeben **153 Zeilen**.
 Überlappen sich zwei Termine einer Serie, bekommen sie **Spuren** (`--lane`,
@@ -248,6 +248,18 @@ Zeilenhöhe `rowH × lanes`) — sonst lägen sie übereinander. Marken (Konflik
 gelten für die Zeile als Ganzes, Umbenennen benennt die ganze Serie um. **Die
 Tabelle bleibt flach**: sie ist der Editor, dort gehört jeder Termin einzeln
 bearbeitbar. Beide Ansichten sortieren weiter über `byStart`.
+
+**Im SHOWABLAUF wird NICHT gebündelt** (`buendeln` in gantt.js). Dort ist die
+Reihenfolge der Zeilen der ABLAUF selbst — Einlass, Band, Umbau, Band, Umbau —,
+und den liest man von oben nach unten. Gebündelt entstand daraus eine Zeile
+«Changeover» mit sechs Balken, die zwischen den Acts hing, und die Zeilenfolge
+richtete sich nach dem frühesten Termin jeder Serie statt nach dem Abend. Jeder
+Programmpunkt trägt seine eigene Zeile, `lanes` ist immer 1: zwei gleichzeitige
+Dinge auf einer Bühne sind zwei Zeilen, keine Spuren. **Die Startzeit steht links
+vor dem Namen** (`bz-lab-zeit`, feste Breite, `tabular-nums`) — damit ist die
+Seitenspalte allein schon der Ablaufplan. Im Bauzeitenplan wäre sie falsch: dort
+stünde eine Uhrzeit stellvertretend für mehrere Termine. `seriesRows` bleibt
+unangetastet — die Funktion ist richtig, der Showablauf ruft sie nur nicht auf.
 
 **„Tag 1/2/3" gehört nicht in den Titel.** Der 24.08. IST Tag 1 — das sagt das
 Datum. Im Namen erzwingt es eine Zeile je Tag und macht aus einer Tätigkeit drei.

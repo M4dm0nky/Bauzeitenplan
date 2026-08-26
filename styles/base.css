@@ -107,6 +107,13 @@ body { margin: 0; }
 .bz-lab-task.has-sub { padding-left: 10px; }
 .bz-lab-task.is-child { padding-left: 46px; }
 .bz-lab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+/* Startzeit im Showablauf. Feste Breite und tabellarische Ziffern, damit die
+   Zeiten untereinander stehen — sonst tanzt die Spalte und die Namen beginnen
+   auf fünf verschiedenen Höhen. Der Einzug der Vorgangszeile fällt dafür
+   kleiner aus: die Zeit übernimmt, was sonst der Leerraum leistet. */
+.bz-lab-zeit { flex: none; width: 40px; font-variant-numeric: tabular-nums; }
+.bz-lab-task:has(.bz-lab-zeit) { padding-left: 12px; }
+.bz-lab-task.is-child:has(.bz-lab-zeit) { padding-left: 28px; }
 .bz-lab-meta { flex: none; font-variant-numeric: tabular-nums; }
 .bz-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--gw); }
 

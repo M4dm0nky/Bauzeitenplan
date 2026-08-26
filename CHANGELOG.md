@@ -3,6 +3,40 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.8.1 — 2026-08-26
+
+**Der Showablauf liest sich jetzt als Ablauf**
+
+Die Ebene erbte die Zeilenbildung des Bauzeitenplans: `seriesRows` bündelt
+Vorgänge gleichen Namens zu EINER Zeile mit mehreren Balken. Für einen
+Bauzeitenplan ist das richtig — «Aufbau Bühne» an drei Tagen ist eine Tätigkeit.
+Für einen Showablauf war es falsch: es entstand eine Zeile «Changeover» mit sechs
+Balken, die zwischen den Acts hing, und die Zeilenfolge richtete sich nach dem
+frühesten Termin jeder Serie statt nach dem Abend.
+
+- **Jeder Programmpunkt trägt seine eigene Zeile**, sortiert nach Startzeit. Die
+  Ansicht liest sich von oben nach unten wie der Ablaufplan auf Papier:
+  Einlass · Band · Umbau · Band · Umbau. `lanes` ist immer 1 — zwei gleichzeitige
+  Dinge auf einer Bühne sind zwei Zeilen, keine Spuren.
+- **Die Startzeit steht links vor dem Namen** («12:00  DOORS»), tabellarisch
+  untereinander. Damit ist die Seitenspalte allein schon der Ablaufplan.
+- **Der Abend füllt die Breite**, nicht der Kalendertag. Die Achse spannt von
+  Doors bis Show-Ende statt über 24 Stunden; vorher nahm der leere Vormittag die
+  halbe Fläche ein und die Umbauten waren Striche. Rechts bleibt eine halbe
+  Stunde Luft, damit die Beschriftung des letzten Punkts nicht über die Kante
+  läuft.
+
+**Der Bauzeitenplan bleibt unverändert** — er bündelt weiter (353 Vorgänge auf
+153 Zeilen) und trägt keine Uhrzeit in der Spalte. Ein Test hält beides fest.
+
+**Nebenbei**
+- Die grobe Achsenzeile (Datum) beginnt eine Einheit früher als der Ausschnitt.
+  Gesucht ist der Tag, in dem man sich befindet, und der beginnt links außerhalb,
+  sobald man in ihn hineingescrollt ist — vorher fiel er heraus und die Achse
+  stand ganz ohne Datum da. Betrifft beide Ebenen; im Bauzeitenplan war die Zeile
+  bisher nur dann leer, wenn man in einen Tag hineingezoomt hatte.
+- `zeitraumFuer` ist entfallen, `programmFenster` ersetzt es.
+
 ## 0.8.0 — 2026-08-25
 
 **Showablauf — der Tagesablauf auf den Bühnen, als zweite Ebene**

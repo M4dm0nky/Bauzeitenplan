@@ -1,4 +1,5 @@
-import { artOf, sichtGewerke, sichtTasks, zeitraumFuer, punktLabel, ART_FUER, EBENEN } from '../js/ebene.js';
+import { artOf, sichtGewerke, sichtTasks, programmFenster, punktLabel, ART_FUER, EBENEN } from '../js/ebene.js';
+import { toMin } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -66,37 +67,42 @@ test('unbekannte Ebene fällt auf Gewerke zurück, statt leer zu sein', () => {
   assert.deepEqual(sichtGewerke(S, 'quatsch').map((g) => g.id), ['g0', 'g1']);
 });
 
-console.log('\nZeitfenster der Ebene');
+console.log('\nProgrammfenster — wo wirklich etwas läuft');
 
-test('rundet auf volle Kalendertage', () => {
-  const z = zeitraumFuer(sichtTasks(S, 'show'));
-  assert.equal(z.start, '2026-08-29T00:00');
-  assert.equal(z.end, '2026-08-31T00:00');
+const F = (id, start, end) => ({ id, title: id, start, end, milestone: false });
+const iso = (min) => new Date(min * 60000).toLocaleString('sv-SE').slice(0, 16).replace(' ', 'T');
+
+test('rundet auf volle Stunden nach außen', () => {
+  // 12:00–21:50 wird 12:00–22:00. Über den Kalendertag gespannt nähme der leere
+  // Vormittag die halbe Breite ein und die Umbauten wären Striche.
+  const f = programmFenster([F('a', '2026-08-29T12:00', '2026-08-29T14:00'),
+    F('b', '2026-08-29T20:40', '2026-08-29T21:50')]);
+  assert.equal(iso(f.von), '2026-08-29T12:00');
+  // 21:50 + 30 min Luft für die Beschriftung → aufgerundet 23:00.
+  assert.equal(iso(f.bis), '2026-08-29T23:00');
 });
 
-test('ein Ende exakt auf Mitternacht hängt keinen leeren Tag an', () => {
-  const z = zeitraumFuer([T('a', 'b0', '2026-08-29T12:00', '2026-08-30T00:00')]);
-  assert.equal(z.start, '2026-08-29T00:00');
-  assert.equal(z.end, '2026-08-30T00:00');
+test('krumme Anfangszeiten runden nach unten', () => {
+  const f = programmFenster([F('a', '2026-08-29T12:20', '2026-08-29T13:10')]);
+  assert.equal(iso(f.von), '2026-08-29T12:00');
+  assert.equal(iso(f.bis), '2026-08-29T14:00');   // 13:10 + 30 min → 14:00
 });
 
-test('ein einzelner Tag bleibt ein Tag', () => {
-  const z = zeitraumFuer([T('a', 'b0', '2026-08-29T14:00', '2026-08-29T14:30')]);
-  assert.equal(z.start, '2026-08-29T00:00');
-  assert.equal(z.end, '2026-08-30T00:00');
+test('ein einzelner Meilenstein bekommt trotzdem eine Spanne', () => {
+  // Sonst wäre die Spanne null und der Maßstab unendlich.
+  const f = programmFenster([F('a', '2026-08-29T21:50', '2026-08-29T21:50')]);
+  assert.ok(f.bis - f.von >= 60, 'Spanne ' + (f.bis - f.von) + ' min');
 });
 
-test('über den Sommerzeit-Sprung bleibt der Tag ein Tag', () => {
-  // 25.10.2026 hat 25 Stunden. Aus Ziffern gerechnet käme 24 h heraus und das
-  // Fenster endete eine Stunde zu früh.
-  const z = zeitraumFuer([T('a', 'b0', '2026-10-25T02:00', '2026-10-25T23:00')]);
-  assert.equal(z.start, '2026-10-25T00:00');
-  assert.equal(z.end, '2026-10-26T00:00');
+test('über Mitternacht wird NICHT auf den Kalendertag beschnitten', () => {
+  // Ein Act bis 02:00 soll ganz zu sehen sein, nicht bei 24:00 enden.
+  const f = programmFenster([F('a', '2026-08-29T22:00', '2026-08-30T02:00')]);
+  assert.equal(iso(f.bis), '2026-08-30T03:00');   // 02:00 + 30 min → 03:00
 });
 
 test('ohne Vorgänge gibt es kein Fenster', () => {
-  assert.equal(zeitraumFuer([]), null);
-  assert.equal(zeitraumFuer(null), null);
+  assert.equal(programmFenster([]), null);
+  assert.equal(programmFenster(null), null);
 });
 
 console.log('\nProgrammpunkt-Typen');

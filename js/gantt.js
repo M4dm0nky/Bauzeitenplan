@@ -8,7 +8,7 @@
 import { computeSchedule, toMin, toDate, byStart, seriesRows } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
 import { runningAt, delaysAt } from './live.js';
-import { sichtGewerke, zeitraumFuer, amTag } from './ebene.js';
+import { sichtGewerke, programmFenster, amTag } from './ebene.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, svgEl } from './dom.js';
 import {
@@ -84,11 +84,17 @@ export function createGantt(root, opts = {}) {
     VT = S.tasks.filter((t) => sichtbar.has(t.gewerk));
     if (ebene === 'show' && tag) VT = amTag(VT, tag);
     // Der Bauzeitenplan spannt die Achse über die ganze Veranstaltung — das IST
-    // sein Zweck. Der Showablauf nimmt seine Spanne aus den Programmpunkten:
-    // zwei Showtage in vierzehn Tagen Projektlaufzeit wären zwei Striche.
-    const z = ebene === 'bau' ? null : zeitraumFuer(VT);
-    T0 = toMin(z ? z.start : S.project.start);
-    T1 = toMin(z ? z.end : S.project.end);
+    // sein Zweck. Der Showablauf nimmt sie aus den Programmpunkten: zwei
+    // Showtage in vierzehn Tagen Projektlaufzeit wären zwei Striche.
+    //
+    // Im Showablauf ist die Spanne der ABEND, nicht der Kalendertag: der Tag hat
+    // 24 Stunden, die Show dauert zehn. Über den ganzen Tag gespannt nahm der
+    // leere Vormittag die halbe Breite ein und die Umbauten waren Striche.
+    // Damit steht die Ansicht auch ohne Scrollen richtig — hineingescrollt war
+    // die Datumszeile der Achse links angeschnitten.
+    const z = ebene === 'bau' ? null : programmFenster(VT);
+    T0 = z ? z.von : toMin(S.project.start);
+    T1 = z ? z.bis : toMin(S.project.end);
     TOTAL_MIN = Math.max(1, T1 - T0);
     NOW = readNow();
     byId = new Map(S.tasks.map((t) => [t.id, t]));
@@ -157,8 +163,19 @@ export function createGantt(root, opts = {}) {
   // Eine Vorgangszeile trägt eine SERIE (siehe seriesRows in schedule.js): alle
   // Vorgänge gleichen Namens, je einer als Balken. Damit hat die Bühne zwei
   // Zeilen statt fünf. Ein einzelner Vorgang ist eine Serie aus einem — so kennt
-  // der Rest der Engine nur einen Fall.
+  // der Rest der Engine nur einen Fall, auch dort, wo gar nicht gebündelt wird.
   const solo = (t) => ({ title: t.title, tasks: [t], lanes: 1, laneOf: new Map([[t.id, 0]]) });
+
+  // Im SHOWABLAUF wird NICHT gebündelt. Dort ist die Reihenfolge der Zeilen der
+  // Ablauf selbst — Einlass, Band, Umbau, Band, Umbau —, und die liest man von
+  // oben nach unten. Gebündelt entstand daraus eine Zeile «Changeover» mit sechs
+  // Balken, die zwischen den Acts hing; die Zeilenfolge richtete sich nach dem
+  // frühesten Termin jeder Serie statt nach dem Abend.
+  //
+  // Der Bauzeitenplan bündelt weiter: dort ist «Aufbau Bühne» an drei Tagen EINE
+  // Tätigkeit, und ohne seriesRows hätte die Crew 113 Zeilen für 28 Dinge.
+  const buendeln = (list) =>
+    (ebene === 'show' ? [...list].sort(byStart).map(solo) : seriesRows(list));
 
   let rows = [];
   function buildRows() {
@@ -174,8 +191,9 @@ export function createGantt(root, opts = {}) {
       rows.push({ kind: 'group', g, y, h: O.groupH, gStart, gEnd, tasks, done, spans });
       y += O.groupH;
       if (!collapsed.has(g.id)) {
-        // Eine Zeile je VORGANGSNAME, ein Balken je Termin (seriesRows). Darunter
-        // je Elternvorgang seine Untervorgänge — eingerückt und über
+        // Bauzeitenplan: eine Zeile je VORGANGSNAME, ein Balken je Termin.
+        // Showablauf: eine Zeile je PROGRAMMPUNKT, chronologisch (siehe buendeln).
+        // Darunter je Elternvorgang seine Untervorgänge — eingerückt und über
         // collapsed[parentId] einklappbar.
         const kidsOf = (id) => tasks.filter((k) => k.parent === id);
         const tops = tasks.filter((x) => x.parent == null);
@@ -183,7 +201,7 @@ export function createGantt(root, opts = {}) {
         // Kinder, sie gehören in keine Serie. Als Serie aus einem Vorgang geführt,
         // damit der Rest der Engine nur EINEN Fall kennt.
         const eintraege = [
-          ...seriesRows(tops.filter((t) => kidsOf(t.id).length === 0)).map((s) => ({ rep: s.tasks[0], s })),
+          ...buendeln(tops.filter((t) => kidsOf(t.id).length === 0)).map((s) => ({ rep: s.tasks[0], s })),
           ...tops.filter((t) => kidsOf(t.id).length > 0)
             .map((t) => ({ rep: t, s: solo(t), huelle: t })),
         ].sort((a, b) => byStart(a.rep, b.rep));
@@ -192,7 +210,7 @@ export function createGantt(root, opts = {}) {
           rows.push({ kind: 'task', g, y, h: O.rowH * e.s.lanes, s: e.s, t: e.rep, parent: !!e.huelle });
           y += O.rowH * e.s.lanes;
           if (!e.huelle || collapsed.has(e.huelle.id)) continue;
-          for (const ks of seriesRows(kidsOf(e.huelle.id))) {
+          for (const ks of buendeln(kidsOf(e.huelle.id))) {
             rows.push({ kind: 'task', g, y, h: O.rowH * ks.lanes, s: ks, t: ks.tasks[0], child: true });
             y += O.rowH * ks.lanes;
           }
@@ -270,6 +288,11 @@ export function createGantt(root, opts = {}) {
           tw.onclick = () => { collapsed.has(r.t.id) ? collapsed.delete(r.t.id) : collapsed.add(r.t.id); rebuild(); layout(); };
           lab.append(tw);
         }
+        // Im Showablauf führt die Uhrzeit — damit ist die Seitenspalte allein
+        // schon der Ablaufplan und man liest ihn, ohne nach rechts zu den Balken
+        // zu schauen. Im Bauzeitenplan wäre sie falsch: dort trägt eine Zeile
+        // mehrere Termine, und einer davon stünde stellvertretend für alle.
+        if (ebene === 'show') lab.append(el('span', 'bz-lab-zeit', String(r.t.start).slice(11, 16)));
         const nm = el('span', 'bz-lab-name', r.s.title);
         nm.title = alle.length > 1 ? r.s.title + ' — ' + alle.length + ' Termine' : r.s.title;
         lab.append(nm);
@@ -717,14 +740,27 @@ export function createGantt(root, opts = {}) {
     const majSpan = (u, d) => u === 'day' ? 1440 : u === 'week' ? 10080
       : Math.round((new Date(d.getFullYear(), d.getMonth() + 1, 1) - new Date(d.getFullYear(), d.getMonth(), 1)) / 60000);
     axisMajor.replaceChildren();
-    for (const t of ticksFor(sc.major, from, to)) {
+    // Die grobe Zeile beginnt eine EINHEIT FRÜHER als der Ausschnitt: gesucht ist
+    // der Tag, in dem man sich befindet, und der beginnt links außerhalb, sobald
+    // man in ihn hineingescrollt hat. Mit `from` allein fiel er heraus — im
+    // Showablauf, der auf den Abend zoomt, stand die Achse dadurch ganz ohne
+    // Datum da. Ticks, die den Ausschnitt gar nicht berühren, fallen unten weg.
+    // NICHT auf T0 klemmen: gebraucht wird gerade der Tick, der VOR T0 beginnt —
+    // im Showablauf steht T0 auf 12:00, der Tag aber auf 00:00. `endMin <= T0`
+    // unten wirft weg, was den Ausschnitt gar nicht berührt.
+    const majBack = sc.major === 'day' ? 1440 : sc.major === 'week' ? 10080 : 44640;
+    const majFrom = new Date((vFrom - majBack) * 60000);
+    for (const t of ticksFor(sc.major, majFrom, to)) {
       const startMin = Math.round(t.t.getTime() / 60000);
-      if (startMin >= T1) continue;
+      const endMin = startMin + majSpan(sc.major, t.t);
+      if (startMin >= T1 || endMin <= T0) continue;
+      // Beidseitig auf die Planspanne geklemmt: ein Tagesbalken ist 1440 min
+      // breit, auch wenn davon nur zehn Minuten in die Ansicht fallen. Ohne die
+      // Klemmung säße sein mittiges Label außerhalb des Bildes.
+      const links = Math.max(T0, startMin);
       const n = el('div', 'bz-t bz-t-major');
-      n.style.left = x(startMin) + 'px';
-      // Ebenfalls auf T1 geklemmt: ein Tagesbalken der groben Zeile ist 1440 min
-      // breit, auch wenn davon nur zehn Minuten in die Ansicht fallen.
-      n.style.width = (Math.min(majSpan(sc.major, t.t), T1 - startMin) * px) + 'px';
+      n.style.left = x(links) + 'px';
+      n.style.width = ((Math.min(T1, endMin) - links) * px) + 'px';
       n.append(el('span', null, sc.major === 'day' ? t.full : t.label));
       axisMajor.append(n);
     }
@@ -924,6 +960,21 @@ export function createGantt(root, opts = {}) {
     scroller.scrollLeft = x(toMin(day + 'T00:00'));
   }
 
+  // Der ABEND füllt die Breite — von Doors bis Show-Ende, nicht der Kalendertag.
+  // Der Showtag hat 24 Stunden, die Show dauert zehn: über den ganzen Tag
+  // gespannt nahm der leere Vormittag die halbe Breite ein und die Umbauten
+  // waren Striche.
+  //
+  // Angefasst wird nur ZOOM und SCROLLSTAND, nicht T0/T1 — die Achse behält
+  // ihre Tagesgrenzen und damit ihre Datumszeile. Wer nach links scrollt, sieht
+  // weiterhin den Vormittag; er drängt sich nur nicht mehr ins Bild.
+  function fitSpanne() {
+    px = clampZoom(fitPx(timelineW(), TOTAL_MIN));
+    zoomMode = null;          // eine eigene Spanne ist keine der festen Stufen
+    layout();
+    scroller.scrollLeft = 0;  // die Spanne IST das Bild, es gibt nichts daneben
+  }
+
   // Datum in der Mitte der sichtbaren Timeline, als YYYY-MM-DD (lokal).
   function centerDayIso() {
     const mid = T0 + (scroller.scrollLeft + timelineW() / 2) / px;
@@ -1023,11 +1074,12 @@ export function createGantt(root, opts = {}) {
       // bedeutete einen ganz anderen Zeitpunkt, und dieselbe Zoomstufe eine
       // ganz andere Zeitspanne. Also beides neu setzen: zwei Showtage wollen
       // Stunden, zwei Projektwochen wollen Tage.
-      // Ein Showtag füllt die Breite («tage» ist die dynamische Stufe, die genau
-      // das tut) — beim Bauzeitenplan ebenso. Die Stufe heißt in beiden Fällen
-      // gleich, sie bedeutet nur je Ebene eine andere Spanne.
+      if (ebene === 'show') {
+        // Der Abend füllt die Breite — von Doors bis Show-Ende, sonst nichts.
+        fitSpanne();
+        return;
+      }
       api.setZoomPreset('tage');
-      // Ist gerade Show, dorthin; sonst an den Anfang der Spanne.
       if (NOW > T0 && NOW < T1) centerOn(NOW, 0.3);
       else scroller.scrollLeft = 0;
     },
@@ -1121,9 +1173,14 @@ export function createGantt(root, opts = {}) {
   let letzteBreite = 0;
   new ResizeObserver(() => {
     const b = scroller.clientWidth;
-    if (zoomMode === 'tage' && b > 0 && Math.abs(b - letzteBreite) > 1) {
+    if (b > 0 && Math.abs(b - letzteBreite) > 1) {
+      const vorher = letzteBreite;
       letzteBreite = b;
-      fitDay(centerDayIso());
+      // «Die Spanne füllt die Breite» ist eine Zusage, die bei JEDER Breite gilt.
+      // Nur beim ersten Messen und beim Wiederauftauchen (Breite war 0, weil die
+      // Tabelle sichtbar war) neu einpassen — nicht bei jedem freien Zoom.
+      if (ebene === 'show' && vorher === 0) fitSpanne();
+      else if (zoomMode === 'tage') fitDay(centerDayIso());
     }
     renderAxis(true);
     layoutMinimap();

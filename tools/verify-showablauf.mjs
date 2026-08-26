@@ -63,6 +63,15 @@ await check('der Bauzeitenplan zeigt 20 Gewerke, keine Bühne', async () => {
 });
 await check('die Bühnen-Häkchen sind im Bauzeitenplan nicht im Weg', async () =>
   (await p.locator('#buehnen').isHidden()) ? true : 'Leiste sichtbar');
+await check('der Bauzeitenplan bündelt weiter und trägt KEINE Uhrzeit in der Spalte', async () => {
+  // Dort steht eine Zeile für mehrere Termine — eine einzelne Uhrzeit stünde
+  // stellvertretend für alle und wäre schlicht falsch.
+  const zeiten = await p.locator('.bz-lab-zeit').count();
+  if (zeiten) return zeiten + ' Uhrzeiten im Bauzeitenplan';
+  // «Aufbau Bühne» läuft an drei Tagen und muss EINE Zeile mit drei Balken sein.
+  const n = await p.locator('.bz-lab-task').filter({ hasText: 'Aufbau Bühne' }).count();
+  return n === 1 ? true : n + ' Zeilen für «Aufbau Bühne» — die Bündelung ist mit weggefallen';
+});
 
 await p.locator('[data-ebene="show"]').click();
 await p.waitForTimeout(700);
@@ -93,6 +102,7 @@ await check('der Tages-Umschalter bringt den Sonntag', async () => {
   const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
   if (pr !== '15') return pr + ' Programmpunkte am Sonntag statt 15';
   if (!namen.some((x) => x.trim() === 'MAX HERRE & JOY DENALANE')) return 'MAX HERRE fehlt';
+  if (namen.length !== 15) return namen.length + ' Zeilen am Sonntag statt 15';
   await knoepfe.nth(0).click();          // zurück auf Samstag für die Folgeprüfungen
   await p.waitForTimeout(600);
   return true;
@@ -104,11 +114,38 @@ await check('die Zeitachse steht auf den Showtagen, nicht auf zwei Projektwochen
   const text = ticks.join(' ');
   return /29|30/.test(text) && !/21\.|22\.|01\.09/.test(text) ? true : 'Achse: ' + text.slice(0, 90);
 });
-await check('CURSE steht als eigene Zeile, Changeover als EINE Zeile', async () => {
-  const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
-  const co = namen.filter((x) => x.trim() === 'Changeover').length;
-  if (!namen.some((x) => x.trim() === 'CURSE')) return 'CURSE fehlt';
-  return co === 1 ? true : co + ' Changeover-Zeilen — die Serien greifen nicht';
+await check('die Namensspalte IST der Ablaufplan — Zeile für Zeile wie im PDF', async () => {
+  // Die wertvollste Prüfung dieser Datei. Gebündelt (seriesRows) stand hier eine
+  // Zeile «Changeover» mit sechs Balken zwischen den Acts, und die Zeilenfolge
+  // richtete sich nach dem frühesten Termin jeder Serie statt nach dem Abend.
+  // Gelesen wird, was in der Seitenspalte steht — nicht, was der Store meint.
+  const zeilen = await p.locator('.bz-lab-task').evaluateAll((ns) => ns.map((n) => [
+    n.querySelector('.bz-lab-zeit')?.textContent.trim() || '',
+    n.querySelector('.bz-lab-name')?.textContent.trim() || '',
+  ].join(' ')));
+  const soll = [
+    '12:00 DOORS', '14:00 CREUTZFELD & JAKOB', '14:30 Changeover', '14:40 OLLI BANJO',
+    '15:10 Changeover', '15:20 CURSE', '15:55 Changeover', '16:05 STIEBER TWINS & CORA E',
+    '16:45 Changeover', '16:55 TORCH FEAT. TONI L', '17:35 Changeover + FLYING STEPS',
+    '17:50 EKO FRESH', '18:30 Changeover', '19:00 KOOL SAVAS', '20:00 Changeover',
+    '20:40 SIDO', '21:50 SHOW END',
+  ];
+  if (zeilen.length !== soll.length) return zeilen.length + ' Zeilen statt ' + soll.length;
+  for (let i = 0; i < soll.length; i++) {
+    if (zeilen[i] !== soll[i]) return 'Zeile ' + (i + 1) + ': «' + zeilen[i] + '» statt «' + soll[i] + '»';
+  }
+  return true;
+});
+await check('die Uhrzeiten stehen tabellarisch untereinander', async () => {
+  // Ohne feste Breite und tabular-nums beginnen die Namen auf fünf Höhen.
+  const x = await p.locator('.bz-lab-task .bz-lab-name')
+    .evaluateAll((ns) => [...new Set(ns.map((n) => Math.round(n.getBoundingClientRect().left)))]);
+  return x.length === 1 ? true : 'Namen beginnen an ' + x.length + ' verschiedenen Stellen: ' + x.join(', ');
+});
+await check('kein Actname wird abgeschnitten', async () => {
+  const kurz = await p.locator('.bz-lab-task .bz-lab-name')
+    .evaluateAll((ns) => ns.filter((n) => n.scrollWidth > n.clientWidth + 1).map((n) => n.textContent.trim()));
+  return kurz.length ? 'abgeschnitten: ' + kurz.join(' · ') : true;
 });
 await check('keine Zieltermin-Zeile im Showablauf', async () =>
   (await p.locator('.bz-lab-projekt').count()) === 0 ? true : 'Zieltermine sind mitgekommen');

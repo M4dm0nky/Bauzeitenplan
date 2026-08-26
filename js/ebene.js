@@ -114,37 +114,32 @@ export function amTag(tasks, tagISO) {
 }
 
 /**
- * Zeitfenster für eine Ebene, auf volle Kalendertage gerundet.
+ * Das Fenster, in dem auf der Bühne WIRKLICH etwas läuft — auf volle Stunden
+ * nach außen gerundet.
  *
- * Nötig, weil `project.start/end` die ganze Veranstaltung umspannt (im
- * Klassentreffen-Plan zwei Wochen). Zöge der Showablauf seine Achse daraus,
- * wären zwei Showtage in vierzehn — jeder Act ein Strich. Gerechnet wird über
- * echte Zeitstempel (`toMin`), nie aus Datumsziffern: sonst ist die Spanne über
- * den Sommerzeit-Sprung um eine Stunde falsch.
+ * Der Showtag hat 24 Stunden, die Show dauert zehn. Über den Kalendertag
+ * gespannt nahm der leere Vormittag die halbe Breite ein und die Umbauten waren
+ * Striche. Dasselbe Verfahren wie `fensterFuer` auf der Druckseite, nur in
+ * Minuten seit Epoche statt in Stunden seit Tagesbeginn.
  *
- * @returns {{start:string, end:string}|null}  lokale ISO-Zeiten, null bei leer
+ * Nicht auf den Kalendertag beschnitten: ein Act, der über Mitternacht läuft,
+ * soll ganz zu sehen sein. Gerechnet über `toMin`, nie aus Datumsziffern.
+ *
+ * @returns {{von:number, bis:number}|null} Minuten seit Epoche, null bei leer
  */
-export function zeitraumFuer(tasks) {
+export function programmFenster(tasks) {
   if (!tasks || !tasks.length) return null;
   let a = Infinity, b = -Infinity;
   for (const t of tasks) {
     a = Math.min(a, toMin(t.start));
     b = Math.max(b, toMin(t.end));
   }
-  const tagISO = (min) => local(toDate(min)).slice(0, 10);
-  const mitternacht = (min) => toMin(tagISO(min) + 'T00:00');
-  // Der Endtag gehört ganz dazu: ein Act bis 21:50 darf das Blatt nicht bei
-  // 21:50 abschneiden. Beginnt das Ende exakt auf Mitternacht, ist der Tag
-  // bereits voll — sonst käme ein leerer Tag dazu.
-  //
-  // Der nächste Tagesanfang wird über den KALENDER gesucht, nicht mit +1440:
-  // der 25.10.2026 hat 25 Stunden, und aus Minuten gerechnet endete das Fenster
-  // um 23:00 statt um Mitternacht.
-  let end = mitternacht(b);
-  if (end !== b) {
-    const d = toDate(end);
-    d.setDate(d.getDate() + 1);
-    end = toMin(local(d));
-  }
-  return { start: local(toDate(mitternacht(a))), end: local(toDate(end)) };
+  const von = Math.floor(a / 60) * 60;
+  // Rechts eine halbe Stunde Luft VOR dem Aufrunden: die Beschriftung steht
+  // neben dem Balken, und beim letzten Punkt des Abends (Show-Ende 21:50) liefe
+  // sie sonst über die Blattkante — auf dem Probebild stand dort «SI».
+  // Mindestens eine Stunde Spanne: ein Tag mit einem einzigen Meilenstein hätte
+  // sonst die Spanne null und der Maßstab wäre unendlich.
+  const bis = Math.max(Math.ceil((b + 30) / 60) * 60, von + 60);
+  return { von, bis };
 }
