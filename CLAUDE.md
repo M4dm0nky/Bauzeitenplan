@@ -469,6 +469,19 @@ füllt die Breite» ist eine Zusage, die bei jeder Breite gilt.
 sieht aus wie siebzehnmal eingetragener Inhalt; SIDOs echtes «1 Riser 2×1 m» war
 darin nicht zu finden. Was die Spalte will, sagt ihre Überschrift.
 
+**Das Running-Order-Blatt kennt den Abschnitt.** Setup und Show sind zwei Abläufe
+mit verschiedenen Lesern — wer der Crew den Vormittag in die Hand gibt, will
+nicht die Running Order darunter. Die Steuerleiste hat deshalb dieselbe Wahl wie
+die App (Setup · Show · beides), der Blattkopf und der Fuß nennen sie, und
+`?abschnitt=` steuert sie von außen. Der Bauzeitenplan bleibt davon unberührt:
+seine Tagesblätter zeigen Gewerke, nie Bühnen.
+
+**`Element.append()` gibt `undefined` zurück.** `wrap.append(el(…)).lastChild` warf
+deshalb, und statt der Meldung «nichts eingetragen» sah man eine leere Seite. Das
+stand zweimal in print.js und fiel jahrelang nicht auf, weil es immer mindestens
+ein Blatt gab — erst die Abschnitts-Auswahl konnte eine leere Auswahl erzeugen.
+Erst anlegen, füllen, dann anhängen.
+
 **Das Running-Order-Blatt ist eine LISTE, kein Zeitstrahl** (`roBlatt` in print.js).
 So liest man einen Showablauf: von oben nach unten, Uhrzeit voran. Ein Gantt über zehn
 Stunden mit siebzehn Zeilen wäre auf Papier ein Streifenmuster, und die Felder zum

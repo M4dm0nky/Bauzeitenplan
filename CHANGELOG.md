@@ -3,6 +3,33 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.5 — 2026-08-27
+
+**Das Running-Order-Blatt kennt den Abschnitt**
+
+Bisher druckte es alle Zeiteinträge einer Bühne — Setup und Show gemischt. Sobald
+Soundchecks als Setup-Einträge existieren, stünden sie zwischen den Acts. Das
+sind aber zwei Abläufe mit verschiedenen Lesern: wer der Crew den Vormittag in
+die Hand gibt, will nicht die Running Order darunter.
+
+- Die Steuerleiste hat jetzt dieselbe Wahl wie die App: **Setup · Show · beides**.
+- **Kopf und Fuß nennen den Abschnitt**, damit ein abgelegtes Blatt sich selbst
+  erklärt. Bei «beides» bleibt die Angabe weg — es sind ja beide.
+- `?abschnitt=setup|show|alle` steuert das von außen; `?ansicht=setup` wählt ihn
+  gleich mit.
+
+**Der Bauzeitenplan bleibt unberührt.** Nachgemessen: seine Tagesblätter zeigen
+20 Gewerk-Häkchen und keine Bühne, der Gantt 153 Zeilen aus 353 Vorgängen, die
+Tabelle nur Gewerk-Gruppen. Bühnen und Zeiteinträge tauchen dort nirgends auf.
+
+**Behoben: eine leere Auswahl zeigte eine weiße Seite**
+
+`Element.append()` gibt `undefined` zurück — die Kette `wrap.append(el(…)).lastChild`
+warf, statt die Meldung «Für die gewählte Auswahl ist nichts eingetragen»
+anzuzeigen. Das stand zweimal in `print.js` und fiel nie auf, weil es bis jetzt
+immer mindestens ein Blatt gab. Die zweite Stelle war der Lade-Fehlerzweig: dort
+hätte er die Fehlermeldung verschluckt, die er anzeigen sollte.
+
 ## 0.9.4 — 2026-08-27
 
 **Der Soundcheck bekommt einen Balken**

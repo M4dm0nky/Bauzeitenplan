@@ -79,7 +79,10 @@ nicht als Act.
 
 **Running-Order-Blatt:** Unter *Drucken → Running Order* kommt ein A3 quer je Tag
 und Bühne — als Liste (`Zeit · Programmpunkt · Anforderungen · Material`). Leere
-Felder drucken als **Linien zum Ausfüllen mit dem Stift**.
+Felder drucken als **Linien zum Ausfüllen mit dem Stift**. Dort wählst du auch
+den **Abschnitt**: ein Setup-Blatt für die Crew am Vormittag, ein Show-Blatt für
+den Abend, oder beides auf einem. Kopf und Fuß nennen ihn, damit ein abgelegtes
+Blatt sich selbst erklärt.
 
 **Weitergeben: einfach die Adresse schicken.** Wer
 [die Seite](https://m4dm0nky.github.io/Bauzeitenplan/) öffnet, sieht den

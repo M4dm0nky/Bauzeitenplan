@@ -502,6 +502,42 @@ await check('nichts läuft über die Blattkante', async () => {
   });
   return ueber === 0 ? true : ueber + ' Zeilen ragen hinaus';
 });
+await check('das Blatt lässt sich auf Setup oder Show eingrenzen', async () => {
+  // Setup läuft bis zum Showstart, Show danach — zwei Abläufe mit ganz
+  // verschiedenen Lesern. Wer der Crew den Vormittag gibt, will nicht die
+  // Running Order darunter.
+  const knopf = (t) => p.locator('.pr-seg .pr-btn', { hasText: t }).first();
+  if (!(await knopf('beides').count())) return 'keine Abschnitts-Auswahl';
+
+  await knopf('Show').click();
+  await p.waitForTimeout(900);
+  const nurShow = await p.locator('.pr-ro').first().locator('.pr-ro-r:not(.pr-ro-h)').count();
+  if (nurShow !== 17) return nurShow + ' Zeilen im Show-Blatt statt 17';
+
+  await knopf('Setup').click();
+  await p.waitForTimeout(900);
+  // Im Klassentreffen-Plan gibt es keine Setup-Einträge — das Blatt sagt das,
+  // statt eine leere Liste zu drucken.
+  const blaetter = await p.locator('.pr-ro').count();
+  const leer = await p.locator('.pr-leer').count();
+  if (blaetter || !leer) return blaetter + ' Setup-Blätter, ' + leer + ' Hinweise';
+
+  await knopf('beides').click();
+  await p.waitForTimeout(900);
+  return (await p.locator('.pr-ro').count()) === 2 ? true : 'nach «beides» stimmt die Blattzahl nicht';
+});
+
+await check('der Blattkopf sagt, welchen Abschnitt man in der Hand hält', async () => {
+  await p.locator('.pr-seg .pr-btn', { hasText: 'Show' }).first().click();
+  await p.waitForTimeout(900);
+  const kopf = await p.locator('.pr-ro .pr-head-t').first().textContent();
+  if (!/Show/.test(kopf)) return 'Kopf: «' + kopf.trim() + '»';
+  await p.locator('.pr-seg .pr-btn', { hasText: 'beides' }).first().click();
+  await p.waitForTimeout(900);
+  const ohne = await p.locator('.pr-ro .pr-head-t').first().textContent();
+  return /Setup|Show/.test(ohne) ? 'bei «beides» steht trotzdem ein Abschnitt: ' + ohne.trim() : true;
+});
+
 await check('die Tagesblätter des Bauzeitenplans sind weiter erreichbar', async () => {
   await p.locator('.pr-seg .pr-btn', { hasText: 'Tagesblätter' }).click();
   await p.waitForTimeout(900);

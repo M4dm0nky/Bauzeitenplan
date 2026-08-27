@@ -17,7 +17,7 @@ import { ticksFor, fmtDay } from './timeaxis.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { local } from './conflicts.js';
 import { el, $ } from './dom.js';
-import { sichtGewerke, typHinweis } from './ebene.js';
+import { sichtGewerke, typHinweis, imAbschnitt, ABSCHNITTE } from './ebene.js';
 import { VERSION } from './version.js';
 
 // Mitgelieferte Pläne — dieselben Kennungen wie in app.js.
@@ -86,7 +86,7 @@ let PLAN = null;
 // `ebene` entscheidet, WAS gedruckt wird: das Gantt-Tagesblatt des
 // Bauzeitenplans oder die Running-Order-Liste einer Bühne (js/ebene.js).
 // Beide teilen sich Tagesauswahl und Blattformat, sonst nichts.
-const wahl = { ebene: 'bau', gewerke: new Set(), von: null, bis: null, fenster: null, autoFenster: true };
+const wahl = { ebene: 'bau', abschnitt: 'alle', gewerke: new Set(), von: null, bis: null, fenster: null, autoFenster: true };
 
 async function ladePlan() {
   const key = new URLSearchParams(location.search).get('plan');
@@ -154,6 +154,21 @@ function baueSteuerung() {
   const segWrap = el('div', 'pr-f');
   segWrap.append(el('span', null, 'Ebene'), seg);
   c.append(segWrap);
+
+  // Setup läuft bis zum Showstart, Show danach — zwei Abläufe mit ganz
+  // verschiedenen Lesern. Wer der Crew den Vormittag in die Hand gibt, will
+  // nicht die Running Order darunter, und umgekehrt.
+  if (show) {
+    const abs = el('div', 'pr-seg');
+    for (const [key, label] of [...ABSCHNITTE, ['alle', 'beides']]) {
+      const b = el('button', 'pr-btn' + (wahl.abschnitt === key ? ' is-on' : ''), label);
+      b.onclick = () => { wahl.abschnitt = key; wahl.autoFenster = true; zeichne(); };
+      abs.append(b);
+    }
+    const absWrap = el('div', 'pr-f');
+    absWrap.append(el('span', null, 'Abschnitt'), abs);
+    c.append(absWrap);
+  }
 
   const feld = (label, node) => { const w = el('label', 'pr-f'); w.append(el('span', null, label), node); return w; };
 
@@ -228,13 +243,17 @@ function zeichne() {
     for (const tag of tage) {
       for (const b of baender()) {
         if (!wahl.gewerke.has(b.id)) continue;
-        const drauf = tagesScheiben(tasks.filter((t) => t.gewerk === b.id), tag);
+        const drauf = tagesScheiben(imAbschnitt(tasks.filter((t) => t.gewerk === b.id), wahl.abschnitt), tag);
         if (drauf.length) blaetter.push({ tag, b, drauf });
       }
     }
     if (!blaetter.length) {
-      wrap.append(el('div', 'pr-sheet', '')).lastChild
-        .append(el('div', 'pr-leer', 'Für die gewählten Bühnen und Tage ist nichts eingetragen.'));
+      // `append` gibt undefined zurück — die Kette `wrap.append(x).lastChild`
+      // warf, und statt der Meldung sah man eine leere Seite. Das fiel nie auf,
+      // weil es bis zur Abschnitts-Auswahl immer mindestens ein Blatt gab.
+      const leer = el('div', 'pr-sheet');
+      leer.append(el('div', 'pr-leer', 'Für die gewählte Auswahl ist nichts eingetragen.'));
+      wrap.append(leer);
       return;
     }
     blaetter.forEach((x, i) => wrap.append(roBlatt(x, i + 1, blaetter.length)));
@@ -259,7 +278,9 @@ function roBlatt({ tag, b, drauf }, nr, gesamt) {
 
   const head = el('div', 'pr-head');
   const d = new Date(tag + 'T12:00');
-  head.append(el('span', 'pr-head-t', PLAN.project.name + ' · ' + b.name));
+  const absName = (ABSCHNITTE.find(([k]) => k === wahl.abschnitt) || [])[1];
+  head.append(el('span', 'pr-head-t',
+    PLAN.project.name + ' · ' + b.name + (absName ? ' · ' + absName : '')));
   head.append(el('span', 'pr-head-d', fmtDay(d) + ' ' + d.getFullYear()));
   head.append(el('span', 'pr-head-n', 'Blatt ' + nr + ' von ' + gesamt));
   sheet.append(head);
@@ -330,10 +351,12 @@ function roBlatt({ tag, b, drauf }, nr, gesamt) {
   return sheet;
 }
 
+const absName2 = () => (ABSCHNITTE.find(([k]) => k === wahl.abschnitt) || [])[1];
+
 function roFuss(b) {
   const f = el('div', 'pr-foot');
   const q = PLAN.project.quelle || {};
-  f.append(el('div', 'pr-leg', b.name),
+  f.append(el('div', 'pr-leg', b.name + (absName2() ? ' · ' + absName2() : '')),
     el('div', null, 'CallBoard · v' + VERSION + (q.exported ? ' · Stand ' + q.exported.slice(0, 10) : '')));
   return f;
 }
@@ -528,6 +551,10 @@ ladePlan().then((plan) => {
   const a = q.get('ansicht');
   const showGewuenscht = a === 'setup' || a === 'show' || q.get('ebene') === 'show';
   if (showGewuenscht && sichtGewerke(PLAN, 'show').length) wahl.ebene = 'show';
+  // `?ansicht=setup` wählt gleich den Abschnitt mit; `?abschnitt=` überschreibt.
+  if (a === 'setup' || a === 'show') wahl.abschnitt = a;
+  const ab = q.get('abschnitt');
+  if (ab === 'setup' || ab === 'show' || ab === 'alle') wahl.abschnitt = ab;
   baender().forEach((g) => wahl.gewerke.add(g.id));
   const alle = gewaehlteTasks().map((t) => toMin(t.start));
   const min = alle.length ? Math.min(...alle) : toMin(PLAN.project.start);
@@ -537,6 +564,8 @@ ladePlan().then((plan) => {
   wahl.fenster = { von: 0, bis: 24 };
   zeichne();
 }).catch((e) => {
-  $('sheets').append(el('div', 'pr-sheet', '')).lastChild
-    .append(el('div', 'pr-leer', 'Konnte nicht laden: ' + (e.message || e)));
+  // Dieselbe Falle: `append` gibt undefined zurück.
+  const leer = el('div', 'pr-sheet');
+  leer.append(el('div', 'pr-leer', 'Konnte nicht laden: ' + (e.message || e)));
+  $('sheets').append(leer);
 });
