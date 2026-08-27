@@ -594,37 +594,46 @@ test('zwei Bühnen gleichen Namens werden abgelehnt', () => {
   assert.match(r.error, /Bühne gibt es schon/);
 });
 
-test('eine Bühne wird als Show angelegt, wenn nichts anderes gesagt ist', () => {
+test('eine Bühne bekommt KEINEN Abschnitt — den trägt der Zeiteintrag', () => {
+  // Es gibt eine Bühne mit zwei Abläufen, nicht zwei Bühnen.
   const { s, id } = mitBuehne();
-  assert.equal(s.state.gewerke.find((x) => x.id === id).abschnitt, 'show');
+  assert.equal('abschnitt' in s.state.gewerke.find((x) => x.id === id), false);
+  const r = s.apply({ type: 'setGewerkField', id, field: 'abschnitt', value: 'setup' });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Zeiteintrag/);
 });
 
-test('eine Setup-Bühne trägt ihren Abschnitt', () => {
+test('addTask reicht den Abschnitt durch', () => {
+  // Fiel er weg, landete ein im Setup angelegter Eintrag in der Show — und war
+  // im gerade gezeigten Abschnitt sofort unsichtbar.
   const s = createStore(seed());
-  const r = s.apply({ type: 'addGewerk', gewerk: { name: 'Hauptbühne Setup', art: 'buehne', abschnitt: 'setup' } });
-  assert.equal(s.state.gewerke.find((x) => x.id === r.id).abschnitt, 'setup');
+  const r = s.apply({ type: 'addTask', task: { gewerk: 'licht', title: 'Line-Check',
+    start: '2026-07-14T08:00', end: '2026-07-14T09:00', abschnitt: 'setup' } });
+  assert.equal(taskById(s, r.id).abschnitt, 'setup');
 });
 
-test('ein Gewerk bekommt gar keinen Abschnitt', () => {
-  // Im Bauzeitenplan gibt es ihn nicht — ein Feld, das nie greift, ist Ballast.
+test('ohne Angabe gehört ein neuer Eintrag zur Show', () => {
   const s = createStore(seed());
-  const r = s.apply({ type: 'addGewerk', gewerk: { name: 'Pyro', abschnitt: 'setup' } });
-  assert.equal('abschnitt' in s.state.gewerke.find((x) => x.id === r.id), false);
+  const r = s.apply({ type: 'addTask', task: { gewerk: 'licht', title: 'X',
+    start: '2026-07-14T08:00', end: '2026-07-14T09:00' } });
+  assert.equal(taskById(s, r.id).abschnitt, 'show');
 });
 
-test('der Abschnitt einer Bühne darf wechseln', () => {
-  // Anders als die Art: die Programmpunkte gehören der Bühne und wandern mit.
-  const { s, id } = mitBuehne();
-  assert.equal(s.apply({ type: 'setGewerkField', id, field: 'abschnitt', value: 'setup' }).ok, true);
-  assert.equal(s.state.gewerke.find((x) => x.id === id).abschnitt, 'setup');
+test('der Abschnitt eines Zeiteintrags lässt sich setzen und zurücknehmen', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'abschnitt', value: 'setup' }).ok, true);
+  assert.equal(taskById(s, 'a').abschnitt, 'setup');
   s.undo();
-  assert.equal(s.state.gewerke.find((x) => x.id === id).abschnitt, 'show');
+  assert.equal(taskById(s, 'a').abschnitt, undefined);
 });
 
-test('erfundene Abschnitte und Gewerke werden abgelehnt', () => {
-  const { s, id } = mitBuehne();
-  assert.equal(s.apply({ type: 'setGewerkField', id, field: 'abschnitt', value: 'quatsch' }).ok, false);
-  assert.equal(s.apply({ type: 'setGewerkField', id: 'buehne', field: 'abschnitt', value: 'setup' }).ok, false);
+test('erfundene Abschnitte werden abgelehnt und hinterlassen nichts', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'setTaskField', id: 'a', field: 'abschnitt', value: 'quatsch' });
+  assert.equal(r.ok, false);
+  assert.equal(taskById(s, 'a').abschnitt, undefined);
+  assert.equal(s.canUndo, false);
+  assert.equal(s.dirty, false);
 });
 
 test('ein Gewerk wird nicht nachträglich zur Bühne', () => {

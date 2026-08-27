@@ -324,10 +324,11 @@ body { margin: 0; }
 /* Breiten großzügig: ein datetime-local zeigt «08/29/2026, 12:00 PM» und wird
    bei 175 px abgeschnitten — auf dem Probebild stand «Tourmanage» und «Chang».
    Lieber scrollen als abschneiden; die Seite selbst scrollt weiterhin nicht. */
-.tb-t[data-tb-ebene="show"] { min-width: 1980px; }
+.tb-t[data-tb-ebene="show"] { min-width: 2120px; }
 .tb-t[data-tb-ebene="show"] .c-gw { width: 152px; }
 .tb-t[data-tb-ebene="show"] .c-start,
 .tb-t[data-tb-ebene="show"] .c-end { width: 205px; }
+.c-abs { width: 118px; }
 .c-typ { width: 142px; }
 .c-sc { width: 205px; }
 .c-kon { width: 176px; }
@@ -345,6 +346,9 @@ body { margin: 0; }
 .tb-group.is-drop-before td { box-shadow: inset 0 2px 0 0 currentColor; }
 .tb-group.is-drop-end td { box-shadow: inset 0 -2px 0 0 currentColor; }
 .tb-add { margin-left: 10px; border: 0; background: none; font: inherit; cursor: pointer; padding: 0; }
+/* Im Showablauf trägt er die Klasse btn/btn-p und braucht deshalb Fläche —
+   der randlose Text sah aus wie eine Beschriftung, nicht wie ein Knopf. */
+.tb-add.btn { padding: 5px 12px; border-radius: 3px; }
 .tb-empty td { padding: 5px 8px 5px 30px; }
 .tb-fixed { padding: 4px 6px; display: inline-block; }
 .tb-ico { border: 0; background: none; font: inherit; cursor: pointer; padding: 2px 5px; line-height: 1; }

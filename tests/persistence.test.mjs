@@ -24,7 +24,7 @@ const fakeStorage = () => {
 const plan = (name = 'Test') => ({
   project: { id: 'p1', name, venue: 'Halle', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin' },
   gewerke: [{ id: 'g1', name: 'Bühne', sort: 0, slot: 0, art: 'gewerk' }],
-  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null, punktTyp: 'act', anforderungen: '', material: '', soundcheck: '', kontakt: '', slot: null }],
+  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null, punktTyp: 'act', anforderungen: '', material: '', soundcheck: '', kontakt: '', slot: null, abschnitt: 'show' }],
   deps: [],
 });
 
@@ -211,22 +211,53 @@ test('eine Bühne bleibt eine Bühne', () => {
   raw.gewerke[0].art = 'buehne';
   assert.equal(migrate(raw).gewerke[0].art, 'buehne');
 });
-test('eine Bühne ohne Abschnitt gehört zur Show', () => {
-  const raw = plan();
-  raw.gewerke[0].art = 'buehne';
-  assert.equal(migrate(raw).gewerke[0].abschnitt, 'show');
-});
 test('der Abschnitt überlebt Export → Import', () => {
   const raw = plan();
+  raw.tasks[0].abschnitt = 'setup';
+  assert.equal(deserialize(serialize(raw)).plan.tasks[0].abschnitt, 'setup');
+});
+test('erfundene Abschnitte gelten als Show', () => {
+  const raw = plan();
+  raw.tasks[0].abschnitt = 'quatsch';
+  assert.equal(migrate(raw).tasks[0].abschnitt, 'show');
+});
+
+console.log('\nMigration v0.9.1 → der Abschnitt wandert von der Bühne zum Eintrag');
+test('eine Setup-Bühne gibt ihren Abschnitt an ihre Einträge weiter', () => {
+  // Bis v0.9.1 trug die BÜHNE den Abschnitt. Es gibt aber EINE Bühne mit zwei
+  // Abläufen, nicht zwei Bühnen.
+  const raw = plan();
   raw.gewerke[0].art = 'buehne';
   raw.gewerke[0].abschnitt = 'setup';
-  assert.equal(deserialize(serialize(raw)).plan.gewerke[0].abschnitt, 'setup');
+  delete raw.tasks[0].abschnitt;          // so sah ein v0.9.1-Plan aus
+  const m = migrate(raw);
+  assert.equal(m.tasks[0].abschnitt, 'setup', 'der Eintrag hat den Abschnitt geerbt');
+  assert.equal('abschnitt' in m.gewerke[0], false, 'am Gewerk ist er weg');
 });
-test('ein GEWERK bekommt keinen Abschnitt angehängt', () => {
-  // Im Bauzeitenplan gibt es ihn nicht; ein Feld, das nie greift, ist Ballast.
+test('eine Show-Bühne aus v0.9.1 bleibt Show', () => {
   const raw = plan();
+  raw.gewerke[0].art = 'buehne';
+  raw.gewerke[0].abschnitt = 'show';
+  delete raw.tasks[0].abschnitt;
+  assert.equal(migrate(raw).tasks[0].abschnitt, 'show');
+});
+test('die Wanderung ist idempotent — ein zweiter Lauf ändert nichts', () => {
+  // migrate() läuft bei JEDEM Laden. Ein Durchlauf, der beim zweiten Mal etwas
+  // anderes tut, verschiebt Daten hinter dem Rücken des Nutzers.
+  const raw = plan();
+  raw.gewerke[0].art = 'buehne';
   raw.gewerke[0].abschnitt = 'setup';
-  assert.equal('abschnitt' in migrate(raw).gewerke[0], false);
+  delete raw.tasks[0].abschnitt;
+  const einmal = migrate(raw);
+  assert.deepEqual(migrate(einmal), einmal);
+  assert.equal(migrate(einmal).tasks[0].abschnitt, 'setup');
+});
+test('ein bereits gesetzter Eintrags-Abschnitt schlägt die alte Bühne', () => {
+  const raw = plan();
+  raw.gewerke[0].art = 'buehne';
+  raw.gewerke[0].abschnitt = 'setup';
+  raw.tasks[0].abschnitt = 'show';
+  assert.equal(migrate(raw).tasks[0].abschnitt, 'show');
 });
 test('erfundene Arten fallen auf Gewerk zurück, statt unsichtbar zu werden', () => {
   const raw = plan();
@@ -235,7 +266,7 @@ test('erfundene Arten fallen auf Gewerk zurück, statt unsichtbar zu werden', ()
 });
 test('Vorgänge ohne die Showablauf-Felder bekommen leere', () => {
   const raw = plan();
-  for (const f of ['punktTyp', 'anforderungen', 'material', 'soundcheck', 'kontakt', 'slot']) delete raw.tasks[0][f];
+  for (const f of ['punktTyp', 'anforderungen', 'material', 'soundcheck', 'kontakt', 'slot', 'abschnitt']) delete raw.tasks[0][f];
   const t = migrate(raw).tasks[0];
   assert.equal(t.punktTyp, 'act');
   assert.equal(t.anforderungen, '');
@@ -243,6 +274,7 @@ test('Vorgänge ohne die Showablauf-Felder bekommen leere', () => {
   assert.equal(t.soundcheck, '');
   assert.equal(t.kontakt, '');
   assert.equal(t.slot, null, 'ohne eigenen Platz erbt der Punkt die Farbe seiner Bühne');
+  assert.equal(t.abschnitt, 'show');
 });
 test('der eigene Farbplatz überlebt Export → Import', () => {
   const raw = plan();

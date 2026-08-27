@@ -3,6 +3,55 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.2 — 2026-08-27
+
+**Eine Bühne, zwei Abläufe — statt zwei Bühnen**
+
+In 0.9.1 trug die **Bühne** den Abschnitt: «Hauptbühne Setup» und «Hauptbühne
+Show» waren zwei Bänder. Das bildet die Wirklichkeit falsch ab. Es gibt eine
+Bühne, sie hat nur zwei zeitliche Abläufe — und der Store verbietet doppelte
+Bühnennamen, man hätte sie künstlich verschieden benennen müssen.
+
+- **Der Abschnitt hängt jetzt am Zeiteintrag** (`abschnitt: 'setup' | 'show'`).
+  Der Umschalter **Setup · Show · alle** filtert die Einträge; die Bühne steht in
+  beiden Ansichten, heißt einmal und ist dieselbe.
+- **Die Bühne bleibt sichtbar, auch wenn sie im gewählten Abschnitt leer ist** —
+  genau dort legt man den ersten Setup-Eintrag an.
+- **Migration:** ein Plan aus 0.9.1 gibt den Abschnitt seiner Setup-Bühne an
+  deren Einträge weiter, das Feld verschwindet vom Band. Idempotent — `migrate()`
+  läuft bei jedem Laden. Bänder werden **nicht** automatisch zusammengeführt: das
+  hieße raten, welches das Ziel ist, und Daten zu verschieben, die niemand
+  zurückholt. Eine Setup-Bühne bleibt stehen, ihre Einträge sind korrekt
+  markiert; wer sie loswerden will, hängt sie über die Bühnen-Spalte um.
+
+**Behoben: `addTask` ließ den Abschnitt fallen**
+
+Der Handler baut das Vorgangsobjekt Feld für Feld auf, und `abschnitt` stand
+nicht dabei. Ein im Setup angelegter Eintrag landete dadurch in der Show — und
+war im gezeigten Abschnitt sofort unsichtbar. Genau dieselbe Sorte Fehler wie der
+falsche Tag in 0.9.1: der Knopf tut etwas, nur woanders.
+
+**«Zeiteintrag» statt «Programmpunkt»**
+
+Ein Line-Check ist kein Programmpunkt. Im ganzen Showablauf heißt eine Zeile
+jetzt **Zeiteintrag** — Spaltenüberschrift, Knopf, Zähler («17 Zeiteinträge»),
+die Ecke der Seitenspalte, der Vorgabename und die Kennzahl oben. Das Datenfeld
+`punktTyp` bleibt (eine Umbenennung wäre eine Migration ohne Gegenwert), und auf
+dem A3-Blatt steht weiter «Programmpunkt»: dort ist die Liste dem PDF
+nachempfunden.
+
+**Der Anlege-Knopf sieht aus wie ein Knopf**
+
+`+ Zeiteintrag` im Bühnenkopf der Tabelle ist ein Primärknopf mit Fläche. Vorher
+war er randlos und ohne Hintergrund, in kleinen Versalien — er sah aus wie eine
+Beschriftung. Im Bauzeitenplan bleibt er schlicht: dort stehen 20 Gewerke
+untereinander, und 20 Primärknöpfe wären eine Wand.
+
+**Nebenbei**
+- Neue Spalte **Abschnitt** in der Tabelle, damit man beim Tippen einer Reihe
+  nicht ins Panel wechseln muss. Im Panel steht sie beim Eintrag statt bei der
+  Bühne.
+
 ## 0.9.1 — 2026-08-27
 
 **Behoben: neue Programmpunkte landeten am falschen Tag**

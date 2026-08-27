@@ -45,12 +45,19 @@ export function migrate(plan) {
   p.gewerke.forEach((g, i) => {
     g.slot ??= i; g.sort ??= i;
     g.art = g.art === 'buehne' ? 'buehne' : 'gewerk';
-    // Nur Bühnen tragen einen Abschnitt (Setup vor dem Showstart, Show danach).
-    // Fehlt er, gilt «show» — die bestehende Running Order bleibt, wo sie ist.
-    // Gewerke bekommen ihn gar nicht erst: im Bauzeitenplan gibt es ihn nicht.
-    if (g.art === 'buehne') g.abschnitt = g.abschnitt === 'setup' ? 'setup' : 'show';
-    else delete g.abschnitt;
   });
+
+  // Bis v0.9.1 trug die BÜHNE den Abschnitt. Das war falsch herum: es gibt EINE
+  // Bühne mit zwei zeitlichen Abläufen, nicht zwei Bühnen — und der Store
+  // verbietet doppelte Bühnennamen, man hätte sie künstlich verschieden nennen
+  // müssen. Jetzt trägt ihn der Zeiteintrag.
+  //
+  // Idempotent: beim zweiten Lauf ist g.abschnitt weg und t.abschnitt gesetzt.
+  // Eine Setup-Bühne aus v0.9.1 gibt ihren Abschnitt an ihre Einträge weiter und
+  // bleibt als Bühne stehen — Bänder automatisch zusammenzuführen hieße raten,
+  // welches das Ziel ist, und Daten zu verschieben, die niemand zurückholt.
+  const setupBand = new Set(p.gewerke.filter((g) => g.abschnitt === 'setup').map((g) => g.id));
+  p.gewerke.forEach((g) => { delete g.abschnitt; });
 
   for (const t of p.tasks) {
     t.milestone = !!t.milestone;
@@ -87,6 +94,12 @@ export function migrate(plan) {
     // (so verhalten sich alle Altpläne). Gewählt wird AUS der Palette, nie eine
     // freie Farbe — sonst wäre die Farbsuche aus docs/farbsuche.md wertlos.
     t.slot ??= null;
+    // Setup (Load-in bis Showstart) oder Show (die Running Order). Nur im
+    // Showablauf sichtbar; Aufbauschritte im Bauzeitenplan tragen es mit, ohne
+    // dass es dort je greift — ein Feld, das je nach Band bedeutungslos ist,
+    // aber überall gleich aussieht, ist billiger als eine Ausnahme.
+    t.abschnitt ??= setupBand.has(t.gewerk) ? 'setup' : 'show';
+    if (t.abschnitt !== 'setup') t.abschnitt = 'show';
   }
   for (const d of p.deps) {
     d.type ??= 'FS';

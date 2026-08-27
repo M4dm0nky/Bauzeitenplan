@@ -8,7 +8,7 @@
 import { computeSchedule, toMin, toDate, byStart, seriesRows } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
 import { runningAt, delaysAt } from './live.js';
-import { sichtGewerke, programmFenster, amTag } from './ebene.js';
+import { sichtGewerke, programmFenster, amTag, imAbschnitt } from './ebene.js';
 import { gewerkVar, gewerkTexture, gewerkInkVar } from './palette.js';
 import { el, svgEl } from './dom.js';
 import {
@@ -80,14 +80,19 @@ export function createGantt(root, opts = {}) {
 
   function syncState() {
     S = store.state;
-    VG = sichtGewerke(S, ebene, ausBlend, abschnitt);
+    VG = sichtGewerke(S, ebene, ausBlend);
     const sichtbar = new Set(VG.map((g) => g.id));
     // Die Zieltermine (`gewerk: 'projekt'`) haben kein Band, gehören aber zum
     // Bauzeitenplan und stehen dort in einer eigenen Zeile ganz unten. Ohne sie
     // zählte die Kopfzeile sie nicht mit — der AMK-Plan meldete 36 statt 37.
     if (ebene === 'bau') sichtbar.add('projekt');
     VT = S.tasks.filter((t) => sichtbar.has(t.gewerk));
-    if (ebene === 'show' && tag) VT = amTag(VT, tag);
+    if (ebene === 'show') {
+      // Der Abschnitt filtert die EINTRÄGE, nicht die Bänder: die Bühne bleibt
+      // in beiden Ansichten stehen, auch wenn sie hier noch nichts hat.
+      VT = imAbschnitt(VT, abschnitt);
+      if (tag) VT = amTag(VT, tag);
+    }
     // Der Bauzeitenplan spannt die Achse über die ganze Veranstaltung — das IST
     // sein Zweck. Der Showablauf nimmt sie aus den Programmpunkten: zwei
     // Showtage in vierzehn Tagen Projektlaufzeit wären zwei Striche.
@@ -153,7 +158,7 @@ export function createGantt(root, opts = {}) {
   // Die Spaltenüberschrift sagt, WAS in der Seitenspalte steht — und das ist je
   // Ebene etwas anderes.
   const cornerCap = el('div', 'bz-corner-cap');
-  const setCap = () => { cornerCap.textContent = ebene === 'show' ? 'Bühne / Programmpunkt' : 'Gewerk / Vorgang'; };
+  const setCap = () => { cornerCap.textContent = ebene === 'show' ? 'Bühne / Zeiteintrag' : 'Gewerk / Vorgang'; };
   setCap();
   corner.append(cornerCap);
 

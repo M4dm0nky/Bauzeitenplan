@@ -112,6 +112,10 @@ const HANDLERS = {
       start: t.start, end: t.end, milestone,
       progress: t.progress ?? 0, status: t.status || 'geplant',
       crew: t.crew ?? null, notes: t.notes || '', parent,
+      // Setup oder Show. MUSS hier durch: wer im Setup-Abschnitt anlegt, will
+      // dort einen Eintrag — fiel das Feld weg, landete er in der Show und war
+      // im gerade gezeigten Abschnitt sofort unsichtbar.
+      abschnitt: t.abschnitt === 'setup' ? 'setup' : 'show',
     });
     return ok({ id });
   },
@@ -152,6 +156,8 @@ const HANDLERS = {
     // Farbplatz: null (erbt von der Bühne) oder ein Platz AUS der Palette.
     // Ohne die Prüfung landete ein Vertipper still im Export und der Balken
     // zeigte auf `var(--gw-NaN)` — also auf gar keine Farbe.
+    if (cmd.field === 'abschnitt' && cmd.value !== 'setup' && cmd.value !== 'show')
+      return 'Abschnitt ist «setup» oder «show».';
     if (cmd.field === 'slot' && cmd.value !== null) {
       const n = cmd.value;
       if (!Number.isInteger(n) || n < 0 || n >= MAX_SLOTS)
@@ -217,11 +223,8 @@ const HANDLERS = {
     const was = art === 'buehne' ? 'Diese Bühne gibt es schon: ' : 'Dieses Gewerk gibt es schon: ';
     if (state.gewerke.some((x) => artVon(x) === art && x.name.toLowerCase() === name.toLowerCase())) return was + name;
     const id = g.id || newId(art === 'buehne' ? 'b' : 'g');
-    // Setup oder Show — nur an Bühnen, und nur diese beiden Werte.
-    const abschnitt = art === 'buehne' ? (g.abschnitt === 'setup' ? 'setup' : 'show') : undefined;
     state.gewerke.push({
       id, name, art,
-      ...(abschnitt ? { abschnitt } : {}),
       sort: g.sort ?? state.gewerke.length,
       // Farbe folgt dem Gewerk, nicht seiner Position: der Platz wird einmal
       // vergeben und bleibt. Sonst färbte sich beim Umsortieren alles um.
@@ -297,13 +300,9 @@ const HANDLERS = {
     // darin sprängen mit, aus Aufbauschritten würden Programmpunkte. Wer eine
     // Bühne will, legt eine an.
     if (cmd.field === 'art') return 'Ein Gewerk wird nicht nachträglich zur Bühne.';
-    // Der Abschnitt DARF wechseln — anders als die Art. Eine Bühne von Setup
-    // nach Show zu schieben ist harmlos: ihre Programmpunkte gehören ihr und
-    // wandern mit. Nur ein Gewerk hat dort nichts zu suchen.
-    if (cmd.field === 'abschnitt') {
-      if (artVon(g) !== 'buehne') return 'Nur Bühnen haben einen Abschnitt.';
-      if (cmd.value !== 'setup' && cmd.value !== 'show') return 'Abschnitt ist «setup» oder «show».';
-    }
+    // Den Abschnitt trägt der ZEITEINTRAG, nicht das Band: es gibt eine Bühne
+    // mit zwei Abläufen, nicht zwei Bühnen.
+    if (cmd.field === 'abschnitt') return 'Den Abschnitt trägt der Zeiteintrag, nicht die Bühne.';
     if (cmd.field === 'name') {
       const name = String(cmd.value || '').trim();
       if (!name) return 'Das Gewerk braucht einen Namen.';

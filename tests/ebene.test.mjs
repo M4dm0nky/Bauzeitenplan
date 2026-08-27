@@ -1,4 +1,4 @@
-import { artOf, abschnittOf, sichtGewerke, sichtTasks, programmFenster, punktLabel, ART_FUER, ABSCHNITTE, EBENEN } from '../js/ebene.js';
+import { artOf, abschnittOf, imAbschnitt, sichtGewerke, sichtTasks, programmFenster, punktLabel, ART_FUER, ABSCHNITTE, EBENEN } from '../js/ebene.js';
 import { toMin } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
@@ -17,7 +17,6 @@ const S = {
     { id: 'g1', name: 'Ton', sort: 1, slot: 1, art: 'gewerk' },
     { id: 'b0', name: 'Hauptbühne', sort: 2, slot: 0, art: 'buehne' },
     { id: 'b1', name: 'Zelt', sort: 3, slot: 1, art: 'buehne' },
-    { id: 'b2', name: 'Hauptbühne Setup', sort: 4, slot: 2, art: 'buehne', abschnitt: 'setup' },
   ],
   tasks: [
     T('t0', 'g0', '2026-08-21T08:00', '2026-08-21T18:00'),
@@ -25,7 +24,7 @@ const S = {
     T('p0', 'b0', '2026-08-29T14:00', '2026-08-29T14:30'),
     T('p1', 'b0', '2026-08-29T20:40', '2026-08-29T21:50'),
     T('p2', 'b1', '2026-08-30T15:00', '2026-08-30T16:00'),
-    T('s0', 'b2', '2026-08-29T08:00', '2026-08-29T10:00'),
+    { ...T('s0', 'b0', '2026-08-29T08:00', '2026-08-29T10:00'), abschnitt: 'setup' },
   ],
 };
 
@@ -41,7 +40,7 @@ test('der Bauzeitenplan zeigt nur Gewerke', () => {
 });
 
 test('der Showablauf zeigt nur Bühnen', () => {
-  assert.deepEqual(sichtGewerke(S, 'show').map((g) => g.id), ['b0', 'b1', 'b2']);
+  assert.deepEqual(sichtGewerke(S, 'show').map((g) => g.id), ['b0', 'b1']);
 });
 
 test('die Bänder kommen nach sort, nicht in Datei-Reihenfolge', () => {
@@ -50,7 +49,7 @@ test('die Bänder kommen nach sort, nicht in Datei-Reihenfolge', () => {
 });
 
 test('der Filter nimmt einzelne Bühnen heraus', () => {
-  assert.deepEqual(sichtGewerke(S, 'show', new Set(['b1'])).map((g) => g.id), ['b0', 'b2']);
+  assert.deepEqual(sichtGewerke(S, 'show', new Set(['b1'])).map((g) => g.id), ['b0']);
   assert.deepEqual(sichtTasks(S, 'show', new Set(['b1'])).map((t) => t.id), ['p0', 'p1', 's0']);
 });
 
@@ -71,37 +70,44 @@ test('unbekannte Ebene fällt auf Gewerke zurück, statt leer zu sein', () => {
 
 console.log('\nAbschnitte: Setup und Show');
 
-test('eine Bühne ohne Feld gehört zur Show', () => {
+test('ein Eintrag ohne Feld gehört zur Show', () => {
   // Die bestehende Running Order bleibt, wo sie ist.
-  assert.equal(abschnittOf({ id: 'b0' }), 'show');
-  assert.equal(abschnittOf({ id: 'b2', abschnitt: 'setup' }), 'setup');
+  assert.equal(abschnittOf({ id: 'p0' }), 'show');
+  assert.equal(abschnittOf({ id: 's0', abschnitt: 'setup' }), 'setup');
 });
 
 test('erfundene Abschnitte gelten als Show, nicht als dritter Zustand', () => {
   assert.equal(abschnittOf({ abschnitt: 'quatsch' }), 'show');
 });
 
-test('der Umschalter zeigt je Abschnitt die richtigen Bänder', () => {
-  assert.deepEqual(sichtGewerke(S, 'show', new Set(), 'setup').map((g) => g.id), ['b2']);
-  assert.deepEqual(sichtGewerke(S, 'show', new Set(), 'show').map((g) => g.id), ['b0', 'b1']);
-  assert.deepEqual(sichtGewerke(S, 'show', new Set(), 'alle').map((g) => g.id), ['b0', 'b1', 'b2']);
+test('imAbschnitt filtert die Einträge, «alle» lässt durch', () => {
+  const alle = sichtTasks(S, 'show');
+  assert.deepEqual(imAbschnitt(alle, 'setup').map((t) => t.id), ['s0']);
+  assert.deepEqual(imAbschnitt(alle, 'show').map((t) => t.id), ['p0', 'p1', 'p2']);
+  assert.deepEqual(imAbschnitt(alle, 'alle').map((t) => t.id), ['p0', 'p1', 'p2', 's0']);
+  assert.deepEqual(imAbschnitt(alle, 'quatsch').map((t) => t.id), ['p0', 'p1', 'p2', 's0']);
+  assert.deepEqual(imAbschnitt(null, 'setup'), []);
 });
 
-test('die Vorgänge folgen dem Abschnitt ihrer Bühne', () => {
+test('DIE BÜHNE BLEIBT in beiden Abschnitten stehen', () => {
+  // Es gibt EINE Bühne mit zwei Abläufen. Sie darf nicht verschwinden, nur weil
+  // sie im gewählten Abschnitt noch nichts hat — genau dort legt man den ersten
+  // Setup-Eintrag an.
+  for (const a of ['setup', 'show', 'alle']) {
+    assert.deepEqual(sichtGewerke(S, 'show').map((g) => g.id), ['b0', 'b1'], a);
+  }
+});
+
+test('sichtTasks filtert im Showablauf nach Abschnitt', () => {
   assert.deepEqual(sichtTasks(S, 'show', new Set(), 'setup').map((t) => t.id), ['s0']);
   assert.deepEqual(sichtTasks(S, 'show', new Set(), 'show').map((t) => t.id), ['p0', 'p1', 'p2']);
 });
 
 test('der Bauzeitenplan kennt keine Abschnitte', () => {
-  // Gewerke tragen keinen — ein Filter dort dürfte nie etwas verschwinden lassen.
+  // Aufbauschritte tragen das Feld mit, aber es darf dort nie etwas ausblenden.
   for (const a of ['setup', 'show', 'alle']) {
-    assert.deepEqual(sichtGewerke(S, 'bau', new Set(), a).map((g) => g.id), ['g0', 'g1'], a);
+    assert.deepEqual(sichtTasks(S, 'bau', new Set(), a).map((t) => t.id), ['t0', 't1'], a);
   }
-});
-
-test('Bühnen-Filter und Abschnitt greifen zusammen', () => {
-  assert.deepEqual(sichtGewerke(S, 'show', new Set(['b1']), 'show').map((g) => g.id), ['b0']);
-  assert.deepEqual(sichtGewerke(S, 'show', new Set(['b2']), 'setup').map((g) => g.id), []);
 });
 
 test('jeder Eintrag des Umschalters ist benannt', () => {

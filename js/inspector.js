@@ -77,20 +77,6 @@ export function createInspector(root, { store, onError, onClose } = {}) {
     ord.append(up, dn);
     root.append(field('Reihenfolge', ord));
 
-    // Setup oder Show — nur an Bühnen. Ein Gewerk hat keinen Abschnitt.
-    if (artOf(g) === 'buehne') {
-      const asel = el('select');
-      for (const [v, label] of ABSCHNITTE) {
-        if (v === 'alle') continue;          // Filterwert, kein Bühnenwert
-        const o = el('option', null, label);
-        o.value = v;
-        if (v === abschnittOf(g)) o.selected = true;
-        asel.append(o);
-      }
-      asel.onchange = () => send({ type: 'setGewerkField', id: g.id, field: 'abschnitt', value: asel.value });
-      root.append(field('Abschnitt', asel,
-        'Setup läuft bis zum Showstart, Show danach — jede Ansicht hat ihre eigene Zeitachse.'));
-    }
 
     // Farbe ist nicht wählbar: die Zuordnung ist gerechnet (docs/farbsuche.md).
     const col = el('div', 'ins-ro');
@@ -250,7 +236,23 @@ export function createInspector(root, { store, onError, onClose } = {}) {
     // Der Inspector führt dafür KEINEN eigenen Ebenen-Zustand: ein Programmpunkt
     // liegt per Definition auf einer Bühne, das steht in den Daten.
     const band = store.state.gewerke.find((g) => g.id === t.gewerk);
-    if (band && artOf(band) === 'buehne') root.append(field('Farbe', farbwahl(t, band)));
+    if (band && artOf(band) === 'buehne') {
+      // Setup läuft bis zum Showstart, Show danach — zwei Abläufe auf DERSELBEN
+      // Bühne. Deshalb hängt der Abschnitt am Eintrag, nicht am Band.
+      const asel = el('select');
+      for (const [v, label] of ABSCHNITTE) {
+        if (v === 'alle') continue;          // Filterwert des Umschalters
+        const o = el('option', null, label);
+        o.value = v;
+        if (v === abschnittOf(t)) o.selected = true;
+        asel.append(o);
+      }
+      asel.onchange = () => send({ type: 'setTaskField', id: t.id, field: 'abschnitt', value: asel.value });
+      root.append(field('Abschnitt', asel,
+        'Jede Ansicht hat ihre eigene Zeitachse — Setup den Morgen, Show den Abend.'));
+
+      root.append(field('Farbe', farbwahl(t, band)));
+    }
 
     const nt = el('textarea');
     nt.rows = 2;

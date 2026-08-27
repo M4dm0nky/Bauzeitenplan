@@ -29,7 +29,7 @@ export const ART_FUER = { bau: 'gewerk', show: 'buehne' };
 /** Altdaten ohne `art` sind Gewerke — sonst verschwände der halbe Bestand. */
 export const artOf = (g) => g.art || 'gewerk';
 
-/** Programmpunkt-Arten. Der Typ steuert Darstellung und Live-Ansage, nie Zeiten. */
+/** Arten eines Zeiteintrags. Der Typ steuert Darstellung und Live-Ansage, nie Zeiten. */
 export const PUNKT_TYPEN = [
   ['act', 'Act'],
   ['changeover', 'Changeover'],
@@ -37,7 +37,7 @@ export const PUNKT_TYPEN = [
   ['ende', 'Show-Ende'],
 ];
 
-/** Anzeigename eines Programmpunkt-Typs. Unbekanntes bleibt unverändert stehen. */
+/** Anzeigename einer Eintragsart. Unbekanntes bleibt unverändert stehen. */
 export const punktLabel = (v) => (PUNKT_TYPEN.find(([k]) => k === v) || [v, v])[1];
 
 /**
@@ -57,14 +57,24 @@ export function typHinweis(t) {
 }
 
 /**
- * Der Abschnitt einer BÜHNE: Load-in und Setup bis zum Showstart, oder die
- * Running Order danach. Zwei Abläufe mit verschiedenen Uhrzeiten und
- * verschiedenen Lesern — deshalb zwei Bänder und zwei Ansichten, nicht eine
- * Liste mit einem Etikett.
+ * Der Abschnitt eines ZEITEINTRAGS: Load-in und Setup bis zum Showstart, oder
+ * die Running Order danach.
  *
- * Fehlt das Feld, gilt «show»: die bestehende Running Order bleibt, wo sie ist.
+ * Es gibt EINE Bühne mit zwei zeitlichen Abläufen — nicht zwei Bühnen. Bis
+ * v0.9.1 hing das Feld am Band, was den Namen doppelt vergeben hätte (und der
+ * Store verbietet doppelte Bühnennamen). Fehlt es, gilt «show»: die bestehende
+ * Running Order bleibt, wo sie ist.
  */
-export const abschnittOf = (g) => (g.abschnitt === 'setup' ? 'setup' : 'show');
+export const abschnittOf = (t) => (t.abschnitt === 'setup' ? 'setup' : 'show');
+
+/**
+ * Die Einträge eines Abschnitts. «alle» (und alles Unbekannte) lässt durch —
+ * so wie `amTag` ohne Tag durchlässt.
+ */
+export const imAbschnitt = (tasks, abschnitt) =>
+  (abschnitt === 'setup' || abschnitt === 'show')
+    ? (tasks || []).filter((t) => abschnittOf(t) === abschnitt)
+    : (tasks || []);
 
 /** Die Auswahl des Umschalters. «alle» ist ein Filterwert, kein Bühnenwert. */
 export const ABSCHNITTE = [['setup', 'Setup'], ['show', 'Show'], ['alle', 'alle']];
@@ -74,27 +84,26 @@ export const ABSCHNITTE = [['setup', 'Setup'], ['show', 'Show'], ['alle', 'alle'
  * Bühnen-Filter) — dieselbe Mechanik wie die Gewerk-Häkchen auf der Druckseite:
  * das Wegklicken ändert Zeilen UND Maßstab, nicht nur die Sichtbarkeit.
  *
- * `abschnitt` greift NUR im Showablauf: Gewerke tragen keinen. «alle» und die
- * Bau-Ebene lassen den Filter aus.
+ * Der Abschnitt filtert hier NICHT: eine Bühne bleibt in beiden Ansichten
+ * stehen, auch wenn sie im gewählten Abschnitt noch nichts hat. Genau dort legt
+ * man den ersten Setup-Eintrag an. Gefiltert werden die Einträge (imAbschnitt).
  *
  * @param {{gewerke:object[]}} state
  * @param {'bau'|'show'} ebene
  * @param {Set<string>} aus  ausgeblendete Gewerk-/Bühnen-IDs
- * @param {'setup'|'show'|'alle'} [abschnitt]
  */
-export function sichtGewerke(state, ebene, aus = new Set(), abschnitt = 'alle') {
+export function sichtGewerke(state, ebene, aus = new Set()) {
   const art = ART_FUER[ebene] || 'gewerk';
-  const prüfen = art === 'buehne' && (abschnitt === 'setup' || abschnitt === 'show');
   return (state.gewerke || [])
-    .filter((g) => artOf(g) === art && !aus.has(g.id)
-      && (!prüfen || abschnittOf(g) === abschnitt))
+    .filter((g) => artOf(g) === art && !aus.has(g.id))
     .sort((a, b) => a.sort - b.sort);
 }
 
 /** Die Vorgänge, die in dieser Ebene sichtbar sind — Vorgänge ohne Band fallen raus. */
 export function sichtTasks(state, ebene, aus = new Set(), abschnitt = 'alle') {
-  const ids = new Set(sichtGewerke(state, ebene, aus, abschnitt).map((g) => g.id));
-  return (state.tasks || []).filter((t) => ids.has(t.gewerk));
+  const ids = new Set(sichtGewerke(state, ebene, aus).map((g) => g.id));
+  const drin = (state.tasks || []).filter((t) => ids.has(t.gewerk));
+  return ebene === 'show' ? imAbschnitt(drin, abschnitt) : drin;
 }
 
 /**

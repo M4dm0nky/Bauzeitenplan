@@ -80,11 +80,11 @@ await check('der Showablauf zeigt genau die Bühne', async () => {
   const namen = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
   return namen.join('|') === 'Hauptbühne' ? true : namen.join('|');
 });
-await check('die Kopfzeile zählt Bühnen und Programm DES TAGES', async () => {
+await check('die Kopfzeile zählt Bühnen und Zeiteinträge DES TAGES', async () => {
   // 17 am Samstag, nicht 32: der Showablauf ist tagesbezogen.
   const bu = (await kpi('Bühnen')).trim();
-  const pr = (await kpi('Programm')).trim();
-  return bu === '1' && pr === '17' ? true : bu + ' Bühnen / ' + pr + ' Programmpunkte';
+  const pr = (await kpi('Zeiteinträge')).trim();
+  return bu === '1' && pr === '17' ? true : bu + ' Bühnen / ' + pr + ' Zeiteinträge';
 });
 await check('keine Zeile ohne Balken — die Acts des anderen Tages sind weg', async () => {
   const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
@@ -98,9 +98,9 @@ await check('der Tages-Umschalter bringt den Sonntag', async () => {
   if (await knoepfe.count() !== 2) return (await knoepfe.count()) + ' Tage statt 2';
   await knoepfe.nth(1).click();
   await p.waitForTimeout(600);
-  const pr = (await kpi('Programm')).trim();
+  const pr = (await kpi('Zeiteinträge')).trim();
   const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
-  if (pr !== '15') return pr + ' Programmpunkte am Sonntag statt 15';
+  if (pr !== '15') return pr + ' Zeiteinträge am Sonntag statt 15';
   if (!namen.some((x) => x.trim() === 'MAX HERRE & JOY DENALANE')) return 'MAX HERRE fehlt';
   if (namen.length !== 15) return namen.length + ' Zeilen am Sonntag statt 15';
   await knoepfe.nth(0).click();          // zurück auf Samstag für die Folgeprüfungen
@@ -332,7 +332,7 @@ await p.waitForTimeout(600);
 
 await check('die Showablauf-Spalten stehen da', async () => {
   const th = await p.locator('.tb-t th').allTextContents();
-  const soll = ['Bühne', 'Programmpunkt', 'Typ', 'Start', 'Dauer', 'Ende', 'Soundcheck', 'Kontakt', 'Anforderungen', 'Benötigtes Material'];
+  const soll = ['Bühne', 'Zeiteintrag', 'Abschnitt', 'Typ', 'Start', 'Dauer', 'Ende', 'Soundcheck', 'Kontakt', 'Anforderungen', 'Benötigtes Material'];
   const fehlt = soll.filter((x) => !th.some((y) => y.trim() === x || (x === 'Benötigtes Material' && y.trim() === 'Material')));
   return fehlt.length ? 'fehlt: ' + fehlt.join(', ') : true;
 });
@@ -386,13 +386,17 @@ await check('der Typ ist ein Auswahlfeld und steht auf changeover', async () => 
   return v === 'changeover' ? true : v;
 });
 
+// Von vorn: das Tippen in die hinteren Spalten hat die Tabelle nach rechts
+// gescrollt, und die Bühnenspalte lag außerhalb des Bildes.
+await p.locator('.tb').evaluate((n) => { n.scrollLeft = 0; });
+await p.waitForTimeout(300);
 await p.screenshot({ path: join(here, 'shots', 'showablauf-tabelle.png') });
 
 await check('der Bauzeitenplan hat KEINE der neuen Spalten', async () => {
   await p.locator('[data-ebene="bau"]').click();
   await p.waitForTimeout(500);
   const th = (await p.locator('.tb-t th').allTextContents()).map((x) => x.trim());
-  const zuviel = ['Typ', 'Soundcheck', 'Kontakt', 'Anforderungen', 'Material'].filter((x) => th.includes(x));
+  const zuviel = ['Typ', 'Abschnitt', 'Soundcheck', 'Kontakt', 'Anforderungen', 'Material'].filter((x) => th.includes(x));
   if (zuviel.length) return 'im Bauzeitenplan sichtbar: ' + zuviel.join(', ');
   return th.includes('Crew') ? true : 'die Crew-Spalte ist verschwunden: ' + th.join('|');
 });
@@ -520,34 +524,31 @@ await p.goto(BASE + '/index.html?plan=klassentreffen&ebene=show&abschnitt=setup'
 await p.waitForSelector('#abschnitt', { timeout: 20000 });
 await p.waitForTimeout(900);
 
-await check('der Setup-View ist zuerst leer und sagt das', async () => {
-  const n = await p.locator('.bz-lab-group').count();
-  if (n) return n + ' Bänder, erwartet 0';
-  const txt = await p.locator('#buehnen').textContent();
-  return /Setup-Bühne/.test(txt) ? true : 'kein Hinweis: «' + txt.trim() + '»';
-});
-
-await check('«+ Bühne» im Setup-View legt eine SETUP-Bühne an', async () => {
-  p.once('dialog', (d) => d.accept('Hauptbühne Setup'));
-  await p.locator('#add-gewerk').click();
-  await p.waitForTimeout(800);
+await check('die Bühne steht in BEIDEN Abschnitten — sie ist dieselbe', async () => {
+  // Es gibt eine Bühne mit zwei Abläufen, nicht zwei Bühnen. Sie darf im Setup
+  // nicht fehlen, nur weil dort noch nichts eingetragen ist — genau da legt man
+  // den ersten Setup-Eintrag an.
   const namen = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
-  if (namen.join('|') !== 'Hauptbühne Setup') return 'Bänder: ' + namen.join('|');
-  // Und sie darf im Show-View NICHT auftauchen.
-  await p.locator('[data-abschnitt="show"]').click();
-  await p.waitForTimeout(700);
-  const imShow = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
-  await p.locator('[data-abschnitt="setup"]').click();
-  await p.waitForTimeout(700);
-  return imShow.includes('Hauptbühne Setup') ? 'steht auch im Show-View' : true;
+  if (namen.join('|') !== 'Hauptbühne') return 'Bänder: ' + namen.join('|');
+  const zeilen = await p.locator('.bz-lab-task').count();
+  return zeilen === 0 ? true : zeilen + ' Zeiteinträge im Setup, erwartet 0';
 });
 
-await check('EIN NEUER PROGRAMMPUNKT LANDET AM GEZEIGTEN TAG — und ist sichtbar', async () => {
-  // Der Kern dieser Runde. Vorher suchte defaultStart() den letzten Punkt über
-  // ALLE Tage und hängte den neuen an den ZWEITEN Showtag; der Tagesfilter
-  // blendete ihn sofort aus. Der Knopf tat etwas, nur unsichtbar.
+await check('der Knopf sieht aus wie ein Knopf und heißt «+ Zeiteintrag»', async () => {
   await p.locator('[data-view="tabelle"]').click();
   await p.waitForTimeout(600);
+  const knopf = p.locator('.tb-add').first();
+  const txt = (await knopf.textContent()).trim();
+  if (txt !== '+ Zeiteintrag') return 'beschriftet mit «' + txt + '»';
+  const [bg, h] = await knopf.evaluate((n) => [
+    getComputedStyle(n).backgroundColor, n.getBoundingClientRect().height]);
+  if (/transparent|rgba\(0, 0, 0, 0\)/.test(bg)) return 'randlos und ohne Fläche: ' + bg;
+  return h >= 22 ? true : 'nur ' + Math.round(h) + ' px hoch';
+});
+
+await check('EIN NEUER ZEITEINTRAG LANDET IM GEZEIGTEN ABSCHNITT UND TAG', async () => {
+  // Der Kern. Vorher suchte defaultStart() den letzten Punkt über ALLE Tage und
+  // hängte den neuen an den ZWEITEN Showtag; der Filter blendete ihn sofort aus.
   await p.locator('.tb-add').first().click();
   await p.waitForTimeout(900);
 
@@ -555,18 +556,30 @@ await check('EIN NEUER PROGRAMMPUNKT LANDET AM GEZEIGTEN TAG — und ist sichtba
   if (zeilen !== 1) return zeilen + ' Zeilen in der Tabelle, erwartet 1';
   const start = await p.locator('.tb-r .c-start input').first().inputValue();
   if (!start.startsWith('2026-08-29')) return 'angelegt am ' + start + ' statt am 29.08.';
+  const abs = await p.locator('.tb-r .c-abs select').first().inputValue();
+  if (abs !== 'setup') return 'im Abschnitt «' + abs + '» statt setup';
 
-  // Und im Gantt muss er ebenfalls stehen — dieselbe Auswahl, dasselbe Bild.
   await p.locator('[data-view="gantt"]').click();
   await p.waitForTimeout(700);
   const balken = await p.locator('.bz-bar').count();
   return balken === 1 ? true : balken + ' Balken im Gantt, erwartet 1';
 });
 
+await check('im Show-Abschnitt ist er WEG — dieselbe Bühne, anderer Ablauf', async () => {
+  await p.locator('[data-abschnitt="show"]').click();
+  await p.waitForTimeout(800);
+  const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
+  if (namen.some((x) => /Neuer Zeiteintrag/.test(x))) return 'der Setup-Eintrag steht in der Show';
+  if (namen.length !== 17) return namen.length + ' Zeiteinträge in der Show statt 17';
+  // Und die Bühne heißt in beiden dasselbe — sie ist dieselbe.
+  const band = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
+  if (band.join('|') !== 'Hauptbühne') return 'Bänder in der Show: ' + band.join('|');
+  await p.locator('[data-abschnitt="setup"]').click();
+  await p.waitForTimeout(800);
+  return true;
+});
+
 await check('Zoomstufe und Datumsfeld zeigen, was die Achse zeigt', async () => {
-  // Der Gantt war eben noch versteckt und passt sich beim Wiederauftauchen neu
-  // ein. Ohne Nachziehen stand der Umschalter auf «Monate», während die Achse
-  // Stunden zeigte, und das Datumsfeld auf einem Tag mitten im Projekt.
   const datum = await p.locator('#date-jump').inputValue();
   if (datum !== '2026-08-29') return 'Datumsfeld steht auf ' + datum;
   const an = await p.locator('[data-z][aria-pressed="true"]').allTextContents();
@@ -575,7 +588,6 @@ await check('Zoomstufe und Datumsfeld zeigen, was die Achse zeigt', async () => 
 });
 
 await check('der Setup-View rechnet seine eigene Zeitachse', async () => {
-  // Nicht 12–23 Uhr wie die Show: ein Setup beginnt morgens.
   const ticks = (await p.locator('.bz-axis-minor .bz-t-n').allTextContents())
     .map((x) => Number(x.trim())).filter((n) => !Number.isNaN(n));
   if (!ticks.length) return 'keine Stundenmarken';
@@ -583,26 +595,21 @@ await check('der Setup-View rechnet seine eigene Zeitachse', async () => {
 });
 
 if ((await p.locator('#live').getAttribute('aria-pressed')) === 'true') {
-  await p.locator('#live').click();     // fürs Bild: sonst ist alles Vergangene gedimmt
+  await p.locator('#live').click();
   await p.waitForTimeout(500);
 }
 await p.screenshot({ path: join(here, 'shots', 'showablauf-setup.png') });
 
-await check('«alle» zeigt Setup UND Show', async () => {
+await check('«alle» zeigt Setup UND Show in einer Liste', async () => {
   await p.locator('[data-abschnitt="alle"]').click();
   await p.waitForTimeout(800);
-  const namen = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
-  return namen.length === 2 ? true : namen.length + ' Bänder: ' + namen.join('|');
+  const band = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
+  if (band.join('|') !== 'Hauptbühne') return 'Bänder: ' + band.join('|');
+  const n = await p.locator('.bz-lab-task').count();
+  return n === 18 ? true : n + ' Zeiteinträge, erwartet 18 (17 Show + 1 Setup)';
 });
 
-await check('der Show-View ist unverändert die Running Order', async () => {
-  await p.locator('[data-abschnitt="show"]').click();
-  await p.waitForTimeout(800);
-  const namen = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
-  if (namen.join('|') !== 'Hauptbühne') return 'Bänder: ' + namen.join('|');
-  const n = await p.locator('.bz-lab-task').count();
-  return n === 17 ? true : n + ' Programmpunkte statt 17';
-});
+
 
 await check('der Bauzeitenplan kennt den Umschalter nicht', async () => {
   await p.locator('[data-ebene="bau"]').click();

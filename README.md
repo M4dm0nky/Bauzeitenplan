@@ -46,14 +46,19 @@ Bühnen legst du an wie ein Gewerk (`+ Bühne`), benennst und sortierst sie gena
 Ein Umschalter über dem Gantt wählt den Showtag, Häkchen blenden einzelne Bühnen
 aus.
 
-**Setup und Show sind zwei Ansichten.** Am Showtag gibt es zwei Abläufe mit ganz
-verschiedenen Uhrzeiten: Load-in und Setup bis zum Showstart, danach die Running
-Order. Jede Bühne gehört einem der beiden Abschnitte, und der Umschalter
-**Setup · Show · alle** zeigt jeweils nur die passenden Bänder — mit eigener
-Zeitachse. Eine neue Bühne erbt den gerade gezeigten Abschnitt: wer im Setup-View
-`+ Bühne` drückt, bekommt eine Setup-Bühne. In der **Tabelle** kommen vier Spalten dazu, genau dort wo du den Zeitstrahl
-anlegst: Typ (Act · Changeover · Doors · Show-Ende), Soundcheck, Kontakt und die
-Freitexte **Anforderungen** und **Benötigtes Material**.
+**Setup und Show sind zwei Ansichten derselben Bühne.** Am Showtag gibt es zwei
+Abläufe mit ganz verschiedenen Uhrzeiten: Load-in und Setup bis zum Showstart,
+danach die Running Order. Jeder **Zeiteintrag** gehört einem der beiden
+Abschnitte, und der Umschalter **Setup · Show · alle** zeigt jeweils nur die
+passenden — mit eigener Zeitachse. Die Bühne selbst steht in beiden Ansichten,
+sie heißt einmal und ist dieselbe.
+
+Angelegt wird in der **Tabelle**: im Bühnenkopf sitzt ein `+ Zeiteintrag`. Der
+neue Eintrag landet im gezeigten Abschnitt und am gezeigten Tag und schließt
+zeitlich an den letzten an. In der **Tabelle** kommen fünf Spalten dazu, genau dort wo du den Zeitstrahl
+anlegst: Abschnitt (Setup/Show), Typ (Act · Changeover · Doors · Show-Ende),
+Soundcheck, Kontakt und die Freitexte **Anforderungen** und **Benötigtes
+Material**.
 
 **Farben je Programmpunkt:** Klick auf einen Balken öffnet das Panel rechts, dort
 gibt es zehn Farbtöne und einen Schalter für **Schraffur** — aus Rot wird so

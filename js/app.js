@@ -302,7 +302,7 @@ function setEbene(name) {
   localStorage.setItem('bzp_ebene', ebene);
   document.querySelectorAll('button[data-ebene]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ebene === ebene)));
   // Eine Bühne, die es nicht mehr gibt, darf nicht ewig ausgeblendet bleiben.
-  const da = new Set(sichtGewerke(store.state, 'show', new Set(), abschnitt).map((g) => g.id));
+  const da = new Set(sichtGewerke(store.state, 'show').map((g) => g.id));
   for (const id of [...ausBlend]) if (!da.has(id)) ausBlend.delete(id);
 
   // Vorgabe-Showtag: der, auf dem «jetzt» liegt — sonst der erste. Beim Aufbau
@@ -346,7 +346,7 @@ function syncBuehnen() {
   const zeigen = ebene === 'show';
   box.hidden = !zeigen;
   if (!zeigen) return;
-  const buehnen = sichtGewerke(store.state, 'show', new Set(), abschnitt);
+  const buehnen = sichtGewerke(store.state, 'show');
   box.replaceChildren();
 
   // Showtag zuerst: er entscheidet, WELCHER Ablauf gezeigt wird. Die Bühnen
@@ -383,8 +383,7 @@ function syncBuehnen() {
     box.append(lab);
   }
   if (!buehnen.length) {
-    const was = abschnitt === 'setup' ? 'Setup-Bühne' : abschnitt === 'show' ? 'Show-Bühne' : 'Bühne';
-    const hint = el('span', 'buehnen-leer', 'Noch keine ' + was + ' — «+ Bühne» legt eine an.');
+    const hint = el('span', 'buehnen-leer', 'Noch keine Bühne — «+ Bühne» legt eine an.');
     box.append(hint);
   }
 }
@@ -613,7 +612,7 @@ function refreshChrome() {
   const st = gantt.stats();
   $('kpis').innerHTML = [
     [ebene === 'show' ? 'Bühnen' : 'Gewerke', st.gewerke],
-    [ebene === 'show' ? 'Programm' : 'Vorgänge', st.total],
+    [ebene === 'show' ? 'Zeiteinträge' : 'Vorgänge', st.total],
     ['läuft', st.run],
     ['Crew', st.crew],
     ['kritisch', st.crit, 'kritisch'],
@@ -630,7 +629,7 @@ function refreshChrome() {
   // Palette von 8 auf 9 Töne wuchs).
   // Nur die Bänder der sichtbaren Ebene: eine Legende mit zwanzig Gewerken über
   // einem Blatt mit zwei Bühnen erklärt nichts, sie verdeckt.
-  $('legend').innerHTML = sichtGewerke(S, ebene, ausBlend, abschnitt)
+  $('legend').innerHTML = sichtGewerke(S, ebene, ausBlend)
     .map((g) => `<span class="legend-i"><span class="bz-dot" style="--gw:${gewerkVar(g.slot)}"${gewerkTexture(g.slot) ? ' data-tex="1"' : ''}></span>${escapeHtml(g.name)}</span>`)
     .join('');
 
@@ -652,12 +651,7 @@ function addGewerk() {
   }
   const name = prompt(buehne ? 'Name der Bühne (z. B. Hauptbühne, Zelt, Halle 3):' : 'Name des Gewerks:');
   if (!name) return;
-  // Die neue Bühne erbt den gerade gezeigten Abschnitt: wer im Setup-View
-  // «+ Bühne» drückt, will eine Setup-Bühne. Bei «alle» ist Show die Vorgabe.
-  const r = store.apply({ type: 'addGewerk', gewerk: {
-    name, art: buehne ? 'buehne' : 'gewerk',
-    abschnitt: abschnitt === 'setup' ? 'setup' : 'show',
-  } });
+  const r = store.apply({ type: 'addGewerk', gewerk: { name, art: buehne ? 'buehne' : 'gewerk' } });
   if (r.ok === false) return toast(r.error, 'bad');
   syncBuehnen();
 }

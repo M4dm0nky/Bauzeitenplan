@@ -346,25 +346,36 @@ gezählt wäre die Palette im Klassentreffen-Plan (20 Gewerke = `MAX_SLOTS`) mit
 ersten Bühne erschöpft. `slotsExhausted` wird entsprechend gegen die Zahl der Bänder
 der AKTIVEN Ebene geprüft, nie gegen `gewerke.length`.
 
-**Die BÜHNE trägt den Abschnitt, nicht der Programmpunkt.** Load-in und Setup bis
-zum Showstart und die Running Order danach sind zwei Abläufe mit verschiedenen
-Uhrzeiten und verschiedenen Lesern — deshalb zwei Bänder (`abschnitt:
-'setup'|'show'` am Gewerk) und ein Umschalter **Setup · Show · alle**, nicht eine
-Liste mit einem Etikett. Jede Ansicht rechnet ihr Zeitfenster selbst
-(`programmFenster`): Setup zeigt den Morgen, Show den Abend. Fehlt das Feld, gilt
-`show`. Nur Bühnen haben es; ein Gewerk bekommt es in `migrate()` gar nicht erst
-angehängt. Der Abschnitt DARF wechseln (anders als `art`) — die Programmpunkte
-gehören der Bühne und wandern mit.
+**Der ZEITEINTRAG trägt den Abschnitt, nicht die Bühne.** Es gibt EINE Bühne mit
+zwei zeitlichen Abläufen — Load-in und Setup bis zum Showstart, die Running Order
+danach —, nicht zwei Bühnen. In v0.9.1 hing das Feld am Band; das erzwang den
+Namen zweimal, und der Store verbietet doppelte Bühnennamen. Seit v0.9.2 steht
+`abschnitt: 'setup'|'show'` am Vorgang, `imAbschnitt` filtert die Einträge, und
+**`sichtGewerke` filtert NICHT**: die Bühne bleibt in beiden Ansichten stehen,
+auch wenn sie dort noch nichts hat — genau da legt man den ersten Setup-Eintrag
+an. Jede Ansicht rechnet ihr Zeitfenster selbst (`programmFenster`): Setup zeigt
+den Morgen, Show den Abend. Fehlt das Feld, gilt `show`.
+
+**Neue Felder müssen durch `addTask` durch.** Der Handler baut das Vorgangsobjekt
+Feld für Feld auf; was dort fehlt, fällt beim Anlegen still weg. `abschnitt` hat
+genau das erlebt: ein im Setup angelegter Eintrag landete in der Show und war im
+gezeigten Abschnitt sofort unsichtbar. Wer ein Feld ergänzt, prüft `addTask` mit.
+
+**Das Wort ist «Zeiteintrag», nicht «Programmpunkt».** Im Showablauf heißt jede
+Zeile so — Spalte, Knopf, Zähler, Ecke der Seitenspalte, Vorgabename, Kennzahl.
+Ein Line-Check ist kein Programmpunkt. Das DATENFELD heißt weiter `punktTyp`
+(eine Umbenennung wäre eine Migration ohne Gegenwert), und auf dem A3-Blatt
+bleibt «Programmpunkt» stehen: dort ist die Liste dem PDF nachempfunden.
 
 **Ein leeres Band ist nur im Bauzeitenplan unsichtbar.** Dort stehen 20 Gewerke,
 ein leeres wäre Rauschen. Im Showablauf muss es stehen: eine frisch angelegte
 Bühne hat noch nichts, und wäre sie unsichtbar, wäre «+ Bühne» ein Klick ins
-Nichts. `Math.min(...[])` ist dabei `Infinity` — die Hülle muss auf `T0` fallen,
+Nichts. Dasselbe gilt für eine Bühne, die im gewählten Abschnitt leer ist. `Math.min(...[])` ist dabei `Infinity` — die Hülle muss auf `T0` fallen,
 sonst zieht sich der Sammelbalken über die ganze Achse.
 
 **Neue Vorgänge landen dort, wo man HINSCHAUT.** `defaultStart()` in table.js
-schließt an den letzten Punkt DES GEZEIGTEN TAGES an, nicht an den letzten des
-Plans. Vorher kam bei zwei Showtagen der letzte Punkt des zweiten heraus: wer am
+schließt an den letzten Eintrag DES GEZEIGTEN TAGES UND ABSCHNITTS an, nicht an
+den letzten des Plans; `addRow` gibt den aktiven Abschnitt mit. Vorher kam bei zwei Showtagen der letzte Punkt des zweiten heraus: wer am
 ersten Tag anlegte, bekam es an den zweiten gehängt, und der Tagesfilter blendete
 es sofort aus. Der Knopf tat etwas, nur unsichtbar — und das fühlt sich an wie
 «geht nicht». Ist der Tag leer, wird 08:00 dieses Tages genommen.
