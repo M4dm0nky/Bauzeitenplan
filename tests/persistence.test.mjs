@@ -24,7 +24,7 @@ const fakeStorage = () => {
 const plan = (name = 'Test') => ({
   project: { id: 'p1', name, venue: 'Halle', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin' },
   gewerke: [{ id: 'g1', name: 'Bühne', sort: 0, slot: 0, art: 'gewerk' }],
-  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null, punktTyp: 'act', anforderungen: '', material: '', soundcheck: '', kontakt: '', slot: null, abschnitt: 'show' }],
+  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null, punktTyp: 'act', anforderungen: '', material: '', kontakt: '', slot: null, abschnitt: 'show', fuer: null }],
   deps: [],
 });
 
@@ -222,6 +222,36 @@ test('erfundene Abschnitte gelten als Show', () => {
   assert.equal(migrate(raw).tasks[0].abschnitt, 'show');
 });
 
+console.log('\nMigration v0.9.3 → der Soundcheck wird ein eigener Zeiteintrag');
+test('aus einer Soundcheck-Zeit wird ein Setup-Eintrag, dem Act zugeordnet', () => {
+  // Als Feld tauchte er in keiner Zeitachse auf; zwei sich überschneidende
+  // Soundchecks sah niemand.
+  const raw = plan();
+  raw.tasks[0].soundcheck = '2026-07-13T09:30';
+  const m = migrate(raw);
+  assert.equal(m.tasks.length, 2);
+  const sc = m.tasks.find((t) => t.id !== 't1');
+  assert.equal(sc.title, 'Soundcheck Podest');
+  assert.equal(sc.start, '2026-07-13T09:30');
+  assert.equal(sc.end, '2026-07-13T10:30', '60 min als Vorgabe');
+  assert.equal(sc.abschnitt, 'setup');
+  assert.equal(sc.fuer, 't1');
+  assert.equal(sc.gewerk, 't1' && m.tasks[0].gewerk, 'auf derselben Bühne');
+  assert.equal('soundcheck' in m.tasks[0], false, 'das Feld ist weg');
+});
+test('ein ZWEITER Ladevorgang erzeugt KEINEN zweiten Soundcheck', () => {
+  // migrate() läuft bei jedem Laden. Eine Migration, die Vorgänge ERZEUGT, legt
+  // sonst bei jedem Öffnen einen weiteren an.
+  const raw = plan();
+  raw.tasks[0].soundcheck = '2026-07-13T09:30';
+  const einmal = migrate(raw);
+  assert.equal(migrate(einmal).tasks.length, 2);
+  assert.deepEqual(migrate(einmal), einmal);
+});
+test('ohne Soundcheck-Zeit entsteht nichts', () => {
+  assert.equal(migrate(plan()).tasks.length, 1);
+});
+
 console.log('\nMigration v0.9.1 → der Abschnitt wandert von der Bühne zum Eintrag');
 test('eine Setup-Bühne gibt ihren Abschnitt an ihre Einträge weiter', () => {
   // Bis v0.9.1 trug die BÜHNE den Abschnitt. Es gibt aber EINE Bühne mit zwei
@@ -266,13 +296,13 @@ test('erfundene Arten fallen auf Gewerk zurück, statt unsichtbar zu werden', ()
 });
 test('Vorgänge ohne die Showablauf-Felder bekommen leere', () => {
   const raw = plan();
-  for (const f of ['punktTyp', 'anforderungen', 'material', 'soundcheck', 'kontakt', 'slot', 'abschnitt']) delete raw.tasks[0][f];
+  for (const f of ['punktTyp', 'anforderungen', 'material', 'kontakt', 'slot', 'abschnitt']) delete raw.tasks[0][f];
   const t = migrate(raw).tasks[0];
   assert.equal(t.punktTyp, 'act');
   assert.equal(t.anforderungen, '');
   assert.equal(t.material, '');
-  assert.equal(t.soundcheck, '');
   assert.equal(t.kontakt, '');
+  assert.equal(t.fuer, null);
   assert.equal(t.slot, null, 'ohne eigenen Platz erbt der Punkt die Farbe seiner Bühne');
   assert.equal(t.abschnitt, 'show');
 });
@@ -285,7 +315,7 @@ test('Anforderungen und Material überleben Export → Import', () => {
   const raw = plan();
   Object.assign(raw.tasks[0], {
     punktTyp: 'changeover', anforderungen: '2× Wedge, Drehleiter',
-    material: '1 Riser 2×1 m', soundcheck: '2026-07-13T09:30', kontakt: 'Max Mustermann', slot: 13,
+    material: '1 Riser 2×1 m', kontakt: 'Max Mustermann', slot: 13,
   });
   const back = deserialize(serialize(raw));
   assert.deepEqual(back.plan.tasks[0], raw.tasks[0]);

@@ -3,6 +3,50 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.4 — 2026-08-27
+
+**Der Soundcheck bekommt einen Balken**
+
+Als Feld am Zeiteintrag war er ein Startzeitpunkt ohne Dauer und ohne Ende. Damit
+tauchte er in keiner Zeitachse auf: ob sich zwei Soundchecks überschneiden, sah
+niemand, und der Nachmittag ließ sich damit nicht planen.
+
+- Ein Soundcheck ist jetzt ein **eigener Zeiteintrag im Setup-Abschnitt**, dem
+  Act zugeordnet (`fuer`, Text-id wie `parent`). Damit hat er Start, Ende, Dauer,
+  Farbe, Notiz und Anforderungen — und einen Balken.
+- **Bedient wird er im Panel des Acts:** ein Klick legt ihn an, zwei Felder
+  ändern Beginn und Dauer, ein Knopf entfernt ihn. Alles über den Store, also mit
+  ⌘Z. In der Setup-Liste steht er danach wie jeder andere Eintrag.
+- **Vorgabe: an den letzten Setup-Eintrag des Tages anschließen**, sonst 08:00.
+  Die erste Fassung setzte ihn eine Stunde vor den Act — im Bild stand dann
+  «19:40 Soundcheck SIDO», und ein Soundcheck läuft nun mal nachmittags.
+- **Den Act löschen nimmt den Soundcheck mit.** Sonst bliebe eine Waise mit toter
+  Zuordnung zurück; ein ⌘Z holt beides zusammen zurück.
+- **Migration:** eine alte Soundcheck-Zeit wird beim Laden zu einem
+  Setup-Eintrag «Soundcheck <Name>» (60 min), danach verschwindet das Feld —
+  damit der zweite Ladevorgang keinen zweiten Eintrag anlegt. Eine Migration, die
+  Vorgänge *erzeugt*, muss besonders sauber einmalig sein.
+
+**Start und Ende ohne Datum**
+
+Im Showablauf zeigten sie «08 / 29 / 2026, 12:00 PM», obwohl der Tag längst oben
+im Umschalter steht. Zwei Spalten à 205 px für eine Information, die schon
+dasteht — die Tabelle war 2120 px breit, und zum Ausfüllen der Anforderungen
+musste man seitwärts scrollen. Jetzt sind es reine Uhrzeitfelder; **die Tabelle
+passt ohne Scrollen ins Bild**. Im Bauzeitenplan bleiben sie datiert, der läuft
+über vierzehn Tage.
+
+Zwei Fallen, die das Datum bisher verdeckt hat — beide als reine Funktionen in
+`conflicts.js`, mit eigenen Tests:
+
+- `mitUhrzeit` **behält den Datumsteil**. Ein Eintrag vom Vortag ist über den
+  Tagesfilter auch am Folgetag sichtbar; schriebe das Feld den gezeigten Tag,
+  spränge er beim ersten Antippen einen Tag weit.
+- `endeNachStart`: **Ende vor Start meint den Folgetag.** «22:00 bis 03:00» ist
+  die selbstverständliche Schreibweise; ohne die Regel lehnte der Store ab. Der
+  Folgetag kommt über den Kalender, nicht über +1440 Minuten — der 25.10.2026 hat
+  25 Stunden.
+
 ## 0.9.3 — 2026-08-27
 
 **Ein Umschalter statt zwei: Bauzeitenplan · Setup · Show**

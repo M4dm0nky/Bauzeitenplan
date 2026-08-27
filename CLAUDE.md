@@ -374,6 +374,34 @@ auch wenn sie dort noch nichts hat — genau da legt man den ersten Setup-Eintra
 an. Jede Ansicht rechnet ihr Zeitfenster selbst (`programmFenster`): Setup zeigt
 den Morgen, Show den Abend. Fehlt das Feld, gilt `show`.
 
+**Ein Soundcheck ist ein ZEITEINTRAG, kein Feld.** Als Feld am Act (`soundcheck`,
+bis v0.9.3) war er ein Startzeitpunkt ohne Dauer und ohne Ende — er tauchte in
+keiner Zeitachse auf, und zwei sich überschneidende Soundchecks sah niemand. Jetzt
+ist er ein normaler Eintrag im Setup-Abschnitt mit `fuer: <taskId>` (Text-id, nie
+Relation, wie `parent`). Damit hat er Balken, Dauer, Farbe, Notiz und
+Anforderungen geschenkt. Bedient wird er aus dem Panel des Acts — das ist der
+bequeme Weg, nicht ein zweiter Speicherort.
+
+**`removeTask` kaskadiert auch über `fuer`.** Wer den Act löscht, löscht seinen
+Soundcheck mit; sonst bliebe eine Waise mit toter Zuordnung zurück, die niemand
+mehr findet. Dieselbe Begründung wie bei den Untervorgängen, ein ⌘Z holt beides
+zusammen zurück.
+
+**Zeitfelder im Showablauf tragen KEIN Datum** — der Tag steht oben im
+Umschalter, und zwei Spalten à 205 px für eine Information, die schon dasteht,
+drängten die Anforderungen aus dem Bild. Zwei Fallen, beide in reinen Funktionen
+in `conflicts.js` gelöst und getestet:
+
+- **`mitUhrzeit` behält den Datumsteil.** Ein Eintrag vom Vortag ist über den
+  Tagesfilter auch am Folgetag sichtbar; schriebe das Feld den GEZEIGTEN Tag,
+  spränge er beim ersten Antippen einen Tag weit.
+- **`endeNachStart`: Ende vor Start meint den Folgetag.** «22:00 bis 03:00» ist
+  die selbstverständliche Schreibweise; ohne die Regel lehnte der Store ab. Der
+  Folgetag wird über den KALENDER gesucht, nicht mit +1440 — der 25.10.2026 hat
+  25 Stunden.
+
+Im **Bauzeitenplan bleiben die Felder datiert**: der läuft über vierzehn Tage.
+
 **Neue Felder müssen durch `addTask` durch.** Der Handler baut das Vorgangsobjekt
 Feld für Feld auf; was dort fehlt, fällt beim Anlegen still weg. `abschnitt` hat
 genau das erlebt: ein im Setup angelegter Eintrag landete in der Show und war im

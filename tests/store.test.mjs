@@ -674,6 +674,49 @@ test('Programmpunkt-Typ und Soundcheck sind normale Felder', () => {
   assert.equal(taskById(s, 'a').soundcheck, '2026-07-13T09:30');
 });
 
+console.log('\nZuordnung: der Soundcheck gehört zu seinem Act');
+
+test('addTask reicht `fuer` durch', () => {
+  // Was der Handler nicht aufzählt, fällt beim Anlegen still weg — genau das
+  // ist `abschnitt` schon passiert.
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addTask', task: { gewerk: 'buehne', title: 'Soundcheck Podest',
+    start: '2026-07-13T06:00', end: '2026-07-13T07:00', abschnitt: 'setup', fuer: 'a' } });
+  assert.equal(taskById(s, r.id).fuer, 'a');
+});
+
+test('eine Zuordnung auf einen unbekannten Eintrag wird abgelehnt', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'setTaskField', id: 'b', field: 'fuer', value: 'gibtsnicht' });
+  assert.equal(r.ok, false);
+  assert.equal(taskById(s, 'b').fuer, undefined);
+});
+
+test('ein Eintrag gehört nicht zu sich selbst', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setTaskField', id: 'b', field: 'fuer', value: 'b' }).ok, false);
+});
+
+test('den Act löschen nimmt seinen Soundcheck mit', () => {
+  // Sonst bliebe eine Waise mit totem `fuer` zurück, die niemand mehr findet.
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addTask', task: { gewerk: 'buehne', title: 'Soundcheck Podest',
+    start: '2026-07-13T06:00', end: '2026-07-13T07:00', abschnitt: 'setup', fuer: 'a' } });
+  s.apply({ type: 'removeTask', id: 'a' });
+  assert.equal(taskById(s, r.id), undefined);
+  assert.equal(taskById(s, 'a'), undefined);
+});
+
+test('ein ⌘Z holt Act und Soundcheck zusammen zurück', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addTask', task: { gewerk: 'buehne', title: 'Soundcheck Podest',
+    start: '2026-07-13T06:00', end: '2026-07-13T07:00', abschnitt: 'setup', fuer: 'a' } });
+  s.apply({ type: 'removeTask', id: 'a' });
+  s.undo();
+  assert.ok(taskById(s, 'a'));
+  assert.ok(taskById(s, r.id));
+});
+
 console.log('\nFarbplatz am Programmpunkt');
 
 test('ein Programmpunkt darf eine eigene Farbe tragen', () => {

@@ -108,6 +108,44 @@ export const local = (d) =>
   d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
   + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 
+/**
+ * Nur die UHRZEIT eines Zeitstempels ersetzen, das Datum behalten.
+ *
+ * Im Showablauf zeigen Start und Ende keine Datumsangabe mehr — der Tag steht
+ * oben im Umschalter. Beim Schreiben darf deshalb NICHT der gezeigte Tag
+ * eingesetzt werden: ein Eintrag, der am Vortag begann, ist über den Tagesfilter
+ * auch am Folgetag sichtbar, und er spränge beim ersten Antippen einen Tag weit.
+ *
+ * @param {string} iso   bestehender Wert, «2026-08-29T20:40»
+ * @param {string} hhmm  neue Uhrzeit, «21:15»
+ * @returns {string|null} null bei unbrauchbarer Eingabe — der Aufrufer lässt dann alles stehen
+ */
+export function mitUhrzeit(iso, hhmm) {
+  const tag = String(iso || '').slice(0, 10);
+  const zeit = String(hhmm || '').slice(0, 5);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tag) || !/^\d{2}:\d{2}$/.test(zeit)) return null;
+  return tag + 'T' + zeit;
+}
+
+/**
+ * Das Ende zu einem Start: liegt es nicht nach ihm, ist der Folgetag gemeint.
+ *
+ * «22:00 bis 03:00» ist die selbstverständliche Schreibweise jedes Ablaufplans.
+ * Ohne diese Regel lehnte der Store ab («Das Ende muss nach dem Start liegen»),
+ * und man käme über Mitternacht nicht hinaus.
+ *
+ * Der Folgetag wird über den KALENDER gesucht, nicht mit +1440 Minuten: der
+ * 25.10.2026 hat 25 Stunden, und aus Minuten gerechnet landete man um 23:00.
+ */
+export function endeNachStart(startISO, hhmm) {
+  const roh = mitUhrzeit(startISO, hhmm);
+  if (!roh) return null;
+  if (toMin(roh) > toMin(startISO)) return roh;
+  const d = new Date(roh);
+  d.setDate(d.getDate() + 1);
+  return local(d);
+}
+
 // ── Dauer-Kurzform ──────────────────────────────────────────────────────────
 // «4h», «1,5h», «90m», «2t», «1t 4h». Eine blanke Zahl sind Stunden — das ist
 // die häufigste Eingabe. Unsinn liefert null; lieber nachfragen als raten.

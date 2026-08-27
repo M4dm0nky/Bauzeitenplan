@@ -59,6 +59,34 @@ export function migrate(plan) {
   const setupBand = new Set(p.gewerke.filter((g) => g.abschnitt === 'setup').map((g) => g.id));
   p.gewerke.forEach((g) => { delete g.abschnitt; });
 
+  // Bis v0.9.3 war der Soundcheck ein einzelnes Datumsfeld am Zeiteintrag: ein
+  // Startzeitpunkt ohne Dauer und ohne Ende. Damit tauchte er in keiner
+  // Zeitachse auf, und zwei sich überschneidende Soundchecks sah niemand.
+  // Jetzt ist er ein eigener Zeiteintrag im Setup-Abschnitt.
+  //
+  // ERZEUGENDE Migration — sie muss besonders sauber einmalig sein: nach der
+  // Umwandlung wird `soundcheck` gelöscht, damit der zweite Ladevorgang keinen
+  // zweiten Eintrag anlegt. migrate() läuft bei JEDEM Laden.
+  const geboren = [];
+  for (const t of p.tasks) {
+    if (!t.soundcheck) { delete t.soundcheck; continue; }
+    const von = String(t.soundcheck).slice(0, 16);
+    const bis = new Date(von);
+    bis.setMinutes(bis.getMinutes() + 60);   // 60 min als Vorgabe, änderbar
+    geboren.push({
+      id: 'sc' + t.id, gewerk: t.gewerk, title: 'Soundcheck ' + t.title,
+      start: von,
+      end: bis.getFullYear() + '-' + String(bis.getMonth() + 1).padStart(2, '0') + '-'
+        + String(bis.getDate()).padStart(2, '0') + 'T' + String(bis.getHours()).padStart(2, '0')
+        + ':' + String(bis.getMinutes()).padStart(2, '0'),
+      milestone: false, abschnitt: 'setup', punktTyp: 'act', fuer: t.id,
+    });
+    delete t.soundcheck;
+  }
+  // Nicht doppelt anlegen, falls ein Plan die Umwandlung schon hinter sich hat.
+  const da = new Set(p.tasks.map((t) => t.id));
+  for (const sc of geboren) if (!da.has(sc.id)) p.tasks.push(sc);
+
   for (const t of p.tasks) {
     t.milestone = !!t.milestone;
     t.progress ??= 0;
@@ -88,8 +116,10 @@ export function migrate(plan) {
     t.punktTyp ??= 'act';
     t.anforderungen ??= '';
     t.material ??= '';
-    t.soundcheck ??= '';
     t.kontakt ??= '';
+    // Wem gehört dieser Eintrag? Ein Soundcheck zeigt auf seinen Act. Text-id,
+    // nie Relation — dieselbe Regel wie bei `parent`.
+    t.fuer ??= null;
     // Eigener Farbplatz des Programmpunkts. null = erbt die Farbe seiner Bühne
     // (so verhalten sich alle Altpläne). Gewählt wird AUS der Palette, nie eine
     // freie Farbe — sonst wäre die Farbsuche aus docs/farbsuche.md wertlos.

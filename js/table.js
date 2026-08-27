@@ -6,7 +6,7 @@
 // Dauer als Kurzform («4h», «2t», «90m») — das Ende rechnet sich; das Ende
 // bearbeiten rechnet die Dauer zurück.
 
-import { parseDuration, fmtDuration, local } from './conflicts.js';
+import { parseDuration, fmtDuration, local, mitUhrzeit, endeNachStart } from './conflicts.js';
 import { toMin, toDate, byStart } from './schedule.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, toInput, STATUS } from './dom.js';
@@ -22,7 +22,7 @@ const SPALTEN = {
   bau: [['Gewerk', 'c-gw'], ['Vorgang', 'c-title'], ['Start', 'c-start'],
     ['Dauer', 'c-dur'], ['Ende', 'c-end'], ['Crew', 'c-crew'], ['Status', 'c-st'], ['', 'c-act']],
   show: [['Bühne', 'c-gw'], ['Zeiteintrag', 'c-title'], ['Abschnitt', 'c-abs'], ['Typ', 'c-typ'], ['Start', 'c-start'],
-    ['Dauer', 'c-dur'], ['Ende', 'c-end'], ['Soundcheck', 'c-sc'], ['Kontakt', 'c-kon'],
+    ['Dauer', 'c-dur'], ['Ende', 'c-end'], ['Kontakt', 'c-kon'],
     ['Anforderungen', 'c-anf'], ['Material', 'c-mat'], ['Status', 'c-st'], ['', 'c-act']],
 };
 
@@ -248,19 +248,27 @@ export function createTable(root, { store, onConflicts } = {}) {
     }
 
     // ── Start ──
+    // Im Showablauf OHNE Datum: der Tag steht oben im Umschalter, und zwei
+    // Spalten à 205 px für eine Information, die schon dasteht, drängen die
+    // Anforderungen aus dem Bild. Im Bauzeitenplan bleibt es datiert — der läuft
+    // über vierzehn Tage.
+    const nurZeit = ebene === 'show';
     const st = el('td', 'c-start');
     const sin = el('input');
-    sin.type = 'datetime-local';
-    sin.value = toInput(t.start);
+    sin.type = nurZeit ? 'time' : 'datetime-local';
+    sin.value = nurZeit ? String(t.start).slice(11, 16) : toInput(t.start);
     sin.setAttribute('aria-label', 'Start');
     // Sammelvorgang: Start/Dauer/Ende sind die Hülle der Untervorgänge — nur lesen.
     if (isParent) { sin.disabled = true; sin.title = 'Ergibt sich aus den Untervorgängen'; }
     commitOn(sin, () => {
       const now = cur(t.id);
-      if (!now || !sin.value || sin.value === toInput(now.start)) return;
+      if (!now || !sin.value) return;
+      // Nur den Zeitteil ersetzen, das Datum behalten: ein Eintrag vom Vortag
+      // ist über den Tagesfilter auch am Folgetag sichtbar und spränge sonst.
+      const start = nurZeit ? mitUhrzeit(now.start, sin.value) : sin.value;
+      if (!start || start === now.start) return;
       const dur = toMin(now.end) - toMin(now.start);   // Dauer beibehalten
-      const a = toMin(sin.value);
-      send({ type: 'moveTask', id: t.id, start: sin.value, end: local(toDate(a + dur)) });
+      send({ type: 'moveTask', id: t.id, start, end: local(toDate(toMin(start) + dur)) });
     });
     st.append(sin);
     tr.append(st);
@@ -293,35 +301,22 @@ export function createTable(root, { store, onConflicts } = {}) {
     // ── Ende ──
     const en = el('td', 'c-end');
     const ein = el('input');
-    ein.type = 'datetime-local';
-    ein.value = toInput(t.end);
+    ein.type = nurZeit ? 'time' : 'datetime-local';
+    ein.value = nurZeit ? String(t.end).slice(11, 16) : toInput(t.end);
     ein.setAttribute('aria-label', 'Ende');
     if (t.milestone || isParent) { ein.disabled = true; if (isParent) ein.title = 'Ergibt sich aus den Untervorgängen'; }
     commitOn(ein, () => {
       const now = cur(t.id);
-      if (!now || !ein.value || ein.value === toInput(now.end)) return;
-      send({ type: 'setTaskField', id: t.id, field: 'end', value: ein.value });
+      if (!now || !ein.value) return;
+      // «22:00 bis 03:00» meint den Folgetag — sonst lehnte der Store ab.
+      const ende = nurZeit ? endeNachStart(now.start, ein.value) : ein.value;
+      if (!ende || ende === now.end) return;
+      send({ type: 'setTaskField', id: t.id, field: 'end', value: ende });
     });
     en.append(ein);
     tr.append(en);
 
     if (ebene === 'show') {
-      // ── Soundcheck ──
-      // Als volle Zeitangabe, nicht als blanke Uhrzeit: ein Soundcheck um 09:30
-      // ohne Datum ist an einem zweitägigen Festival mehrdeutig.
-      const sc = el('td', 'c-sc');
-      const scin = el('input');
-      scin.type = 'datetime-local';
-      scin.value = toInput(t.soundcheck || '');
-      scin.setAttribute('aria-label', 'Soundcheck');
-      commitOn(scin, () => {
-        const now = cur(t.id);
-        if (!now || scin.value === toInput(now.soundcheck || '')) return;
-        send({ type: 'setTaskField', id: t.id, field: 'soundcheck', value: scin.value });
-      });
-      sc.append(scin);
-      tr.append(sc);
-
       // ── Kontakt · Anforderungen · Material ──
       // Drei Freitexte, die beim Anlegen des Zeitstrahls direkt mitgetippt
       // werden. Sie gehen denselben Weg wie jedes andere Feld: über den Store,

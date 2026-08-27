@@ -332,7 +332,7 @@ await p.waitForTimeout(600);
 
 await check('die Showablauf-Spalten stehen da', async () => {
   const th = await p.locator('.tb-t th').allTextContents();
-  const soll = ['Bühne', 'Zeiteintrag', 'Abschnitt', 'Typ', 'Start', 'Dauer', 'Ende', 'Soundcheck', 'Kontakt', 'Anforderungen', 'Benötigtes Material'];
+  const soll = ['Bühne', 'Zeiteintrag', 'Abschnitt', 'Typ', 'Start', 'Dauer', 'Ende', 'Kontakt', 'Anforderungen', 'Benötigtes Material'];
   const fehlt = soll.filter((x) => !th.some((y) => y.trim() === x || (x === 'Benötigtes Material' && y.trim() === 'Material')));
   return fehlt.length ? 'fehlt: ' + fehlt.join(', ') : true;
 });
@@ -396,7 +396,7 @@ await check('der Bauzeitenplan hat KEINE der neuen Spalten', async () => {
   await p.locator('[data-ansicht="bau"]').click();
   await p.waitForTimeout(500);
   const th = (await p.locator('.tb-t th').allTextContents()).map((x) => x.trim());
-  const zuviel = ['Typ', 'Abschnitt', 'Soundcheck', 'Kontakt', 'Anforderungen', 'Material'].filter((x) => th.includes(x));
+  const zuviel = ['Typ', 'Abschnitt', 'Kontakt', 'Anforderungen', 'Material'].filter((x) => th.includes(x));
   if (zuviel.length) return 'im Bauzeitenplan sichtbar: ' + zuviel.join(', ');
   return th.includes('Crew') ? true : 'die Crew-Spalte ist verschwunden: ' + th.join('|');
 });
@@ -517,6 +517,135 @@ await p.addStyleTag({ content: '.pr-ctl{display:none!important}' });
 await p.waitForTimeout(300);
 await p.locator('.pr-ro').first().screenshot({ path: join(here, 'shots', 'showablauf-blatt.png') });
 
+// ── Uhrzeit statt Datum ─────────────────────────────────────────────────────
+console.log('\nUHRZEIT STATT DATUM');
+
+await check('Start und Ende zeigen nur die Uhrzeit', async () => {
+  await p.goto(BASE + '/index.html?plan=klassentreffen&ansicht=show');
+  await p.waitForSelector('.bz-lab', { timeout: 20000 });
+  await p.locator('[data-view="tabelle"]').click();
+  await p.waitForTimeout(700);
+  const [typ, wert] = await p.locator('.tb-r .c-start input').first()
+    .evaluate((n) => [n.type, n.value]);
+  if (typ !== 'time') return 'Feldtyp ist «' + typ + '»';
+  return /^\d{2}:\d{2}$/.test(wert) ? true : 'Wert ist «' + wert + '»';
+});
+
+await check('die Tabelle passt jetzt ohne seitliches Scrollen ins Bild', async () => {
+  const [breit, sicht] = await p.locator('.tb').evaluate((n) => [n.scrollWidth, n.clientWidth]);
+  return breit <= sicht + 1 ? true : breit + ' px in einem ' + sicht + ' px breiten Fenster';
+});
+
+await check('eine Uhrzeit ändern verschiebt den Eintrag NICHT auf einen anderen Tag', async () => {
+  // Der Datumsteil muss erhalten bleiben — sonst spränge ein Eintrag vom Vortag
+  // beim ersten Antippen einen Tag weit.
+  const feld = p.locator('.tb-r .c-start input').first();
+  await feld.fill('13:00');
+  await feld.press('Tab');
+  await p.waitForTimeout(1400);
+  const t = await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    return (raw.tasks || []).find((x) => x.title === 'DOORS' && x.start.startsWith('2026-08-29'));
+  });
+  if (!t) return 'DOORS ist vom 29.08. verschwunden';
+  return t.start === '2026-08-29T13:00' ? true : 'steht jetzt auf ' + t.start;
+});
+
+// ── Soundcheck ──────────────────────────────────────────────────────────────
+console.log('\nSOUNDCHECK ALS EIGENER ZEITEINTRAG');
+
+await check('im Panel eines Acts steht ein Soundcheck-Bereich', async () => {
+  await p.locator('[data-view="gantt"]').click();
+  await p.waitForTimeout(600);
+  await p.locator('.bz-bar').filter({ hasText: 'SIDO' }).first().click();
+  await p.waitForTimeout(600);
+  return (await p.locator('#ins .ins-sc').count()) === 1 ? true : 'kein Soundcheck-Bereich';
+});
+
+await check('ANLEGEN ERZEUGT EINEN BALKEN IM SETUP', async () => {
+  // Der Kern: als Feld tauchte der Soundcheck in keiner Zeitachse auf. Nur ein
+  // Balken zeigt, ob sich zwei überschneiden.
+  await p.locator('#ins .ins-sc button').first().click();
+  await p.waitForTimeout(900);
+  const sc = await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const sido = (raw.tasks || []).find((x) => x.title === 'SIDO');
+    return (raw.tasks || []).find((x) => x.fuer === (sido || {}).id) || null;
+  });
+  if (!sc) return 'kein Zeiteintrag angelegt';
+  if (sc.abschnitt !== 'setup') return 'liegt im Abschnitt «' + sc.abschnitt + '»';
+  if (sc.title !== 'Soundcheck SIDO') return 'heißt «' + sc.title + '»';
+  // Am Vormittag, nicht kurz vor dem Auftritt: ein Soundcheck läuft im Setup.
+  if (!sc.start.startsWith('2026-08-29T08:00')) return 'beginnt um ' + sc.start.slice(11) + ', erwartet 08:00';
+
+  await p.locator('[data-ansicht="setup"]').click();
+  await p.waitForTimeout(900);
+  const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
+  if (!namen.some((x) => x.trim() === 'Soundcheck SIDO')) return 'im Setup nicht zu sehen: ' + namen.join('|');
+  const balken = await p.locator('.bz-bar').filter({ hasText: 'Soundcheck SIDO' }).count();
+  return balken === 1 ? true : balken + ' Balken für den Soundcheck';
+});
+
+await p.screenshot({ path: join(here, 'shots', 'showablauf-soundcheck.png') });
+
+await check('er hat eine Dauer, die sich ändern lässt', async () => {
+  await p.locator('[data-ansicht="show"]').click();
+  await p.waitForTimeout(800);
+  await p.locator('.bz-bar').filter({ hasText: 'SIDO' }).first().click();
+  await p.waitForTimeout(600);
+  const dauer = p.locator('#ins .ins-sc input').nth(1);
+  if ((await dauer.inputValue()) !== '1h') return 'Vorgabe ist «' + (await dauer.inputValue()) + '», erwartet 1h';
+  await dauer.fill('90m');
+  await dauer.press('Tab');
+  await p.waitForTimeout(900);
+  const min = await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const sido = (raw.tasks || []).find((x) => x.title === 'SIDO');
+    const sc = (raw.tasks || []).find((x) => x.fuer === (sido || {}).id);
+    return sc ? (new Date(sc.end) - new Date(sc.start)) / 60000 : null;
+  });
+  return min === 90 ? true : min + ' Minuten statt 90';
+});
+
+await check('den Act löschen nimmt den Soundcheck mit', async () => {
+  // Sonst bliebe eine Waise mit totem `fuer` zurück, die niemand mehr findet.
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    window.__sido = (raw.tasks || []).find((x) => x.title === 'SIDO').id;
+  });
+  await p.locator('#ins .ins-x').click();
+  await p.waitForTimeout(400);
+  await p.locator('.bz-bar').filter({ hasText: 'SIDO' }).first().click({ button: 'right' });
+  await p.waitForTimeout(500);
+  await p.locator('.mn-i', { hasText: 'Löschen' }).first().click();
+  await p.waitForTimeout(1400);
+  const rest = await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    return (raw.tasks || []).filter((x) => x.fuer === window.__sido).length;
+  });
+  if (rest) return rest + ' verwaiste Soundchecks';
+  await p.keyboard.press('Meta+z');       // Act und Soundcheck zusammen zurück
+  await p.waitForTimeout(1200);
+  return true;
+});
+
+// Aufräumen: die folgenden Blöcke prüfen einen LEEREN Setup-Abschnitt. Jeder
+// Block hinterlässt den Zustand, den der nächste erwartet — sonst prüft man
+// irgendwann die Reste des vorigen.
+await check('den Soundcheck wieder entfernen räumt den Setup leer', async () => {
+  await p.locator('[data-ansicht="show"]').click();
+  await p.waitForTimeout(700);
+  await p.locator('.bz-bar').filter({ hasText: 'SIDO' }).first().click();
+  await p.waitForTimeout(600);
+  await p.locator('#ins .ins-sc .btn-danger').click();
+  await p.waitForTimeout(1200);
+  const rest = await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    return (raw.tasks || []).filter((x) => x.abschnitt === 'setup').length;
+  });
+  return rest === 0 ? true : rest + ' Setup-Einträge übrig';
+});
+
 // ── Setup-Abschnitt: anlegen und wiederfinden ───────────────────────────────
 console.log('\nSETUP-ABSCHNITT');
 
@@ -554,7 +683,12 @@ await check('EIN NEUER ZEITEINTRAG LANDET IM GEZEIGTEN ABSCHNITT UND TAG', async
 
   const zeilen = await p.locator('.tb-r').count();
   if (zeilen !== 1) return zeilen + ' Zeilen in der Tabelle, erwartet 1';
-  const start = await p.locator('.tb-r .c-start input').first().inputValue();
+  // Das Feld zeigt nur noch die Uhrzeit — der Tag steht in den Daten.
+  const start = await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const neu = (raw.tasks || []).find((t) => t.title === 'Neuer Zeiteintrag');
+    return neu ? neu.start : '(nicht angelegt)';
+  });
   if (!start.startsWith('2026-08-29')) return 'angelegt am ' + start + ' statt am 29.08.';
   const abs = await p.locator('.tb-r .c-abs select').first().inputValue();
   if (abs !== 'setup') return 'im Abschnitt «' + abs + '» statt setup';

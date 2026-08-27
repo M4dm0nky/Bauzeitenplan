@@ -56,10 +56,15 @@ Show-Ansichten, sie heißt einmal und ist dieselbe.
 
 Angelegt wird in der **Tabelle**: im Bühnenkopf sitzt ein `+ Zeiteintrag`. Der
 neue Eintrag landet im gezeigten Abschnitt und am gezeigten Tag und schließt
-zeitlich an den letzten an. In der **Tabelle** kommen fünf Spalten dazu, genau dort wo du den Zeitstrahl
+zeitlich an den letzten an. In der **Tabelle** kommen vier Spalten dazu, genau dort wo du den Zeitstrahl
 anlegst: Abschnitt (Setup/Show), Typ (Act · Changeover · Doors · Show-Ende),
-Soundcheck, Kontakt und die Freitexte **Anforderungen** und **Benötigtes
-Material**.
+Kontakt und die Freitexte **Anforderungen** und **Benötigtes Material**. Start
+und Ende zeigen dort nur die Uhrzeit — der Tag steht ja oben.
+
+**Soundchecks** legst du im Panel eines Acts an: ein Klick, und es entsteht ein
+eigener Zeiteintrag im Setup-Abschnitt mit Start und Dauer. Als **Balken** — nur
+so siehst du, ob sich zwei Soundchecks überschneiden. Löschst du den Act, geht
+sein Soundcheck mit.
 
 **Farben je Programmpunkt:** Klick auf einen Balken öffnet das Panel rechts, dort
 gibt es zehn Farbtöne und einen Schalter für **Schraffur** — aus Rot wird so

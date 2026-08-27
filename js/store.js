@@ -116,6 +116,9 @@ const HANDLERS = {
       // dort einen Eintrag — fiel das Feld weg, landete er in der Show und war
       // im gerade gezeigten Abschnitt sofort unsichtbar.
       abschnitt: t.abschnitt === 'setup' ? 'setup' : 'show',
+      // Wem gehört der Eintrag? Ein Soundcheck zeigt auf seinen Act. MUSS hier
+      // durch — was der Handler nicht aufzählt, fällt beim Anlegen still weg.
+      fuer: t.fuer ?? null,
     });
     return ok({ id });
   },
@@ -126,7 +129,11 @@ const HANDLERS = {
     // Ein Sammelvorgang nimmt seine Untervorgänge mit (Kaskade) — wie beim
     // Löschen eines Gewerks. Rückgängig über den Schnappschuss, nicht Stück für
     // Stück. Ohne die Kaskade blieben verwaiste Kinder mit totem parent zurück.
-    const gone = new Set([cmd.id, ...state.tasks.filter((t) => t.parent === cmd.id).map((t) => t.id)]);
+    // Kaskade: Untervorgänge UND zugeordnete Einträge (der Soundcheck eines Acts)
+    // gehen mit. Sonst bliebe eine Waise mit totem `fuer` zurück, die niemand
+    // mehr findet — dieselbe Begründung wie bei den Untervorgängen.
+    const gone = new Set([cmd.id,
+      ...state.tasks.filter((t) => t.parent === cmd.id || t.fuer === cmd.id).map((t) => t.id)]);
     state.tasks = state.tasks.filter((t) => !gone.has(t.id));
     // Verwaiste Abhängigkeiten mitnehmen: sonst zeigen Pfeile ins Leere und
     // die Terminrechnung stolpert über undefined.
@@ -158,6 +165,10 @@ const HANDLERS = {
     // zeigte auf `var(--gw-NaN)` — also auf gar keine Farbe.
     if (cmd.field === 'abschnitt' && cmd.value !== 'setup' && cmd.value !== 'show')
       return 'Abschnitt ist «setup» oder «show».';
+    if (cmd.field === 'fuer' && cmd.value !== null) {
+      if (cmd.value === cmd.id) return 'Ein Eintrag gehört nicht zu sich selbst.';
+      if (!state.tasks.some((x) => x.id === cmd.value)) return 'Zugeordneter Eintrag nicht gefunden.';
+    }
     if (cmd.field === 'slot' && cmd.value !== null) {
       const n = cmd.value;
       if (!Number.isInteger(n) || n < 0 || n >= MAX_SLOTS)

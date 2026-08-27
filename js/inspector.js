@@ -3,7 +3,7 @@
 // Bewusst der Weg für PRÄZISES Bearbeiten; das Schnelle läuft übers
 // Rechtsklick-Menü und Doppelklick.
 
-import { parseDuration, fmtDuration, local } from './conflicts.js';
+import { parseDuration, fmtDuration, local, mitUhrzeit } from './conflicts.js';
 import { toMin, toDate, computeSchedule, candidateGroups } from './schedule.js';
 import { gewerkVar, gewerkTexture, hueVon, slotAus, HUES, MAX_SLOTS } from './palette.js';
 import { artOf, abschnittOf, ABSCHNITTE } from './ebene.js';
@@ -251,6 +251,12 @@ export function createInspector(root, { store, onError, onClose } = {}) {
         'Jede Ansicht hat ihre eigene Zeitachse — Setup den Morgen, Show den Abend.'));
 
       root.append(field('Farbe', farbwahl(t, band)));
+
+      // Der Soundcheck gehört zu DIESEM Eintrag, ist aber ein eigener
+      // Zeiteintrag im Setup — nur so bekommt er einen Balken, und nur ein
+      // Balken zeigt, ob sich zwei Soundchecks überschneiden. Hier steht der
+      // bequeme Weg dorthin; in der Setup-Liste steht er wie jeder andere.
+      if (abschnittOf(t) !== 'setup') root.append(field('Soundcheck', soundcheck(t)));
     }
 
     const nt = el('textarea');
@@ -408,6 +414,75 @@ export function createInspector(root, { store, onError, onClose } = {}) {
    * Punkte und ein Häkchen, um alle zwanzig zu erreichen (slotAus in palette.js).
    * Gewählt wird AUS der Palette; keine Farbe wird umdefiniert.
    */
+  /**
+   * Start und Dauer des Soundchecks, der zu diesem Eintrag gehört.
+   * Es gibt keinen? Dann ein Knopf, der einen anlegt — eine Stunde vor dem Act,
+   * 60 min lang, im Setup-Abschnitt. Alles über den Store, also mit ⌘Z.
+   */
+  function soundcheck(t) {
+    const box = el('div', 'ins-sc');
+    const sc = store.state.tasks.find((x) => x.fuer === t.id);
+
+    if (!sc) {
+      const add = el('button', 'btn', '+ Soundcheck');
+      add.type = 'button';
+      add.onclick = () => {
+        // Vorgabe: an den letzten Setup-Eintrag DESSELBEN TAGES anschließen,
+        // sonst 08:00. Ein Soundcheck läuft am Nachmittag, nicht eine Stunde vor
+        // dem Auftritt — genau das kam heraus, als die Vorgabe am Act hing.
+        // Dieselbe Regel wie beim «+ Zeiteintrag» in der Tabelle.
+        const tag = String(t.start).slice(0, 10);
+        const vorher = store.state.tasks
+          .filter((x) => x.gewerk === t.gewerk && abschnittOf(x) === 'setup'
+            && String(x.start).slice(0, 10) === tag)
+          .sort((a, b) => toMin(a.start) - toMin(b.start)).pop();
+        const start = vorher ? vorher.end : tag + 'T08:00';
+        send({ type: 'addTask', task: {
+          gewerk: t.gewerk, title: 'Soundcheck ' + t.title,
+          start, end: local(toDate(toMin(start) + 60)),
+          abschnitt: 'setup', fuer: t.id,
+        } });
+      };
+      box.append(add, el('div', 'ins-hint',
+        'Wird ein eigener Zeiteintrag im Setup — mit Balken, damit du siehst, ob sich zwei überschneiden.'));
+      return box;
+    }
+
+    const zeile = el('div', 'ins-row');
+    const zeit = el('input');
+    zeit.type = 'time';
+    zeit.value = String(sc.start).slice(11, 16);
+    zeit.setAttribute('aria-label', 'Soundcheck-Beginn');
+    zeit.onchange = () => {
+      const jetzt = store.state.tasks.find((x) => x.id === sc.id);
+      if (!jetzt || !zeit.value) return;
+      const start = mitUhrzeit(jetzt.start, zeit.value);
+      if (!start || start === jetzt.start) return;
+      const dauer = toMin(jetzt.end) - toMin(jetzt.start);
+      send({ type: 'moveTask', id: sc.id, start, end: local(toDate(toMin(start) + dauer)) });
+    };
+
+    const dauer = el('input');
+    dauer.value = fmtDuration(toMin(sc.end) - toMin(sc.start));
+    dauer.placeholder = '60m';
+    dauer.setAttribute('aria-label', 'Soundcheck-Dauer');
+    dauer.onchange = () => {
+      const jetzt = store.state.tasks.find((x) => x.id === sc.id);
+      if (!jetzt) return;
+      const m = parseDuration(dauer.value);
+      if (m == null || m === 0) { dauer.value = fmtDuration(toMin(jetzt.end) - toMin(jetzt.start)); return; }
+      send({ type: 'setTaskField', id: sc.id, field: 'end', value: local(toDate(toMin(jetzt.start) + m)) });
+    };
+    zeile.append(zeit, dauer);
+    box.append(zeile);
+
+    const weg = el('button', 'btn btn-danger', 'Soundcheck entfernen');
+    weg.type = 'button';
+    weg.onclick = () => send({ type: 'removeTask', id: sc.id });
+    box.append(weg);
+    return box;
+  }
+
   function farbwahl(t, band) {
     const box = el('div', 'ins-farbe');
     const eigen = t.slot != null;

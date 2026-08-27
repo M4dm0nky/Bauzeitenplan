@@ -1,4 +1,4 @@
-import { findConflicts, resolveConflictsCmd, parseDuration, fmtDuration } from '../js/conflicts.js';
+import { findConflicts, resolveConflictsCmd, parseDuration, fmtDuration, mitUhrzeit, endeNachStart } from '../js/conflicts.js';
 import { createStore } from '../js/store.js';
 import { computeSchedule } from '../js/schedule.js';
 import assert from 'node:assert/strict';
@@ -283,6 +283,42 @@ test('Abhaken läuft über den Store und ist per Undo zurücknehmbar', () => {
   assert.deepEqual(findConflicts(st.state), []);
   st.undo();
   assert.equal(findConflicts(st.state).length, 1);
+});
+
+console.log('\nUhrzeit ohne Datum — Showablauf');
+
+test('nur die Uhrzeit wird ersetzt, das Datum bleibt', () => {
+  // Ein Eintrag vom Vortag ist über den Tagesfilter auch am Folgetag sichtbar.
+  // Schriebe das Feld den gezeigten Tag, spränge er beim ersten Antippen.
+  assert.equal(mitUhrzeit('2026-08-29T20:40', '21:15'), '2026-08-29T21:15');
+  assert.equal(mitUhrzeit('2026-08-29T23:00', '08:00'), '2026-08-29T08:00');
+});
+
+test('unbrauchbare Eingaben liefern null, statt etwas zu erfinden', () => {
+  assert.equal(mitUhrzeit('', '21:15'), null);
+  assert.equal(mitUhrzeit('2026-08-29T20:40', ''), null);
+  assert.equal(mitUhrzeit('2026-08-29T20:40', 'quatsch'), null);
+  assert.equal(mitUhrzeit(null, null), null);
+});
+
+test('ein Ende nach dem Start bleibt am selben Tag', () => {
+  assert.equal(endeNachStart('2026-08-29T20:40', '21:50'), '2026-08-29T21:50');
+});
+
+test('ein Ende VOR dem Start meint den Folgetag', () => {
+  // «22:00 bis 03:00» ist die selbstverständliche Schreibweise jedes Ablaufplans.
+  assert.equal(endeNachStart('2026-08-29T22:00', '03:00'), '2026-08-30T03:00');
+});
+
+test('ein Ende GLEICH dem Start meint ebenfalls den Folgetag', () => {
+  // Sonst wäre die Dauer null und der Store lehnte ab.
+  assert.equal(endeNachStart('2026-08-29T22:00', '22:00'), '2026-08-30T22:00');
+});
+
+test('über den Sommerzeit-Sprung bleibt der Folgetag der Folgetag', () => {
+  // Der 25.10.2026 hat 25 Stunden. Mit +1440 Minuten gerechnet landete man
+  // um 23:00 statt am nächsten Tag — der Fehler, der hier schon zweimal auftrat.
+  assert.equal(endeNachStart('2026-10-25T22:00', '03:00'), '2026-10-26T03:00');
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

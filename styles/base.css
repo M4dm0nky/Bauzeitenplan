@@ -324,13 +324,13 @@ body { margin: 0; }
 /* Breiten großzügig: ein datetime-local zeigt «08/29/2026, 12:00 PM» und wird
    bei 175 px abgeschnitten — auf dem Probebild stand «Tourmanage» und «Chang».
    Lieber scrollen als abschneiden; die Seite selbst scrollt weiterhin nicht. */
-.tb-t[data-tb-ebene="show"] { min-width: 2120px; }
+.tb-t[data-tb-ebene="show"] { min-width: 1620px; }
 .tb-t[data-tb-ebene="show"] .c-gw { width: 152px; }
+/* Ohne Datum reicht die halbe Breite — der Tag steht oben im Umschalter. */
 .tb-t[data-tb-ebene="show"] .c-start,
-.tb-t[data-tb-ebene="show"] .c-end { width: 205px; }
+.tb-t[data-tb-ebene="show"] .c-end { width: 96px; }
 .c-abs { width: 118px; }
 .c-typ { width: 142px; }
-.c-sc { width: 205px; }
 .c-kon { width: 176px; }
 .c-anf, .c-mat { width: auto; min-width: 230px; }
 .tb-group td { padding: 8px 8px 5px; }
@@ -429,6 +429,8 @@ body { margin: 0; }
    `--gw` setzt js/inspector.js je Punkt; die Schraffur kommt aus derselben
    Regel wie am Balken (.bz-dot[data-tex] weiter oben), damit der Punkt aussieht
    wie das, was er setzt. */
+.ins-sc { display: flex; flex-direction: column; gap: 6px; }
+.ins-sc .ins-row input { flex: 1; min-width: 0; }
 .ins-farbe { display: flex; flex-direction: column; gap: 6px; }
 .ins-toene { display: flex; flex-wrap: wrap; gap: 5px; }
 .ins-ton {
