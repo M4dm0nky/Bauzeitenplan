@@ -44,7 +44,14 @@ Seitenspalte ist damit allein schon der Ablaufplan.
 
 Bühnen legst du an wie ein Gewerk (`+ Bühne`), benennst und sortierst sie genauso.
 Ein Umschalter über dem Gantt wählt den Showtag, Häkchen blenden einzelne Bühnen
-aus. In der **Tabelle** kommen vier Spalten dazu, genau dort wo du den Zeitstrahl
+aus.
+
+**Setup und Show sind zwei Ansichten.** Am Showtag gibt es zwei Abläufe mit ganz
+verschiedenen Uhrzeiten: Load-in und Setup bis zum Showstart, danach die Running
+Order. Jede Bühne gehört einem der beiden Abschnitte, und der Umschalter
+**Setup · Show · alle** zeigt jeweils nur die passenden Bänder — mit eigener
+Zeitachse. Eine neue Bühne erbt den gerade gezeigten Abschnitt: wer im Setup-View
+`+ Bühne` drückt, bekommt eine Setup-Bühne. In der **Tabelle** kommen vier Spalten dazu, genau dort wo du den Zeitstrahl
 anlegst: Typ (Act · Changeover · Doors · Show-Ende), Soundcheck, Kontakt und die
 Freitexte **Anforderungen** und **Benötigtes Material**.
 

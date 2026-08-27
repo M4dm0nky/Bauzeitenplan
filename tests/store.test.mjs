@@ -594,6 +594,39 @@ test('zwei Bühnen gleichen Namens werden abgelehnt', () => {
   assert.match(r.error, /Bühne gibt es schon/);
 });
 
+test('eine Bühne wird als Show angelegt, wenn nichts anderes gesagt ist', () => {
+  const { s, id } = mitBuehne();
+  assert.equal(s.state.gewerke.find((x) => x.id === id).abschnitt, 'show');
+});
+
+test('eine Setup-Bühne trägt ihren Abschnitt', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addGewerk', gewerk: { name: 'Hauptbühne Setup', art: 'buehne', abschnitt: 'setup' } });
+  assert.equal(s.state.gewerke.find((x) => x.id === r.id).abschnitt, 'setup');
+});
+
+test('ein Gewerk bekommt gar keinen Abschnitt', () => {
+  // Im Bauzeitenplan gibt es ihn nicht — ein Feld, das nie greift, ist Ballast.
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addGewerk', gewerk: { name: 'Pyro', abschnitt: 'setup' } });
+  assert.equal('abschnitt' in s.state.gewerke.find((x) => x.id === r.id), false);
+});
+
+test('der Abschnitt einer Bühne darf wechseln', () => {
+  // Anders als die Art: die Programmpunkte gehören der Bühne und wandern mit.
+  const { s, id } = mitBuehne();
+  assert.equal(s.apply({ type: 'setGewerkField', id, field: 'abschnitt', value: 'setup' }).ok, true);
+  assert.equal(s.state.gewerke.find((x) => x.id === id).abschnitt, 'setup');
+  s.undo();
+  assert.equal(s.state.gewerke.find((x) => x.id === id).abschnitt, 'show');
+});
+
+test('erfundene Abschnitte und Gewerke werden abgelehnt', () => {
+  const { s, id } = mitBuehne();
+  assert.equal(s.apply({ type: 'setGewerkField', id, field: 'abschnitt', value: 'quatsch' }).ok, false);
+  assert.equal(s.apply({ type: 'setGewerkField', id: 'buehne', field: 'abschnitt', value: 'setup' }).ok, false);
+});
+
 test('ein Gewerk wird nicht nachträglich zur Bühne', () => {
   const s = createStore(seed());
   const r = s.apply({ type: 'setGewerkField', id: 'buehne', field: 'art', value: 'buehne' });

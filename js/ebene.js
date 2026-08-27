@@ -57,23 +57,43 @@ export function typHinweis(t) {
 }
 
 /**
+ * Der Abschnitt einer BÜHNE: Load-in und Setup bis zum Showstart, oder die
+ * Running Order danach. Zwei Abläufe mit verschiedenen Uhrzeiten und
+ * verschiedenen Lesern — deshalb zwei Bänder und zwei Ansichten, nicht eine
+ * Liste mit einem Etikett.
+ *
+ * Fehlt das Feld, gilt «show»: die bestehende Running Order bleibt, wo sie ist.
+ */
+export const abschnittOf = (g) => (g.abschnitt === 'setup' ? 'setup' : 'show');
+
+/** Die Auswahl des Umschalters. «alle» ist ein Filterwert, kein Bühnenwert. */
+export const ABSCHNITTE = [['setup', 'Setup'], ['show', 'Show'], ['alle', 'alle']];
+
+/**
  * Die Zeilenbänder der Ebene, nach `sort`. `aus` blendet einzelne aus (der
  * Bühnen-Filter) — dieselbe Mechanik wie die Gewerk-Häkchen auf der Druckseite:
  * das Wegklicken ändert Zeilen UND Maßstab, nicht nur die Sichtbarkeit.
+ *
+ * `abschnitt` greift NUR im Showablauf: Gewerke tragen keinen. «alle» und die
+ * Bau-Ebene lassen den Filter aus.
+ *
  * @param {{gewerke:object[]}} state
  * @param {'bau'|'show'} ebene
  * @param {Set<string>} aus  ausgeblendete Gewerk-/Bühnen-IDs
+ * @param {'setup'|'show'|'alle'} [abschnitt]
  */
-export function sichtGewerke(state, ebene, aus = new Set()) {
+export function sichtGewerke(state, ebene, aus = new Set(), abschnitt = 'alle') {
   const art = ART_FUER[ebene] || 'gewerk';
+  const prüfen = art === 'buehne' && (abschnitt === 'setup' || abschnitt === 'show');
   return (state.gewerke || [])
-    .filter((g) => artOf(g) === art && !aus.has(g.id))
+    .filter((g) => artOf(g) === art && !aus.has(g.id)
+      && (!prüfen || abschnittOf(g) === abschnitt))
     .sort((a, b) => a.sort - b.sort);
 }
 
 /** Die Vorgänge, die in dieser Ebene sichtbar sind — Vorgänge ohne Band fallen raus. */
-export function sichtTasks(state, ebene, aus = new Set()) {
-  const ids = new Set(sichtGewerke(state, ebene, aus).map((g) => g.id));
+export function sichtTasks(state, ebene, aus = new Set(), abschnitt = 'alle') {
+  const ids = new Set(sichtGewerke(state, ebene, aus, abschnitt).map((g) => g.id));
   return (state.tasks || []).filter((t) => ids.has(t.gewerk));
 }
 

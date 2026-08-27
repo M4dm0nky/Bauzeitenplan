@@ -346,6 +346,38 @@ gezählt wäre die Palette im Klassentreffen-Plan (20 Gewerke = `MAX_SLOTS`) mit
 ersten Bühne erschöpft. `slotsExhausted` wird entsprechend gegen die Zahl der Bänder
 der AKTIVEN Ebene geprüft, nie gegen `gewerke.length`.
 
+**Die BÜHNE trägt den Abschnitt, nicht der Programmpunkt.** Load-in und Setup bis
+zum Showstart und die Running Order danach sind zwei Abläufe mit verschiedenen
+Uhrzeiten und verschiedenen Lesern — deshalb zwei Bänder (`abschnitt:
+'setup'|'show'` am Gewerk) und ein Umschalter **Setup · Show · alle**, nicht eine
+Liste mit einem Etikett. Jede Ansicht rechnet ihr Zeitfenster selbst
+(`programmFenster`): Setup zeigt den Morgen, Show den Abend. Fehlt das Feld, gilt
+`show`. Nur Bühnen haben es; ein Gewerk bekommt es in `migrate()` gar nicht erst
+angehängt. Der Abschnitt DARF wechseln (anders als `art`) — die Programmpunkte
+gehören der Bühne und wandern mit.
+
+**Ein leeres Band ist nur im Bauzeitenplan unsichtbar.** Dort stehen 20 Gewerke,
+ein leeres wäre Rauschen. Im Showablauf muss es stehen: eine frisch angelegte
+Bühne hat noch nichts, und wäre sie unsichtbar, wäre «+ Bühne» ein Klick ins
+Nichts. `Math.min(...[])` ist dabei `Infinity` — die Hülle muss auf `T0` fallen,
+sonst zieht sich der Sammelbalken über die ganze Achse.
+
+**Neue Vorgänge landen dort, wo man HINSCHAUT.** `defaultStart()` in table.js
+schließt an den letzten Punkt DES GEZEIGTEN TAGES an, nicht an den letzten des
+Plans. Vorher kam bei zwei Showtagen der letzte Punkt des zweiten heraus: wer am
+ersten Tag anlegte, bekam es an den zweiten gehängt, und der Tagesfilter blendete
+es sofort aus. Der Knopf tat etwas, nur unsichtbar — und das fühlt sich an wie
+«geht nicht». Ist der Tag leer, wird 08:00 dieses Tages genommen.
+
+**Der Gantt meldet, wenn er sich von SELBST einpasst** (`O.onView`). Das passiert
+an zwei Stellen asynchron: beim ersten Programmpunkt eines leeren Showablaufs und
+beim Wiederauftauchen aus der Tabelle (ResizeObserver). Wer die Kopfzeile danach
+aktualisieren will — Zoomstufe, Mitteldatum —, kann den Zeitpunkt nicht raten;
+ein `requestAnimationFrame` lief zu früh und schrieb den 25.10. ins Datumsfeld.
+Aus demselben Grund merkt sich der ResizeObserver eine Breite von **0**: sonst
+gilt die Rückkehr aus der Tabelle als «keine Änderung», und ein Zoom, der
+währenddessen mit Breite 0 gerechnet wurde, bleibt für immer falsch.
+
 **Der Showablauf ist tagesbezogen.** Ein Umschalter wählt den Showtag; ohne ihn standen
 die Acts des zweiten Tages als zehn Zeilen ohne Balken im Bild — genau die Fehlerart,
 die hier schon dreimal erst der Screenshot gefunden hat. Gantt und Tabelle bekommen

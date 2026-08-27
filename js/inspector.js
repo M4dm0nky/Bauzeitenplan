@@ -6,7 +6,7 @@
 import { parseDuration, fmtDuration, local } from './conflicts.js';
 import { toMin, toDate, computeSchedule, candidateGroups } from './schedule.js';
 import { gewerkVar, gewerkTexture, hueVon, slotAus, HUES, MAX_SLOTS } from './palette.js';
-import { artOf } from './ebene.js';
+import { artOf, abschnittOf, ABSCHNITTE } from './ebene.js';
 import { fmtFloat } from './timeaxis.js';
 import { el, toInput, STATUS } from './dom.js';
 
@@ -76,6 +76,21 @@ export function createInspector(root, { store, onError, onClose } = {}) {
     dn.onclick = () => send({ type: 'reorderGewerk', id: g.id, dir: 1 });
     ord.append(up, dn);
     root.append(field('Reihenfolge', ord));
+
+    // Setup oder Show — nur an Bühnen. Ein Gewerk hat keinen Abschnitt.
+    if (artOf(g) === 'buehne') {
+      const asel = el('select');
+      for (const [v, label] of ABSCHNITTE) {
+        if (v === 'alle') continue;          // Filterwert, kein Bühnenwert
+        const o = el('option', null, label);
+        o.value = v;
+        if (v === abschnittOf(g)) o.selected = true;
+        asel.append(o);
+      }
+      asel.onchange = () => send({ type: 'setGewerkField', id: g.id, field: 'abschnitt', value: asel.value });
+      root.append(field('Abschnitt', asel,
+        'Setup läuft bis zum Showstart, Show danach — jede Ansicht hat ihre eigene Zeitachse.'));
+    }
 
     // Farbe ist nicht wählbar: die Zuordnung ist gerechnet (docs/farbsuche.md).
     const col = el('div', 'ins-ro');

@@ -13,7 +13,7 @@ import { slotsExhausted, MAX_SLOTS, gewerkVar, gewerkTexture } from './palette.j
 import { createInspector } from './inspector.js';
 import { openMenu } from './menu.js';
 import { liveStats, runningAt, nextUp, delaysAt } from './live.js';
-import { sichtGewerke, sichtTasks, typHinweis, programmTage } from './ebene.js';
+import { sichtGewerke, sichtTasks, typHinweis, programmTage, ABSCHNITTE } from './ebene.js';
 import { toMin, toDate } from './schedule.js';
 import { $, el, escapeHtml } from './dom.js';
 import { VERSION } from './version.js';
@@ -36,6 +36,16 @@ const ausBlend = new Set();   // ausgeblendete Bühnen (nur in der Show-Ebene)
 // nebeneinander ergäben zehn Zeilen ohne Balken — genau die Fehlerart, die in
 // diesem Projekt schon dreimal erst auf dem Screenshot aufgefallen ist.
 let showTag = null;
+// Setup (Load-in bis Showstart), Show (die Running Order) oder beides. Anzeige-
+// Zustand wie die Ebene: localStorage, übersteuerbar per ?abschnitt=setup.
+let abschnitt = 'alle';
+
+const startAbschnitt = () => {
+  const q = new URLSearchParams(location.search).get('abschnitt');
+  if (ABSCHNITTE.some(([k]) => k === q)) return q;
+  const gemerkt = localStorage.getItem('bzp_abschnitt');
+  return ABSCHNITTE.some(([k]) => k === gemerkt) ? gemerkt : 'alle';
+};
 
 const startEbene = () => {
   const q = new URLSearchParams(location.search).get('ebene');
@@ -152,6 +162,11 @@ function mount() {
     onContext: showContext,
     onError: (msg) => toast(msg, 'bad'),
     onTick: () => refreshLive(),
+    // Der Gantt hat sich von selbst neu eingepasst — die Kopfzeile muss nach.
+    onView: () => {
+      if (syncZoomSeg) syncZoomSeg();
+      $('date-jump').value = gantt.centerDayIso();
+    },
   });
   table = createTable($('tb'), { store, onConflicts: ({ error }) => toast(error, 'bad') });
   inspector = createInspector($('ins'), {
@@ -226,6 +241,10 @@ function mount() {
   document.querySelectorAll('button[data-ebene]').forEach((b) => {
     b.onclick = () => setEbene(b.dataset.ebene);
   });
+  document.querySelectorAll('button[data-abschnitt]').forEach((b) => {
+    b.onclick = () => { abschnitt = b.dataset.abschnitt; setEbene('show'); };
+  });
+  abschnitt = startAbschnitt();
   setEbene(startEbene());
 
   // ── Projekt ──
@@ -269,8 +288,10 @@ function setView(v) {
   syncPanel();
   document.querySelector('.hd-zoom').hidden = v !== 'gantt';
   syncBuehnen();
-  if (v === 'tabelle') renderTable();
-  else gantt.relayout();
+  if (v === 'tabelle') { renderTable(); return; }
+  gantt.relayout();
+  // Kein Nachziehen per Zeitschätzung: der Gantt passt sich beim
+  // Wiederauftauchen selbst ein (ResizeObserver) und meldet das über onView.
 }
 
 // ── Ebene wechseln ──────────────────────────────────────────────────────────
@@ -281,7 +302,7 @@ function setEbene(name) {
   localStorage.setItem('bzp_ebene', ebene);
   document.querySelectorAll('button[data-ebene]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ebene === ebene)));
   // Eine Bühne, die es nicht mehr gibt, darf nicht ewig ausgeblendet bleiben.
-  const da = new Set(sichtGewerke(store.state, 'show').map((g) => g.id));
+  const da = new Set(sichtGewerke(store.state, 'show', new Set(), abschnitt).map((g) => g.id));
   for (const id of [...ausBlend]) if (!da.has(id)) ausBlend.delete(id);
 
   // Vorgabe-Showtag: der, auf dem «jetzt» liegt — sonst der erste. Beim Aufbau
@@ -293,8 +314,13 @@ function setEbene(name) {
   }
   if (ebene !== 'show') showTag = null;
 
-  gantt.setEbene(ebene, ausBlend, showTag);
-  table.setEbene(ebene, ausBlend, showTag);
+  localStorage.setItem('bzp_abschnitt', abschnitt);
+  $('abschnitt').hidden = ebene !== 'show';
+  document.querySelectorAll('button[data-abschnitt]')
+    .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.abschnitt === abschnitt)));
+
+  gantt.setEbene(ebene, ausBlend, showTag, abschnitt);
+  table.setEbene(ebene, ausBlend, showTag, abschnitt);
   // Die Auswahl gehört der anderen Ebene und zeigt ins Leere.
   gantt.select(null);
   syncPanel();
@@ -320,7 +346,7 @@ function syncBuehnen() {
   const zeigen = ebene === 'show';
   box.hidden = !zeigen;
   if (!zeigen) return;
-  const buehnen = sichtGewerke(store.state, 'show');
+  const buehnen = sichtGewerke(store.state, 'show', new Set(), abschnitt);
   box.replaceChildren();
 
   // Showtag zuerst: er entscheidet, WELCHER Ablauf gezeigt wird. Die Bühnen
@@ -345,8 +371,8 @@ function syncBuehnen() {
     cb.checked = !ausBlend.has(g.id);
     cb.onchange = () => {
       cb.checked ? ausBlend.delete(g.id) : ausBlend.add(g.id);
-      gantt.setEbene(ebene, ausBlend, showTag);
-      table.setEbene(ebene, ausBlend, showTag);
+      gantt.setEbene(ebene, ausBlend, showTag, abschnitt);
+      table.setEbene(ebene, ausBlend, showTag, abschnitt);
       if (view === 'tabelle') renderTable();
       refreshChrome();
     };
@@ -357,7 +383,8 @@ function syncBuehnen() {
     box.append(lab);
   }
   if (!buehnen.length) {
-    const hint = el('span', 'buehnen-leer', 'Noch keine Bühne — «+ Bühne» legt eine an.');
+    const was = abschnitt === 'setup' ? 'Setup-Bühne' : abschnitt === 'show' ? 'Show-Bühne' : 'Bühne';
+    const hint = el('span', 'buehnen-leer', 'Noch keine ' + was + ' — «+ Bühne» legt eine an.');
     box.append(hint);
   }
 }
@@ -603,9 +630,11 @@ function refreshChrome() {
   // Palette von 8 auf 9 Töne wuchs).
   // Nur die Bänder der sichtbaren Ebene: eine Legende mit zwanzig Gewerken über
   // einem Blatt mit zwei Bühnen erklärt nichts, sie verdeckt.
-  $('legend').innerHTML = sichtGewerke(S, ebene, ausBlend)
+  $('legend').innerHTML = sichtGewerke(S, ebene, ausBlend, abschnitt)
     .map((g) => `<span class="legend-i"><span class="bz-dot" style="--gw:${gewerkVar(g.slot)}"${gewerkTexture(g.slot) ? ' data-tex="1"' : ''}></span>${escapeHtml(g.name)}</span>`)
     .join('');
+
+  if (syncZoomSeg) syncZoomSeg();
 
   $('undo').disabled = !store.canUndo;
   $('redo').disabled = !store.canRedo;
@@ -623,7 +652,12 @@ function addGewerk() {
   }
   const name = prompt(buehne ? 'Name der Bühne (z. B. Hauptbühne, Zelt, Halle 3):' : 'Name des Gewerks:');
   if (!name) return;
-  const r = store.apply({ type: 'addGewerk', gewerk: { name, art: buehne ? 'buehne' : 'gewerk' } });
+  // Die neue Bühne erbt den gerade gezeigten Abschnitt: wer im Setup-View
+  // «+ Bühne» drückt, will eine Setup-Bühne. Bei «alle» ist Show die Vorgabe.
+  const r = store.apply({ type: 'addGewerk', gewerk: {
+    name, art: buehne ? 'buehne' : 'gewerk',
+    abschnitt: abschnitt === 'setup' ? 'setup' : 'show',
+  } });
   if (r.ok === false) return toast(r.error, 'bad');
   syncBuehnen();
 }

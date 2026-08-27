@@ -59,6 +59,11 @@ export function createGantt(root, opts = {}) {
   let VG = [], VT = [];
   let ebene = O.ebene || 'bau';
   let ausBlend = new Set();
+  // Showablauf: Setup, Show oder beides. Zwei Abläufe mit verschiedenen
+  // Uhrzeiten — jede Ansicht rechnet ihr Zeitfenster selbst (programmFenster).
+  let abschnitt = 'alle';
+  // Hat der Showablauf schon ein Zeitfenster? Erst wenn Programmpunkte da sind.
+  let fensterDa = false;
   // Showablauf: der gezeigte Kalendertag. null = alle. Eine Running Order ist
   // tagesbezogen — beide Showtage nebeneinander ergäben zehn Zeilen ohne Balken.
   let tag = null;
@@ -75,7 +80,7 @@ export function createGantt(root, opts = {}) {
 
   function syncState() {
     S = store.state;
-    VG = sichtGewerke(S, ebene, ausBlend);
+    VG = sichtGewerke(S, ebene, ausBlend, abschnitt);
     const sichtbar = new Set(VG.map((g) => g.id));
     // Die Zieltermine (`gewerk: 'projekt'`) haben kein Band, gehören aber zum
     // Bauzeitenplan und stehen dort in einer eigenen Zeile ganz unten. Ohne sie
@@ -93,6 +98,7 @@ export function createGantt(root, opts = {}) {
     // Damit steht die Ansicht auch ohne Scrollen richtig — hineingescrollt war
     // die Datumszeile der Achse links angeschnitten.
     const z = ebene === 'bau' ? null : programmFenster(VT);
+    fensterDa = !!z;
     T0 = z ? z.von : toMin(S.project.start);
     T1 = z ? z.bis : toMin(S.project.end);
     TOTAL_MIN = Math.max(1, T1 - T0);
@@ -195,10 +201,16 @@ export function createGantt(root, opts = {}) {
     let y = 0;
     for (const g of VG) {
       const tasks = VT.filter((t) => t.gewerk === g.id).sort(byStart);
-      if (!tasks.length) continue;
+      // Im Bauzeitenplan bleibt ein leeres Gewerk unsichtbar — dort gibt es 20
+      // Bänder und ein leeres wäre nur Rauschen. Im SHOWABLAUF muss es stehen:
+      // eine frisch angelegte Bühne hat noch nichts, und wäre sie unsichtbar,
+      // wäre «+ Bühne» ein Klick ins Nichts.
+      if (!tasks.length && ebene !== 'show') continue;
       const spans = tasks.filter((t) => !t.milestone);
-      const gStart = Math.min(...tasks.map((t) => toMin(t.start)));
-      const gEnd = Math.max(...tasks.map((t) => toMin(t.end)));
+      // Ohne Vorgänge gäbe Math.min(...[]) Infinity — der Sammelbalken zöge
+      // sich über die ganze Achse.
+      const gStart = tasks.length ? Math.min(...tasks.map((t) => toMin(t.start))) : T0;
+      const gEnd = tasks.length ? Math.max(...tasks.map((t) => toMin(t.end))) : T0;
       const done = tasks.filter((t) => t.status === 'fertig').length;
       rows.push({ kind: 'group', g, y, h: O.groupH, gStart, gEnd, tasks, done, spans });
       y += O.groupH;
@@ -993,6 +1005,7 @@ export function createGantt(root, opts = {}) {
     zoomMode = 'tage';
     layout();
     scroller.scrollLeft = x(toMin(day + 'T00:00'));
+    meldeView();
   }
 
   // Der ABEND füllt die Breite — von Doors bis Show-Ende, nicht der Kalendertag.
@@ -1003,11 +1016,19 @@ export function createGantt(root, opts = {}) {
   // Angefasst wird nur ZOOM und SCROLLSTAND, nicht T0/T1 — die Achse behält
   // ihre Tagesgrenzen und damit ihre Datumszeile. Wer nach links scrollt, sieht
   // weiterhin den Vormittag; er drängt sich nur nicht mehr ins Bild.
+  // Der Gantt passt sich an zwei Stellen von SELBST ein: beim ersten
+  // Programmpunkt eines leeren Showablaufs und beim Wiederauftauchen aus der
+  // Tabelle (ResizeObserver). Beides passiert asynchron — wer die Kopfzeile
+  // (Zoomstufe, Mitteldatum) danach aktualisieren will, kann nicht raten, wann
+  // es so weit ist. Deshalb sagt der Gantt Bescheid.
+  const meldeView = () => { if (O.onView) O.onView(); };
+
   function fitSpanne() {
     px = clampZoom(fitPx(timelineW(), TOTAL_MIN));
     zoomMode = null;          // eine eigene Spanne ist keine der festen Stufen
     layout();
     scroller.scrollLeft = 0;  // die Spanne IST das Bild, es gibt nichts daneben
+    meldeView();
   }
 
   // Datum in der Mitte der sichtbaren Timeline, als YYYY-MM-DD (lokal).
@@ -1094,11 +1115,12 @@ export function createGantt(root, opts = {}) {
      * Der Zoom kommt mit: eine Ansicht über zwei Showtage in der Wochenstufe
      * zeigte lauter Striche, eine über zwei Wochen in der Stundenstufe nichts.
      */
-    setEbene(name, aus = new Set(), showTag = null) {
-      const gewechselt = name !== ebene;
+    setEbene(name, aus = new Set(), showTag = null, absch = 'alle') {
+      const gewechselt = name !== ebene || (name === 'show' && absch !== abschnitt);
       ebene = name;
       ausBlend = new Set(aus);
       tag = name === 'show' ? showTag : null;
+      abschnitt = name === 'show' ? absch : 'alle';
       setCap();
       root.dataset.ebene = ebene;   // das CSS entscheidet über Füllung, nicht JS
       root.style.setProperty('--side-w', (ebene === 'show' ? SIDE_SHOW : O.sideW) + 'px');
@@ -1167,10 +1189,19 @@ export function createGantt(root, opts = {}) {
   function refresh() {
     const keepLeft = scroller.scrollLeft, keepTop = scroller.scrollTop;
     const vorher = S && S.project.id;
+    const vorherFenster = fensterDa;
     syncState();
     rebuild();
     layout();
-    if (S.project.id !== vorher) {
+    // ERSTER Programmpunkt in einem noch leeren Showablauf: bis eben gab es
+    // kein Zeitfenster, die Achse stand auf der Projektlaufzeit und der Zoom
+    // entsprechend weit draußen — der neue Balken wäre ein Strich in der
+    // Monatsansicht gewesen. Einmalig einpassen, danach nie wieder: sonst
+    // spränge die Ansicht bei jeder Änderung an den Anfang zurück.
+    const ersteinpassen = ebene === 'show' && !vorherFenster && fensterDa;
+    if (ersteinpassen) {
+      fitSpanne();
+    } else if (S.project.id !== vorher) {
       // PROJEKTWECHSEL. Der Scrollstand darf NICHT erhalten bleiben: T0 ist ein
       // anderes Datum, dieselbe Pixelzahl bedeutet also einen ganz anderen
       // Zeitpunkt. Vorher landete man Wochen daneben — nur 6 von 35 Balken im
@@ -1210,7 +1241,12 @@ export function createGantt(root, opts = {}) {
   let letzteBreite = 0;
   new ResizeObserver(() => {
     const b = scroller.clientWidth;
-    if (b > 0 && Math.abs(b - letzteBreite) > 1) {
+    // Verschwunden (die Tabelle ist sichtbar): merken, dass die nächste
+    // Rückkehr ein Wiederauftauchen ist. Ohne das blieb `letzteBreite` auf dem
+    // alten Wert stehen, die Rückkehr galt als «keine Änderung» — und ein Zoom,
+    // der währenddessen mit Breite 0 gerechnet wurde, blieb für immer falsch.
+    if (b === 0) { letzteBreite = 0; return; }
+    if (Math.abs(b - letzteBreite) > 1) {
       const vorher = letzteBreite;
       letzteBreite = b;
       // «Die Spanne füllt die Breite» ist eine Zusage, die bei JEDER Breite gilt.

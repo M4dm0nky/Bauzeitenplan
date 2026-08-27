@@ -33,7 +33,8 @@ export function createTable(root, { store, onConflicts } = {}) {
   // setzt ihn über setEbene(), die Tabelle entscheidet ihn nicht selbst.
   let ebene = 'bau';
   let ausBlend = new Set();
-  let tag = null;      // Showablauf: der gezeigte Kalendertag (null = alle)
+  let tag = null;         // Showablauf: der gezeigte Kalendertag (null = alle)
+  let abschnitt = 'alle'; // Showablauf: Setup, Show oder beides
   // Eingeklappte Elternvorgänge (deren Untervorgänge verborgen sind). Tabellen-
   // eigener Anzeige-Zustand — kein Store-Belang, überlebt das render() hier.
   const collapsed = new Set();
@@ -57,7 +58,7 @@ export function createTable(root, { store, onConflicts } = {}) {
     table.append(thead);
 
     const tbody = el('tbody');
-    const gewerke = sichtGewerke(S, ebene, ausBlend);
+    const gewerke = sichtGewerke(S, ebene, ausBlend, abschnitt);
 
     for (const g of gewerke) {
       // Denselben Tagesausschnitt wie der Gantt — sonst zeigt derselbe Plan in
@@ -419,7 +420,7 @@ export function createTable(root, { store, onConflicts } = {}) {
   // Neue Zeile unter dem letzten Vorgang des Gewerks: schließt zeitlich an,
   // 2h Vorgabe. So tippt man eine Kette runter, ohne Daten einzugeben.
   function addRow(gewerkId, after) {
-    const sichtbar = sichtGewerke(store.state, ebene, ausBlend);
+    const sichtbar = sichtGewerke(store.state, ebene, ausBlend, abschnitt);
     if (gewerkId === 'projekt') gewerkId = sichtbar[0] && sichtbar[0].id;
     if (!gewerkId) return;
     const start = after ? after.end : defaultStart();
@@ -442,12 +443,20 @@ export function createTable(root, { store, onConflicts } = {}) {
   function defaultStart() {
     const S = store.state;
     if (ebene === 'show') {
-      // Eine neue Bühne soll am Showtag beginnen, nicht am Projektanfang zwei
-      // Wochen davor. Also am letzten schon eingetragenen Programmpunkt
-      // anschließen — egal auf welcher Bühne; die Showtage sind dieselben.
-      const letzte = sichtGewerke(S, 'show').map((g) => g.id);
-      const punkte = S.tasks.filter((t) => letzte.includes(t.gewerk)).sort(byStart).pop();
-      if (punkte) return toInput(punkte.start);
+      // Am GEZEIGTEN Tag anschließen, nicht am letzten Punkt des Plans.
+      //
+      // Vorher wurde über alle Bühnen und alle Tage gesucht: bei zwei Showtagen
+      // kam der letzte Punkt des ZWEITEN heraus. Wer am ersten Tag auf einer
+      // leeren Bühne etwas anlegte, bekam es an den zweiten gehängt — und der
+      // Tagesfilter blendete es sofort wieder aus. Der Knopf tat also etwas,
+      // nur unsichtbar, und das fühlte sich an wie «geht nicht».
+      const buehnen = sichtGewerke(S, 'show', ausBlend, abschnitt).map((g) => g.id);
+      const drin = amTag(S.tasks.filter((t) => buehnen.includes(t.gewerk)), tag);
+      const letzter = drin.sort(byStart).pop();
+      if (letzter) return toInput(letzter.start);
+      // Der Tag ist noch leer: morgens anfangen. Ein Setup beginnt um acht,
+      // nicht am Projektanfang zwei Wochen vorher.
+      if (tag) return tag + 'T08:00';
     }
     const ph = (S.phases || []).find((p) => /aufbau|load/i.test(p.name));
     return toInput(ph ? ph.start : S.project.start);
@@ -529,7 +538,7 @@ export function createTable(root, { store, onConflicts } = {}) {
     // Nur die Bänder DIESER Ebene: die Gruppenköpfe zeigen nur sie, und ein
     // Gewerk aus der anderen Ebene als „steht schon dort" mitzuzählen ergäbe
     // eine falsche Nachbarschaft.
-    const list = sichtGewerke(store.state, ebene, ausBlend).map((g) => g.id);
+    const list = sichtGewerke(store.state, ebene, ausBlend, abschnitt).map((g) => g.id);
     const curBefore = list[list.indexOf(id) + 1] ?? null;
     if (before !== id && before !== curBefore) send({ type: 'moveGewerk', id, before });
   });
@@ -539,10 +548,11 @@ export function createTable(root, { store, onConflicts } = {}) {
   return {
     render,
     /** Ebene wechseln — die App entscheidet, die Tabelle zeigt. */
-    setEbene(name, aus = new Set(), showTag = null) {
+    setEbene(name, aus = new Set(), showTag = null, absch = 'alle') {
       ebene = name;
       ausBlend = new Set(aus);
       tag = name === 'show' ? showTag : null;
+      abschnitt = name === 'show' ? absch : 'alle';
       collapsed.clear();   // Eingeklapptes der anderen Ebene sagt hier nichts
     },
     get ebene() { return ebene; },

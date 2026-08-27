@@ -211,6 +211,23 @@ test('eine Bühne bleibt eine Bühne', () => {
   raw.gewerke[0].art = 'buehne';
   assert.equal(migrate(raw).gewerke[0].art, 'buehne');
 });
+test('eine Bühne ohne Abschnitt gehört zur Show', () => {
+  const raw = plan();
+  raw.gewerke[0].art = 'buehne';
+  assert.equal(migrate(raw).gewerke[0].abschnitt, 'show');
+});
+test('der Abschnitt überlebt Export → Import', () => {
+  const raw = plan();
+  raw.gewerke[0].art = 'buehne';
+  raw.gewerke[0].abschnitt = 'setup';
+  assert.equal(deserialize(serialize(raw)).plan.gewerke[0].abschnitt, 'setup');
+});
+test('ein GEWERK bekommt keinen Abschnitt angehängt', () => {
+  // Im Bauzeitenplan gibt es ihn nicht; ein Feld, das nie greift, ist Ballast.
+  const raw = plan();
+  raw.gewerke[0].abschnitt = 'setup';
+  assert.equal('abschnitt' in migrate(raw).gewerke[0], false);
+});
 test('erfundene Arten fallen auf Gewerk zurück, statt unsichtbar zu werden', () => {
   const raw = plan();
   raw.gewerke[0].art = 'quatsch';

@@ -42,7 +42,15 @@ export function migrate(plan) {
   // `art` trennt die beiden Ebenen (js/ebene.js): Gewerke tragen den
   // Bauzeitenplan, Bühnen den Showablauf. Altpläne kennen das Feld nicht und
   // sind deshalb durchweg Gewerke — der Bauzeitenplan sieht aus wie immer.
-  p.gewerke.forEach((g, i) => { g.slot ??= i; g.sort ??= i; g.art = g.art === 'buehne' ? 'buehne' : 'gewerk'; });
+  p.gewerke.forEach((g, i) => {
+    g.slot ??= i; g.sort ??= i;
+    g.art = g.art === 'buehne' ? 'buehne' : 'gewerk';
+    // Nur Bühnen tragen einen Abschnitt (Setup vor dem Showstart, Show danach).
+    // Fehlt er, gilt «show» — die bestehende Running Order bleibt, wo sie ist.
+    // Gewerke bekommen ihn gar nicht erst: im Bauzeitenplan gibt es ihn nicht.
+    if (g.art === 'buehne') g.abschnitt = g.abschnitt === 'setup' ? 'setup' : 'show';
+    else delete g.abschnitt;
+  });
 
   for (const t of p.tasks) {
     t.milestone = !!t.milestone;

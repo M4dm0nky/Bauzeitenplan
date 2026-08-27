@@ -217,8 +217,11 @@ const HANDLERS = {
     const was = art === 'buehne' ? 'Diese Bühne gibt es schon: ' : 'Dieses Gewerk gibt es schon: ';
     if (state.gewerke.some((x) => artVon(x) === art && x.name.toLowerCase() === name.toLowerCase())) return was + name;
     const id = g.id || newId(art === 'buehne' ? 'b' : 'g');
+    // Setup oder Show — nur an Bühnen, und nur diese beiden Werte.
+    const abschnitt = art === 'buehne' ? (g.abschnitt === 'setup' ? 'setup' : 'show') : undefined;
     state.gewerke.push({
       id, name, art,
+      ...(abschnitt ? { abschnitt } : {}),
       sort: g.sort ?? state.gewerke.length,
       // Farbe folgt dem Gewerk, nicht seiner Position: der Platz wird einmal
       // vergeben und bleibt. Sonst färbte sich beim Umsortieren alles um.
@@ -294,6 +297,13 @@ const HANDLERS = {
     // darin sprängen mit, aus Aufbauschritten würden Programmpunkte. Wer eine
     // Bühne will, legt eine an.
     if (cmd.field === 'art') return 'Ein Gewerk wird nicht nachträglich zur Bühne.';
+    // Der Abschnitt DARF wechseln — anders als die Art. Eine Bühne von Setup
+    // nach Show zu schieben ist harmlos: ihre Programmpunkte gehören ihr und
+    // wandern mit. Nur ein Gewerk hat dort nichts zu suchen.
+    if (cmd.field === 'abschnitt') {
+      if (artVon(g) !== 'buehne') return 'Nur Bühnen haben einen Abschnitt.';
+      if (cmd.value !== 'setup' && cmd.value !== 'show') return 'Abschnitt ist «setup» oder «show».';
+    }
     if (cmd.field === 'name') {
       const name = String(cmd.value || '').trim();
       if (!name) return 'Das Gewerk braucht einen Namen.';

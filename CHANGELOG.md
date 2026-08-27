@@ -3,6 +3,48 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.1 — 2026-08-27
+
+**Behoben: neue Programmpunkte landeten am falschen Tag**
+
+Der Knopf «+ Programmpunkt» in der Tabelle gibt es längst — er legte den Punkt
+aber am **letzten Tag des Plans** an statt am gezeigten. `defaultStart()` suchte
+den letzten Programmpunkt über alle Bühnen und alle Tage; bei zwei Showtagen kam
+der letzte des zweiten heraus. Wer am ersten Tag auf einer leeren Bühne etwas
+anlegte, bekam es an den zweiten gehängt — und der Tagesfilter blendete es sofort
+aus. Der Knopf tat also etwas, nur unsichtbar. Jetzt schließt ein neuer Punkt an
+den letzten **des gezeigten Tages** an; ist der Tag leer, beginnt er um 08:00.
+
+Zwei Folgefehler aus derselben Ecke:
+
+- **Eine leere Bühne war im Gantt unsichtbar.** Bänder ohne Vorgänge wurden
+  übersprungen — im Bauzeitenplan richtig (ein leeres Gewerk unter zwanzig wäre
+  Rauschen), im Showablauf falsch: eine frisch angelegte Bühne hat noch nichts,
+  und «+ Bühne» war damit ein Klick ins Nichts.
+- **Zoomstufe und Datumsfeld zeigten etwas anderes als die Achse.** Der Gantt
+  passt sich an zwei Stellen von selbst ein — beim ersten Programmpunkt eines
+  leeren Showablaufs und beim Wiederauftauchen aus der Tabelle. Beides ist
+  asynchron; die Kopfzeile lief hinterher und schrieb schon mal den 25.10. ins
+  Datumsfeld. Der Gantt meldet das jetzt (`onView`), statt dass jemand den
+  Zeitpunkt rät.
+
+**Setup und Show als zwei Ansichten**
+
+Am Showtag gibt es zwei Abläufe mit ganz verschiedenen Uhrzeiten: Load-in und
+Setup bis zum Showstart, danach die Running Order. Sie in einer Achse von 08 bis
+23 Uhr untereinander zu zeigen, wird beidem nicht gerecht.
+
+- Jede **Bühne** gehört einem Abschnitt (`abschnitt: 'setup' | 'show'`), und ein
+  Umschalter **Setup · Show · alle** zeigt jeweils nur die passenden Bänder.
+  Bestehende Bühnen sind «Show» — die Running Order bleibt, wo sie ist.
+- **Jede Ansicht rechnet ihr Zeitfenster selbst**: Setup zeigt den Morgen, Show
+  den Abend. Das fällt ohne Zutun ab, weil `programmFenster` über die sichtbaren
+  Punkte rechnet.
+- Eine **neue Bühne erbt den gezeigten Abschnitt**: wer im Setup-View «+ Bühne»
+  drückt, bekommt eine Setup-Bühne. Im Panel lässt sich der Abschnitt ändern.
+- Der Bauzeitenplan kennt den Umschalter nicht — Gewerke haben keinen Abschnitt,
+  und `migrate()` hängt ihnen auch keinen an.
+
 ## 0.9.0 — 2026-08-26
 
 **Farbige Balken im Showablauf — mit wählbarer Farbe und Schraffur**

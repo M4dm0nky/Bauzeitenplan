@@ -281,7 +281,7 @@ body { margin: 0; }
 /* Bühnen-Häkchen (nur Showablauf). Umbrechend, damit acht Bühnen die
    Werkzeugzeile nicht aus dem Fenster schieben. */
 .buehnen { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
-.seg-tag { flex: none; }
+.seg-tag, .seg-abschnitt { flex: none; }
 .buehne-i { display: flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
 .buehne-i .bz-dot { width: 9px; height: 9px; }
 
