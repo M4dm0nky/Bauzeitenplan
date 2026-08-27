@@ -15,7 +15,7 @@ der Load-In läuft stundengenau.
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
 mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
-**Dazugekommen (bis v0.8.1):** Gewerke per Drag & Drop umsortieren · Gantt und
+**Dazugekommen (bis v0.9.5):** Gewerke per Drag & Drop umsortieren · Gantt und
 Tabelle in gleicher Reihenfolge (nach Startzeit) · **Untervorgänge** (einklappbar,
 Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für kritische
 Vorgänge und Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
@@ -31,7 +31,7 @@ Aufbau, Show, Abbau. Vorgänge gleichen Namens werden zu einer Zeile mit mehrere
 Balken gebündelt; 353 Vorgänge ergeben 153 Zeilen.
 
 **Showablauf** — der Tagesablauf auf den **Bühnen**: Bands, Redner, Umbauten.
-Hier wird **nicht** gebündelt: jeder Programmpunkt trägt seine eigene Zeile,
+Hier wird **nicht** gebündelt: jeder Zeiteintrag trägt seine eigene Zeile,
 chronologisch von oben nach unten, mit der Startzeit vor dem Namen. Die
 Seitenspalte ist damit allein schon der Ablaufplan.
 
@@ -66,7 +66,7 @@ eigener Zeiteintrag im Setup-Abschnitt mit Start und Dauer. Als **Balken** — n
 so siehst du, ob sich zwei Soundchecks überschneiden. Löschst du den Act, geht
 sein Soundcheck mit.
 
-**Farben je Programmpunkt:** Klick auf einen Balken öffnet das Panel rechts, dort
+**Farben je Zeiteintrag:** Klick auf einen Balken öffnet das Panel rechts, dort
 gibt es zehn Farbtöne und einen Schalter für **Schraffur** — aus Rot wird so
 Rot-mit-Schraffur, insgesamt zwanzig unterscheidbare Kombinationen. «Wie Bühne»
 nimmt eine eigene Farbe wieder zurück. Die Balken sind im Showablauf **gefüllt**;
@@ -205,10 +205,10 @@ node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
 Er prüft Verhalten (Sticky-Spalten, Zoomstufen, Pfeilgeometrie, Beschriftungen,
 Jetzt-Linie, Service Worker) und legt Screenshots unter `tools/shots/` ab.
 
-**Screenshots ansehen, nicht nur Häkchen zählen.** Zehn echte Fehler haben in diesem
-Projekt die automatischen Prüfungen passiert und wurden erst im Bild sichtbar —
-zuletzt eine Datumszeile, die links angeschnitten war, und ein «SHOW END», das
-über die Blattkante lief.
+**Screenshots ansehen, nicht nur Häkchen zählen.** Ein Dutzend echter Fehler hat in
+diesem Projekt die automatischen Prüfungen passiert und wurde erst im Bild sichtbar
+— zuletzt ein Zoom-Umschalter auf «Monate» über einer Stundenachse und ein
+Soundcheck, den die Vorgabe eine Stunde vor den Act setzte statt an den Nachmittag.
 
 ## Deploy
 
@@ -253,12 +253,12 @@ js/
   gantt.js              Render-Engine (DOM, Zoom, Pfeile, Tooltip, Minimap)
   table.js              Tabellen-Editor
   schedule.js           Terminrechnung: CPM, Topo-Sort, kritischer Pfad — DOM-frei
-  conflicts.js          Konflikte + Auflösen + Dauer-Kurzform — DOM-frei
+  conflicts.js          Konflikte, Dauer-Kurzform, Uhrzeit-Eingabe — DOM-frei
   timeaxis.js           Zeit ↔ Pixel, Zoomstufen, Ticks, Kalenderwochen — DOM-frei
   templates.js          Vier Vorlagen (Festival, Tour, Corporate, Messe)
   persistence.js        localStorage, Export/Import, Migration — DOM-frei
   palette.js            Gewerk-Farben: 10 Töne × 2 Schraffuren = 20 Plätze
-  ebene.js              Bauzeitenplan ↔ Showablauf: Bänder, Showtage, Fenster — DOM-frei
+  ebene.js              Ansichten: Bänder, Abschnitt, Showtage, Zeitfenster — DOM-frei
   live.js               Verzug + laufende Vorgänge — DOM-frei
   inspector.js          Seitenpanel (mit Verknüpfungs-Suche)
   menu.js               Kontextmenü
@@ -309,7 +309,9 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | Untervorgänge (Eltern = Hülle, einklappbar) · Handy/Tablet-tauglich |
 | ✅ | Prüf-Liste (kritisch & Konflikte sehen/zeigen/abhaken) · Verknüpfungs-Suche |
 | ✅ | Tagesblätter zum Drucken (ein A3 quer je Tag) |
-| ✅ | Showablauf-Ebene: Bühnen, Anforderungen/Material, Live-Kopfzeile, Running-Order-Blatt |
+| ✅ | Showablauf: Bühnen, Anforderungen/Material, Live-Kopfzeile, Running-Order-Blatt |
+| ✅ | Setup und Show als eigene Ansichten · Soundchecks als Zeiteinträge mit Balken |
+| ✅ | Farbe je Zeiteintrag (zehn Töne × Schraffur), Schrift auf der Farbe gerechnet |
 | → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen, Verknüpfungen ziehen |
 | | Ansichten & Export: öffentlicher Link, PDF/ICS |
 | ❄️ | PocketBase, Login, Rollen — auf Eis, Stand im Branch `pocketbase-vorbereitung` |
@@ -326,6 +328,6 @@ sind (gestrichelte Kante, Grund in der Notiz). Neu gebaut wird er mit
 diesem Werkzeug. **Keine Verknüpfungen** — V07 ist ein terminierter Kalender,
 und erfundene Abhängigkeiten erzeugten rote Konflikte ohne Wirklichkeitsbezug.
 
-Dazu die **Running Order** beider Showtage (Stand 05.08.2026, 32 Programmpunkte
+Dazu die **Running Order** beider Showtage (Stand 05.08.2026, 32 Zeiteinträge
 auf der Hauptbühne) für die Showablauf-Ebene. Anforderungen und Material bleiben
 dort leer — die trägt man von Hand ein, dafür ist die Ansicht da.

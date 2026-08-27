@@ -21,15 +21,17 @@ node tools/verify-showablauf.mjs # Showablauf: Ebene, Bühnen, Live-Kopfzeile, B
 Beides muss grün sein, bevor etwas als fertig gilt. `verify-browser.mjs` braucht
 einmalig `npx playwright install firefox`.
 
-**Screenshots ansehen, nicht nur die Häkchen zählen.** Acht echte Fehler haben in
-diesem Projekt die automatischen Prüfungen passiert und wurden erst im Bild sichtbar:
-Pfeile quer über die Gewerk-Spalte, unsichtbare Phasennamen, Beschriftungen ohne
-Balken, eine auf „J" zusammengeschnurrte JETZT-Fahne, zehn Zeilen ohne Balken im
-Showablauf, „Changeover: Changeover", ein Platzhaltertext in siebzehn Tabellenzeilen,
-der wie eingetragener Inhalt aussah, ein Showtag, der nur zwei Drittel des Bildes
-füllte, eine links angeschnittene Datumszeile und ein «12:00 Uhr», bei dem das
-«Uhr» in eine zweite Zeile rutschte. Für jeden gibt es jetzt eine Prüfung — der
-nächste Fehler dieser Art hat aber noch keine.
+**Screenshots ansehen, nicht nur die Häkchen zählen.** Ein Dutzend echter Fehler
+hat in diesem Projekt die automatischen Prüfungen passiert und wurde erst im Bild
+sichtbar: Pfeile quer über die Gewerk-Spalte, unsichtbare Phasennamen,
+Beschriftungen ohne Balken, eine auf „J" zusammengeschnurrte JETZT-Fahne, zehn
+Zeilen ohne Balken im Showablauf, «Changeover: Changeover», ein Platzhaltertext in
+siebzehn Tabellenzeilen, der wie eingetragener Inhalt aussah, ein Showtag, der nur
+zwei Drittel des Bildes füllte, eine links angeschnittene Datumszeile, ein
+«12:00 Uhr», bei dem das «Uhr» in eine zweite Zeile rutschte, ein Zoom-Umschalter
+auf «Monate» über einer Stundenachse, und ein Soundcheck, den die Vorgabe auf
+19:40 setzte — eine Stunde vor den Act statt an den Nachmittag. Für jeden gibt es
+jetzt eine Prüfung — der nächste Fehler dieser Art hat aber noch keine.
 
 **Neue Bausteine gehören in die `needed`-Liste in `tests/run.mjs`.** Sonst kennt
 sie nur das Theme, in dem sie entstanden sind, und in den vier anderen fehlen sie

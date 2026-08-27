@@ -110,7 +110,7 @@ Ein Test deckt den DST-Übergang ab.
 
 Ein Bauzeitenplan und ein Showablauf sehen verschieden aus, haben aber dieselbe
 **Form**: eine benannte, sortierbare, eingefärbte Spur mit Vorgängen darin. Deshalb
-ist eine **Bühne technisch ein Gewerk mit `art:'buehne'`** und ein Programmpunkt ein
+ist eine **Bühne technisch ein Gewerk mit `art:'buehne'`** und ein Zeiteintrag ein
 normaler Vorgang darin (`js/ebene.js`). Der Preis der Alternative wäre ein zweiter
 Store, ein zweites Undo und eine zweite Persistenz gewesen — für dasselbe Verhalten.
 
@@ -135,6 +135,77 @@ nach Plan lief. Das ist keine Verspätung, sondern eine fehlende Rückmeldung. D
 «Status wird nie automatisch gesetzt» bleibt unberührt: gefiltert wird die Anzeige,
 nicht die Rechnung.
 
+## Der Abschnitt: Setup und Show sind zwei Abläufe DERSELBEN Bühne
+
+Am Showtag laufen zwei Dinge mit ganz verschiedenen Uhrzeiten und verschiedenen
+Lesern: Load-in und Setup bis zum Showstart, danach die Running Order. In beides
+in eine Achse von 08 bis 23 Uhr zu quetschen, wird keinem gerecht.
+
+Der Abschnitt hängt am **Zeiteintrag** (`abschnitt: 'setup'|'show'`), nicht am
+Band. Der erste Versuch (v0.9.1) hängte ihn an die Bühne — das erzwang zwei
+Bänder «Hauptbühne Setup» und «Hauptbühne Show», und der Store verbietet doppelte
+Bühnennamen, man hätte sie künstlich verschieden benennen müssen. Es gibt aber
+EINE Bühne mit zwei Abläufen.
+
+Deshalb filtert `sichtGewerke` **nicht** nach Abschnitt, `imAbschnitt` filtert die
+Einträge: die Bühne bleibt in beiden Ansichten stehen, auch wenn sie dort noch
+nichts hat — genau da legt man den ersten Setup-Eintrag an. Jede Ansicht rechnet
+ihr Zeitfenster selbst (`programmFenster`), Setup zeigt den Morgen, Show den Abend.
+
+**Die Oberfläche kennt drei Ansichten, das Modell zwei Ebenen plus Abschnitt.**
+Bauzeitenplan · Setup · Show stehen in EINER Leiste, genau eine ist gedrückt.
+Vorher waren es zwei Umschalter im selben Stil nebeneinander, mit je einem
+dunklen Knopf — das las sich als eine Leiste mit zwei gleichzeitig angewählten
+Knöpfen, und niemand fand, wie man zwischen Setup und Show wechselt. **Zwei gleich
+aussehende Segmentgruppen nebeneinander SIND eine Gruppe, egal was der Code
+meint.** «Alle» gibt es dafür nicht mehr; der Durchlass lebt in `imAbschnitt`
+weiter, eine vierte Stufe wäre ohne Umbau nachrüstbar.
+
+## Ein Soundcheck ist ein Zeiteintrag, kein Feld
+
+Als Feld am Act (`soundcheck`, bis v0.9.3) war er ein Startzeitpunkt ohne Dauer
+und ohne Ende. Er tauchte damit in keiner Zeitachse auf — ob sich zwei
+Soundchecks überschneiden, sah niemand, und genau das ist die Frage, die man am
+Nachmittag beantworten muss.
+
+Jetzt ist er ein normaler Eintrag im Setup-Abschnitt mit `fuer: <taskId>` — Text-id,
+nie Relation, wie `parent`. Damit hat er Balken, Dauer, Farbe, Notiz und
+Anforderungen geschenkt. Bedient wird er aus dem Panel des Acts; das ist der
+bequeme Weg dorthin, kein zweiter Speicherort. `removeTask` kaskadiert über
+`fuer`, sonst bliebe eine Waise mit toter Zuordnung zurück.
+
+## Farbe: gewählt AUS der Palette, nie neu definiert
+
+Ein Zeiteintrag darf eine eigene Farbe tragen (`slot` am Vorgang, `null` = erbt
+von der Bühne); ein Gewerk nicht. Der Unterschied hat einen Grund: im
+Bauzeitenplan stehen 20 Gewerke untereinander, und genau dafür ist die Farbsuche
+gemacht. Auf einer Bühne stehen selten mehr als zwei, drei Bänder.
+
+Gewählt wird immer aus der validierten Palette — zehn Töne × Schraffur, weil ein
+Farbplatz genau dieses Paar IST (`slotAus`/`hueVon`). Deshalb reichen zehn Punkte
+und ein Häkchen für zwanzig Kombinationen.
+
+**Neben jedem Farbton steht seine Schriftfarbe (`--gw-t-*`), und die ist ebenfalls
+gerechnet.** Gefüllte Balken tragen ihre Beschriftung auf der Farbe. Weiß erreicht
+auf Gelb nur 2,17:1; gewählt ist je Ton die Tinte, die in hell UND dunkel über 3:1
+bleibt — dunkel auf sieben Tönen, weiß auf Violett, Grün und Ocker. Eine statische
+Prüfung rechnet das bei jedem Testlauf nach.
+
+## Zeitfelder im Showablauf tragen kein Datum
+
+Der Tag steht im Umschalter; zwei Spalten à 205 px für dieselbe Information
+drängten die Anforderungen aus dem Bild. Zwei Fallen, die das Datum verdeckt hatte
+— beide als reine Funktionen in `conflicts.js`:
+
+- **`mitUhrzeit` behält den Datumsteil.** Ein Eintrag vom Vortag ist über den
+  Tagesfilter auch am Folgetag sichtbar; schriebe das Feld den GEZEIGTEN Tag,
+  spränge er beim ersten Antippen einen Tag weit.
+- **`endeNachStart`: Ende vor Start meint den Folgetag.** «22:00 bis 03:00» ist
+  die selbstverständliche Schreibweise. Der Folgetag kommt über den Kalender,
+  nicht über +1440 Minuten — der 25.10.2026 hat 25 Stunden.
+
+Im Bauzeitenplan bleiben die Felder datiert: er läuft über vierzehn Tage.
+
 ## PocketBase liegt auf Eis
 
 Eine fertige Login- und Rollenschicht lag von v0.3.0 bis v0.7.1 **bewusst uncommittet**
@@ -156,6 +227,7 @@ die Crewplaner-Lehren weiter oben in dieser Datei gelten dann wieder.
 
 Drag & Drop der Balken im Gantt sowie Ansichten & Export (öffentlicher Link, PDF/ICS).
 Darstellung, Bearbeiten, Live-Modus, Untervorgänge, Prüf-Liste, Verknüpfungs-Suche,
-Tagesblätter und die Showablauf-Ebene stehen (Stand v0.8.1). Startdaten kommen aus den
+Tagesblätter und der Showablauf mit Setup, Farben und Soundchecks stehen
+(Stand v0.9.5). Startdaten kommen aus den
 Vorlagen (`js/templates.js`) bzw. importierten JSON-Plänen — einen
 `js/data.js`-Demo-Datensatz gibt es nicht mehr.

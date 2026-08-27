@@ -106,3 +106,19 @@ Drei Farben (Rigging, Licht, Ton) liegen auf hellem Grund unter 3:1 Kontrast. Da
 ist bekannt und zulässig, solange die Reliefregel greift: Identität hängt nie an
 der Farbe allein. Deshalb hat **jeder Balken eine sichtbare Beschriftung** und die
 Legende trägt Namen, nicht nur Punkte. Wer das entfernt, bricht die Barrierefreiheit.
+
+## Schrift AUF der Farbe (`--gw-t-*`)
+
+Im Showablauf sind die Balken gefüllt, die Beschriftung steht also auf der
+Gewerkfarbe. Neben jedem Ton steht deshalb in `base.css` eine **gerechnete**
+Schriftfarbe: je Ton die Tinte, die in hell UND dunkel über 3:1 bleibt. Weiß
+erreicht auf Gelb nur 2,17:1, dunkle Tinte dagegen 8,23:1; auf Violett, Grün und
+Ocker ist es umgekehrt.
+
+Feste Werte, absichtlich ohne Dunkel-Scope — der Balken ist in beiden Modi
+kräftig, und die Wahl trägt in beiden. **Wer an `--gw-*` dreht, muss hier
+mitrechnen**; die statische Prüfung «Schrift auf Gewerkfarbe hält 3:1 — in hell
+UND dunkel» in `tests/run.mjs` schlägt sonst an.
+
+Ein Theme definiert diese Werte **nicht** neu — sie gehören zur Palette, nicht zur
+Gestaltung.
