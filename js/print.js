@@ -521,8 +521,13 @@ function fuss() {
 // ── Start ───────────────────────────────────────────────────────────────────
 ladePlan().then((plan) => {
   PLAN = plan;
-  const q = new URLSearchParams(location.search).get('ebene');
-  if (q === 'show' && sichtGewerke(PLAN, 'show').length) wahl.ebene = 'show';
+  // `?ansicht=setup|show` wie in der App; `?ebene=show` bleibt verstanden (es
+  // steht in Lesezeichen und in CLAUDE.md). Das Blatt kennt nur Bau oder Show —
+  // Setup und Show landen beide auf der Running-Order-Liste.
+  const q = new URLSearchParams(location.search);
+  const a = q.get('ansicht');
+  const showGewuenscht = a === 'setup' || a === 'show' || q.get('ebene') === 'show';
+  if (showGewuenscht && sichtGewerke(PLAN, 'show').length) wahl.ebene = 'show';
   baender().forEach((g) => wahl.gewerke.add(g.id));
   const alle = gewaehlteTasks().map((t) => toMin(t.start));
   const min = alle.length ? Math.min(...alle) : toMin(PLAN.project.start);

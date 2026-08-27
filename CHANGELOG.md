@@ -3,6 +3,48 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.3 — 2026-08-27
+
+**Ein Umschalter statt zwei: Bauzeitenplan · Setup · Show**
+
+In der Werkzeugzeile standen zwei Segmentgruppen im selben Stil nebeneinander —
+Ebene und Abschnitt — mit je einem dunkel hinterlegten Knopf:
+
+```
+BAUZEITENPLAN [SHOWABLAUF]  [SETUP] SHOW ALLE  [GANTT] TABELLE
+```
+
+Das las sich als **eine** Leiste, in der zwei Dinge gleichzeitig angewählt sind,
+und niemand fand, wie man zwischen Setup und Show wechselt. Technisch stimmte der
+Zustand, die Oberfläche behauptete etwas anderes.
+
+Jetzt gibt es **einen** Umschalter mit drei gleichrangigen Ansichten, in der
+Reihenfolge des Tages — Bauzeitenplan, dann Setup, dann Show. Genau eine ist
+gedrückt, man klickt direkt hin und her.
+
+- `?ansicht=bau|setup|show` steuert das von außen. Die alten `?ebene=` und
+  `?abschnitt=` werden weiter verstanden und übersetzt; ein gemerkter Stand aus
+  0.9.2 wird beim ersten Start übernommen.
+- Das **Datenmodell bleibt unverändert**: zwei Ebenen plus Abschnitt am
+  Zeiteintrag. `app.js` leitet beides aus einem Zustand ab.
+- Neue Prüfungen, die genau diesen Fehler gefunden hätten: **immer genau eine**
+  Ansicht ist gedrückt, die Reihenfolge stimmt, und der Wechsel greift wirklich
+  statt nur die Markierung zu setzen.
+
+**Was dabei wegfällt**
+
+«Alle» gibt es nicht mehr. Der komplette Showtag — Load-in bis Show-Ende in einer
+durchgehenden Achse — lässt sich damit nicht mehr in einem Bild sehen; der
+Bauzeitenplan ist dafür kein Ersatz, er zeigt Gewerke statt Bühnen. Der
+Durchlass-Fall lebt intern weiter (`imAbschnitt` lässt alles durch, was nicht
+`setup` oder `show` ist), eine vierte Stufe wäre also ohne Umbau nachrüstbar.
+
+**Nebenbei**
+- `ABSCHNITTE` listet nur noch die beiden Werte, die ein Zeiteintrag tragen kann.
+  Tabelle und Panel bauen ihre Auswahlfelder daraus und mussten «alle» bisher
+  jedes Mal herausfiltern.
+- Die Druckseite versteht `?ansicht=` ebenfalls.
+
 ## 0.9.2 — 2026-08-27
 
 **Eine Bühne, zwei Abläufe — statt zwei Bühnen**

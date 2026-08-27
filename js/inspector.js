@@ -241,7 +241,6 @@ export function createInspector(root, { store, onError, onClose } = {}) {
       // Bühne. Deshalb hängt der Abschnitt am Eintrag, nicht am Band.
       const asel = el('select');
       for (const [v, label] of ABSCHNITTE) {
-        if (v === 'alle') continue;          // Filterwert des Umschalters
         const o = el('option', null, label);
         o.value = v;
         if (v === abschnittOf(t)) o.selected = true;

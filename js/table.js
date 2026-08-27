@@ -218,7 +218,6 @@ export function createTable(root, { store, onConflicts } = {}) {
       const ab = el('td', 'c-abs');
       const asel = el('select');
       for (const [v, label] of ABSCHNITTE) {
-        if (v === 'alle') continue;          // Filterwert des Umschalters, kein Eintragswert
         const o = el('option', null, label);
         o.value = v;
         if (v === (t.abschnitt === 'setup' ? 'setup' : 'show')) o.selected = true;

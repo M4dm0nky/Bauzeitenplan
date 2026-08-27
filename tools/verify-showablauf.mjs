@@ -73,7 +73,7 @@ await check('der Bauzeitenplan bündelt weiter und trägt KEINE Uhrzeit in der S
   return n === 1 ? true : n + ' Zeilen für «Aufbau Bühne» — die Bündelung ist mit weggefallen';
 });
 
-await p.locator('[data-ebene="show"]').click();
+await p.locator('[data-ansicht="show"]').click();
 await p.waitForTimeout(700);
 
 await check('der Showablauf zeigt genau die Bühne', async () => {
@@ -193,12 +193,12 @@ await check('die Balken sind GEFÜLLT, nicht nur umrandet', async () => {
 });
 
 await check('im Bauzeitenplan bleiben sie umrandet', async () => {
-  await p.locator('[data-ebene="bau"]').click();
+  await p.locator('[data-ansicht="bau"]').click();
   await p.waitForTimeout(700);
   const bg = await p.locator('.bz-bar.bz-st-geplant').first()
     .evaluate((n) => getComputedStyle(n).backgroundColor);
   const leer = /transparent|rgba\(0, 0, 0, 0\)/.test(bg);
-  await p.locator('[data-ebene="show"]').click();
+  await p.locator('[data-ansicht="show"]').click();
   await p.waitForTimeout(700);
   return leer ? true : 'auch dort gefüllt: ' + bg;
 });
@@ -296,12 +296,12 @@ await check('«wie Bühne» nimmt die eigene Farbe zurück', async () => {
 
 await check('im Bauzeitenplan gibt es keine Farbwahl', async () => {
   // Dort ist die Zuordnung gerechnet (docs/farbsuche.md) und bleibt es.
-  await p.locator('[data-ebene="bau"]').click();
+  await p.locator('[data-ansicht="bau"]').click();
   await p.waitForTimeout(600);
   await p.locator('.bz-bar').first().click();
   await p.waitForTimeout(500);
   const da = await p.locator('#ins .ins-farbe').count();
-  await p.locator('[data-ebene="show"]').click();
+  await p.locator('[data-ansicht="show"]').click();
   await p.waitForTimeout(700);
   return da === 0 ? true : 'die Farbwahl steht auch im Bauzeitenplan';
 });
@@ -393,7 +393,7 @@ await p.waitForTimeout(300);
 await p.screenshot({ path: join(here, 'shots', 'showablauf-tabelle.png') });
 
 await check('der Bauzeitenplan hat KEINE der neuen Spalten', async () => {
-  await p.locator('[data-ebene="bau"]').click();
+  await p.locator('[data-ansicht="bau"]').click();
   await p.waitForTimeout(500);
   const th = (await p.locator('.tb-t th').allTextContents()).map((x) => x.trim());
   const zuviel = ['Typ', 'Abschnitt', 'Soundcheck', 'Kontakt', 'Anforderungen', 'Material'].filter((x) => th.includes(x));
@@ -403,7 +403,7 @@ await check('der Bauzeitenplan hat KEINE der neuen Spalten', async () => {
 
 // ── Live-Kopfzeile ──────────────────────────────────────────────────────────
 console.log('\nLIVE-KOPFZEILE (Uhr auf Sa 29.08.2026, 15:30)');
-await p.locator('[data-ebene="show"]').click();
+await p.locator('[data-ansicht="show"]').click();
 await p.locator('[data-view="gantt"]').click();
 await p.waitForTimeout(400);
 await p.locator('#live').click();
@@ -431,17 +431,17 @@ await check('die laufende Zeile ist hervorgehoben', async () =>
   (await p.locator('.bz-bar.is-run, .bz-row.is-run, .is-running').count()) > 0
     ? true : 'nichts markiert');
 await check('im Bauzeitenplan bleibt die Kopfzeile weg', async () => {
-  await p.locator('[data-ebene="bau"]').click();
+  await p.locator('[data-ansicht="bau"]').click();
   await p.waitForTimeout(400);
   return (await p.locator('#showhead').isHidden()) ? true : 'sie steht auch dort';
 });
-await p.locator('[data-ebene="show"]').click();
+await p.locator('[data-ansicht="show"]').click();
 await p.waitForTimeout(500);
 await p.screenshot({ path: join(here, 'shots', 'showablauf-live.png') });
 
 // ── Running-Order-Blatt ─────────────────────────────────────────────────────
 console.log('\nRUNNING-ORDER-BLATT (A3 quer)');
-await p.goto(BASE + '/print.html?plan=klassentreffen&ebene=show');
+await p.goto(BASE + '/print.html?plan=klassentreffen&ansicht=show');
 await p.waitForSelector('.pr-ro', { timeout: 20000 });
 await p.waitForTimeout(700);
 
@@ -520,8 +520,8 @@ await p.locator('.pr-ro').first().screenshot({ path: join(here, 'shots', 'showab
 // ── Setup-Abschnitt: anlegen und wiederfinden ───────────────────────────────
 console.log('\nSETUP-ABSCHNITT');
 
-await p.goto(BASE + '/index.html?plan=klassentreffen&ebene=show&abschnitt=setup');
-await p.waitForSelector('#abschnitt', { timeout: 20000 });
+await p.goto(BASE + '/index.html?plan=klassentreffen&ansicht=setup');
+await p.waitForSelector('[data-ansicht="setup"][aria-pressed="true"]', { timeout: 20000 });
 await p.waitForTimeout(900);
 
 await check('die Bühne steht in BEIDEN Abschnitten — sie ist dieselbe', async () => {
@@ -566,7 +566,7 @@ await check('EIN NEUER ZEITEINTRAG LANDET IM GEZEIGTEN ABSCHNITT UND TAG', async
 });
 
 await check('im Show-Abschnitt ist er WEG — dieselbe Bühne, anderer Ablauf', async () => {
-  await p.locator('[data-abschnitt="show"]').click();
+  await p.locator('[data-ansicht="show"]').click();
   await p.waitForTimeout(800);
   const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
   if (namen.some((x) => /Neuer Zeiteintrag/.test(x))) return 'der Setup-Eintrag steht in der Show';
@@ -574,7 +574,7 @@ await check('im Show-Abschnitt ist er WEG — dieselbe Bühne, anderer Ablauf', 
   // Und die Bühne heißt in beiden dasselbe — sie ist dieselbe.
   const band = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
   if (band.join('|') !== 'Hauptbühne') return 'Bänder in der Show: ' + band.join('|');
-  await p.locator('[data-abschnitt="setup"]').click();
+  await p.locator('[data-ansicht="setup"]').click();
   await p.waitForTimeout(800);
   return true;
 });
@@ -600,29 +600,48 @@ if ((await p.locator('#live').getAttribute('aria-pressed')) === 'true') {
 }
 await p.screenshot({ path: join(here, 'shots', 'showablauf-setup.png') });
 
-await check('«alle» zeigt Setup UND Show in einer Liste', async () => {
-  await p.locator('[data-abschnitt="alle"]').click();
-  await p.waitForTimeout(800);
-  const band = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
-  if (band.join('|') !== 'Hauptbühne') return 'Bänder: ' + band.join('|');
-  const n = await p.locator('.bz-lab-task').count();
-  return n === 18 ? true : n + ' Zeiteinträge, erwartet 18 (17 Show + 1 Setup)';
+await check('IMMER GENAU EINE Ansicht ist gedrückt', async () => {
+  // Der Fehler, der das ausgelöst hat: zwei Umschalter im selben Stil
+  // nebeneinander, mit je einem dunklen Knopf. Das las sich als eine Leiste, in
+  // der zwei Dinge gleichzeitig angewählt sind.
+  for (const a of ['bau', 'setup', 'show']) {
+    await p.locator(`[data-ansicht="${a}"]`).click();
+    await p.waitForTimeout(700);
+    const an = await p.locator('[data-ansicht][aria-pressed="true"]').allTextContents();
+    if (an.length !== 1) return a + ': ' + an.length + ' gedrückt (' + an.join(' ') + ')';
+    const soll = { bau: 'Bauzeitenplan', setup: 'Setup', show: 'Show' }[a];
+    if (an[0].trim() !== soll) return a + ': gedrückt ist «' + an[0].trim() + '»';
+  }
+  return true;
 });
 
+await check('die Reihenfolge ist Bauzeitenplan, Setup, Show', async () => {
+  const namen = (await p.locator('[data-ansicht]').allTextContents()).map((x) => x.trim());
+  return namen.join(' · ') === 'Bauzeitenplan · Setup · Show' ? true : namen.join(' · ');
+});
 
+await check('der Wechsel greift wirklich, nicht nur die Markierung', async () => {
+  await p.locator('[data-ansicht="setup"]').click();
+  await p.waitForTimeout(800);
+  const imSetup = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
+  await p.locator('[data-ansicht="show"]').click();
+  await p.waitForTimeout(800);
+  const inShow = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
+  if (imSetup.length === inShow.length) return 'beide zeigen ' + inShow.length + ' Zeilen';
+  if (inShow.length !== 17) return 'die Show zeigt ' + inShow.length + ' Zeiteinträge statt 17';
+  return imSetup.some((x) => /Neuer Zeiteintrag/.test(x)) ? true : 'im Setup fehlt der angelegte Eintrag';
+});
 
-await check('der Bauzeitenplan kennt den Umschalter nicht', async () => {
-  await p.locator('[data-ebene="bau"]').click();
-  await p.waitForTimeout(600);
-  const versteckt = await p.locator('#abschnitt').isHidden();
-  await p.locator('[data-ebene="show"]').click();
-  await p.waitForTimeout(700);
-  return versteckt ? true : 'die Abschnitts-Umschaltung steht auch dort';
+await check('kein zweiter Umschalter mehr in der Werkzeugzeile', async () => {
+  // Nur KNÖPFE: der Gantt-Container trägt weiterhin ein `data-ebene`, damit das
+  // CSS die gefüllten Balken je Ebene setzen kann. Das ist kein Umschalter.
+  const alt = await p.locator('button[data-ebene], button[data-abschnitt]').count();
+  return alt === 0 ? true : alt + ' Knöpfe des alten Umschalters stehen noch da';
 });
 
 // ── Dunkel und schmal ───────────────────────────────────────────────────────
 console.log('\nDUNKEL UND SCHMAL');
-await p.goto(BASE + '/index.html?plan=klassentreffen&ebene=show');
+await p.goto(BASE + '/index.html?plan=klassentreffen&ansicht=show');
 await p.waitForSelector('.bz-lab', { timeout: 20000 });
 await p.waitForTimeout(800);
 
@@ -702,7 +721,7 @@ try {
 if (chromeExe && existsSync(chromeExe)) {
   const cb = await chromium.launch({ executablePath: chromeExe });
   const cp = await cb.newPage();
-  await cp.goto(BASE + '/print.html?plan=klassentreffen&ebene=show');
+  await cp.goto(BASE + '/print.html?plan=klassentreffen&ansicht=show');
   await cp.waitForSelector('.pr-ro', { timeout: 20000 });
   await cp.waitForTimeout(600);
   const out = join(here, 'shots', 'running-order-a3.pdf');

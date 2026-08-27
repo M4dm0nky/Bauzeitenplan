@@ -13,7 +13,7 @@ import { slotsExhausted, MAX_SLOTS, gewerkVar, gewerkTexture } from './palette.j
 import { createInspector } from './inspector.js';
 import { openMenu } from './menu.js';
 import { liveStats, runningAt, nextUp, delaysAt } from './live.js';
-import { sichtGewerke, sichtTasks, typHinweis, programmTage, ABSCHNITTE } from './ebene.js';
+import { sichtGewerke, sichtTasks, typHinweis, programmTage } from './ebene.js';
 import { toMin, toDate } from './schedule.js';
 import { $, el, escapeHtml } from './dom.js';
 import { VERSION } from './version.js';
@@ -23,34 +23,54 @@ import { VERSION } from './version.js';
 let repo = null;
 let store = null, gantt = null, table = null, inspector = null, view = 'gantt';
 
-// ── Ebene ───────────────────────────────────────────────────────────────────
-// «bau» = die ganze Veranstaltung (Gewerke), «show» = der Ablauf auf den Bühnen
-// (js/ebene.js). Anzeige-Zustand, nicht Plandaten: er lebt in localStorage und
-// ist über ?ebene=show übersteuerbar — die Prüfwerkzeuge hängen daran.
+// ── Ansicht ─────────────────────────────────────────────────────────────────
+// DREI gleichrangige Ansichten in EINER Leiste, in der Reihenfolge des Tages:
+// Bauzeitenplan · Setup · Show. Genau eine ist gedrückt.
 //
-// EIN Besitzer: setEbene() ist der einzige Schreiber. Gantt und Tabelle
-// bekommen sie gereicht, sie entscheiden nichts selbst.
+// Vorher waren es zwei Umschalter — Ebene und Abschnitt — im selben Stil
+// nebeneinander, mit je einem dunklen Knopf. Das las sich als eine Leiste, in
+// der zwei Dinge gleichzeitig angewählt sind, und man wusste nicht, wie man
+// zwischen Setup und Show wechselt.
+//
+// Das DATENMODELL bleibt zweiteilig (Ebene + Abschnitt, siehe js/ebene.js);
+// hier wird nur beides aus einem Zustand abgeleitet:
+//
+//   bau   → ebene 'bau',  abschnitt 'alle'  (greift dort ohnehin nicht)
+//   setup → ebene 'show', abschnitt 'setup'
+//   show  → ebene 'show', abschnitt 'show'
+//
+// EIN Besitzer: setAnsicht() ist der einzige Schreiber. Gantt und Tabelle
+// bekommen Ebene UND Abschnitt gereicht, sie entscheiden nichts selbst.
+const ANSICHTEN = ['bau', 'setup', 'show'];
+let ansicht = 'bau';
+// Abgeleitet, nie von Hand gesetzt: setAnsicht() schreibt alle drei zusammen.
 let ebene = 'bau';
-const ausBlend = new Set();   // ausgeblendete Bühnen (nur in der Show-Ebene)
+let abschnitt = 'alle';
+const ebeneVon = (a) => (a === 'bau' ? 'bau' : 'show');
+const abschnittVon = (a) => (a === 'bau' ? 'alle' : a);
+
+const ausBlend = new Set();   // ausgeblendete Bühnen (nur im Showablauf)
 // Der gezeigte Showtag. Eine Running Order ist tagesbezogen: beide Showtage
 // nebeneinander ergäben zehn Zeilen ohne Balken — genau die Fehlerart, die in
 // diesem Projekt schon dreimal erst auf dem Screenshot aufgefallen ist.
 let showTag = null;
-// Setup (Load-in bis Showstart), Show (die Running Order) oder beides. Anzeige-
-// Zustand wie die Ebene: localStorage, übersteuerbar per ?abschnitt=setup.
-let abschnitt = 'alle';
 
-const startAbschnitt = () => {
-  const q = new URLSearchParams(location.search).get('abschnitt');
-  if (ABSCHNITTE.some(([k]) => k === q)) return q;
-  const gemerkt = localStorage.getItem('bzp_abschnitt');
-  return ABSCHNITTE.some(([k]) => k === gemerkt) ? gemerkt : 'alle';
-};
-
-const startEbene = () => {
-  const q = new URLSearchParams(location.search).get('ebene');
-  if (q === 'show' || q === 'bau') return q;
-  return localStorage.getItem('bzp_ebene') === 'show' ? 'show' : 'bau';
+const startAnsicht = () => {
+  const q = new URLSearchParams(location.search);
+  const neu = q.get('ansicht');
+  if (ANSICHTEN.includes(neu)) return neu;
+  // Die alten Parameter aus v0.8.0–0.9.2 weiter verstehen: sie stehen in
+  // Lesezeichen, in CLAUDE.md und in den Prüfwerkzeugen.
+  const e = q.get('ebene'), a = q.get('abschnitt');
+  if (e === 'bau') return 'bau';
+  if (e === 'show') return a === 'setup' ? 'setup' : 'show';
+  const gemerkt = localStorage.getItem('bzp_ansicht');
+  if (ANSICHTEN.includes(gemerkt)) return gemerkt;
+  // Und den gemerkten Stand einer laufenden Sitzung nicht wegwerfen.
+  if (localStorage.getItem('bzp_ebene') === 'show') {
+    return localStorage.getItem('bzp_abschnitt') === 'setup' ? 'setup' : 'show';
+  }
+  return 'bau';
 };
 
 // ── Mitgelieferte Pläne ─────────────────────────────────────────────────────
@@ -238,14 +258,10 @@ function mount() {
   });
 
   // ── Ebene ──
-  document.querySelectorAll('button[data-ebene]').forEach((b) => {
-    b.onclick = () => setEbene(b.dataset.ebene);
+  document.querySelectorAll('button[data-ansicht]').forEach((b) => {
+    b.onclick = () => setAnsicht(b.dataset.ansicht);
   });
-  document.querySelectorAll('button[data-abschnitt]').forEach((b) => {
-    b.onclick = () => { abschnitt = b.dataset.abschnitt; setEbene('show'); };
-  });
-  abschnitt = startAbschnitt();
-  setEbene(startEbene());
+  setAnsicht(startAnsicht());
 
   // ── Projekt ──
   $('proj-menu').onclick = () => showProjectDialog({});
@@ -295,12 +311,15 @@ function setView(v) {
 }
 
 // ── Ebene wechseln ──────────────────────────────────────────────────────────
-// Der EINZIGE Ort, der über die Ebene entscheidet. Gantt und Tabelle bekommen
-// sie gereicht; der Rest der Kopfzeile richtet sich danach aus.
-function setEbene(name) {
-  ebene = name === 'show' ? 'show' : 'bau';
-  localStorage.setItem('bzp_ebene', ebene);
-  document.querySelectorAll('button[data-ebene]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ebene === ebene)));
+// Der EINZIGE Ort, der über die Ansicht entscheidet. Gantt und Tabelle bekommen
+// Ebene und Abschnitt gereicht; der Rest der Kopfzeile richtet sich danach aus.
+function setAnsicht(name) {
+  ansicht = ANSICHTEN.includes(name) ? name : 'bau';
+  ebene = ebeneVon(ansicht);
+  abschnitt = abschnittVon(ansicht);
+  localStorage.setItem('bzp_ansicht', ansicht);
+  document.querySelectorAll('button[data-ansicht]')
+    .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ansicht === ansicht)));
   // Eine Bühne, die es nicht mehr gibt, darf nicht ewig ausgeblendet bleiben.
   const da = new Set(sichtGewerke(store.state, 'show').map((g) => g.id));
   for (const id of [...ausBlend]) if (!da.has(id)) ausBlend.delete(id);
@@ -313,11 +332,6 @@ function setEbene(name) {
     showTag = tage.includes(jetzt) ? jetzt : (tage[0] || null);
   }
   if (ebene !== 'show') showTag = null;
-
-  localStorage.setItem('bzp_abschnitt', abschnitt);
-  $('abschnitt').hidden = ebene !== 'show';
-  document.querySelectorAll('button[data-abschnitt]')
-    .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.abschnitt === abschnitt)));
 
   gantt.setEbene(ebene, ausBlend, showTag, abschnitt);
   table.setEbene(ebene, ausBlend, showTag, abschnitt);
@@ -358,7 +372,7 @@ function syncBuehnen() {
       const btn = el('button', null, new Date(t + 'T12:00')
         .toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }));
       btn.setAttribute('aria-pressed', String(t === showTag));
-      btn.onclick = () => { showTag = t; setEbene('show'); };
+      btn.onclick = () => { showTag = t; setAnsicht(ansicht); };
       seg.append(btn);
     }
     box.append(seg);

@@ -332,6 +332,24 @@ unbenutzbar. Die reine Funktion gruppiert nach Gewerk, sortiert je Gewerk über
 `byStart` und filtert per Query (Titel/Gewerkname); der Inspector rendert nur ihr
 Ergebnis. Neue lange Auswahllisten genauso lösen — nie einen 122-Zeilen-`<select>`.
 
+**Die Oberfläche kennt DREI Ansichten, das Datenmodell zwei Ebenen plus
+Abschnitt.** In der Werkzeugzeile steht EIN Umschalter — Bauzeitenplan · Setup ·
+Show, in der Reihenfolge des Tages —, und genau einer ist gedrückt. `app.js` hält
+dafür `ansicht` und leitet `ebene`/`abschnitt` daraus ab (`ebeneVon`,
+`abschnittVon`); `setAnsicht()` ist der einzige Schreiber aller drei.
+
+Vorher waren es zwei Umschalter (Ebene und Abschnitt) im selben Stil
+nebeneinander, mit je einem dunklen Knopf. Das las sich als EINE Leiste, in der
+zwei Dinge gleichzeitig angewählt sind — und niemand fand, wie man zwischen
+Setup und Show wechselt. **Zwei gleich aussehende Segmentgruppen nebeneinander
+sind eine Gruppe, egal was der Code meint.**
+
+`?ansicht=bau|setup|show` steuert das von außen; die alten `?ebene=`/`?abschnitt=`
+werden weiter übersetzt (Lesezeichen, Prüfwerkzeuge, print.html). **«alle» gibt es
+in der Oberfläche nicht mehr** — der ganze Showtag in einer Achse ist damit nicht
+mehr zu sehen. Der Durchlass lebt in `imAbschnitt` weiter, eine vierte Stufe wäre
+also ohne Umbau nachrüstbar.
+
 **Zwei Ebenen, ein Plan — und `js/ebene.js` ist die einzige Stelle, die das weiß.**
 Der Bauzeitenplan zeigt GEWERKE, der Showablauf BÜHNEN; eine Bühne ist ein Gewerk mit
 `art:'buehne'`, ein Programmpunkt ein normaler Vorgang darin. Kein zweiter Store, kein

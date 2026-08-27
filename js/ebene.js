@@ -76,8 +76,12 @@ export const imAbschnitt = (tasks, abschnitt) =>
     ? (tasks || []).filter((t) => abschnittOf(t) === abschnitt)
     : (tasks || []);
 
-/** Die Auswahl des Umschalters. «alle» ist ein Filterwert, kein Bühnenwert. */
-export const ABSCHNITTE = [['setup', 'Setup'], ['show', 'Show'], ['alle', 'alle']];
+/**
+ * Die beiden Abschnitte, aus denen Tabelle und Panel ihre Auswahlfelder bauen.
+ * «alle» steht bewusst NICHT drin: das ist ein Filterwert der Ansicht, kein Wert,
+ * den ein Zeiteintrag tragen könnte. Den Durchlass regelt `imAbschnitt`.
+ */
+export const ABSCHNITTE = [['setup', 'Setup'], ['show', 'Show']];
 
 /**
  * Die Zeilenbänder der Ebene, nach `sort`. `aus` blendet einzelne aus (der

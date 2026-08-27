@@ -110,9 +110,20 @@ test('der Bauzeitenplan kennt keine Abschnitte', () => {
   }
 });
 
-test('jeder Eintrag des Umschalters ist benannt', () => {
-  assert.deepEqual(ABSCHNITTE.map(([k]) => k), ['setup', 'show', 'alle']);
+test('ABSCHNITTE listet genau die beiden Werte, die ein Eintrag tragen kann', () => {
+  // «alle» steht bewusst nicht drin: das ist ein Filterwert der Ansicht, kein
+  // Wert, den ein Zeiteintrag haben könnte. Tabelle und Panel bauen ihre
+  // Auswahlfelder aus dieser Liste — stünde «alle» darin, könnte man es wählen.
+  assert.deepEqual(ABSCHNITTE.map(([k]) => k), ['setup', 'show']);
   for (const [, label] of ABSCHNITTE) assert.ok(label, 'ohne Beschriftung');
+});
+
+test('imAbschnitt lässt trotzdem alles durch, was nicht setup oder show ist', () => {
+  // Der Durchlass gehört hierher, nicht in die Auswahlliste — der Bauzeitenplan
+  // reicht «alle» durch, und eine vierte Ansicht wäre so ohne Umbau nachrüstbar.
+  const alle = sichtTasks(S, 'show');
+  assert.equal(imAbschnitt(alle, 'alle').length, alle.length);
+  assert.equal(imAbschnitt(alle, undefined).length, alle.length);
 });
 
 console.log('\nProgrammfenster — wo wirklich etwas läuft');

@@ -49,9 +49,10 @@ aus.
 **Setup und Show sind zwei Ansichten derselben Bühne.** Am Showtag gibt es zwei
 Abläufe mit ganz verschiedenen Uhrzeiten: Load-in und Setup bis zum Showstart,
 danach die Running Order. Jeder **Zeiteintrag** gehört einem der beiden
-Abschnitte, und der Umschalter **Setup · Show · alle** zeigt jeweils nur die
-passenden — mit eigener Zeitachse. Die Bühne selbst steht in beiden Ansichten,
-sie heißt einmal und ist dieselbe.
+Abschnitte. Oben steht ein Umschalter mit drei gleichrangigen Ansichten in der
+Reihenfolge des Tages — **Bauzeitenplan · Setup · Show** —, und genau eine ist
+gewählt. Jede rechnet ihre eigene Zeitachse. Die Bühne steht in beiden
+Show-Ansichten, sie heißt einmal und ist dieselbe.
 
 Angelegt wird in der **Tabelle**: im Bühnenkopf sitzt ein `+ Zeiteintrag`. Der
 neue Eintrag landet im gezeigten Abschnitt und am gezeigten Tag und schließt
