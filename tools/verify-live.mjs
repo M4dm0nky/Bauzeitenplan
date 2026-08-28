@@ -151,6 +151,63 @@ await check('Live ausschalten räumt die Marken weg', async () => {
   return n === 0 ? true : `${n} Marken bleiben stehen`;
 });
 
+console.log('\nDIE LINIE ZEIGT DIE PROJEKT-ZEITZONE, NICHT DIE DES BETRACHTERS');
+// nowInZone() rechnet «jetzt» in die Projekt-Zeitzone um. Scheitert das Parsen,
+// fällt es stumm auf die LOKALE Zeit zurück — und niemand sieht es, weil das
+// Projekt seine Zone standardmäßig vom Browser erbt, beide also ohnehin gleich
+// sind. Deshalb hier zwei Betrachter in verschiedenen Zonen auf DASSELBE Projekt
+// (Europe/Berlin): steht die Linie an zwei verschiedenen Stellen, greift der
+// Rückfall.
+//
+// Der Zeitpunkt ist mit Bedacht Mitternacht in Berlin: «00:00» ist genau die
+// Eingabe, an der hour12:false in manchen Engines «24:00» erzeugt — daraus macht
+// new Date() ein Invalid Date. Ein geschütztes Leerzeichen aus Intl endet ebenso.
+const BERLIN_MITTERNACHT = new Date('2026-08-05T22:00:00Z');   // = 06.08. 00:00 in Berlin
+async function linieBeiBetrachterZone(tz) {
+  const c = await browser.newContext({ viewport: { width: 1600, height: 950 }, timezoneId: tz });
+  const p = await c.newPage();
+  await p.clock.install({ time: BERLIN_MITTERNACHT });
+  await p.goto(BASE + '/index.html?plan=leer');
+  await p.waitForTimeout(600);
+  await p.fill('.dlg-f:first-child input', 'Zonen-Test');
+  await p.fill('.dlg-f:nth-child(3) input', '2026-08-05T06:00');
+  await p.locator('.dlg-t[data-k="festival"]').click();
+  await p.locator('.dlg-act .btn-p').click();
+  await p.waitForTimeout(800);
+  // Das Projekt erbt die Zone des Browsers — genau deshalb fällt der Fehler nie
+  // auf. Hier wird sie fest auf Berlin gesetzt, damit die beiden Betrachter
+  // wirklich dasselbe Projekt sehen.
+  await p.evaluate(() => {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      try {
+        const v = JSON.parse(localStorage.getItem(k));
+        if (v && v.project && v.project.timezone) {
+          v.project.timezone = 'Europe/Berlin';
+          localStorage.setItem(k, JSON.stringify(v));
+        }
+      } catch { /* kein Plan unter diesem Schlüssel */ }
+    }
+  });
+  await p.reload();
+  await p.waitForTimeout(1000);
+  const x = await p.locator('.bz-now').evaluate((n) => parseFloat(n.style.left));
+  const zone = await p.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  await c.close();
+  return { x, zone };
+}
+const inBerlin = await linieBeiBetrachterZone('Europe/Berlin');
+const inNewYork = await linieBeiBetrachterZone('America/New_York');
+await check('der Betrachter sitzt tatsächlich in zwei verschiedenen Zonen', async () =>
+  inBerlin.zone !== inNewYork.zone ? true : `beide melden ${inBerlin.zone}`);
+await check('beide Betrachter sehen die Linie an derselben Stelle', async () => {
+  if (!Number.isFinite(inBerlin.x) || !Number.isFinite(inNewYork.x))
+    return `keine Linie: Berlin ${inBerlin.x}, New York ${inNewYork.x}`;
+  const d = Math.abs(inBerlin.x - inNewYork.x);
+  return d <= 1 ? true
+    : `${d.toFixed(1)}px auseinander (${inBerlin.x} vs ${inNewYork.x}) — nowInZone ist auf die lokale Zeit zurückgefallen`;
+});
+
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 6).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 

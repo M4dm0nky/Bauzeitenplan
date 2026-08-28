@@ -106,6 +106,30 @@ Zeitstempeln — nie aus Ziffernarithmetik auf Datumsstrings. Sonst ist die Daue
 den Sommerzeit-Sprung falsch, und dieser Bug schlägt genau einmal im Jahr zu.
 Ein Test deckt den DST-Übergang ab.
 
+### `nowInZone` darf nicht stumm zurückfallen
+
+Die Jetzt-Linie zeigt die Zeit in der **Projekt**-Zeitzone; `nowInZone` in
+`gantt.js` formatiert dafür mit `Intl` und liest das Ergebnis wieder ein. Bis
+v0.9.6 konnte dieses Einlesen auf zwei Wegen scheitern, und beide endeten im
+`catch` — also in der lokalen Systemzeit, ohne ein Wort:
+
+- `hour12: false` wählt in manchen Engines den Stundenzyklus **h24**. Mitternacht
+  heißt dann «24:00», und `new Date('…T24:00')` ist ein Invalid Date. Der Rückfall
+  wäre also **jede Nacht** passiert. Jetzt steht dort `hourCycle: 'h23'`.
+- `Intl` liefert je nach Engine ein geschütztes Leerzeichen (U+00A0, U+202F).
+  `replace(' ', 'T')` griff dann nicht. Jetzt `replace(/\s+/, 'T')`.
+
+Zusätzlich prüft die Funktion das Ergebnis auf `Invalid Date` und schreibt beim
+Rückfall einmalig eine Warnung. **Eine falsche Jetzt-Linie ist schlimmer als
+keine** — sie darf nicht lautlos entstehen.
+
+Warum das so lange unentdeckt blieb: ein Projekt erbt seine Zone beim Anlegen vom
+Browser (`templates.js`, `persistence.js`). Für fast jeden ist Projekt-Zone ==
+lokale Zone, und dann liefert der Rückfall zufällig das Richtige. Die Prüfung in
+`tools/verify-live.mjs` stellt deshalb **zwei Betrachter in verschiedenen Zonen**
+auf dasselbe Berlin-Projekt und verlangt die Linie an derselben Stelle — zum
+Zeitpunkt Mitternacht in Berlin, also genau auf der «00:00»-Falle.
+
 ## Zwei Ebenen statt zweier Anwendungen
 
 Ein Bauzeitenplan und ein Showablauf sehen verschieden aus, haben aber dieselbe
@@ -222,6 +246,33 @@ PocketBase-Schema samt Hooks und `setup.mjs`, die zugehörigen Tests und die
 Integrationspunkte — liegt im Branch **`pocketbase-vorbereitung`**. Er wird nicht
 deployt und nicht gemergt. Wer Online + Rollen wieder aufnimmt, macht dort weiter;
 die Crewplaner-Lehren weiter oben in dieser Datei gelten dann wieder.
+
+## Vorschläge aus Reviews, die geprüft und abgelehnt wurden
+
+Damit derselbe Vorschlag nicht beim nächsten Review erneut Arbeit macht — hier
+steht, warum er nicht umgesetzt wurde. Aus dem Review zu v0.9.5:
+
+**«Drag & Drop der Gewerke verrechnet sich bei ausgeblendeten Bändern.»** Kein
+Fehler. `dropBeforeAt` (`table.js`) liefert die id eines **sichtbaren**
+Gruppenkopfes, und `moveGewerk` (`store.js`) fügt in der Gesamtliste unmittelbar
+vor genau dieser id ein. Ein ausgeblendetes Band dazwischen ändert daran nichts:
+die sichtbare Reihenfolge stimmt in jedem durchgespielten Fall. Den einen echten
+Grenzfall — Ziel «ans Ende» (`before = null`), während versteckte Bänder hinten
+stehen — fängt der `curBefore`-Vergleich ab, der aus derselben gefilterten Liste
+kommt; es geht dann gar kein Befehl raus.
+
+**«`clone` in eine Util-Datei ziehen.»** Nein, und zwar aus einem Grund, der
+schwerer wiegt als die eine doppelte Zeile: der Store dürfte für einen gemeinsamen
+Helfer auf `persistence.js` zeigen — Kern → äußere Schicht, der falsche Pfeil. Ein
+eigenes Util-Modul nur für einen Einzeiler wäre die dritte Datei für eine Zeile
+Code. Es sind ohnehin **zwei** Stellen (`store.js`, `persistence.js`), nicht drei.
+
+**«Row-Diffing in `table.js` statt `replaceChildren`.»** Verschoben, nicht
+verworfen — aber nicht ohne Messung. Der Klassentreffen-Plan mit 353 Vorgängen ist
+der Ernstfall; solange nicht gemessen ist, wie lange ein Neuaufbau dort wirklich
+dauert, wäre der Umbau ein Tausch von belegter Einfachheit gegen vermutete
+Geschwindigkeit. `computeSchedule` ist denselben Weg gegangen: erst messen (3,4 ms
+bei 500 Vorgängen), dann die Zahl der Aufrufe senken statt einen Cache einzuziehen.
 
 ## Was bewusst noch fehlt
 

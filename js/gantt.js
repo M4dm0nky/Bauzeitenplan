@@ -22,17 +22,33 @@ import {
 
 // «Jetzt» in der Projekt-Zeitzone. Ohne die Umrechnung stünde die Linie für
 // jemanden außerhalb dieser Zone um den Zonenversatz falsch.
+let zoneWarned = false;
 function nowInZone(tz) {
   const d = new Date();
   if (!tz) return d;
   try {
+    // hourCycle 'h23' statt hour12:false: letzteres wählt in manchen Engines
+    // den Zyklus h24 und schreibt Mitternacht als «24:00» — daraus macht
+    // new Date() ein Invalid Date, und die Jetzt-Linie fiele jede Nacht
+    // stumm auf die lokale Zeit zurück.
     const p = new Intl.DateTimeFormat('sv-SE', {
       timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false,
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
     }).format(d);                       // «2026-07-15 11:20»
-    return new Date(p.replace(' ', 'T'));
-  } catch {
-    return d;                           // unbekannte Zone → lokale Zeit
+    // \s+ statt ' ': Intl liefert je nach Engine ein geschütztes Leerzeichen
+    // (U+00A0/U+202F), und ein Ersetzen, das nicht greift, endet ebenfalls
+    // im Invalid Date.
+    const inZone = new Date(p.replace(/\s+/, 'T'));
+    if (Number.isNaN(inZone.getTime())) throw new Error('unlesbar: ' + p);
+    return inZone;
+  } catch (err) {
+    // Eine falsche Jetzt-Linie ist schlimmer als keine — der Rückfall darf
+    // nicht stumm bleiben, sonst sucht ihn niemand.
+    if (!zoneWarned) {
+      zoneWarned = true;
+      console.warn('Zeitzone «' + tz + '» nicht auswertbar, es gilt die lokale Zeit.', err);
+    }
+    return d;
   }
 }
 
@@ -391,6 +407,7 @@ export function createGantt(root, opts = {}) {
         for (const t of r.tasks) {
           const d = el('div', 'bz-ms bz-ms-projekt');
           d.dataset.at = toMin(t.start);
+          d.tabIndex = 0;                 // auswählbar per Klick → auch per Tab
           d.append(el('span', 'bz-ms-d'), el('span', 'bz-ms-t', t.title));
           bindTip(d, t);
           bindMark(d, { kind: 'task', id: t.id });
@@ -424,6 +441,10 @@ export function createGantt(root, opts = {}) {
             d.style.setProperty('--lane', lane);
             d.classList.toggle('is-crit', s.critical);
             d.dataset.at = toMin(t.start);
+            // Wie der Balken mit Tab erreichbar: eine Raute ist genauso
+            // auswählbar, und sie zu überspringen hieße, dass ein Meilenstein
+            // per Tastatur gar nicht anzusteuern ist.
+            d.tabIndex = 0;
             d.append(el('span', 'bz-ms-d'), el('span', 'bz-ms-t', t.title));
             bindTip(d, t);
             bindMark(d, { kind: 'task', id: t.id });
@@ -483,6 +504,14 @@ export function createGantt(root, opts = {}) {
       e.preventDefault();
       select(sel);
       if (O.onContext) O.onContext(sel, e.clientX, e.clientY);
+    });
+    // Balken und Rauten tragen tabIndex 0, sind also mit Tab erreichbar — ohne
+    // diesen Handler passierte dort auf jede Taste nichts. Space muss abgefangen
+    // werden, sonst scrollt es die Seite statt auszuwählen.
+    node.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      select(sel);
     });
   }
 

@@ -549,7 +549,13 @@ function showContext(sel, x, y) {
     { label: 'Umbenennen', hint: 'Doppelklick', run: () => renameInPlace('task', t.id) },
     { label: 'Duplizieren', run: () => {
       const r = apply({ type: 'duplicateTask', id: t.id });
-      if (r && r.id) gantt.select({ kind: 'task', id: r.id });
+      if (r && r.id) {
+        gantt.select({ kind: 'task', id: r.id });
+        // Die Kopie hat keine Verknüpfungen (store.js, duplicateTask). Das sieht
+        // man dem Balken nicht an — wer eine Kette erwartet, merkt es erst, wenn
+        // der Plan nicht mitzieht.
+        toast('Vorgang dupliziert — ohne Verknüpfungen.');
+      }
     } },
     { label: t.milestone ? 'In Vorgang zurückverwandeln' : 'Zu Meilenstein machen', run: () => {
       apply(t.milestone

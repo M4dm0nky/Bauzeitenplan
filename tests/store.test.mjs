@@ -745,6 +745,18 @@ test('ein Platz außerhalb der Palette wird abgelehnt', () => {
   assert.equal(s.dirty, false, 'nicht als ungesichert markiert');
 });
 
+test('die Ränder der Palette sind gültig — 0 und MAX_SLOTS-1', () => {
+  // Intern 0-basiert, in der Oberfläche 1-basiert («Platz 1 von 20»). Die
+  // Meldung darf deshalb keinen Bereich nennen, der bei 1 anfängt: sie behauptete
+  // «zwischen 1 und 20», während 0 gültig und 20 ungültig ist.
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'slot', value: 0 }).ok, true, 'Platz 0 ist gültig');
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'slot', value: 19 }).ok, true, 'Platz 19 ist gültig');
+  const r = s.apply({ type: 'setTaskField', id: 'a', field: 'slot', value: 20 });
+  assert.equal(r.ok, false);
+  assert.doesNotMatch(String(r.error), /zwischen 1/, 'Meldung nennt keinen Bereich, der 0 ausschließt');
+});
+
 test('⌘Z nimmt eine Farbe zurück', () => {
   const s = createStore(seed());
   s.apply({ type: 'setTaskField', id: 'a', field: 'slot', value: 7 });

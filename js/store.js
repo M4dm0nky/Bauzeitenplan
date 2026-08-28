@@ -169,10 +169,14 @@ const HANDLERS = {
       if (cmd.value === cmd.id) return 'Ein Eintrag gehört nicht zu sich selbst.';
       if (!state.tasks.some((x) => x.id === cmd.value)) return 'Zugeordneter Eintrag nicht gefunden.';
     }
+    // Der Farbplatz ist intern 0-basiert (0…MAX_SLOTS-1), in der Oberfläche
+    // 1-basiert («Platz 3 von 20», inspector.js). Die Meldung nennt deshalb
+    // keinen Zahlenbereich: gewählt wird über Knöpfe, hier tippt niemand einen
+    // Wert ein, und «zwischen 1 und 20» widerspräche dem, was gültig ist.
     if (cmd.field === 'slot' && cmd.value !== null) {
       const n = cmd.value;
       if (!Number.isInteger(n) || n < 0 || n >= MAX_SLOTS)
-        return 'Farbplatz muss zwischen 1 und ' + MAX_SLOTS + ' liegen (oder leer für «wie Bühne»).';
+        return 'Diesen Farbplatz gibt es nicht — die Palette hat ' + MAX_SLOTS + ' Plätze (oder leer für «wie Bühne»).';
     }
     t[cmd.field] = cmd.value;
     // Wechselt ein Elternvorgang das Gewerk, ziehen seine Untervorgänge mit —
@@ -298,8 +302,11 @@ const HANDLERS = {
     const t = state.tasks.find((x) => x.id === cmd.id);
     if (!t) return 'Vorgang nicht gefunden.';
     const id = newId('t');
-    // Bewusst OHNE Verknüpfungen: mit denselben Vorgängern stünde das Duplikat
-    // sofort im Konflikt — niemand will beim Duplizieren einen roten Plan.
+    // Das Duplikat steht OHNE Verknüpfungen da: deps leben in state.deps, nicht
+    // am Vorgang — die Kopie erbt sie also gar nicht erst, und das ist richtig
+    // so. Mit denselben Vorgängern stünde sie sofort im Konflikt, und niemand
+    // will beim Duplizieren einen roten Plan. Weil das Fehlen im Bild nicht zu
+    // sehen ist, sagt es app.js dem Nutzer per Toast.
     state.tasks.push({ ...t, id, title: t.title + ' (Kopie)' });
     return ok({ id });
   },

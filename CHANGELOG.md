@@ -3,6 +3,55 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.6 — 2026-08-28
+
+**Vier Korrekturen aus einem Review — und drei Vorschläge, die geprüft und
+abgelehnt wurden.** Die Ablehnungen stehen mit Begründung in
+`docs/entscheidungen.md`, damit sie nicht beim nächsten Review wieder Arbeit machen.
+
+**Die Jetzt-Linie fiel stumm auf die lokale Zeit zurück**
+
+`nowInZone` formatiert «jetzt» in die Projekt-Zeitzone und liest das Ergebnis
+wieder ein. Zwei Wege führten dabei in ein `Invalid Date`, und beide endeten
+kommentarlos im `catch` — also in der Systemzeit des Betrachters:
+
+- `hour12: false` wählt in manchen Engines den Stundenzyklus **h24**. Mitternacht
+  heißt dort «24:00», und daraus macht `new Date()` nichts Gültiges. Der Rückfall
+  wäre **jede Nacht** passiert. Jetzt steht dort `hourCycle: 'h23'`.
+- `Intl` liefert je nach Engine ein geschütztes Leerzeichen; `replace(' ', 'T')`
+  griff dann nicht. Jetzt `replace(/\s+/, 'T')`.
+
+Das Ergebnis wird zusätzlich auf Gültigkeit geprüft, und der Rückfall schreibt
+einmalig eine Warnung — eine falsche Jetzt-Linie ist schlimmer als keine, sie darf
+nicht lautlos entstehen. Unentdeckt blieb das, weil ein Projekt seine Zone beim
+Anlegen vom Browser erbt: für fast jeden sind beide gleich, und dann liefert der
+Rückfall zufällig das Richtige. Die neue Prüfung stellt deshalb **zwei Betrachter
+in verschiedenen Zonen** auf dasselbe Berlin-Projekt, zum Zeitpunkt Mitternacht in
+Berlin, und verlangt die Linie an derselben Stelle.
+
+**Balken und Rauten reagieren jetzt auf die Tastatur**
+
+Sie trugen `tabIndex = 0`, waren also mit Tab erreichbar — aber es hing nur ein
+`click`-Handler daran. Wer hinsprang, kam mit keiner Taste weiter: fokussierbar
+ohne Auslöser ist eine Sackgasse. **Enter und Leertaste wählen aus** (Space mit
+`preventDefault`, sonst scrollt es die Seite). Dabei kam heraus, dass die
+**Meilenstein-Rauten gar keinen `tabIndex` hatten** — beide Renderpfade waren per
+Tastatur unerreichbar, obwohl sie per Klick auswählbar sind. Behoben.
+
+**Duplizieren sagt jetzt, was der Kopie fehlt**
+
+Das Duplikat steht ohne Verknüpfungen da (`deps` liegen in `state.deps`, die Kopie
+erbt sie gar nicht erst — und das ist richtig so, mit denselben Vorgängern stünde
+sie sofort im Konflikt). Nur sah man das dem Balken nicht an: wer eine Kette
+erwartete, wartete auf etwas, das nie kam. Ein Toast sagt es jetzt.
+
+**Die Meldung zum Farbplatz behauptete einen falschen Bereich**
+
+«Farbplatz muss zwischen 1 und 20 liegen», während intern 0…19 gültig ist. Der
+Platz ist 0-basiert gespeichert und 1-basiert angezeigt («Platz 3 von 20»); die
+Meldung nennt deshalb gar keinen Zahlenbereich mehr — gewählt wird über Knöpfe,
+dort tippt niemand einen Wert ein.
+
 ## 0.9.5 — 2026-08-27
 
 **Das Running-Order-Blatt kennt den Abschnitt**

@@ -268,6 +268,61 @@ await check('Verknüpfungen stehen im Panel', async () =>
   (await page.locator('.ins-deps').count()) === 1 ? true : 'kein Verknüpfungsblock');
 await page.screenshot({ path: join(here, 'shots', 'edit-6-panel.png') });
 
+console.log('\nTASTATUR AUF DEN BALKEN');
+// Balken und Rauten tragen tabIndex 0, sind also mit Tab erreichbar. Bis v0.9.6
+// hing dort aber nur ein click-Handler: wer hingesprungen war, kam mit keiner
+// Taste weiter — fokussierbar ohne Auslöser ist eine Sackgasse.
+const titelVon = (i) => page.locator('.bz-bar').nth(i).locator('.bz-bar-t').textContent();
+await check('Enter auf einem fokussierten Balken wählt ihn aus', async () => {
+  await page.locator('.bz-bar').first().click();          // Ausgangsauswahl
+  await page.waitForTimeout(250);
+  const soll = (await titelVon(2)).trim();
+  await page.locator('.bz-bar').nth(2).focus();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  const ist = (await page.locator('.ins-title').textContent()).trim();
+  return ist === soll ? true : `Panel zeigt «${ist}» statt «${soll}»`;
+});
+await check('Leertaste wählt ebenfalls aus — und scrollt die Seite nicht', async () => {
+  const soll = (await titelVon(1)).trim();
+  const vorher = await page.evaluate(() => window.scrollY);
+  await page.locator('.bz-bar').nth(1).focus();
+  await page.keyboard.press(' ');
+  await page.waitForTimeout(300);
+  const ist = (await page.locator('.ins-title').textContent()).trim();
+  if (ist !== soll) return `Panel zeigt «${ist}» statt «${soll}»`;
+  const nachher = await page.evaluate(() => window.scrollY);
+  return nachher === vorher ? true : `Space hat gescrollt (${vorher} → ${nachher}) — preventDefault fehlt`;
+});
+await check('auch die Meilenstein-Raute ist mit Tab erreichbar', async () => {
+  const n = await page.locator('.bz-ms').count();
+  if (!n) return 'kein Meilenstein im Plan — Prüfung greift ins Leere';
+  const ohne = await page.evaluate(() =>
+    [...document.querySelectorAll('.bz-ms')].filter((d) => d.tabIndex !== 0).length);
+  return ohne === 0 ? true : `${ohne} von ${n} Rauten ohne tabIndex`;
+});
+
+console.log('\nDUPLIZIEREN SAGT, WAS FEHLT');
+await check('Duplizieren meldet, dass die Kopie ohne Verknüpfungen dasteht', async () => {
+  // deps liegen in state.deps, die Kopie erbt sie also nicht. Das sieht man dem
+  // Balken nicht an — ohne Meldung wartet man auf eine Kette, die nie kommt.
+  await page.locator('.bz-bar').first().click({ button: 'right' });
+  await page.waitForTimeout(300);
+  const eintrag = page.locator('.mn-i', { hasText: 'Duplizieren' });
+  if (!(await eintrag.count())) return 'kein «Duplizieren» im Menü';
+  await eintrag.click();
+  await page.waitForTimeout(400);
+  if (await page.locator('#toast').isHidden()) return 'kein Toast';
+  const t = await page.locator('#toast').textContent();
+  return /Verknüpfungen/i.test(t) ? true : 'Toast schweigt zu den Verknüpfungen: ' + t;
+});
+await check('die Kopie steht im Plan und ist ausgewählt', async () => {
+  const ist = (await page.locator('.ins-title').textContent()).trim();
+  return /\(Kopie\)$/.test(ist) ? true : `Panel zeigt «${ist}», nicht die Kopie`;
+});
+await page.screenshot({ path: join(here, 'shots', 'edit-6b-tastatur-duplikat.png') });
+await page.evaluate(() => document.getElementById('toast').hidden = true);
+
 console.log('\nVERKNÜPFUNGS-SUCHE');
 let firstCand = '';
 await check('Suchfeld: Unsinn zeigt „nichts", ein Teilstring filtert die Treffer', async () => {
