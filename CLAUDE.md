@@ -65,7 +65,11 @@ noch Pages einschalten (nur `push`, kein `admin`).
 
 ## Version
 
-**Aktuell: 0.7.1** · `CHANGELOG.md` hält die Historie, nicht diese Datei.
+**Den aktuellen Stand sagt `node tools/version.mjs`** (ohne Argument), nicht diese
+Datei. Hier stand einmal eine feste Nummer — sie war vier Versionen veraltet, weil
+`tools/version.mjs` alle sechs Stempelstellen kennt, aber CLAUDE.md nicht. Eine
+Zahl, die kein Werkzeug pflegt, ist eine Zahl, die lügt. `CHANGELOG.md` hält die
+Historie.
 
 **Die Version wird NIE von Hand geändert.** Ein Befehl stempelt sie in alle
 sechs Stellen zugleich:
@@ -132,9 +136,31 @@ Gewerke untereinander, und genau dafür ist die Farbsuche gemacht.
 Grund unter 3:1 Kontrast. Die Beschriftung ist die vorgeschriebene sekundäre
 Kodierung — ohne sie hängt Identität an der Farbe allein.
 
+**Was `tabIndex` trägt, muss auf Enter UND Leertaste reagieren.** Ein Element, das
+per Klick auswählbar ist, gehört in die Tab-Reihenfolge — und wer dort ankommt,
+muss weiterkommen. Fokussierbar ohne Auslöser ist eine Sackgasse: der Fokusring
+verspricht etwas, das keine Taste einlöst. Genau das lag bis v0.9.6 an drei
+Stellen: die Balken hatten `tabIndex = 0`, aber nur einen `click`-Handler, und die
+Meilenstein-Rauten hatten in BEIDEN Renderpfaden gar keinen `tabIndex` — anklickbar,
+aber per Tastatur unerreichbar. Der Handler gehört an die EINE Stelle, durch die
+alle Marken laufen (`bindMark` in gantt.js), nicht je Renderzweig. Space braucht
+`preventDefault()`, sonst scrollt es die Seite statt auszuwählen. Eine Prüfung in
+`verify-edit.mjs` hält beides fest — und sie hat die Rauten gefunden, nicht das Auge.
+
 **Zeiten immer aus echten Zeitstempeln rechnen** (`toMin()`), nie aus Ziffern auf
 Datumsstrings. Sonst ist die Dauer über den Sommerzeit-Sprung falsch — ein Bug, der
 genau einmal im Jahr zuschlägt.
+
+**`nowInZone` darf nie stumm zurückfallen** (`gantt.js`). Sie formatiert «jetzt»
+per `Intl` in die Projekt-Zone und liest das Ergebnis wieder ein — beim Formatieren
+gehört `hourCycle: 'h23'` hin (nicht `hour12: false`: das wählt in manchen Engines
+h24, schreibt Mitternacht als «24:00» und ergibt ein Invalid Date) und beim Einlesen
+`replace(/\s+/, 'T')` (Intl liefert je nach Engine ein geschütztes Leerzeichen).
+Scheitert es doch, gilt lokale Zeit PLUS eine Warnung: eine falsche Jetzt-Linie ist
+schlimmer als keine. Testen lässt sich das nur mit **zwei Betrachtern in
+verschiedenen Zonen** auf demselben Projekt (`verify-live.mjs`) — ein Projekt erbt
+seine Zone vom Browser, für fast jeden sind beide gleich, und dann trifft auch der
+kaputte Rückfall zufällig das Richtige.
 
 **Zoomstufen in sichtbarer Zeitspanne bemessen**, nicht in Pixeln. Eine
 „Tages"-Ansicht muss Tage zeigen. Die Tests setzen das durch.
