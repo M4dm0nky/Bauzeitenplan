@@ -3,6 +3,77 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.7 — 2026-08-29
+
+**Zwei Dinge, die man im Gantt bisher nicht konnte: Pfeile ziehen und dem Plan
+sagen, dass es später wird.**
+
+### Verknüpfen per Ziehen
+
+Der Gantt ist die Ansicht für Pfeile — jetzt werden sie dort auch gezogen. Am
+Ende jedes Balkens sitzt ein Griff, der beim Hinsehen erscheint (dauerhaft wären
+es bei 153 Zeilen 153 Punkte im Bild); von dort zieht man auf den Nachfolger.
+Während der Geste zeigt ein Gummiband die Richtung, zulässige Ziele sind
+hervorgehoben und **unzulässige gesperrt**: was einen Ring ergäbe, sagt schon
+vor dem Loslassen nein, statt danach. Am Rand scrollt die Ansicht mit, Escape
+bricht ab.
+
+Es entsteht immer FS — den Typ stellt man danach im Panel um, wo die Auswahl
+ohnehin schon steht. Deshalb genügt EIN Griff je Balken: eine FS-Verknüpfung
+legt man beim Vorgänger an, ein zweiter Griff wäre ein zweites Ziel ohne zweite
+Bedeutung.
+
+**Pfeile sind jetzt anklickbar.** Ein 1,5 px breiter Pfad ist mit der Maus nicht
+zu treffen und mit dem Finger gar nicht; darunter liegt ein unsichtbarer
+Zwilling mit demselben Verlauf, nur dick. Ein Klick wählt die Verknüpfung aus,
+das Panel nennt beide Vorgänge und lässt Typ und Versatz ändern, Entf entfernt
+sie, ⌘Z holt sie zurück. Das Suchfeld im Panel bleibt daneben bestehen — Ziehen
+setzt voraus, dass beide Balken gleichzeitig im Bild sind, und das ist über
+vierzehn Tage der Ausnahmefall.
+
+Nebenbei: Das Suchfeld bot bisher Kandidaten an, die der Store gleich darauf
+ablehnte. `candidateGroups` filtert jetzt über `reachable` alles heraus, was
+schon hinter dem Vorgang hängt — Suchfeld und Ziehen geben damit dieselbe
+Antwort.
+
+### Live-Versatz: die Ansage vom Pult
+
+Der Verzug entstand bisher allein aus Status gegen Uhr — er setzt voraus, dass
+jemand die Häkchen pflegt, und im Betrieb tut das niemand. Neben dem Live-Knopf
+steht deshalb ein Stepper `− [ 5 ] +`: **plus ist Delay**, minus Vorlauf,
+je ein Klick eine Minute, die Zahl selbst zum Eintippen. Daneben die Aussage im
+Klartext — «5 Min Delay» in Rot, «3 Min vor Plan» in Grün.
+
+**Der Ablauf rutscht, die Uhr bleibt stehen.** Balken, Beschriftungen und Pfeile
+wandern; Achse, Ticks und JETZT-Linie stehen auf der echten Zeit. Nur so liest
+man an der Achse ab, wann SIDO wirklich auf die Bühne geht, statt es im Kopf zu
+addieren. Die Uhrzeiten in der Showablauf-Seitenspalte, im Tooltip und in der
+Live-Kopfzeile wandern mit — stünde links «20:00 Uhr» neben einem Balken auf
+20:05, widerspräche sich das Blatt selbst.
+
+Die Verzugsrechnung bekommt die zurückgedrehte Uhr statt des Versatzes:
+«was läuft im verschobenen Plan?» ist dieselbe Frage wie «was lief im Original
+vor fünf Minuten?». `live.js` musste dafür nicht angefasst werden, und der
+Verzug rechnet von selbst gegen den verschobenen Plan. Die Uhr in der
+Show-Kopfzeile bleibt bewusst die echte — sie ist der feste Punkt, gegen den
+der Versatz überhaupt eine Aussage ist.
+
+Der Versatz gehört dem Abend, nicht dem Plan: er steht im `localStorage`, nicht
+im Export, und **gilt nur für den Tag, an dem er gesetzt wurde**. Sonst stünde
+der Plan am nächsten Morgen 45 Minuten daneben und niemand wüsste, warum. Beim
+Projektwechsel fällt er auf 0, Vertipper werden auf ±180 Minuten geklemmt.
+
+### Nebenbei repariert
+
+- `verify-print.mjs` **stürzte auf Apple Silicon ab**, statt das PDF sauber zu
+  überspringen: der Chromium-Pfad war auf `chrome-mac/Chromium.app` verdrahtet,
+  dort heißt der Ordner `chrome-mac-arm64` und das Programm «Google Chrome for
+  Testing.app». `verify-showablauf.mjs` übersprang aus demselben Grund still das
+  Running-Order-PDF, obwohl Chromium installiert war. Beide ermitteln den Pfad
+  jetzt, statt ihn zu raten.
+- Die Uhr in der Show-Kopfzeile hieß intern `uhr` wie eine neue Hilfsfunktion —
+  die Namenskollision hätte beim Start die ganze App lahmgelegt.
+
 ## 0.9.6 — 2026-08-28
 
 **Vier Korrekturen aus einem Review — und drei Vorschläge, die geprüft und

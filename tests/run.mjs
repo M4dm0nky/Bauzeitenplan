@@ -121,7 +121,12 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
   const needed = ['bz-bar', 'bz-ms-d', 'bz-sum', 'bz-now', 'bz-dep', 'bz-tip', 'bz-ph-t', 'bz-slack', 'bz-corner-cap',
     // Showablauf-Ebene (v0.8.0). Sie fehlten hier zunächst — nur das aktive
     // Theme kannte sie, die vier anderen hätten die Ebene ungestaltet gezeigt.
-    'bz-lab-zeit', 'bz-lab-dauer', 'showhead', 'sh-v', 'buehne-i'];
+    'bz-lab-zeit', 'bz-lab-dauer', 'showhead', 'sh-v', 'buehne-i',
+    // Verknüpfen per Ziehen (v0.9.7): Griff, Gummiband, ausgewählter Pfeil.
+    'bz-link', 'bz-dep-ghost', 'is-link-no',
+    // Versatz-Stepper: ohne Farbe ist «Delay» von «vor Plan» nicht zu
+    // unterscheiden — und rot/grün ist die halbe Aussage.
+    'vz-n', 'vz-txt'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

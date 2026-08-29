@@ -165,11 +165,26 @@ await p.screenshot({ path: join(here, 'shots', 'druck-gefiltert.png'), fullPage:
 // aber nicht die Seitenaufteilung. Einmalig holen: npx playwright install chromium
 console.log('\nPDF (A3 quer)');
 const chromDir = readdirSync(cache).find((d) => d.startsWith('chromium-'));
-if (!chromDir) {
+// Den Pfad NICHT raten: der Ordner heißt je nach Architektur `chrome-mac` oder
+// `chrome-mac-arm64`, und das Programm darin mal `Chromium.app`, mal
+// «Google Chrome for Testing.app». Hart verdrahtet stürzte der Lauf ab, statt
+// sauber zu überspringen — und ein abgebrochener Download hinterlässt einen
+// leeren Ordner, der wie eine Installation aussieht.
+const chromExe = (() => {
+  if (!chromDir) return null;
+  const bin = join(cache, chromDir);
+  const arch = readdirSync(bin).find((d) => d.startsWith('chrome-mac'));
+  if (!arch) return null;
+  const app = readdirSync(join(bin, arch)).find((d) => d.endsWith('.app'));
+  if (!app) return null;
+  const p = join(bin, arch, app, 'Contents', 'MacOS', app.replace(/\.app$/, ''));
+  return existsSync(p) ? p : null;
+})();
+if (!chromExe) {
   console.log('  – übersprungen: Chromium nicht installiert.');
   console.log('    Für echte PDFs einmalig:  npx playwright install chromium');
 } else {
-  const cb = await chromium.launch({ executablePath: join(cache, chromDir, 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium') });
+  const cb = await chromium.launch({ executablePath: chromExe });
   const cp = await cb.newPage();
   await cp.goto(BASE + '/print.html?plan=klassentreffen');
   await cp.waitForSelector('.pr-sheet', { timeout: 15000 });

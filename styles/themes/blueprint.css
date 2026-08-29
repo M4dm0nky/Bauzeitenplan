@@ -128,6 +128,13 @@ body {
 .sh-next .sh-v { color: var(--ink-2); }
 .sh-clock .sh-v { font-variant-numeric: tabular-nums; }
 .sh-late.is-late .sh-v, .sh-late.is-late .sh-z { color: var(--crit); }
+/* ── Versatz-Stepper ──────────────────────────────────────────────────────── */
+/* Dieselbe Sprache wie die Live-Leiste: Delay rot, Vorlauf grün. Die Knöpfe
+   selbst tragen `seg` und sind damit schon gestaltet. */
+.vz-n { color: var(--ink); }
+.vz-txt { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); }
+.vz-txt.is-late { color: var(--crit); font-weight: 700; }
+.vz-txt.is-early { color: var(--live-run, #1a7a46); font-weight: 700; }
 .bz-lab-projekt { background: var(--paper); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--cyan); }
 .bz-crit-tag {
   flex: none; font-size: 7.5px; letter-spacing: .1em; padding: 1px 3px;
@@ -228,6 +235,16 @@ body {
 .bz-dep.is-crit { stroke: var(--crit); stroke-width: 1.4; opacity: .95; }
 .bz-ah path { fill: var(--ink-3); }
 .bz-ah-c path { fill: var(--crit); }
+/* Verknüpfen per Ziehen. Ein gesperrtes Ziel wird ABGEBLENDET, nicht umgefärbt:
+   Farbe allein trägt die Aussage nicht, und Rot hieße hier «Fehler» statt
+   «geht nicht». Der Griff trägt einen Ring in Panelfarbe, damit er auch auf
+   einem gleichfarbigen Balken abgesetzt bleibt. */
+.bz-link::after { background: var(--sel, currentColor); box-shadow: 0 0 0 2px var(--panel2, #fff); }
+.bz-dep-ghost { stroke: var(--sel, currentColor); stroke-width: 2; stroke-dasharray: 4 3; opacity: .9; }
+.bz-dep.is-sel { stroke: var(--sel, currentColor); stroke-width: 3; opacity: 1; }
+.bz[data-linking] .is-link-no { opacity: .22; }
+.bz[data-linking] .is-link-target { outline: 2px solid var(--sel, currentColor); outline-offset: 2px; }
+
 
 /* ── Tooltip ──────────────────────────────────────────────────────────────── */
 .bz-tip {

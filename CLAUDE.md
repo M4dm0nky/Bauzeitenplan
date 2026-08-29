@@ -201,6 +201,43 @@ jede Minute den DOM neu und risse die Auswahl weg. Nur `paintNow()`/`paintLive()
 daraus, dass die menschliche Aussage «geplant» der Uhr widerspricht. Schaltete
 etwas automatisch um, sähe der Plan immer nach Plan aus — und das Signal wäre weg.
 
+**Der Versatz verschiebt den ABLAUF, nie die UHR** (`versatz` in gantt.js). Die
+Ansage vom Pult — «wir hängen fünf Minuten hinterher», positiv = Delay — rutscht
+die Balken nach rechts; Achse, Ticks, Bänder und die JETZT-Linie bleiben auf der
+echten Zeit stehen. Nur so liest man an der Achse ab, wann SIDO **wirklich** auf
+die Bühne geht. Wanderte die Linie mit, wäre es eine Lupe auf den Plan statt
+einer Aussage über die Wirklichkeit. Zwei Regeln halten das zusammen:
+
+- **Zwei Abbildungen Zeit → Pixel.** `x()` ist die echte Zeit (Achse, Linie),
+  `xp()` die des Ablaufs (Balken, Beschriftungen, Pfeile). Genau DREI Stellen
+  dürfen `xp()` rufen: `place()`, `updateLabels()`, `depAnchors()`. Wer eine
+  vierte braucht, verschiebt vermutlich gerade etwas, das zur Achse gehört.
+- **Die Logik bekommt die zurückgedrehte Uhr, nicht den Versatz.** «Was läuft im
+  verschobenen Plan?» ist dieselbe Frage wie «was lief im Original vor fünf
+  Minuten?» — deshalb kennt `live.js` den Versatz gar nicht, es bekommt
+  `nowPlan() = NOW − versatz`. Der Verzug rechnet damit von selbst gegen den
+  verschobenen Plan. **Die Uhr in der Show-Kopfzeile ist die Ausnahme**: sie
+  zeigt `now`, nicht `planNow` — sie ist der feste Punkt, gegen den der Versatz
+  überhaupt eine Aussage ist.
+
+Angezeigte Zeiten laufen durch `verschoben()` — Seitenspalte, Tooltip,
+Kopfzeile. Stünde links «20:00 Uhr» neben einem Balken auf 20:05, widerspräche
+sich das Blatt selbst. Relative Angaben («in 12 Min») brauchen **keine**
+Korrektur: Plan und Uhr sind gleich weit verschoben.
+
+Der Versatz gehört dem Abend, nicht dem Plan: `localStorage`, **nicht** im
+Export, und er gilt nur für den Tag, an dem er gesetzt wurde (`{min, tag}`).
+Sonst stünde der Plan am nächsten Morgen 45 Minuten daneben und niemand wüsste,
+warum. Beim Projektwechsel fällt er auf 0.
+
+**Im Showablauf wird das Verzugsfeld nie «im Plan» sagen, solange etwas läuft** —
+dort steht alles auf «geplant», weil im Betrieb niemand Häkchen pflegt, und für
+den laufenden Punkt meldet die Rechnung deshalb immer seine bisherige Laufzeit.
+Das war schon vor dem Versatz so. Was der Versatz leistet, ist relativ: er zieht
+seinen Betrag ab, Minute für Minute. Eine Prüfung in `verify-showablauf.mjs`
+hält genau das fest — die naheliegende Erwartung «passender Versatz ⇒ im Plan»
+ist im Showablauf unerfüllbar und wäre eine falsche Zusicherung.
+
 **`reorderGewerk` darf `slot` nicht anfassen.** Farbe gehört dem Gewerk, nicht
 seiner Position; sonst färbt sich beim Sortieren der halbe Plan um. Ein Test
 prüft das.
@@ -550,7 +587,7 @@ Information (kein automatisches Verschieben), nur die Sichtbarkeit wird abhakbar
 | `js/templates.js` | Vier Vorlagen |
 | `js/palette.js` | 10 Farbtöne × 2 Schraffuren = 20 Gewerke (HUES=10, MAX_SLOTS=20) |
 | `js/ebene.js` | Bauzeitenplan ↔ Showablauf: Bänder, Showtage, Typ-Hinweis — **DOM-frei** |
-| `js/live.js` | Verzug + laufende Vorgänge — **DOM-frei** |
+| `js/live.js` | Verzug, laufende Vorgänge, Versatz (`verschoben`, `versatzText`) — **DOM-frei** |
 | `js/inspector.js` | Seitenpanel |
 | `js/menu.js` | Kontextmenü (Muster: Crewplaner dropdown.js) |
 | `tools/build-prototypes.mjs` | **Nur** für die Design-Artifacts (CSP verlangt alles inline). Die App braucht keinen Build. |
@@ -566,9 +603,11 @@ dort begründet und ist durch Regressionstests abgesichert.
 ✅ Untervorgänge (Eltern = Hülle, einklappbar) · ✅ Handy/Tablet-tauglich ·
 ✅ Prüf-Liste (kritisch & Konflikte sehen, zeigen, abhaken/lösen) ·
 ✅ Tagesblätter A3 · ✅ Showablauf-Ebene (Bühnen, Anforderungen/Material, Live-Kopfzeile,
-Running-Order-Blatt)
-→ Als Nächstes: Drag & Drop der Balken im Gantt · danach Ansichten & Export
-(öffentlicher Link, PDF/ICS)
+Running-Order-Blatt) · ✅ Verknüpfen per Ziehen + anklickbare Pfeile ·
+✅ Live-Versatz (die Ansage vom Pult)
+→ Als Nächstes: Balken und Dauern im Gantt ziehen — die Verknüpfungen sind schon
+gezogen, der Griff und die Zielprüfung stehen als Muster in gantt.js · danach
+Ansichten & Export (öffentlicher Link, PDF/ICS)
 
 **PocketBase liegt auf Eis.** Die vorbereitete Login-/Rollenschicht wurde in v0.8.0 aus
 `main` entfernt — die Seite ist eine reine GitHub-Pages-Auslieferung ohne

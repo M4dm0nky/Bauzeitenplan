@@ -12,7 +12,7 @@ import { resolveConflictsCmd, local } from './conflicts.js';
 import { slotsExhausted, MAX_SLOTS, gewerkVar, gewerkTexture } from './palette.js';
 import { createInspector } from './inspector.js';
 import { openMenu } from './menu.js';
-import { liveStats, runningAt, nextUp, delaysAt } from './live.js';
+import { liveStats, runningAt, nextUp, delaysAt, verschoben, versatzText } from './live.js';
 import { sichtGewerke, sichtTasks, typHinweis, programmTage } from './ebene.js';
 import { toMin, toDate } from './schedule.js';
 import { $, el, escapeHtml } from './dom.js';
@@ -163,8 +163,13 @@ async function boot() {
 }
 
 function open(plan) {
-  if (store) store.replace(plan);
-  else {
+  if (store) {
+    store.replace(plan);
+    // Ein Versatz gilt dem Abend, den man gerade fährt — nicht dem nächsten
+    // Projekt. Beim Wechsel zurück auf null, sonst stünde der neue Plan
+    // kommentarlos verschoben da.
+    setVersatz(0);
+  } else {
     store = createStore(plan);
     mount();
   }
@@ -182,6 +187,13 @@ function mount() {
     onContext: showContext,
     onError: (msg) => toast(msg, 'bad'),
     onTick: () => refreshLive(),
+    // Im Gantt vom Griff eines Balkens auf einen anderen gezogen. Immer FS —
+    // den Typ stellt man danach im Panel um, dort steht die Auswahl schon.
+    onLink: (from, to) => {
+      const r = apply({ type: 'addDep', dep: { from, to, type: 'FS', lag: 0 } });
+      if (r && r.id) gantt.select({ kind: 'dep', id: r.id });
+    },
+    onRemoveDep: (id) => apply({ type: 'removeDep', id }),
     // Der Gantt hat sich von selbst neu eingepasst — die Kopfzeile muss nach.
     onView: () => {
       if (syncZoomSeg) syncZoomSeg();
@@ -200,6 +212,11 @@ function mount() {
   // Stromausfall wieder live sein, ohne dass jemand hinläuft.
   const wantLive = localStorage.getItem('bzp_live') === '1';
   $('live').onclick = () => setLive(!gantt.isLive);
+  $('vz-minus').onclick = () => setVersatz(gantt.versatz - 1);
+  $('vz-plus').onclick = () => setVersatz(gantt.versatz + 1);
+  // Nur `change`, nie zusätzlich `blur` — dieselbe Falle wie in der Tabelle.
+  $('vz-n').onchange = () => setVersatz(parseInt($('vz-n').value, 10) || 0);
+  setVersatz(gespeicherterVersatz(), false);
   if (wantLive) setLive(true);
   refreshLive();
 
@@ -412,6 +429,46 @@ function renderTable() {
   table.render();
 }
 
+// ── Versatz: die Ansage vom Pult ────────────────────────────────────────────
+// Plus ist Delay — der Ablauf rutscht im Bild nach rechts, die Uhr bleibt echt.
+//
+// `setVersatz` ist der EINZIGE Schreiber von Wert, Anzeige und Speicher. Ein
+// Zustand, ein Besitzer: als `#ins.hidden` vier Schreiber hatte, holte jede
+// Änderung das Panel zurück, das gerade zu sein hatte.
+const VZ_KEY = 'bzp_versatz';
+
+/** Der Kalendertag, auf den sich ein gespeicherter Versatz bezieht. */
+const versatzTag = () => local(toDate(gantt.liveInfo().now)).slice(0, 10);
+
+/**
+ * Der gespeicherte Versatz — aber nur, wenn er von HEUTE ist.
+ *
+ * Der Live-Knopf überlebt den Neustart bewusst, und der Versatz tut es auch:
+ * nach einem Stromausfall soll der Monitor wieder stimmen. Über Nacht wird
+ * daraus aber Unsinn — ein Plan, der am nächsten Morgen 45 Minuten neben der
+ * Achse liegt, und niemand weiß, warum. Deshalb steht der Tag mit im Speicher.
+ */
+function gespeicherterVersatz() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(VZ_KEY) || '{}');
+    return raw && raw.tag === versatzTag() ? Number(raw.min) || 0 : 0;
+  } catch (_) {
+    return 0;                              // unlesbar heißt: kein Versatz
+  }
+}
+
+function setVersatz(min, speichern = true) {
+  const v = gantt.setVersatz(min);          // klemmt auf ±180 und zeichnet neu
+  $('vz-n').value = String(v);
+  const t = versatzText(v);
+  const n = $('vz-txt');
+  n.textContent = t.text;
+  n.classList.toggle('is-late', t.klasse === 'is-late');
+  n.classList.toggle('is-early', t.klasse === 'is-early');
+  if (speichern) localStorage.setItem(VZ_KEY, JSON.stringify({ min: v, tag: versatzTag() }));
+  refreshLive();
+}
+
 // ── Live ────────────────────────────────────────────────────────────────────
 function setLive(on) {
   gantt.setLive(on);
@@ -428,7 +485,13 @@ function setLive(on) {
 function refreshLive() {
   if (!store || !gantt) return;
   refreshShowhead();
-  const st = liveStats(store.state.tasks, gantt.liveInfo().now);
+  // Der Stepper gehört zur laufenden Uhr: ohne Live sagt ein Versatz nichts,
+  // und in beiden Ebenen ist er gleichermaßen nützlich (auch ein Aufbau hängt).
+  $('vz').hidden = !gantt.isLive;
+  $('vz-txt').hidden = !gantt.isLive;
+  // planNow statt now: gezählt wird gegen den VERSCHOBENEN Plan. Wer fünf
+  // Minuten angesagt hat und exakt fünf Minuten spät ist, ist im Plan.
+  const st = liveStats(store.state.tasks, gantt.liveInfo().planNow);
   const n = $('live-bar');
   // Im Showablauf trägt die große Kopfzeile dieselbe Aussage, nur genauer und
   // auf den Tag bezogen. Beides nebeneinander widerspräche sich sichtbar: hier
@@ -460,7 +523,10 @@ function refreshShowhead() {
   n.hidden = !an;
   if (!an) return;
 
-  const now = gantt.liveInfo().now;
+  // Gerechnet wird gegen den verschobenen Plan (planNow), angezeigt werden die
+  // verschobenen Uhrzeiten (`vz`) — sonst stünde in der Kopfzeile 20:00, wo der
+  // Balken daneben auf 20:05 liegt.
+  const { planNow: now, now: echtNow, versatz: vz } = gantt.liveInfo();
   const punkte = gantt.sichtbareTasks();   // schon auf Ebene UND Showtag gefiltert
   const laeuft = runningAt(punkte, now);
   const jetzt = punkte.filter((t) => laeuft.has(t.id)).sort((a, b) => toMin(a.start) - toMin(b.start));
@@ -494,14 +560,18 @@ function refreshShowhead() {
     n.append(d);
   };
 
+  const hhmm = (iso) => verschoben(iso, vz).slice(11, 16);
+
   feld('sh-now', 'Jetzt',
     jetzt.length ? jetzt.map(ansage).join(' · ') : 'nichts auf der Bühne',
-    jetzt.length ? 'bis ' + jetzt.map((t) => t.end.slice(11, 16)).join(' / ') : null);
+    jetzt.length ? 'bis ' + jetzt.map((t) => hhmm(t.end)).join(' / ') : null);
 
   const nt = naechst && titelVon(naechst.taskId);
+  // «in 12 Min» braucht keine Korrektur: Plan und Uhr sind gleich weit
+  // verschoben, die Differenz bleibt dieselbe. Nur die absolute Uhrzeit wandert.
   feld('sh-next', 'Als Nächstes',
     nt ? ansage(nt) : 'Show zu Ende',
-    nt ? 'in ' + fmtMin(naechst.inMin) + ' · ' + nt.start.slice(11, 16) : null);
+    nt ? 'in ' + fmtMin(naechst.inMin) + ' · ' + hhmm(nt.start) : null);
 
   const schlimm = verzug[0];
   const d = el('div', 'sh-f sh-late');
@@ -511,14 +581,29 @@ function refreshShowhead() {
   if (schlimm) d.append(el('div', 'sh-z', schlimm.title + ' — ' + schlimm.message));
   n.append(d);
 
+  // Die Uhr zeigt die ECHTE Zeit, nicht die des Ablaufs — sie ist der feste
+  // Punkt, gegen den der Versatz überhaupt erst eine Aussage ist. Deshalb hier
+  // `echtNow` statt `now` (das ist seit dem Versatz die Planzeit).
   const uhr = el('div', 'sh-f sh-clock');
-  uhr.append(el('div', 'sh-k', 'Uhr'), el('div', 'sh-v', local(toDate(now)).slice(11, 16)));
+  uhr.append(el('div', 'sh-k', 'Uhr'), el('div', 'sh-v', local(toDate(echtNow)).slice(11, 16)));
   n.append(uhr);
 }
 
 // ── Kontextmenü ─────────────────────────────────────────────────────────────
 function showContext(sel, x, y) {
   const S = store.state;
+  // Eine Verknüpfung zuerst abfangen: darunter wird `sel.id` als Vorgangs-id
+  // gelesen, und die Suche liefe ins Leere.
+  if (sel.kind === 'dep') {
+    const d = S.deps.find((z) => z.id === sel.id);
+    if (!d) return;
+    const name = (id) => (S.tasks.find((t) => t.id === id) || {}).title || id;
+    openMenu(x, y, [
+      { label: 'Entfernen: ' + name(d.from) + ' → ' + name(d.to), danger: true, hint: 'Entf',
+        run: () => apply({ type: 'removeDep', id: d.id }) },
+    ]);
+    return;
+  }
   if (sel.kind === 'gewerk') {
     const g = S.gewerke.find((z) => z.id === sel.id);
     if (!g) return;

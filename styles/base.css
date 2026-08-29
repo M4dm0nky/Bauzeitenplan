@@ -229,6 +229,52 @@ body { margin: 0; }
 .bz-deps { position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none; overflow: hidden; }
 .bz-dep { fill: none; }
 
+/* Ein 1–1,5 px breiter Pfad ist mit der Maus nicht zu treffen und mit dem Finger
+   gar nicht. Darunter liegt ein unsichtbarer Zwilling mit demselben Verlauf, nur
+   dick — er allein nimmt Zeigerereignisse an. Die Ebene bleibt sonst
+   pointer-events:none, sonst fingen die Pfeile Klicks auf die Balken darunter ab. */
+.bz-dep-hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }
+.bz-dep-ghost { fill: none; pointer-events: none; }
+
+/* ── Verknüpfen per Ziehen ────────────────────────────────────────────────── */
+/* Der Griff steht NEBEN dem Balken im Track, nicht darin — wie .bz-slack. Als
+   Kind lag er hinter dem overflow:hidden des Balkens und war weder zu sehen noch
+   zu treffen. `place()` setzt left und width (2 px) über data-from/data-to; der
+   sichtbare Punkt und die Trefferfläche stecken deshalb im ::after, dessen
+   Ereignisse beim Griff selbst ankommen. 10 px Punkt, 24 px Fläche — darunter
+   ist auf dem Tablet nichts zu bedienen. */
+/* z-index 6 muss über der Trefferfläche der Pfeile liegen (.bz-deps: 2). Sonst
+   fängt der 12 px breite Hit-Pfad eines Pfeils den Griff ab, der genau dort
+   endet, wo Pfeile beginnen — das Ziehen ließ sich gar nicht starten.
+   Und KEIN pointer-events:none hier: das schaltet in Firefox auch das ::after
+   ab, obwohl das ausdrücklich `auto` verlangt. Der Griff selbst ist 2×0 px groß
+   und fängt damit ohnehin nichts ein; getroffen wird das ::after. */
+/* Eigene Ebene ÜBER den Pfeilen. Nötig, weil `.bz-rows` mit z-index 1 einen
+   eigenen Stapelkontext bildet: ein Griff darin kommt NIE über `.bz-deps`
+   (z-index 2), und dessen 12 px breite Trefferfläche beginnt genau dort, wo der
+   Griff sitzt — das Ziehen ließ sich gar nicht erst starten.
+   Die Ebene selbst lässt Zeiger durch, nur die Griffe fangen sie ein. */
+.bz-links { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.bz-link {
+  position: absolute; height: 0; pointer-events: auto;
+  opacity: 0; transition: opacity .12s ease;
+}
+.bz-link::after {
+  content: ''; position: absolute; left: 50%; top: 0;
+  transform: translate(-50%, -50%);
+  width: 10px; height: 10px; padding: 7px;
+  box-sizing: content-box; border-radius: 50%; background-clip: content-box;
+  cursor: crosshair;
+}
+/* Erst beim Hinsehen. Dauerhaft wären es bei 153 Zeilen 153 Punkte im Bild.
+   Der Griff wird direkt hinter seinem Balken angehängt — daher der Nachbar-Selektor. */
+.bz-link.is-on, .bz-link:hover { opacity: 1; }
+/* Ohne Zeigegerät gibt es kein Hover — dort steht der Griff immer. */
+@media (pointer: coarse) { .bz-link { opacity: 1; } }
+/* Während des Ziehens sind die übrigen Griffe nur Störung. */
+.bz[data-linking] .bz-link { opacity: 0; }
+.bz[data-linking] .bz-tip { opacity: 0 !important; }
+
 /* ── Tooltip ──────────────────────────────────────────────────────────────── */
 .bz-tip {
   position: absolute; top: 0; left: 0; z-index: 30; pointer-events: none;
@@ -480,6 +526,22 @@ body { margin: 0; }
 .mn-sep { height: 1px; }
 
 /* ── Live ─────────────────────────────────────────────────────────────────── */
+/* ── Versatz-Stepper ──────────────────────────────────────────────────────── */
+/* Die Ansage vom Pult: − [ 5 ] +. Ein Minutenschritt je Klick, die Zahl selbst
+   ist das Eingabefeld — der Weg zurück auf null ist eine getippte 0 und kostet
+   keinen dritten Knopf in einer ohnehin vollen Werkzeugzeile. */
+/* Regler und Aussage bleiben zusammen — die Werkzeugzeile darf zwischen ihnen
+   nicht umbrechen. Leer (Live aus) ist die Gruppe 0 breit und stört nicht. */
+.vz-grp { display: flex; align-items: center; }
+.vz { display: flex; align-items: center; }
+.vz-n {
+  width: 44px; text-align: center; border: 0; padding: 4px 0;
+  font: inherit; background: transparent;
+  /* Ziffern gleich breit: sonst hüpfen die Knöpfe daneben bei jedem Klick. */
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.vz-txt { display: flex; align-items: center; padding: 0 8px; white-space: nowrap; }
 .live-bar { display: flex; align-items: center; gap: 7px; }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; animation: bz-blink 2s ease-in-out infinite; }
 @keyframes bz-blink { 50% { opacity: .25; } }

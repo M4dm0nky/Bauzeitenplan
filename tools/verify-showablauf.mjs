@@ -430,6 +430,72 @@ await check('die Uhr zeigt die gestellte Zeit', async () => {
 await check('die laufende Zeile ist hervorgehoben', async () =>
   (await p.locator('.bz-bar.is-run, .bz-row.is-run, .is-running').count()) > 0
     ? true : 'nichts markiert');
+// ── Versatz im Showablauf ───────────────────────────────────────────────────
+// Hier zahlt er sich aus: die Seitenspalte IST der Ablaufplan, und wenn dort
+// «20:00 Uhr» steht, während der Balken auf 20:05 liegt, widerspricht sich das
+// Blatt selbst. Genau das sieht keine Zahlenprüfung — nur diese hier.
+const spaltenZeit = () => p.locator('.bz-lab-zeit').first().textContent();
+const setVzShow = async (v) => {
+  await p.fill('#vz-n', String(v));
+  await p.press('#vz-n', 'Enter');
+  await p.waitForTimeout(400);
+};
+
+await check('die Uhrzeit in der Seitenspalte wandert mit dem Balken', async () => {
+  const vorher = (await spaltenZeit()).trim();
+  await setVzShow(5);
+  const nachher = (await spaltenZeit()).trim();
+  const zuMin = (s) => {
+    const m = /^(\d\d):(\d\d)/.exec(s);
+    return m ? +m[1] * 60 + +m[2] : null;
+  };
+  const a = zuMin(vorher), b = zuMin(nachher);
+  if (a == null || b == null) return `unlesbar: «${vorher}» → «${nachher}»`;
+  return b - a === 5 ? true : `${vorher} → ${nachher} (${b - a} statt 5 Minuten)`;
+});
+
+await check('die Kopfzeile nennt ebenfalls die verschobene Uhrzeit', async () => {
+  // «bis 20:45» und «· 20:00» sind absolute Zeiten und müssen mitwandern —
+  // «in 12 Min» dagegen nicht, das ist eine Differenz und bleibt richtig.
+  const z = (await p.locator('#showhead .sh-now .sh-z').textContent()).trim();
+  return /^bis \d\d:\d\d/.test(z) ? true : 'kein «bis HH:MM»: ' + z;
+});
+
+await check('die Uhr in der Kopfzeile bleibt die ECHTE Zeit', async () => {
+  // Der feste Punkt, gegen den der Versatz überhaupt eine Aussage ist. Wanderte
+  // sie mit, wäre der Versatz unsichtbar — alles verschöbe sich gleichmäßig.
+  const v = await shText('sh-clock');
+  return /^15:3\d$/.test(v) ? true : 'die Uhr ist mitgewandert: ' + v;
+});
+await check('DIE ANSAGE ZÄHLT: der Versatz rechnet den Verzug herunter', async () => {
+  // Die Kernentscheidung — aber sie ist RELATIV zu lesen, und das ist keine
+  // Schwäche der Umsetzung, sondern eine Eigenschaft des Showablaufs: dort
+  // steht alles auf «geplant», weil im Betrieb niemand Häkchen pflegt. Für den
+  // gerade laufenden Punkt meldet die Rechnung deshalb IMMER Verzug in Höhe
+  // seiner bisherigen Laufzeit. «im Plan» erscheint hier also nie, solange
+  // etwas läuft — auch schon vor dem Versatz war das so.
+  //
+  // Was der Versatz leisten muss und hier geprüft wird: er zieht seinen Betrag
+  // vom gemeldeten Verzug DESSELBEN Punktes ab, Minute für Minute.
+  const lies = async () => {
+    const v = (await p.locator('#showhead .sh-late .sh-v').textContent()).trim();
+    const z = (await p.locator('#showhead .sh-late .sh-z').textContent()).trim();
+    const m = /(\d+)\s*Min/.exec(v);
+    return { min: m ? Number(m[1]) : null, wer: z.split('—')[0].trim(), v };
+  };
+  await setVzShow(0);
+  const ohne = await lies();
+  if (ohne.min == null) return 'ohne Versatz kein «+N Min»: ' + ohne.v;
+  await setVzShow(3);
+  const mit = await lies();
+  if (mit.wer !== ohne.wer) return `anderer Punkt gemeldet: «${ohne.wer}» → «${mit.wer}»`;
+  return mit.min === ohne.min - 3 ? true
+    : `${ohne.min} − 3 sollte ${ohne.min - 3} sein, gemeldet wird ${mit.min}`;
+});
+await setVzShow(5);
+await p.screenshot({ path: join(here, 'shots', 'showablauf-versatz.png') });
+await setVzShow(0);
+
 await check('im Bauzeitenplan bleibt die Kopfzeile weg', async () => {
   await p.locator('[data-ansicht="bau"]').click();
   await p.waitForTimeout(400);
@@ -885,8 +951,14 @@ await p.setViewportSize({ width: 1700, height: 1000 });
 console.log('\nPDF (A3 quer)');
 let chromeExe = null;
 try {
+  // Nicht raten: der Ordner heißt je nach Architektur `chrome-mac` oder
+  // `chrome-mac-arm64`, das Programm darin mal `Chromium.app`, mal «Google
+  // Chrome for Testing.app». Hart verdrahtet wurde das PDF auf Apple Silicon
+  // stillschweigend übersprungen, obwohl Chromium installiert war.
   const d = readdirSync(cache).find((x) => x.startsWith('chromium-'));
-  if (d) chromeExe = join(cache, d, 'chrome-mac/Chromium.app/Contents/MacOS/Chromium');
+  const arch = d && readdirSync(join(cache, d)).find((x) => x.startsWith('chrome-mac'));
+  const app = arch && readdirSync(join(cache, d, arch)).find((x) => x.endsWith('.app'));
+  if (app) chromeExe = join(cache, d, arch, app, 'Contents/MacOS', app.replace(/\.app$/, ''));
 } catch { /* nicht da */ }
 if (chromeExe && existsSync(chromeExe)) {
   const cb = await chromium.launch({ executablePath: chromeExe });

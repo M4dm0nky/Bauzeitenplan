@@ -7,3 +7,10 @@ tools/shots/
 # PocketBase (lokale Entwicklung — nicht einchecken)
 pocketbase/bin/
 pocketbase/pb_data/
+
+# Wegwerf-Sonden beim Debuggen (_dbg, _probe, _live-check …). Sie beantworten
+# EINE Frage und sind danach wertlos; was sich bewährt, wird ein verify-*.mjs.
+tools/_*.mjs
+
+# Lokale Claude-Code-Berechtigungen — maschinenabhängig, kein Projektinhalt.
+.claude/

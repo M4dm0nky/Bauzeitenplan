@@ -1,4 +1,4 @@
-import { computeSchedule, topoSort, toMin, byStart, candidateGroups, seriesRows, tagesScheiben } from '../js/schedule.js';
+import { computeSchedule, topoSort, toMin, byStart, candidateGroups, seriesRows, tagesScheiben, reachable } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -215,6 +215,36 @@ test('Sommerzeit: Reihenfolge aus echten Zeitstempeln (toMin), nicht aus Ziffern
   assert.deepEqual(list.map((x) => x.id), ['vor', 'nach']);
 });
 
+console.log('\nreachable — wer hängt (mittelbar) an wem');
+// Kette a → b → c, dazu d ganz für sich.
+const rDeps = [{ from: 'a', to: 'b' }, { from: 'b', to: 'c' }];
+
+test('vorwärts: alles, was NACH dem Vorgang kommt — inklusive er selbst', () => {
+  assert.deepEqual([...reachable(rDeps, 'a', 'nach')].sort(), ['a', 'b', 'c']);
+});
+test('rückwärts: alles, was VOR dem Vorgang liegt — inklusive er selbst', () => {
+  assert.deepEqual([...reachable(rDeps, 'c', 'vor')].sort(), ['a', 'b', 'c']);
+});
+test('mitten in der Kette sieht jede Richtung nur ihre Hälfte', () => {
+  assert.deepEqual([...reachable(rDeps, 'b', 'nach')].sort(), ['b', 'c']);
+  assert.deepEqual([...reachable(rDeps, 'b', 'vor')].sort(), ['a', 'b']);
+});
+test('ohne Verknüpfungen bleibt nur der Vorgang selbst', () => {
+  assert.deepEqual([...reachable([], 'a', 'nach')], ['a']);
+  assert.deepEqual([...reachable(rDeps, 'd', 'nach')], ['d']);
+});
+test('Raute: beide Zweige zählen, jeder Knoten nur einmal', () => {
+  // a → b → d und a → c → d
+  const raute = [{ from: 'a', to: 'b' }, { from: 'a', to: 'c' }, { from: 'b', to: 'd' }, { from: 'c', to: 'd' }];
+  assert.deepEqual([...reachable(raute, 'a', 'nach')].sort(), ['a', 'b', 'c', 'd']);
+  assert.deepEqual([...reachable(raute, 'd', 'vor')].sort(), ['a', 'b', 'c', 'd']);
+});
+test('ein Ring in den Daten lässt die Suche nicht hängen', () => {
+  // Der Store verbietet Ringe, aber reachable darf an Altdaten nicht ewig laufen.
+  const ring = [{ from: 'a', to: 'b' }, { from: 'b', to: 'a' }];
+  assert.deepEqual([...reachable(ring, 'a', 'nach')].sort(), ['a', 'b']);
+});
+
 console.log('\ncandidateGroups — Verknüpfungs-Picker');
 const cgTasks = [
   { id: 's', gewerk: 'g1', title: 'Selbst', start: '2026-07-13T08:00', end: '2026-07-13T09:00' },
@@ -257,6 +287,24 @@ test('leeres Query = alle Kandidaten', () => {
 test('Projekt-Zieltermine als eigene Gruppe am Ende', () => {
   const g = cg();
   assert.equal(g[g.length - 1].gewerk.id, 'projekt');
+});
+test('bietet keinen Kandidaten an, der einen Ring ergäbe', () => {
+  // Der Kandidat wird VORGÄNGER des gewählten Vorgangs (inspector.js:
+  // dep {from: Kandidat, to: t}). Ein Ring entsteht also, wenn der Kandidat
+  // schon HINTER t hängt — hier: s → a → b, also wäre b → s ein Ring.
+  // «Bereits verknüpft» greift nicht: b und s hängen nicht direkt zusammen.
+  const ids = cg({ deps: [{ from: 's', to: 'a' }, { from: 'a', to: 'b' }] })
+    .flatMap((x) => x.items.map((t) => t.id));
+  assert.equal(ids.includes('b'), false, 'b hängt hinter s — b → s wäre ein Ring');
+  assert.equal(ids.includes('c'), true, 'c hängt an nichts und bleibt wählbar');
+});
+test('die Gegenrichtung bleibt erlaubt', () => {
+  // Nur weil t hinter etwas hängt, ist das nichts wert für die Sperre: hier
+  // liegt a VOR s, ein zweiter Weg a → s wäre bloß eine Dopplung, kein Ring.
+  // Gesperrt wird ausschließlich, was hinter s liegt.
+  const ids = cg({ deps: [{ from: 'a', to: 'c' }, { from: 'c', to: 's' }] })
+    .flatMap((x) => x.items.map((t) => t.id));
+  assert.equal(ids.includes('a'), true, 'a liegt vor s — als Vorgänger unbedenklich');
 });
 
 // ── Serien: eine Zeile je Vorgangsname, ein Balken je Termin ─────────────────

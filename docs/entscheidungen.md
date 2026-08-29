@@ -230,6 +230,91 @@ drängten die Anforderungen aus dem Bild. Zwei Fallen, die das Datum verdeckt ha
 
 Im Bauzeitenplan bleiben die Felder datiert: er läuft über vierzehn Tage.
 
+## Der Live-Versatz verschiebt den Ablauf, nicht die Uhr
+
+Der gerechnete Verzug (`delaysAt`) entsteht aus dem Widerspruch zwischen Status und
+Uhr — er setzt voraus, dass jemand Häkchen pflegt. Im Showablauf tut das niemand:
+dort steht alles auf «geplant», und die Kopfzeile meldet für den laufenden Act
+immer seine bisherige Laufzeit. Gebraucht wurde die direkte menschliche Aussage
+daneben: «wir hängen fünf Minuten hinterher.» **Positiv ist Delay** — in der Regie
+heißt «plus fünf», dass es später wird.
+
+**Was sich bewegt, war die eigentliche Entscheidung.** Drei Wege standen zur Wahl:
+
+1. **Die Balken wandern**, Achse und Jetzt-Linie bleiben echt. Gewählt.
+2. Die Jetzt-Linie wandert um −5, der Plan bleibt stehen.
+3. Ein Store-Befehl verschiebt die echten Daten (undo-fähig, im Export).
+
+(2) wäre eine Lupe auf den Plan: man sähe, wo man im Ablauf steht, müsste die
+wirkliche Uhrzeit aber im Kopf addieren — und genau die will man am Pult ablesen
+(«wann geht SIDO auf die Bühne?»). (3) wirft den ursprünglichen Plan weg; ein
+Versatz ist eine Beobachtung über den Abend, keine Umplanung, und morgen früh wäre
+die Datei dauerhaft verschoben. Also (1): der **Ablauf** rutscht, die **Uhr** ist
+der feste Punkt, gegen den er überhaupt eine Aussage ist.
+
+**Zwei Abbildungen Zeit → Pixel.** `x()` bleibt die echte Zeit (Achse, Ticks,
+Bänder, Jetzt-Linie), daneben tritt `xp(min) = x(min + versatz)` für alles, was zum
+Ablauf gehört. Genau drei Stellen dürfen `xp()` rufen: `place()`, `updateLabels()`
+und `depAnchors()`. Durch `place()` laufen ohnehin **alle** zeitpositionierten
+Knoten — Balken, Meilensteine, Sammelbalken, Puffer, Ziehgriffe —, deshalb ist die
+Liste kurz und vollständig.
+
+**Kein `transform` auf die Balken-Ebene.** Das wäre die naheliegende Ein-Zeilen-
+Lösung gewesen, verschöbe aber auch Zeilenhintergründe und Trennlinien und risse an
+den Rändern Lücken auf. Und `updateLabels()` rechnet mit `scrollLeft` gegen die
+Balkenposition — die Beschriftungen lägen um den Versatz daneben, im Stundenzoom
+des Showablaufs deutlich sichtbar.
+
+**Die Logik bekommt die zurückgedrehte Uhr, nicht den Versatz.** «Was läuft im um
+`v` verschobenen Plan?» ist dieselbe Frage wie «was lief im Originalplan vor `v`
+Minuten?». Also `nowPlan() = NOW − versatz` an `runningAt`/`delaysAt`/`nextUp` —
+**`live.js` kennt den Versatz gar nicht.** Damit rechnet der Verzug von selbst
+gegen den verschobenen Plan, und relative Angaben («in 12 Min») stimmen ohne
+Zutun, weil beide Seiten gleich weit verschoben sind. Nur absolute Uhrzeiten
+laufen durch `verschoben()`.
+
+**Die Uhr in der Show-Kopfzeile ist die Ausnahme** und zeigt `now`, nicht
+`planNow`. Wanderte sie mit, verschöbe sich alles gleichmäßig und der Versatz wäre
+unsichtbar.
+
+**Grenze, die eine Prüfung aufgedeckt hat:** «passender Versatz ⇒ im Plan» ist im
+Showablauf *unerfüllbar*. Der laufende Act steht auf «geplant», also meldet die
+Rechnung immer seine Laufzeit; sinkt sein Verzug unter die 5-Minuten-Schwelle,
+übernimmt der vorige Punkt. Was der Versatz leistet, ist relativ — er zieht seinen
+Betrag ab, Minute für Minute. `verify-showablauf.mjs` prüft genau das; die
+naheliegende, aber falsche Zusicherung wurde ausgebaut statt festgeschrieben.
+
+**Der Versatz gehört dem Abend, nicht dem Plan.** `localStorage` als `{min, tag}`,
+nicht im Export, und er gilt nur am Tag seiner Eingabe. Der Live-Knopf überlebt den
+Neustart bewusst (Stromausfall am Monitor) — ein Versatz von gestern wäre dagegen
+ein Plan, der am nächsten Morgen 45 Minuten neben der Achse liegt, ohne dass jemand
+den Grund fände. Geklemmt auf ±180 Minuten: darüber ist es kein Ablaufplan mehr.
+
+## Verknüpfen per Ziehen: ein Griff, nicht zwei
+
+Der Gantt ist die Ansicht für Pfeile, also werden sie dort gezogen. **Ein** Griff je
+Balken, am Ende: es entsteht immer FS, und eine FS-Verknüpfung legt man beim
+Vorgänger an — ein zweiter Griff wäre ein zweites Ziel ohne zweite Bedeutung. Den
+Typ stellt man danach im Panel um, wo die Auswahl ohnehin schon steht.
+
+**Gesperrt wird VOR der Geste, nicht danach.** `wouldCycle` im Store lehnt einen
+Ring ohnehin ab — aber eine Bedienung, die erst nach dem Loslassen nein sagt, ist
+eine schlechte Bedienung. `reachable(deps, id, 'vor')` liefert die verbotenen Ziele
+vorab; sie werden während des Ziehens ausgegraut. Dieselbe Funktion räumt auch im
+Suchfeld auf: `candidateGroups` bot vorher Kandidaten an, die der Store gleich
+darauf zurückwies — Suchfeld und Ziehen geben jetzt dieselbe Antwort.
+
+**Der Griff hängt in einer eigenen Ebene über den Pfeilen.** `.bz-rows` bildet mit
+`z-index: 1` einen eigenen Stapelkontext; ein Griff darin käme nie über `.bz-deps`
+(z-index 2), und dessen 12 px breite Trefferfläche beginnt genau dort, wo der Griff
+sitzt — das Ziehen ließ sich gar nicht erst starten.
+
+**Pfeile brauchen einen dicken Zwilling.** Ein 1,5 px breiter Pfad ist mit der Maus
+kaum und mit dem Finger gar nicht zu treffen. Darunter liegt derselbe Verlauf,
+unsichtbar und 12 px stark; nur er nimmt Zeigerereignisse an. Die Ebene bleibt
+sonst `pointer-events: none`, sonst fingen die Pfeile Klicks auf die Balken darunter
+ab.
+
 ## PocketBase liegt auf Eis
 
 Eine fertige Login- und Rollenschicht lag von v0.3.0 bis v0.7.1 **bewusst uncommittet**
@@ -276,9 +361,12 @@ bei 500 Vorgängen), dann die Zahl der Aufrufe senken statt einen Cache einzuzie
 
 ## Was bewusst noch fehlt
 
-Drag & Drop der Balken im Gantt sowie Ansichten & Export (öffentlicher Link, PDF/ICS).
-Darstellung, Bearbeiten, Live-Modus, Untervorgänge, Prüf-Liste, Verknüpfungs-Suche,
-Tagesblätter und der Showablauf mit Setup, Farben und Soundchecks stehen
-(Stand v0.9.5). Startdaten kommen aus den
+Das Ziehen der **Balken und Dauern** im Gantt sowie Ansichten & Export
+(öffentlicher Link, PDF/ICS). Verknüpfungen lassen sich seit v0.9.7 ziehen — Griff,
+Gummiband und Zielprüfung stehen dort als Muster für den Rest.
+
+Darstellung, Bearbeiten, Live-Modus mit Versatz, Untervorgänge, Prüf-Liste,
+Verknüpfungs-Suche, Tagesblätter und der Showablauf mit Setup, Farben und
+Soundchecks stehen (Stand v0.9.7). Startdaten kommen aus den
 Vorlagen (`js/templates.js`) bzw. importierten JSON-Plänen — einen
 `js/data.js`-Demo-Datensatz gibt es nicht mehr.

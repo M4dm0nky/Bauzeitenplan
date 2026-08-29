@@ -351,6 +351,214 @@ await check('Treffer wählen legt die Verknüpfung an (oder lehnt einen Ring ab)
   return (after > before || ring) ? true : 'Klick auf einen Treffer bewirkte nichts';
 });
 
+console.log('\nVERKNÜPFEN PER ZIEHEN (der Gantt ist die Ansicht für Pfeile)');
+const pfeile = () => page.locator('path.bz-dep').count();
+// Der Griff steht NEBEN dem Balken (wie .bz-slack) und ist 2 px breit, 0 hoch —
+// sein Mittelpunkt liegt auf der Oberkante. getBoundingClientRect statt
+// boundingBox(): der Griff ist bei opacity 0 trotzdem treffbar, aber Playwright
+// wartete sonst auf «sichtbar».
+const griffPunkt = (id) => page.locator(`.bz-link[data-link-from="${id}"]`).first()
+  .evaluate((n) => { const r = n.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top }; });
+// Eine Quelle suchen, deren Griff wirklich im Bild steht — und sie notfalls
+// hinscrollen. Blind den ersten Balken zu nehmen schlug fehl: an dieser Stelle
+// im Lauf ist der Gantt längst gezoomt und verschoben, und das Ende des ersten
+// Balkens liegt dann weit außerhalb. Die Maus drückte ins Leere.
+// Nutzbarer Bereich: links steht die Gewerk-Spalte, rechts das Panel.
+const RAND = { l: 330, r: 390, t: 140, b: 140 };
+
+// Der Griff eines Vorgangs, ins Bild geholt. Blind den ersten Balken zu nehmen
+// schlug fehl: an dieser Stelle im Lauf ist der Gantt längst gezoomt und
+// verschoben, und das Ende des ersten Balkens liegt weit außerhalb — die Maus
+// drückte dann ins Leere.
+const imBild = (tid, m) => page.evaluate(([id, m]) => {
+  const h = document.querySelector(`.bz-link[data-link-from="${id}"]`);
+  if (!h) return false;
+  h.scrollIntoView({ block: 'center', inline: 'center' });
+  const r = h.getBoundingClientRect();
+  return r.left > m.l && r.left < innerWidth - m.r
+    && r.top > m.t && r.top < innerHeight - m.b;
+}, [tid, m || RAND]);
+
+async function waehleQuelle(ab = 0) {
+  const ids = await page.evaluate(() =>
+    [...document.querySelectorAll('.bz-bar[data-task]')].map((b) => b.dataset.task));
+  for (let i = ab; i < Math.min(ids.length, 40); i++) {
+    if (await imBild(ids[i])) return ids[i];
+  }
+  return null;
+}
+
+// Ein zulässiges Ziel mit anklickbarem Punkt. Der Balken muss NICHT ganz
+// sichtbar sein — bei diesem Zoom sind viele breiter als der Ausschnitt. Der
+// Punkt wird in den sichtbaren Streifen geklemmt und muss dort auf dem Balken
+// liegen.
+const zielImBild = () => page.evaluate((m) => {
+  const L = m.l, R = innerWidth - m.r, T = m.t, B = innerHeight - m.b;
+  const alle = [...document.querySelectorAll('.bz-bar.is-link-ok')];
+  for (const b of alle) {
+    const r = b.getBoundingClientRect();
+    const y = r.top + r.height / 2;
+    if (y < T || y > B) continue;
+    const x = Math.max(L, Math.min(R, r.left + r.width / 2));
+    if (x < r.left || x > r.right) continue;
+    return { id: b.dataset.task, x, y };
+  }
+  return { fehler: alle.length + ' zulaessige Ziele, keines mit Punkt im Bild' };
+}, RAND);
+
+// Zieht vom Griff los und bleibt mit gedrückter Maus stehen — erst dann stehen
+// die Markierungen im DOM und der Test weiß, welches Ziel die App zulässt.
+async function zieheLos(id) {
+  const p = await griffPunkt(id);
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.down();
+  await page.mouse.move(p.x + 26, p.y, { steps: 4 });
+  await page.waitForTimeout(120);
+}
+
+await check('der Griff steht nicht dauerhaft im Bild, sondern erscheint beim Hinsehen', async () => {
+  const ids = [await waehleQuelle()];
+  if (!ids[0]) return 'kein Balken mit sichtbarem Griff gefunden';
+  const g = page.locator(`.bz-link[data-link-from="${ids[0]}"]`).first();
+  const o = await g.evaluate((n) => getComputedStyle(n).opacity);
+  if (o !== '0') return `dauerhaft sichtbar (opacity ${o}) — bei 153 Zeilen wären das 153 Punkte`;
+  await page.locator(`.bz-bar[data-task="${ids[0]}"]`).first().hover();
+  await page.waitForTimeout(250);
+  const o2 = await g.evaluate((n) => getComputedStyle(n).opacity);
+  return o2 === '1' ? true : `beim Hover immer noch opacity ${o2}`;
+});
+
+let vonId = null, nachId = null, neuerDep = null;
+await check('Ziehen vom Griff auf ein zulässiges Ziel legt eine Verknüpfung an', async () => {
+  const vorher = await pfeile();
+  vonId = await waehleQuelle();
+  if (!vonId) return 'kein Balken mit sichtbarem Griff gefunden';
+  await zieheLos(vonId);
+  const z = await zielImBild();
+  if (!z || z.fehler) { await page.mouse.up(); return z ? z.fehler : 'kein zulässiges Ziel markiert'; }
+  nachId = z.id;
+  await page.mouse.move(z.x, z.y, { steps: 6 });
+  await page.waitForTimeout(150);
+  const geist = await page.locator('.bz-dep-ghost').count();
+  const markiert = await page.locator('.bz-bar.is-link-target').count();
+  // Mitten in der Geste festhalten: Gummiband, gültige und gesperrte Ziele.
+  await page.screenshot({ path: join(here, 'shots', 'edit-8-ziehen.png') });
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  if (!geist) return 'kein Gummiband während des Ziehens';
+  if (!markiert) return 'das Ziel unter dem Zeiger war nicht hervorgehoben';
+  const nachher = await pfeile();
+  if (nachher !== vorher + 1) return `${vorher} → ${nachher} Pfeile statt +1`;
+  const kind = (await page.locator('.ins-kind').textContent()).trim();
+  if (kind !== 'Verknüpfung') return `Panel zeigt «${kind}» statt der neuen Verknüpfung`;
+  neuerDep = await page.locator('path.bz-dep.is-sel').getAttribute('data-dep');
+  return neuerDep ? true : 'der neue Pfeil ist nicht als ausgewählt markiert';
+});
+
+await check('nach dem Ziehen räumt die App restlos auf', async () => {
+  const r = await page.evaluate(() => ({
+    geist: document.querySelectorAll('.bz-dep-ghost').length,
+    marken: document.querySelectorAll('.is-link-ok, .is-link-no, .is-link-from, .is-link-target').length,
+    flag: document.querySelector('.bz').hasAttribute('data-linking'),
+  }));
+  if (r.geist) return 'Gummiband bleibt stehen';
+  if (r.marken) return `${r.marken} Markierungen bleiben stehen`;
+  return r.flag ? 'data-linking bleibt gesetzt' : true;
+});
+
+await check('was einen Ring ergäbe, ist gesperrt — der Store sagt nicht erst hinterher nein', async () => {
+  // Eben wurde vonId → nachId angelegt. Zieht man jetzt von nachId aus, muss
+  // vonId gesperrt sein: nachId → vonId liefe im Kreis.
+  if (!(await imBild(nachId))) return 'der Nachfolger liegt nicht im Bild';
+  await zieheLos(nachId);
+  const gesperrt = await page.locator(`.bz-bar[data-task="${vonId}"].is-link-no`).count();
+  const faelschlichOk = await page.locator(`.bz-bar[data-task="${vonId}"].is-link-ok`).count();
+  const selbst = await page.locator(`.bz-bar[data-task="${nachId}"].is-link-ok`).count();
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  if (faelschlichOk) return 'der Vorgänger ist als gültiges Ziel markiert — das gäbe einen Ring';
+  if (selbst) return 'der Ausgangsbalken ist als gültiges Ziel markiert — das wäre eine Selbstverknüpfung';
+  return gesperrt ? true : 'der Vorgänger ist gar nicht markiert';
+});
+
+await check('Escape bricht ab: keine Verknüpfung, keine Reste', async () => {
+  const vorher = await pfeile();
+  const q = await waehleQuelle(2);
+  if (!q) return 'kein Balken mit sichtbarem Griff gefunden';
+  await zieheLos(q);
+  const z = await zielImBild();
+  if (z && !z.fehler) await page.mouse.move(z.x, z.y, { steps: 4 });
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  if (await pfeile() !== vorher) return 'Escape hat trotzdem verknüpft';
+  const reste = await page.evaluate(() =>
+    document.querySelectorAll('.bz-dep-ghost, .is-link-ok, .is-link-no, .is-link-from').length);
+  return reste === 0 ? true : `${reste} Reste nach dem Abbruch`;
+});
+
+console.log('\nPFEILE SIND ANKLICKBAR');
+// Auf die LINIE klicken, nicht in die Mitte des umschließenden Rechtecks: der
+// Pfad ist L-förmig, und `pointer-events: stroke` trifft nur die Linie selbst.
+// Gesucht wird der erste Pfeil mit einem Punkt, der im Bild liegt UND an dem
+// elementFromPoint wirklich diesen Pfad meldet — das prüft die Trefferfläche,
+// statt sie mit dispatchEvent zu umgehen. Welcher Pfeil es ist, spielt keine
+// Rolle; auf einen bestimmten zu zielen scheiterte daran, dass er zwischen zwei
+// weit auseinander liegenden Balken verlief und komplett außerhalb war.
+const freierPfeil = () => page.evaluate((m) => {
+  const L = m.l, R = innerWidth - m.r, T = m.t, B = innerHeight - m.b;
+  const alle = [...document.querySelectorAll('path.bz-dep-hit')];
+  for (const n of alle) {
+    const ctm = n.getScreenCTM();
+    if (!ctm) continue;
+    const len = n.getTotalLength();
+    if (!len) continue;
+    for (let f = 0.1; f <= 0.9; f += 0.1) {
+      const q = n.getPointAtLength(len * f);
+      const s = new DOMPoint(q.x, q.y).matrixTransform(ctm);
+      if (s.x < L || s.x > R || s.y < T || s.y > B) continue;
+      if (document.elementFromPoint(s.x, s.y) !== n) continue;
+      return { dep: n.dataset.dep, x: s.x, y: s.y };
+    }
+  }
+  return { fehler: alle.length + ' Pfeile, keiner mit freiem Punkt im Bild' };
+}, RAND);
+
+await check('Klick auf die Linie wählt die Verknüpfung aus', async () => {
+  const p = await freierPfeil();
+  if (p.fehler) return p.fehler;
+  const vorher = (await page.locator('.ins-kind').count())
+    ? (await page.locator('.ins-kind').textContent()).trim() : '';
+  await page.mouse.click(p.x, p.y);
+  await page.waitForTimeout(350);
+  const kind = (await page.locator('.ins-kind').textContent()).trim();
+  if (kind !== 'Verknüpfung') return `Panel zeigt «${kind}» (vorher «${vorher}»)`;
+  const n = await page.locator('path.bz-dep.is-sel').count();
+  if (n !== 1) return `${n} Pfeile gleichzeitig als ausgewählt markiert`;
+  const gewaehlt = await page.locator('path.bz-dep.is-sel').getAttribute('data-dep');
+  return gewaehlt === p.dep ? true : 'es wurde ein anderer Pfeil ausgewählt als angeklickt';
+});
+await check('das Panel nennt beide Vorgänge und lässt Typ und Versatz ändern', async () => {
+  const t = await page.locator('#ins').textContent();
+  if (!/von/.test(t) || !/nach/.test(t)) return 'Richtung wird nicht benannt: ' + t.slice(0, 90);
+  if (!(await page.locator('.ins-dep-t').count())) return 'keine Typ-Auswahl';
+  return (await page.locator('.ins-dep-l').count()) ? true : 'kein Feld für den Versatz';
+});
+await page.screenshot({ path: join(here, 'shots', 'edit-9-pfeil-gewaehlt.png') });
+await check('Entf entfernt die ausgewählte Verknüpfung, ⌘Z holt sie zurück', async () => {
+  const vorher = await pfeile();
+  await page.keyboard.press('Delete');
+  await page.waitForTimeout(400);
+  const weg = await pfeile();
+  if (weg !== vorher - 1) return `${vorher} → ${weg} statt −1`;
+  if (!(await page.locator('#ins').isHidden())) return 'das Panel zeigt noch die gelöschte Verknüpfung';
+  await page.keyboard.press('Meta+z');
+  await page.waitForTimeout(400);
+  const zurueck = await pfeile();
+  return zurueck === vorher ? true : `⌘Z bringt ${zurueck} statt ${vorher}`;
+});
+
 console.log('\nRECHTSKLICK-MENÜ');
 await check('Rechtsklick auf ein Gewerk öffnet das Menü', async () => {
   await page.locator('.bz-lab-group').first().click({ button: 'right' });

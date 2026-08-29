@@ -93,6 +93,14 @@ in den anderen fehlt er unsichtbar. Genau das ist mit der Showablauf-Ebene
 zunächst nur in `callboard.css`, und die Prüfung schwieg, weil ihre Liste die
 Namen nicht kannte.
 
+**Manchmal ist die bessere Antwort, gar keinen Baustein zu erfinden.** Der
+Versatz-Stepper (v0.9.7) trägt zusätzlich die Klasse `seg` — damit sehen seine
+Knöpfe in allen fünf Themes aus wie jede andere Segmentgruppe, ohne dass ein
+Theme eine Zeile dazulernt. Nur was wirklich neu ist, braucht eigene Regeln:
+hier `vz-n` (die Zahl) und `vz-txt` (die Aussage), denn **Delay rot und Vorlauf
+grün ist die halbe Information** — ohne Farbe wäre «5 Min Delay» von «5 Min vor
+Plan» nur am Wortlaut zu unterscheiden. Beide stehen in der `needed`-Liste.
+
 ## Farbpalette der Gewerke
 
 Die ersten **acht Farben sind gerechnet, nicht ausgesucht** (`docs/entscheidungen.md`).

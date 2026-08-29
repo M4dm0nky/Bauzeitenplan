@@ -103,6 +103,42 @@ export function seriesRows(tasks) {
 }
 
 /**
+ * Alle Vorgänge, die von `startId` aus über die Verknüpfungen erreichbar sind —
+ * `'nach'` folgt den Pfeilen, `'vor'` geht gegen sie. `startId` ist immer dabei.
+ *
+ * Damit lässt sich VOR einer Geste sagen, was ein gültiges Ziel ist: eine neue
+ * Verknüpfung a → b ergibt genau dann einen Ring, wenn a von b aus schon
+ * erreichbar ist. Der Store lehnt so etwas ohnehin ab (`wouldCycle`), aber eine
+ * Bedienung, die erst NACH der Geste nein sagt, ist eine schlechte Bedienung —
+ * beim Ziehen im Gantt hätte man den Balken dann schon losgelassen.
+ *
+ * Läuft auch über ringhaltige Altdaten nicht ewig: besucht wird jeder Knoten
+ * einmal.
+ * @param {{from:string,to:string}[]} deps
+ * @param {string} startId
+ * @param {'nach'|'vor'} dir
+ * @returns {Set<string>}
+ */
+export function reachable(deps, startId, dir = 'nach') {
+  const next = new Map();
+  for (const d of deps || []) {
+    const [a, b] = dir === 'vor' ? [d.to, d.from] : [d.from, d.to];
+    if (!next.has(a)) next.set(a, []);
+    next.get(a).push(b);
+  }
+  const seen = new Set([startId]);
+  const queue = [startId];
+  while (queue.length) {
+    for (const n of next.get(queue.shift()) || []) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      queue.push(n);
+    }
+  }
+  return seen;
+}
+
+/**
  * Kandidaten fürs Verknüpfen, gruppiert nach Gewerk und je Gewerk nach Start
  * (byStart). Ohne den Vorgang selbst (`selfId`) und ohne die bereits mit ihm
  * Verknüpften. `query` filtert groß/klein-egal auf Titel ODER Gewerkname; leer =
@@ -117,6 +153,12 @@ export function candidateGroups({ tasks = [], gewerke = [], deps = [], selfId, q
     if (d.from === selfId) linked.add(d.to);
     if (d.to === selfId) linked.add(d.from);
   }
+  // Der Kandidat wird VORGÄNGER des gewählten Vorgangs (der Inspector schickt
+  // `dep: {from: Kandidat, to: selfId}`). Ein Ring entstünde also bei allem, was
+  // schon HINTER selfId hängt — Richtung 'nach', nicht 'vor'. Ohne diese Sperre
+  // bot das Suchfeld Treffer an, die der Store gleich darauf ablehnte, und das
+  // Ziehen im Gantt sagte nein, wo das Suchfeld ja sagte.
+  for (const id of reachable(deps, selfId, 'nach')) linked.add(id);
   const gName = new Map(gewerke.map((g) => [g.id, g.name]));
   gName.set('projekt', 'Zieltermine');
   const q = String(query).trim().toLowerCase();

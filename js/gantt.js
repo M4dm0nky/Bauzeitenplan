@@ -5,9 +5,9 @@
 // Das Raster im Canvas ist ein CSS-Gradient (kostenlos, beliebig breit); nur die
 // Beschriftungen im Viewport landen im DOM und werden beim Scrollen recycelt.
 
-import { computeSchedule, toMin, toDate, byStart, seriesRows } from './schedule.js';
+import { computeSchedule, toMin, toDate, byStart, seriesRows, reachable } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
-import { runningAt, delaysAt } from './live.js';
+import { runningAt, delaysAt, verschoben } from './live.js';
 import { sichtGewerke, programmFenster, amTag, imAbschnitt } from './ebene.js';
 import { gewerkVar, gewerkTexture, gewerkInkVar } from './palette.js';
 import { el, svgEl } from './dom.js';
@@ -94,6 +94,14 @@ export function createGantt(root, opts = {}) {
     return toMin(local(nowInZone(S0.project.timezone)));
   }
 
+  // Die Uhrzeit, an der der ABLAUF gerade steht. «Was läuft im um fünf Minuten
+  // verschobenen Plan?» ist dieselbe Frage wie «was lief im Originalplan vor
+  // fünf Minuten?» — deshalb kennt live.js den Versatz gar nicht, es bekommt
+  // einfach die zurückgedrehte Uhr. Damit rechnet auch der Verzug automatisch
+  // gegen den verschobenen Plan: wer genau fünf Minuten spät ist und fünf
+  // Minuten angesagt hat, ist im Plan.
+  const nowPlan = () => NOW - versatz;
+
   function syncState() {
     S = store.state;
     VG = sichtGewerke(S, ebene, ausBlend);
@@ -144,6 +152,13 @@ export function createGantt(root, opts = {}) {
   // und der Knopf verlöre die Markierung. Freies Zoomen setzt das wieder auf null.
   let zoomMode = O.initialZoom;
 
+  // Die Ansage vom Pult in Minuten, positiv = Delay (siehe live.js). Sie
+  // verschiebt den ABLAUF im Bild; Achse, Ticks, Bänder und die JETZT-Linie
+  // bleiben auf der echten Uhr stehen. Eine Zahl, kein Zustand im Plan: der
+  // Versatz gehört dem Abend, nicht dem Projekt, und wird deshalb auch nicht
+  // exportiert.
+  let versatz = 0;
+
   // ── DOM-Gerüst ──────────────────────────────────────────────────────────────
   root.classList.add('bz');
   root.dataset.ebene = ebene;
@@ -181,9 +196,10 @@ export function createGantt(root, opts = {}) {
   const bandLayer = el('div', 'bz-bands');
   const rowLayer = el('div', 'bz-rows');
   const depLayer = svgEl('svg', { class: 'bz-deps' });
+  const linkLayer = el('div', 'bz-links');
   const nowLine = el('div', 'bz-now');
   nowLine.append(el('div', 'bz-now-flag', 'JETZT'));
-  canvas.append(bandLayer, rowLayer, depLayer, nowLine);
+  canvas.append(bandLayer, rowLayer, depLayer, linkLayer, nowLine);
 
   const tip = el('div', 'bz-tip');
   root.append(scroller, tip);
@@ -273,7 +289,15 @@ export function createGantt(root, opts = {}) {
     return y;
   }
 
+  // ZWEI Abbildungen Zeit → Pixel, und der Unterschied ist der ganze Trick des
+  // Versatzes:
+  //   x()  — die echte Zeit. Achse, Ticks, Bänder, JETZT-Linie. Steht still.
+  //   xp() — die Zeit des ABLAUFS. Balken, Beschriftungen, Pfeile. Wandert.
+  // Nur drei Stellen dürfen xp() benutzen: place(), updateLabels() und
+  // depAnchors(). Wer eine vierte braucht, verschiebt vermutlich gerade etwas,
+  // das zur Achse gehört — und dann steht die Uhr falsch im Bild.
   const x = (min) => (min - T0) * px;
+  const xp = (min) => (min + versatz - T0) * px;
   const rowById = new Map();
   const labById = new Map();   // id → Zeile in der Seitenspalte
   let selected = null;        // {kind:'task'|'gewerk', id}
@@ -283,6 +307,7 @@ export function createGantt(root, opts = {}) {
     const totalH = buildRows();
     side.replaceChildren();
     rowLayer.replaceChildren();
+    linkLayer.replaceChildren();   // die Ziehgriffe hängen in einer eigenen Ebene
     rowById.clear();
     labById.clear();
     canvas.style.height = totalH + 'px';
@@ -338,7 +363,15 @@ export function createGantt(root, opts = {}) {
         // zu schauen. Im Bauzeitenplan wäre sie falsch: dort trägt eine Zeile
         // mehrere Termine, und einer davon stünde stellvertretend für alle.
         if (ebene === 'show') {
-          lab.append(el('span', 'bz-lab-zeit', String(r.t.start).slice(11, 16) + ' Uhr'));
+          // Mit dem Versatz gerechnet: stünde hier 20:00, während der Balken
+          // daneben auf 20:05 liegt, widerspräche sich das Blatt selbst — und
+          // die verschobene Uhrzeit ist ja gerade das, was man wissen will.
+          // `data-at` trägt die PLANZEIT, damit relabelZeiten() später ohne
+          // Neuaufbau neu rechnen kann — aus der angezeigten Zeit ließe sich
+          // der Ausgangswert nicht zurückgewinnen.
+          const zt = el('span', 'bz-lab-zeit', verschoben(r.t.start, versatz).slice(11, 16) + ' Uhr');
+          zt.dataset.at = r.t.start;
+          lab.append(zt);
           // Dauer in MINUTEN — bei einem Ablauf zählt man in Minuten, nicht in
           // «1,2 h». Ein Meilenstein hat keine Dauer und sagt das mit einem
           // Strich, statt eine Null zu behaupten.
@@ -412,6 +445,7 @@ export function createGantt(root, opts = {}) {
           bindTip(d, t);
           bindMark(d, { kind: 'task', id: t.id });
           track.append(d);
+          bindLink(d, r, t, toMin(t.start));
           rowById.set('task:' + t.id, d);
         }
       } else {
@@ -449,6 +483,7 @@ export function createGantt(root, opts = {}) {
             bindTip(d, t);
             bindMark(d, { kind: 'task', id: t.id });
             track.append(d);
+            bindLink(d, r, t, toMin(t.start));
             rowById.set('task:' + t.id, d);
           } else {
             const b = el('div', 'bz-bar bz-st-' + t.status + (r.parent ? ' is-summary' : ''));
@@ -486,6 +521,7 @@ export function createGantt(root, opts = {}) {
             bindTip(b, t);
             bindMark(b, { kind: 'task', id: t.id });
             track.append(b);
+            bindLink(b, r, t, toMin(t.end));
             rowById.set('task:' + t.id, b);
           }
         }
@@ -514,6 +550,165 @@ export function createGantt(root, opts = {}) {
       select(sel);
     });
   }
+
+  // ── Verknüpfen per Ziehen ───────────────────────────────────────────────────
+  // Der Gantt ist die Ansicht für Pfeile: hier werden sie gezogen, nicht getippt.
+  // Das Suchfeld im Panel bleibt daneben bestehen — Ziehen setzt voraus, dass
+  // BEIDE Balken gleichzeitig im Bild sind, und das ist bei 153 Zeilen über
+  // vierzehn Tage der Ausnahmefall.
+  //
+  // EIN Griff je Balken, am Ende. Nicht zwei: es entsteht immer FS, und jede
+  // FS-Verknüpfung legt man an, indem man beim Vorgänger beginnt — ein zweiter
+  // Griff wäre ein zweites Ziel ohne zweite Bedeutung. Wer SS/FF/SF braucht,
+  // stellt den Typ danach im Panel um.
+  // Der Griff ist GESCHWISTER des Balkens im Track, nicht sein Kind — genau wie
+  // `.bz-slack`. Als Kind lag er hinter `overflow: hidden` des Balkens und war
+  // weder zu sehen noch zu treffen. Positioniert wird er von `place()` über
+  // data-from/data-to wie alles andere auch; die Trefferfläche steckt in einem
+  // ::after, dessen Ereignisse beim Griff selbst ankommen.
+  function bindLink(node, row, task, atMin) {
+    node.dataset.task = task.id;     // Rückweg: Knoten unter dem Zeiger → Vorgang
+    const h = el('div', 'bz-link');
+    h.dataset.from = atMin; h.dataset.to = atMin;
+    h.dataset.linkFrom = task.id;
+    // Senkrecht über markY — dieselbe Rechnung, die schon die Pfeilanker setzt.
+    // Sie kennt Spuren, zugeklappte Gruppen und die Zieltermin-Zeile bereits.
+    h.style.top = markY(row, task) + 'px';
+    h.title = 'Ziehen legt eine Verknüpfung zum Nachfolger an';
+    linkLayer.append(h);
+    // Der Griff liegt nicht mehr neben dem Balken im DOM (er braucht eine Ebene
+    // ÜBER den Pfeilen, sonst fängt deren Trefferfläche ihn ab). Ein
+    // CSS-Nachbarselektor scheidet damit aus — die Sichtbarkeit schaltet der
+    // Balken selbst.
+    const an = () => h.classList.add('is-on');
+    const aus = () => h.classList.remove('is-on');
+    node.addEventListener('pointerenter', an);
+    node.addEventListener('pointerleave', aus);
+    node.addEventListener('focus', an);
+    node.addEventListener('blur', aus);
+    h.addEventListener('pointerenter', an);
+    h.addEventListener('pointerleave', aus);
+  }
+
+  let link = null;                   // { from, node, ghost, verboten, moved }
+  let edgeRaf = 0, edgePt = null;
+
+  const canvasXY = (cx, cy) => {
+    const r = canvas.getBoundingClientRect();
+    return { x: cx - r.left, y: cy - r.top };
+  };
+
+  function drawGhost(cx, cy) {
+    if (!link) return;
+    const r = link.node.getBoundingClientRect();
+    const a = canvasXY(r.right, r.top + r.height / 2);
+    const b = canvasXY(cx, cy);
+    link.ghost.setAttribute('d', `M${a.x},${a.y} L${b.x},${b.y}`);
+  }
+
+  // Am Rand mitscrollen. Ohne das ist nur verknüpfbar, was gerade im Bild steht —
+  // im Bauzeitenplan wäre das Ziehen damit fast nutzlos.
+  function edgeTick() {
+    edgeRaf = 0;
+    if (!link || !edgePt) return;
+    const r = scroller.getBoundingClientRect(), M = 44, SPD = 16;
+    let dx = 0, dy = 0;
+    if (edgePt.x < r.left + M) dx = -SPD; else if (edgePt.x > r.right - M) dx = SPD;
+    if (edgePt.y < r.top + M) dy = -SPD; else if (edgePt.y > r.bottom - M) dy = SPD;
+    if (dx || dy) {
+      scroller.scrollLeft += dx;
+      scroller.scrollTop += dy;
+      drawGhost(edgePt.x, edgePt.y);     // der Anker wandert mit dem Scrollstand
+    }
+    edgeRaf = requestAnimationFrame(edgeTick);
+  }
+
+  function endLink() {
+    if (!link) return;
+    link.ghost.remove();
+    root.removeAttribute('data-linking');
+    for (const n of root.querySelectorAll('.is-link-from, .is-link-ok, .is-link-no, .is-link-target'))
+      n.classList.remove('is-link-from', 'is-link-ok', 'is-link-no', 'is-link-target');
+    if (edgeRaf) cancelAnimationFrame(edgeRaf);
+    edgeRaf = 0; edgePt = null;
+    window.removeEventListener('keydown', linkEsc, true);
+    link = null;
+  }
+
+  const linkEsc = (e) => {
+    if (e.key !== 'Escape' || !link) return;
+    e.preventDefault();
+    e.stopPropagation();
+    endLink();
+  };
+
+  // Ziel unter dem Zeiger. Über elementFromPoint statt über die Ereignisziele:
+  // der Griff hält den Pointer gefangen, also käme jedes pointermove von IHM.
+  const zielUnter = (cx, cy) => {
+    const n = document.elementFromPoint(cx, cy);
+    const m = n && n.closest('.bz-bar[data-task], .bz-ms[data-task]');
+    return m && !link.verboten.has(m.dataset.task) ? m : null;
+  };
+
+  root.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest('.bz-link');
+    if (!h || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const from = h.dataset.linkFrom;
+    const node = from && root.querySelector('[data-task="' + from + '"]');
+    if (!node) return;
+    e.preventDefault();
+    e.stopPropagation();
+    tip.classList.remove('is-on');           // hängt an pointerenter und stünde im Weg
+
+    // Was hier gesperrt ist, lehnte der Store ohnehin ab — nur eben ERST nach
+    // dem Loslassen. Ein Ring entsteht genau bei allem, was schon VOR der Quelle
+    // liegt; dazu die bereits Verknüpften und die Quelle selbst.
+    const verboten = reachable(S.deps, from, 'vor');
+    for (const d of S.deps) {
+      if (d.from === from) verboten.add(d.to);
+      if (d.to === from) verboten.add(d.from);
+    }
+
+    const ghost = svgEl('path', { class: 'bz-dep-ghost' });
+    depLayer.append(ghost);
+    link = { from, node, ghost, verboten, moved: false };
+
+    root.dataset.linking = '1';
+    node.classList.add('is-link-from');
+    for (const n of root.querySelectorAll('[data-task]')) {
+      if (n === node) continue;
+      n.classList.add(verboten.has(n.dataset.task) ? 'is-link-no' : 'is-link-ok');
+    }
+    try { h.setPointerCapture(e.pointerId); } catch (_) { /* egal */ }
+    window.addEventListener('keydown', linkEsc, true);
+    drawGhost(e.clientX, e.clientY);
+  });
+
+  root.addEventListener('pointermove', (e) => {
+    if (!link) return;
+    link.moved = true;
+    edgePt = { x: e.clientX, y: e.clientY };
+    if (!edgeRaf) edgeRaf = requestAnimationFrame(edgeTick);
+    drawGhost(e.clientX, e.clientY);
+    for (const n of root.querySelectorAll('.is-link-target')) n.classList.remove('is-link-target');
+    const ziel = zielUnter(e.clientX, e.clientY);
+    if (ziel) ziel.classList.add('is-link-target');
+  });
+
+  root.addEventListener('pointerup', (e) => {
+    if (!link) return;
+    const from = link.from, moved = link.moved;
+    const ziel = zielUnter(e.clientX, e.clientY);
+    endLink();
+    // Der Griff sitzt IM Balken; sein click blubbert zu bindMark und wählte
+    // sonst die Quelle aus statt der neuen Verknüpfung. Nur nach einer echten
+    // Ziehbewegung abfangen — bei einem bloßen Klick auf den Griff ist
+    // Auswählen das richtige Verhalten.
+    if (moved) window.addEventListener('click', (c) => { c.stopPropagation(); }, { capture: true, once: true });
+    if (ziel && O.onLink) O.onLink(from, ziel.dataset.task);
+  });
+
+  root.addEventListener('pointercancel', endLink);
 
   function bindRow(lab, sel, nameNode, serie) {
     lab.addEventListener('click', (e) => {
@@ -590,6 +785,12 @@ export function createGantt(root, opts = {}) {
   function paintSelection() {
     for (const n of root.querySelectorAll('.is-sel')) n.classList.remove('is-sel');
     if (!selected) return;
+    // Eine Verknüpfung hat keine Zeile und keinen Balken — nur ihren Pfad.
+    if (selected.kind === 'dep') {
+      const p = depLayer.querySelector('path.bz-dep[data-dep="' + selected.id + '"]');
+      if (p) p.classList.add('is-sel');
+      return;
+    }
     const key = selected.kind === 'gewerk' ? 'group:' + selected.id : 'task:' + selected.id;
     const bar = rowById.get(key);
     if (bar) bar.classList.add('is-sel');
@@ -625,8 +826,21 @@ export function createGantt(root, opts = {}) {
         class: 'bz-dep' + (crit ? ' is-crit' : ''),
         'marker-end': crit ? 'url(#bz-ah-c)' : 'url(#bz-ah)',
       });
-      depLayer.append(p);
-      depPaths.push({ p, d, ra, rb });
+      p.dataset.dep = d.id;
+      // Ein 1,5 px breiter Pfad ist nicht zu treffen. Darunter liegt ein
+      // unsichtbarer Zwilling mit demselben `d`, nur dick — er allein nimmt
+      // Zeigerereignisse an (.bz-deps bleibt pointer-events:none, sonst fingen
+      // die Pfeile Klicks auf den Balken darunter ab).
+      const hit = svgEl('path', { class: 'bz-dep-hit' });
+      hit.dataset.dep = d.id;
+      hit.addEventListener('click', () => select({ kind: 'dep', id: d.id }));
+      hit.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        select({ kind: 'dep', id: d.id });
+        if (O.onContext) O.onContext({ kind: 'dep', id: d.id }, e.clientX, e.clientY);
+      });
+      depLayer.append(hit, p);
+      depPaths.push({ p, hit, d, ra, rb });
     }
   }
 
@@ -653,14 +867,16 @@ export function createGantt(root, opts = {}) {
     const bFrom = collapsed.has(b.gewerk) && rb.kind === 'group' ? rb.gStart : toMin(b.start);
     const bTo = collapsed.has(b.gewerk) && rb.kind === 'group' ? rb.gEnd : toMin(b.end);
     // FS/FF gehen vom Ende des Vorgängers, SS/SF von dessen Start.
-    const x1 = x(d.type === 'SS' || d.type === 'SF' ? aFrom : aTo);
+    // xp(), nicht x(): die Pfeile gehören zum Ablauf und wandern mit ihren
+    // Balken — sonst zeigten sie nach einem Versatz daneben ins Leere.
+    const x1 = xp(d.type === 'SS' || d.type === 'SF' ? aFrom : aTo);
     // FS/SS enden am Start des Nachfolgers, FF/SF an dessen Ende.
-    const x2 = x(d.type === 'FF' || d.type === 'SF' ? bTo : bFrom);
+    const x2 = xp(d.type === 'FF' || d.type === 'SF' ? bTo : bFrom);
     return { x1, x2, y1: markY(ra, a), y2: markY(rb, b) };
   }
 
   function layoutDeps() {
-    for (const { p, d, ra, rb } of depPaths) {
+    for (const { p, hit, d, ra, rb } of depPaths) {
       const { x1, y1, x2, y2 } = depAnchors(d, ra, rb);
       const back = x2 < x1 + 12;
       const r = 4, dir = y2 > y1 ? 1 : -1;
@@ -675,6 +891,7 @@ export function createGantt(root, opts = {}) {
         path = `M${x1},${y1} H${out} V${mid} H${back2} V${y2} H${x2 - 2}`;
       }
       p.setAttribute('d', path);
+      hit.setAttribute('d', path);        // derselbe Verlauf, nur dick und unsichtbar
     }
   }
 
@@ -696,6 +913,7 @@ export function createGantt(root, opts = {}) {
     root.classList.toggle('has-hour-grid', hourPx >= 14);
 
     for (const n of rowLayer.querySelectorAll('[data-from]')) place(n);
+    for (const n of linkLayer.children) place(n);
     for (const n of rowLayer.querySelectorAll('[data-at]')) {
       n.style.left = x(+n.dataset.at) + 'px';
     }
@@ -710,7 +928,7 @@ export function createGantt(root, opts = {}) {
   }
 
   function place(n) {
-    const a = x(+n.dataset.from), b = x(+n.dataset.to);
+    const a = xp(+n.dataset.from), b = xp(+n.dataset.to);
     n.style.left = a + 'px';
     n.style.width = Math.max(2, b - a) + 'px';
     // Ob die Beschriftung in den Balken passt, kann keine feste Pixelschwelle
@@ -734,13 +952,13 @@ export function createGantt(root, opts = {}) {
     for (const n of rowLayer.querySelectorAll('.bz-bar')) {
       const lab = n._lab || (n._lab = n.querySelector('.bz-bar-t'));
       if (!lab || n._textW === undefined) continue;
-      const a = x(+n.dataset.from), b = x(+n.dataset.to);
+      const a = xp(+n.dataset.from), b = xp(+n.dataset.to);
       if (n.classList.contains('is-narrow')) {
         // Beschriftung liegt rechts NEBEN dem Balken. Weg damit, wenn der Balken
         // aus dem Bild ist — oder wenn in einer Serie der nächste Balken so dicht
         // folgt, dass der Text quer über ihn liefe. Den Namen trägt dann die
         // Zeilenbeschriftung links, die immer stehen bleibt.
-        const naechster = n.dataset.next ? x(+n.dataset.next) : Infinity;
+        const naechster = n.dataset.next ? xp(+n.dataset.next) : Infinity;
         n.classList.toggle('lab-hide', b <= s || naechster - b < n._textW);
         lab.style.transform = '';
         continue;
@@ -753,6 +971,14 @@ export function createGantt(root, opts = {}) {
       const shift = Math.min(Math.max(0, s - a), maxShift);
       lab.style.transform = shift ? 'translateX(' + shift + 'px)' : '';
     }
+  }
+
+  // Die Uhrzeiten der Showablauf-Seitenspalte neu schreiben. Sie entstehen beim
+  // Zeilenaufbau, der Versatz ändert sich aber ohne Aufbau — ohne das hier
+  // stünde links die Planzeit neben einem verschobenen Balken.
+  function relabelZeiten() {
+    for (const n of side.querySelectorAll('.bz-lab-zeit[data-at]'))
+      n.textContent = verschoben(n.dataset.at, versatz).slice(11, 16) + ' Uhr';
   }
 
   // ── Hintergrundbänder: Phasen + Wochenenden ─────────────────────────────────
@@ -862,7 +1088,9 @@ export function createGantt(root, opts = {}) {
       tip.append(h, el('div', 'bz-tip-t', t.title));
       const dl = el('dl', 'bz-tip-dl');
       const add = (k, v) => { dl.append(el('dt', null, k), el('dd', null, v)); };
-      const sd = new Date(t.start), ed = new Date(t.end);
+      // Mit dem Versatz, wie Balken und Seitenspalte: der Tooltip beantwortet
+      // «wann ist das?», und die Antwort ist die verschobene Zeit.
+      const sd = new Date(verschoben(t.start, versatz)), ed = new Date(verschoben(t.end, versatz));
       if (t.milestone) add('Termin', fmtDay(sd) + ', ' + fmtTime(sd));
       else {
         add('Start', fmtDay(sd) + ', ' + fmtTime(sd));
@@ -964,8 +1192,8 @@ export function createGantt(root, opts = {}) {
   function paintLive() {
     const on = live;
     root.classList.toggle('is-live', on);
-    const running = on ? runningAt(S.tasks, NOW) : new Set();
-    const late = new Map(on ? delaysAt(S.tasks, NOW).map((d) => [d.taskId, d]) : []);
+    const running = on ? runningAt(S.tasks, nowPlan()) : new Set();
+    const late = new Map(on ? delaysAt(S.tasks, nowPlan()).map((d) => [d.taskId, d]) : []);
     for (const [key, node] of rowById) {
       if (!key.startsWith('task:')) continue;
       const id = key.slice(5);
@@ -1121,6 +1349,14 @@ export function createGantt(root, opts = {}) {
 
   root.addEventListener('keydown', (e) => {
     if (e.target.closest('input,select,textarea')) return;
+    // Entf auf einer ausgewählten Verknüpfung. Nur auf Verknüpfungen: einen
+    // Vorgang per Tastendruck zu löschen wäre zu leicht aus Versehen getan, und
+    // dafür gibt es das Menü mit seiner Rückfrage.
+    if (selected && selected.kind === 'dep' && (e.key === 'Delete' || e.key === 'Backspace')) {
+      e.preventDefault();
+      if (O.onRemoveDep) O.onRemoveDep(selected.id);
+      return;
+    }
     const step = scroller.clientWidth * 0.8;
     if (e.key === 'ArrowRight') { scroller.scrollLeft += step; e.preventDefault(); }
     else if (e.key === 'ArrowLeft') { scroller.scrollLeft -= step; e.preventDefault(); }
@@ -1209,7 +1445,35 @@ export function createGantt(root, opts = {}) {
     },
     get isLive() { return live; },
     tickNow,
-    liveInfo: () => ({ now: NOW, running: runningAt(S.tasks, NOW), late: delaysAt(S.tasks, NOW) }),
+    /**
+     * Die Ansage vom Pult in Minuten setzen (positiv = Delay).
+     *
+     * Geklemmt auf ±180: darüber ist es keine Ansage mehr, sondern ein
+     * Vertipper, und ein Ablauf, der drei Stunden neben der Achse liegt, ist
+     * kein Ablaufplan mehr.
+     *
+     * Bewusst KEIN rebuild(): der Zeilenaufbau ändert sich nicht, nur die
+     * Lage. Ein Neubau risse die Auswahl weg — dieselbe Begründung wie beim
+     * Tick. layout() reicht, und die Seitenspalten-Uhrzeit hängt am Aufbau,
+     * deshalb wird sie unten gezielt nachgezogen.
+     */
+    setVersatz(min) {
+      const next = Math.max(-180, Math.min(180, Math.round(Number(min) || 0)));
+      if (next === versatz) return versatz;
+      versatz = next;
+      layout();
+      paintLive();
+      relabelZeiten();
+      return versatz;
+    },
+    get versatz() { return versatz; },
+    liveInfo: () => ({
+      now: NOW,                       // die echte Uhr — für Datum und Anzeige
+      planNow: nowPlan(),             // wo der Ablauf steht — für jede Rechnung
+      versatz,
+      running: runningAt(S.tasks, nowPlan()),
+      late: delaysAt(S.tasks, nowPlan()),
+    }),
     // Die Vorgänge der sichtbaren Ebene — die Live-Kopfzeile des Showablaufs
     // fragt danach, statt selbst zu filtern. Kopie: niemand soll von außen in
     // die Auswahl der Engine schreiben.

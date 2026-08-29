@@ -15,12 +15,13 @@ der Load-In läuft stundengenau.
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
 mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
-**Dazugekommen (bis v0.9.5):** Gewerke per Drag & Drop umsortieren · Gantt und
+**Dazugekommen (bis v0.9.7):** Gewerke per Drag & Drop umsortieren · Gantt und
 Tabelle in gleicher Reihenfolge (nach Startzeit) · **Untervorgänge** (einklappbar,
 Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für kritische
 Vorgänge und Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
 statt endlosem Dropdown · Hell/Dunkel-Umschalter im Kopf · **Tagesblätter zum
-Drucken** · **Showablauf-Ebene** (siehe unten) · CallBoard-Marke.
+Drucken** · **Showablauf-Ebene** (siehe unten) · **Verknüpfen per Ziehen** im Gantt ·
+**Live-Versatz** («wir hängen 5 Minuten hinterher») · CallBoard-Marke.
 
 ## Zwei Ebenen: Bauzeitenplan und Showablauf
 
@@ -127,8 +128,25 @@ Vorgänge leuchten, Verzug wird benannt («sollte seit 20m laufen»). Der Status
 wird dabei **nie** automatisch gesetzt — sonst sähe der Plan immer nach Plan aus
 und das Signal «wir hängen» wäre weg.
 
-**Als Nächstes:** Drag & Drop der Balken im Gantt, danach Ansichten & Export
-(öffentlicher Link, PDF/ICS).
+**Der Versatz: die Ansage vom Pult.** Der gerechnete Verzug setzt voraus, dass
+jemand die Häkchen pflegt — im Betrieb tut das niemand. Neben dem Live-Knopf
+steht deshalb ein Stepper `− [ 5 ] +`: **plus ist Delay**, minus Vorlauf, je ein
+Klick eine Minute. Daneben die Aussage im Klartext, «5 Min Delay» in Rot,
+«3 Min vor Plan» in Grün.
+
+**Der Ablauf rutscht, die Uhr bleibt stehen.** Balken, Beschriftungen und Pfeile
+wandern nach rechts; Achse, Ticks und Jetzt-Linie stehen auf der echten Zeit. So
+liest du an der Achse ab, wann SIDO **wirklich** auf die Bühne geht, statt es im
+Kopf zu addieren — und in der Seitenspalte steht dieselbe verschobene Uhrzeit.
+Der gerechnete Verzug zieht deine Ansage ab: aus «+10 Min» wird bei 5 Minuten
+Ansage «+5 Min».
+
+Der Versatz gehört dem Abend, nicht dem Plan: Er bleibt in diesem Browser, wandert
+**nicht** in den Export und gilt nur für den Tag, an dem du ihn gesetzt hast —
+sonst stünde der Plan am nächsten Morgen kommentarlos daneben.
+
+**Als Nächstes:** Balken und Dauern im Gantt ziehen (Verknüpfungen gehen schon),
+danach Ansichten & Export (öffentlicher Link, PDF/ICS).
 
 **PocketBase liegt auf Eis.** Eine Login- und Rollenschicht war vorbereitet,
 wurde aber in v0.8.0 aus `main` entfernt: die Seite ist eine reine
@@ -165,6 +183,14 @@ rechnet die Dauer zurück.
 **Im Gantt:** Klick auf Balken oder Zeile → Panel rechts mit allen Feldern und
 den Verknüpfungen. **Rechtsklick** öffnet das Menü (umbenennen, duplizieren,
 sortieren, löschen). **Doppelklick** auf einen Namen benennt an Ort und Stelle um.
+
+**Verknüpfen per Ziehen:** Fahr über einen Balken — an seinem Ende erscheint ein
+Griff. Von dort auf den Nachfolger ziehen, fertig. Ein Gummiband zeigt die
+Richtung, zulässige Ziele sind hervorgehoben und **unzulässige gesperrt**: Was
+einen Ring ergäbe, sagt schon vor dem Loslassen nein. Am Rand scrollt die Ansicht
+mit, `Esc` bricht ab. Es entsteht immer Ende→Start; den Typ stellst du danach im
+Panel um. **Pfeile sind anklickbar** — ein Klick wählt die Verknüpfung aus, `Entf`
+entfernt sie, `⌘Z` holt sie zurück.
 
 **Geschätzte Dauern** haben eine gestrichelte rechte Kante — das Ende steht
 nicht fest. Im Panel gibt es dazu ein Häkchen «Dauer geschätzt» zum Abhaken,
@@ -312,7 +338,9 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | Showablauf: Bühnen, Anforderungen/Material, Live-Kopfzeile, Running-Order-Blatt |
 | ✅ | Setup und Show als eigene Ansichten · Soundchecks als Zeiteinträge mit Balken |
 | ✅ | Farbe je Zeiteintrag (zehn Töne × Schraffur), Schrift auf der Farbe gerechnet |
-| → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen, Verknüpfungen ziehen |
+| ✅ | Verknüpfen per Ziehen · Pfeile anklickbar (Typ, Versatz, `Entf`) |
+| ✅ | Live-Versatz: «wir hängen 5 Minuten hinterher», der Ablauf rutscht, die Uhr nicht |
+| → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen |
 | | Ansichten & Export: öffentlicher Link, PDF/ICS |
 | ❄️ | PocketBase, Login, Rollen — auf Eis, Stand im Branch `pocketbase-vorbereitung` |
 

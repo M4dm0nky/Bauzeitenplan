@@ -1,4 +1,4 @@
-import { runningAt, delaysAt, nextUp, liveStats } from '../js/live.js';
+import { runningAt, delaysAt, nextUp, liveStats, verschoben, versatzText } from '../js/live.js';
 import { toMin } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
@@ -160,6 +160,75 @@ test('leerer Plan stürzt nicht ab', () => {
   assert.equal(s.running, 0);
   assert.equal(s.late, 0);
   assert.equal(s.next, null);
+});
+
+console.log('\nVersatz — die Ansage vom Pult');
+test('Delay ist plus und rot', () => {
+  assert.deepEqual(versatzText(5), { text: '5 Min Delay', klasse: 'is-late' });
+});
+test('Vorlauf ist minus und grün', () => {
+  assert.deepEqual(versatzText(-3), { text: '3 Min vor Plan', klasse: 'is-early' });
+});
+test('null Versatz sagt «im Plan», ohne Farbe', () => {
+  assert.deepEqual(versatzText(0), { text: 'im Plan', klasse: '' });
+});
+test('immer in MINUTEN, nie in Stunden', () => {
+  // Bei einem Ablauf zählt man Minuten — «1,5h Delay» müsste man erst umrechnen.
+  assert.equal(versatzText(90).text, '90 Min Delay');
+});
+test('fehlender Wert ist kein Absturz, sondern «im Plan»', () => {
+  assert.equal(versatzText(undefined).text, 'im Plan');
+  assert.equal(versatzText(null).text, 'im Plan');
+});
+
+console.log('\nVerschobene Zeiten');
+test('fünf Minuten später', () => {
+  assert.equal(verschoben('2026-07-15T20:00', 5), '2026-07-15T20:05');
+});
+test('Vorlauf schiebt zurück', () => {
+  assert.equal(verschoben('2026-07-15T20:00', -3), '2026-07-15T19:57');
+});
+test('über Mitternacht wandert das Datum mit', () => {
+  assert.equal(verschoben('2026-07-15T23:58', 5), '2026-07-16T00:03');
+});
+test('ohne Versatz bleibt der Zeitstempel unangetastet', () => {
+  assert.equal(verschoben('2026-07-15T20:00', 0), '2026-07-15T20:00');
+});
+test('addiert ECHTE Minuten, nicht Ziffern auf dem String', () => {
+  // Der eigentliche Punkt: die Differenz muss in jeder Zone und über jeden
+  // Zeitumstellungs-Sprung exakt der Versatz sein. Rechnete verschoben() auf
+  // den Datumsziffern, wäre sie einmal im Jahr um 60 Minuten falsch.
+  // (Die Rückstellungsnacht steht im Test darunter — dort ist die Wanduhrzeit
+  // selbst zweideutig, und zwar unabhängig vom Versatz.)
+  for (const iso of ['2026-03-29T01:30', '2026-10-25T04:00', '2026-07-15T12:00']) {
+    for (const v of [5, -5, 90, 1440]) {
+      assert.equal(toMin(verschoben(iso, v)) - toMin(iso), v, `${iso} um ${v}`);
+    }
+  }
+});
+test('in der doppelten Stunde stimmt die ANZEIGE, der Rückweg bleibt zweideutig', () => {
+  // Bekannte Grenze des Datenmodells, keine Eigenheit des Versatzes: Zeiten
+  // sind lokale Strings OHNE Zone, und am 25.10.2026 gibt es 02:00 bis 03:00
+  // zweimal. Die Anzeige ist trotzdem richtig — 01:30 plus 90 echte Minuten
+  // IST die zweite 02:00. Nur wer diesen String wieder einliest, bekommt die
+  // erste zurück und verliert eine Stunde. Angezeigt wird er, eingelesen nicht.
+  const jan = new Date('2026-01-15T12:00').getTimezoneOffset();
+  const jul = new Date('2026-07-15T12:00').getTimezoneOffset();
+  if (jan === jul) { console.log('      (übersprungen: Systemzone ohne Sommerzeit)'); return; }
+  assert.equal(verschoben('2026-10-25T01:30', 90), '2026-10-25T02:00');
+  assert.equal(verschoben('2026-10-25T01:30', 30), '2026-10-25T02:00', 'dieselbe Wanduhrzeit, 60 Min früher');
+});
+test('an der Zeitumstellung springt die UHRZEIT anders als die Minuten', () => {
+  // Nur dort aussagekräftig, wo die Systemzone wirklich umstellt — auf einem
+  // Rechner in UTC gibt es keinen Sprung, und der Test hätte nichts zu zeigen.
+  const jan = new Date('2026-01-15T12:00').getTimezoneOffset();
+  const jul = new Date('2026-07-15T12:00').getTimezoneOffset();
+  if (jan === jul) { console.log('      (übersprungen: Systemzone ohne Sommerzeit)'); return; }
+  // 2026 stellt Europa am 29.03. um 02:00 auf 03:00 vor: 01:30 + 60 echte
+  // Minuten ist 03:30 nach der Uhr, nicht 02:30.
+  const raus = verschoben('2026-03-29T01:30', 60);
+  assert.equal(toMin(raus) - toMin('2026-03-29T01:30'), 60, 'echte Minuten stimmen');
+  assert.notEqual(raus.slice(11), '02:30', 'die Wanduhr springt über die Lücke');
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

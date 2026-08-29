@@ -142,12 +142,159 @@ await check('Live-Zustand überlebt das Neuladen', async () => {
   const p = await page.locator('#live').getAttribute('aria-pressed');
   return p === 'true' ? true : 'nach Reload aus';
 });
+console.log('\nVERSATZ — die Ansage vom Pult');
+// Der ganze Zweck: der ABLAUF rutscht, die UHR bleibt stehen. Beides wird
+// getrennt gemessen, denn nur zusammen ist die Aussage richtig — ein Bild, in
+// dem Balken UND Linie wandern, sähe beim flüchtigen Hinsehen genauso aus.
+const balkenX = () => page.evaluate(() => {
+  const b = document.querySelector('.bz-bar[data-task]');
+  return b ? { id: b.dataset.task, left: parseFloat(b.style.left) } : null;
+});
+const pxProMin = () => page.evaluate(() =>
+  parseFloat(getComputedStyle(document.querySelector('.bz')).getPropertyValue('--px')));
+const vzText = () => page.locator('#vz-txt').textContent();
+// Über das Feld statt über 30 Klicks — die Knöpfe haben ihre eigene Prüfung.
+const setVz = async (v) => {
+  await page.fill('#vz-n', String(v));
+  await page.press('#vz-n', 'Enter');
+  await page.waitForTimeout(350);
+};
+
+await check('der Stepper steht bei Live im Bild und sagt «im Plan»', async () => {
+  if (!(await page.locator('#vz').isVisible())) return 'kein Stepper sichtbar';
+  const t = (await vzText()).trim();
+  return t === 'im Plan' ? true : 'Text: ' + t;
+});
+
+let vorher = null, ppm = 0;
+await check('+5 schiebt den Ablauf 5 Minuten nach rechts', async () => {
+  vorher = await balkenX();
+  ppm = await pxProMin();
+  if (!vorher || !ppm) return 'kein Balken oder keine Skala gefunden';
+  await setVz(5);
+  const nach = await balkenX();
+  if (nach.id !== vorher.id) return 'anderer Balken gemessen';
+  const soll = 5 * ppm, ist = nach.left - vorher.left;
+  return Math.abs(ist - soll) < 0.5 ? true
+    : `${ist.toFixed(1)}px statt ${soll.toFixed(1)}px (${ppm.toFixed(2)} px/min)`;
+});
+
+await check('DIE UHR BLEIBT STEHEN — die Linie rührt sich keinen Pixel', async () => {
+  // Das ist der Kern der Entscheidung: verschöbe sich die Linie mit, wäre der
+  // Versatz eine Lupe auf den Plan statt einer Aussage über die Wirklichkeit.
+  const jetzt = await lineX();
+  await setVz(0);
+  const ohne = await lineX();
+  await setVz(30);
+  const mit = await lineX();
+  await setVz(5);
+  if (Math.abs(ohne - mit) > 0.01) return `Linie wandert: ${ohne} → ${mit}`;
+  return Math.abs(jetzt - ohne) < 0.01 ? true : `Linie unruhig: ${jetzt} → ${ohne}`;
+});
+
+await check('die Anzeige nennt Delay in Rot', async () => {
+  const t = (await vzText()).trim();
+  const k = await page.locator('#vz-txt').getAttribute('class');
+  if (t !== '5 Min Delay') return 'Text: ' + t;
+  return /is-late/.test(k) ? true : 'ohne Verzugs-Klasse: ' + k;
+});
+await page.screenshot({ path: join(here, 'shots', 'live-2-delay.png') });
+
+await check('Pfeile wandern mit ihren Balken', async () => {
+  // Sonst zeigen sie nach dem Versatz daneben ins Leere — der Fehler wäre im
+  // Bauzeitenplan mit seinen wenigen Pfeilen leicht zu übersehen.
+  const d = await page.evaluate(() => {
+    const p = document.querySelector('path.bz-dep[data-dep]');
+    if (!p) return { fehler: 'kein Pfeil im Plan' };
+    const dep = p.getAttribute('d');
+    const x1 = parseFloat(dep.slice(1).split(',')[0]);
+    const von = document.querySelector('.bz-bar.is-link-from') || null;
+    return { x1, von: !!von };
+  });
+  if (d.fehler) return d.fehler;
+  await setVz(0);
+  const ohne = await page.evaluate(() =>
+    parseFloat(document.querySelector('path.bz-dep[data-dep]').getAttribute('d').slice(1).split(',')[0]));
+  await setVz(5);
+  const soll = ohne + 5 * ppm;
+  return Math.abs(d.x1 - soll) < 0.5 ? true
+    : `Pfeilanfang ${d.x1.toFixed(1)} statt ${soll.toFixed(1)}`;
+});
+
+await check('Vorlauf ist minus, grün und schiebt nach links', async () => {
+  const bei0 = await (async () => { await setVz(0); return balkenX(); })();
+  await setVz(-3);
+  const nach = await balkenX();
+  const t = (await vzText()).trim();
+  const k = await page.locator('#vz-txt').getAttribute('class');
+  const ist = nach.left - bei0.left, soll = -3 * ppm;
+  if (Math.abs(ist - soll) > 0.5) return `${ist.toFixed(1)}px statt ${soll.toFixed(1)}px`;
+  if (t !== '3 Min vor Plan') return 'Text: ' + t;
+  return /is-early/.test(k) ? true : 'ohne Vorlauf-Klasse: ' + k;
+});
+await page.screenshot({ path: join(here, 'shots', 'live-3-vorlauf.png') });
+
+await check('zurück auf 0 stellt den Ausgangszustand her', async () => {
+  await setVz(0);
+  const nach = await balkenX();
+  const t = (await vzText()).trim();
+  if (Math.abs(nach.left - vorher.left) > 0.01) return `Balken bei ${nach.left} statt ${vorher.left}`;
+  return t === 'im Plan' ? true : 'Text: ' + t;
+});
+
+await check('die Knöpfe zählen in Minutenschritten', async () => {
+  await page.locator('#vz-plus').click();
+  await page.locator('#vz-plus').click();
+  await page.waitForTimeout(250);
+  const auf2 = await page.locator('#vz-n').inputValue();
+  await page.locator('#vz-minus').click();
+  await page.waitForTimeout(250);
+  const auf1 = await page.locator('#vz-n').inputValue();
+  return (auf2 === '2' && auf1 === '1') ? true : `+ + ergab ${auf2}, − danach ${auf1}`;
+});
+
+await check('ein Vertipper wird geklemmt statt übernommen', async () => {
+  // 999 Minuten sind keine Ansage mehr; ein Ablauf 16 Stunden neben der Achse
+  // wäre kein Ablaufplan.
+  await setVz(999);
+  const v = await page.locator('#vz-n').inputValue();
+  return v === '180' ? true : 'ergab ' + v;
+});
+
+await check('der Versatz überlebt das Neuladen', async () => {
+  await setVz(7);
+  await page.reload();
+  await page.waitForTimeout(1000);
+  const v = await page.locator('#vz-n').inputValue();
+  const t = (await vzText()).trim();
+  return (v === '7' && t === '7 Min Delay') ? true : `nach Reload: ${v} / ${t}`;
+});
+
+await check('ein Versatz von GESTERN gilt heute nicht mehr', async () => {
+  // Sonst stünde der Plan am nächsten Morgen kommentarlos daneben, und niemand
+  // wüsste, warum. Der Live-Knopf selbst überlebt bewusst — der Versatz nicht.
+  await page.evaluate(() => localStorage.setItem('bzp_versatz',
+    JSON.stringify({ min: 42, tag: '2020-01-01' })));
+  await page.reload();
+  await page.waitForTimeout(1000);
+  const v = await page.locator('#vz-n').inputValue();
+  const b = await page.evaluate(() => {
+    const n = document.querySelector('.bz-bar[data-task]');
+    return n ? parseFloat(n.style.left) : null;
+  });
+  if (v !== '0') return 'Feld zeigt ' + v;
+  return Math.abs(b - vorher.left) < 0.01 ? true : `Balken steht bei ${b} statt ${vorher.left}`;
+});
+
 await check('Live ausschalten räumt die Marken weg', async () => {
   await page.locator('#live').click();
   await page.waitForTimeout(400);
   const n = await page.locator('.bz-bar.is-running, .bz-bar.is-late').count();
   const vis = await page.locator('#live-bar').isVisible();
   if (vis) return 'Leiste bleibt sichtbar';
+  // Der Stepper gehört zur laufenden Uhr: ohne sie sagt ein Versatz nichts.
+  if (await page.locator('#vz').isVisible()) return 'der Versatz-Stepper bleibt stehen';
+  if (await page.locator('#vz-txt').isVisible()) return 'die Versatz-Anzeige bleibt stehen';
   return n === 0 ? true : `${n} Marken bleiben stehen`;
 });
 

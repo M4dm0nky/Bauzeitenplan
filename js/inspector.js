@@ -41,7 +41,8 @@ export function createInspector(root, { store, onError, onClose } = {}) {
     if (!sel) return;
 
     const head = el('div', 'ins-head');
-    head.append(el('span', 'ins-kind', sel.kind === 'gewerk' ? 'Gewerk' : 'Vorgang'));
+    const KIND = { gewerk: 'Gewerk', dep: 'Verknüpfung', task: 'Vorgang' };
+    head.append(el('span', 'ins-kind', KIND[sel.kind] || 'Vorgang'));
     const close = el('button', 'ins-x', '×');
     close.title = 'Panel schließen';
     close.onclick = () => { sel = null; render(); if (onClose) onClose(); };
@@ -49,6 +50,7 @@ export function createInspector(root, { store, onError, onClose } = {}) {
     root.append(head);
 
     if (sel.kind === 'gewerk') renderGewerk();
+    else if (sel.kind === 'dep') renderDep();
     else renderTask();
   }
 
@@ -282,6 +284,63 @@ export function createInspector(root, { store, onError, onClose } = {}) {
   }
 
   // ── Verknüpfungen ─────────────────────────────────────────────────────────
+  /**
+   * Typ, Versatz und Entfernen einer Verknüpfung — die drei Bedienelemente, die
+   * in der Liste am Vorgang UND im Panel einer angeklickten Verknüpfung stehen.
+   * Eine Quelle: zwei Stellen, die dieselben Felder schreiben, laufen
+   * auseinander, sobald eine von beiden angefasst wird.
+   * @returns {HTMLElement[]}
+   */
+  function depControls(d) {
+    const ty = el('select', 'ins-dep-t');
+    for (const [v, label] of DEP_TYPES) {
+      const op = el('option', null, label);
+      op.value = v;
+      if (v === d.type) op.selected = true;
+      ty.append(op);
+    }
+    ty.onchange = () => send({ type: 'setDepField', id: d.id, field: 'type', value: ty.value });
+
+    const lag = el('input', 'ins-dep-l');
+    lag.value = d.lag ? fmtDuration(Math.abs(d.lag)) : '';
+    lag.placeholder = 'Lag';
+    lag.title = 'Wartezeit dazwischen. Minus erlaubt Überlappung: -2h';
+    lag.onchange = () => {
+      const neg = lag.value.trim().startsWith('-');
+      const m = parseDuration(lag.value.replace('-', ''));
+      send({ type: 'setDepField', id: d.id, field: 'lag', value: lag.value.trim() === '' ? 0 : (m == null ? d.lag : (neg ? -m : m)) });
+    };
+    if (d.lag < 0) lag.value = '-' + fmtDuration(-d.lag);
+
+    const x = el('button', 'ins-dep-x', '×');
+    x.title = 'Verknüpfung entfernen';
+    x.onclick = () => send({ type: 'removeDep', id: d.id });
+
+    return [ty, lag, x];
+  }
+
+  // ── Verknüpfung (im Gantt auf den Pfeil geklickt) ─────────────────────────
+  function renderDep() {
+    const d = store.state.deps.find((x) => x.id === sel.id);
+    // Nach dem Entfernen darf kein totes Panel stehen bleiben — dieselbe Wache
+    // wie bei einem gelöschten Gewerk.
+    if (!d) { sel = null; if (onClose) onClose(); return; }
+    const from = cur(d.from), to = cur(d.to);
+
+    const box = el('div', 'ins-deps');
+    const r = el('div', 'ins-dep');
+    r.append(el('span', 'ins-dep-d', 'von'));
+    r.append(el('span', 'ins-dep-n', from ? from.title : d.from));
+    box.append(r);
+    const r2 = el('div', 'ins-dep');
+    r2.append(el('span', 'ins-dep-d', '→ nach'));
+    r2.append(el('span', 'ins-dep-n', to ? to.title : d.to));
+    r2.append(...depControls(d));
+    box.append(r2);
+    root.append(box);
+    root.append(el('div', 'ins-hint', 'Entf entfernt die Verknüpfung. Die Zeiten der beiden Vorgänge ändert sie nie — sie sagt nur, was auf was folgt.'));
+  }
+
   function deps(t) {
     const box = el('div', 'ins-deps');
     box.append(el('h4', 'ins-h4', 'Verknüpfungen'));
@@ -298,32 +357,7 @@ export function createInspector(root, { store, onError, onClose } = {}) {
       const r = el('div', 'ins-dep');
       r.append(el('span', 'ins-dep-d', dir === 'vor' ? '← nach' : '→ vor'));
       r.append(el('span', 'ins-dep-n', o ? o.title : other));
-
-      const ty = el('select', 'ins-dep-t');
-      for (const [v, label] of DEP_TYPES) {
-        const op = el('option', null, label);
-        op.value = v;
-        if (v === d.type) op.selected = true;
-        ty.append(op);
-      }
-      ty.onchange = () => send({ type: 'setDepField', id: d.id, field: 'type', value: ty.value });
-
-      const lag = el('input', 'ins-dep-l');
-      lag.value = d.lag ? fmtDuration(Math.abs(d.lag)) : '';
-      lag.placeholder = 'Lag';
-      lag.title = 'Wartezeit dazwischen. Minus erlaubt Überlappung: -2h';
-      lag.onchange = () => {
-        const neg = lag.value.trim().startsWith('-');
-        const m = parseDuration(lag.value.replace('-', ''));
-        send({ type: 'setDepField', id: d.id, field: 'lag', value: lag.value.trim() === '' ? 0 : (m == null ? d.lag : (neg ? -m : m)) });
-      };
-      if (d.lag < 0) lag.value = '-' + fmtDuration(-d.lag);
-
-      const x = el('button', 'ins-dep-x', '×');
-      x.title = 'Verknüpfung entfernen';
-      x.onclick = () => send({ type: 'removeDep', id: d.id });
-
-      r.append(ty, lag, x);
+      r.append(...depControls(d));
       box.append(r);
     }
 
