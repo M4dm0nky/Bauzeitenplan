@@ -63,8 +63,15 @@ anlegst: Abschnitt (Setup/Show), Typ, Kontakt und die Freitexte
 **Anforderungen** und **Benötigtes Material**. Start und Ende zeigen dort nur die
 Uhrzeit — der Tag steht ja oben.
 
+**Eigene Abschnitte auch.** Dieselbe Mechanik in der Spalte *Abschnitt*: unten
+im Auswahlfeld steht **«Neu»**, und schon hast du Load-in, Soundcheck oder
+Aftershow. Der Umschalter oben bleibt bei Bauzeitenplan · Setup · Show — ein
+eigener Abschnitt ist ein Etikett am Eintrag und wird in der **Show-Ansicht**
+gezeigt. Stellst du einen Setup-Eintrag darauf um, sagt die App dir das, damit
+die Zeile nicht kommentarlos aus dem Bild verschwindet.
+
 **Eigene Arten legst du selbst an.** Neben Act, Changeover, Doors und Show-Ende
-steht im Typ-Auswahlfeld unten **«+ Neue Art…»** — Name eintippen, fertig, die
+steht im Typ-Auswahlfeld unten **«Neu»** — Name eintippen, fertig, die
 Art ist angelegt und für diese Zeile gewählt. Ein Häkchen bestimmt, ob sie auf
 dem A3-Blatt **zurücktritt** wie ein Changeover (niedrigere Zeile: auf dem Blatt
 zählt, wer spielt). Deine Arten gehören zum Plan und reisen im JSON-Export mit —
@@ -349,6 +356,7 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | Verknüpfen per Ziehen · Pfeile anklickbar (Typ, Versatz, `Entf`) |
 | ✅ | Live-Versatz: «wir hängen 5 Minuten hinterher», der Ablauf rutscht, die Uhr nicht |
 | ✅ | Eigene Arten für Zeiteinträge, je Art die Blattzeile wählbar |
+| ✅ | Eigene Abschnitte (Load-in, Soundcheck, Aftershow …) |
 | → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen |
 | | Ansichten & Export: öffentlicher Link, PDF/ICS |
 | ❄️ | PocketBase, Login, Rollen — auf Eis, Stand im Branch `pocketbase-vorbereitung` |

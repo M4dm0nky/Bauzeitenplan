@@ -22,7 +22,7 @@ const fakeStorage = () => {
 };
 
 const plan = (name = 'Test') => ({
-  project: { id: 'p1', name, venue: 'Halle', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin', punktTypen: [] },
+  project: { id: 'p1', name, venue: 'Halle', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin', punktTypen: [], abschnitte: [] },
   gewerke: [{ id: 'g1', name: 'Bühne', sort: 0, slot: 0, art: 'gewerk' }],
   tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null, punktTyp: 'act', anforderungen: '', material: '', kontakt: '', slot: null, abschnitt: 'show', fuer: null }],
   deps: [],
@@ -331,6 +331,31 @@ test('eigene Eintragsarten überleben Export → Import', () => {
   const back = deserialize(serialize(raw));
   assert.deepEqual(back.plan.project.punktTypen, raw.project.punktTypen);
   assert.equal(back.plan.tasks[0].punktTyp, 'linecheck');
+});
+
+test('eigene Abschnitte überleben Export → Import', () => {
+  const raw = plan();
+  raw.project.abschnitte = [{ id: 'loadin', label: 'Load-in' }];
+  raw.tasks[0].abschnitt = 'loadin';
+  const back = deserialize(serialize(raw));
+  assert.deepEqual(back.plan.project.abschnitte, raw.project.abschnitte);
+  assert.equal(back.plan.tasks[0].abschnitt, 'loadin',
+    'der eigene Abschnitt darf beim Import nicht auf «show» normalisiert werden');
+});
+
+test('ein Abschnitt, den der Plan nicht kennt, fällt auf «show» zurück', () => {
+  // Die Gegenrichtung zum Test darüber: eine tote Kennung darf keine Waise
+  // erzeugen, die in keiner Ansicht auftaucht. Bekannt heißt: eingebaut oder in
+  // project.abschnitte.
+  const roh = plan();
+  roh.tasks[0].abschnitt = 'gibtsnichtmehr';
+  assert.equal(migrate(roh).tasks[0].abschnitt, 'show');
+});
+
+test('ein Altplan bekommt eine leere Abschnittsliste, keine fehlende', () => {
+  const roh = plan();
+  delete roh.project.abschnitte;
+  assert.deepEqual(migrate(roh).project.abschnitte, []);
 });
 
 test('ein Altplan bekommt eine leere Artenliste, keine fehlende', () => {

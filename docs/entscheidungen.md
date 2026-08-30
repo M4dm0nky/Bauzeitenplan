@@ -352,6 +352,40 @@ Tick später.
 In Kauf genommen: Dauer und Ende aktualisieren sich erst beim Verlassen des
 Feldes. Beim Tippen ist das ohnehin das erwartete Verhalten.
 
+## Eigene Abschnitte sind Etiketten, keine neuen Ansichten
+
+Nach den Eintragsarten kam derselbe Wunsch für die Spalte **Abschnitt**: nicht
+nur Setup und Show. Der Mechanismus ist identisch (`project.abschnitte`,
+`abschnitte(state)`, Anlegen im Auswahlfeld), die Wirkung aber bewusst nicht.
+
+**Der Umschalter oben bleibt unverändert.** Ein eigener Abschnitt filtert die
+Ansicht NICHT; über `abschnittOf` zählt er zur Show. Der Alternativentwurf — je
+Abschnitt ein Knopf in der Werkzeugzeile — wurde verworfen: die Leiste bricht
+schon heute um, und bei fünf Abschnitten schöbe sie Zoom und Live-Knöpfe eine
+Zeile tiefer. Der Durchlass für eine spätere dynamische Leiste liegt in
+`imAbschnitt` weiterhin bereit.
+
+**Daraus folgt eine Falle, und die wird angesagt.** Wer im Setup steht und einen
+Eintrag auf «Load-in» stellt, verliert die Zeile im selben Moment aus dem Bild —
+sie zählt jetzt zur Show. Genau diese Fehlerart steht in diesem Projekt schon
+einmal («ein im Setup angelegter Eintrag landete in der Show und war im gezeigten
+Abschnitt sofort unsichtbar»); der Knopf tut etwas, nur unsichtbar, und das fühlt
+sich an wie «geht nicht». `waehleAbschnitt` in table.js meldet es deshalb über
+`onHinweis` als Toast.
+
+**Sortiert wird nach der Uhrzeit, nicht von Hand.** Die eigenen Abschnitte ordnen
+sich nach ihrem frühesten Eintrag: ein Load-in um 07:00 steht vor einer Aftershow
+um 23:30, ohne Sortierdialog. Noch leere hängen hinten an — sie haben keine Zeit,
+an der man sie einordnen könnte.
+
+**Eine Migrationszeile hätte das Feature still zerstört.** In `persistence.js`
+stand `if (t.abschnitt !== 'setup') t.abschnitt = 'show'` — eine Normalisierung,
+die vor eigenen Abschnitten richtig war und danach jeden «Load-in» beim nächsten
+Laden gelöscht hätte, ohne Meldung und ohne Rückweg. Jetzt wird nur
+plattgemacht, was der Plan nicht kennt; `setTaskField` und `addTask` lehnen
+unbekannte Abschnitte ab, damit gar keine Waise entsteht. Gefunden hat das ein
+Export-Import-Test, nicht das Auge.
+
 ## Eigene Eintragsarten stehen im PLAN, nicht im Browser
 
 Die vier eingebauten Arten reichten nicht. Beim Speicherort standen zwei

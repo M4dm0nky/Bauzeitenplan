@@ -112,6 +112,40 @@ export const imAbschnitt = (tasks, abschnitt) =>
 export const ABSCHNITTE = [['setup', 'Setup'], ['show', 'Show']];
 
 /**
+ * Alle Abschnitte: die beiden eingebauten zuerst, dann die im PLAN angelegten.
+ * Wie bei den Eintragsarten — sie stehen in `project.abschnitte` und reisen im
+ * Export mit, sonst sähe ein Empfänger nur die Kennung «loadin».
+ *
+ * Eigene werden nach ihrem FRÜHESTEN Eintrag sortiert: ein Load-in um 07:00
+ * steht damit vor einer Aftershow um 23:30, ohne dass jemand etwas sortieren
+ * muss. Noch leere Abschnitte haben keine Zeit und hängen hinten an.
+ *
+ * **Die Ansicht filtert weiterhin nur nach Setup und Show** (`abschnittOf`).
+ * Ein eigener Abschnitt ist ein Etikett am Eintrag; gezeigt wird er in der
+ * Show-Ansicht. Wer das ändert, muss den Umschalter mitdenken.
+ * @returns {[string, string][]}
+ */
+export function abschnitte(state) {
+  const eigene = (state && state.project && state.project.abschnitte) || [];
+  const tasks = (state && state.tasks) || [];
+  const frueh = new Map();
+  for (const t of tasks) {
+    const a = t.abschnitt;
+    if (!a || a === 'setup' || a === 'show') continue;
+    const m = toMin(t.start);
+    if (!Number.isFinite(m)) continue;
+    if (!frueh.has(a) || m < frueh.get(a)) frueh.set(a, m);
+  }
+  const sortiert = [...eigene].sort((x, y) =>
+    (frueh.has(x.id) ? frueh.get(x.id) : Infinity) - (frueh.has(y.id) ? frueh.get(y.id) : Infinity));
+  return [...ABSCHNITTE, ...sortiert.map((a) => [a.id, a.label])];
+}
+
+/** Anzeigename eines Abschnitts. Unbekanntes bleibt unverändert stehen. */
+export const abschnittLabel = (v, state) =>
+  (abschnitte(state).find(([k]) => k === v) || [v, v])[1];
+
+/**
  * Die Zeilenbänder der Ebene, nach `sort`. `aus` blendet einzelne aus (der
  * Bühnen-Filter) — dieselbe Mechanik wie die Gewerk-Häkchen auf der Druckseite:
  * das Wegklicken ändert Zeilen UND Maßstab, nicht nur die Sichtbarkeit.

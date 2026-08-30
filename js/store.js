@@ -36,6 +36,13 @@ const artVon = (g) => g.art || 'gewerk';
 const TYPEN_EINGEBAUT = [
   ['act', 'Act'], ['changeover', 'Changeover'], ['doors', 'Doors'], ['ende', 'Show-Ende'],
 ];
+// Dasselbe für die Abschnitte, aus demselben Grund und mit demselben Test.
+const ABSCHNITTE_EINGEBAUT = [['setup', 'Setup'], ['show', 'Show']];
+
+/** Kennt der Plan diesen Abschnitt — eingebaut oder selbst angelegt? */
+const abschnittBekannt = (state, v) =>
+  ABSCHNITTE_EINGEBAUT.some(([k]) => k === v)
+  || ((state.project && state.project.abschnitte) || []).some((a) => a.id === v);
 
 const UNDO_MAX = 100;
 
@@ -44,6 +51,34 @@ const err = (msg) => ({ ok: false, error: msg });
 
 let idSeq = 0;
 const newId = (prefix) => prefix + Date.now().toString(36) + (idSeq++).toString(36);
+
+/**
+ * Eine selbst angelegte Auswahl im Plan ablegen — Eintragsarten und Abschnitte
+ * gehen denselben Weg, deshalb steht er einmal hier.
+ *
+ * Sie landen am PROJEKT und reisen damit im Export mit: ein Eintrag trägt nur
+ * `punktTyp: "linecheck"` bzw. `abschnitt: "loadin"`, und ohne die Namensliste
+ * in derselben Datei sähe der Empfänger genau diese Kennung.
+ *
+ * Verglichen wird gegen die eingebauten MIT, ohne Rücksicht auf Groß- und
+ * Kleinschreibung — «Changeover» zweimal im Auswahlfeld wäre nicht
+ * auseinanderzuhalten.
+ * @returns {string|{ok:true,id:string}} Fehlertext oder Erfolg
+ */
+function neuerEintrag(state, { feld, eingebaut, praefix, wort, label: roh, extra = {} }) {
+  const label = String(roh || '').trim();
+  if (!label) return `${wort === 'Art' ? 'Die Art' : 'Der Abschnitt'} braucht einen Namen.`;
+  if (label.length > 40) return 'Der Name ist zu lang (höchstens 40 Zeichen).';
+  const alle = [...eingebaut, ...((state.project[feld] || []).map((x) => [x.id, x.label]))];
+  if (alle.some(([, l]) => String(l).toLowerCase() === label.toLowerCase()))
+    return `${wort === 'Art' ? 'Diese Art' : 'Diesen Abschnitt'} gibt es schon: ${label}`;
+  // Lesbare id aus dem Namen; bei Kollision oder leerem Rest eine erzeugte.
+  let id = label.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (!id || alle.some(([k]) => k === id)) id = newId(praefix);
+  if (!Array.isArray(state.project[feld])) state.project[feld] = [];
+  state.project[feld].push({ id, label, ...extra });
+  return ok({ id });
+}
 
 // ── Validierung ─────────────────────────────────────────────────────────────
 // Läuft IMMER vor der Änderung. Ein abgelehnter Befehl darf keinen halben
@@ -127,7 +162,7 @@ const HANDLERS = {
       // Setup oder Show. MUSS hier durch: wer im Setup-Abschnitt anlegt, will
       // dort einen Eintrag — fiel das Feld weg, landete er in der Show und war
       // im gerade gezeigten Abschnitt sofort unsichtbar.
-      abschnitt: t.abschnitt === 'setup' ? 'setup' : 'show',
+      abschnitt: abschnittBekannt(state, t.abschnitt) ? t.abschnitt : 'show',
       // Wem gehört der Eintrag? Ein Soundcheck zeigt auf seinen Act. MUSS hier
       // durch — was der Handler nicht aufzählt, fällt beim Anlegen still weg.
       fuer: t.fuer ?? null,
@@ -175,8 +210,11 @@ const HANDLERS = {
     // Farbplatz: null (erbt von der Bühne) oder ein Platz AUS der Palette.
     // Ohne die Prüfung landete ein Vertipper still im Export und der Balken
     // zeigte auf `var(--gw-NaN)` — also auf gar keine Farbe.
-    if (cmd.field === 'abschnitt' && cmd.value !== 'setup' && cmd.value !== 'show')
-      return 'Abschnitt ist «setup» oder «show».';
+    // Der Abschnitt muss BEKANNT sein: eingebaut oder im Plan angelegt. Ein
+    // freier Text wäre eine Waise — er zählte zur Show, hätte aber keinen Namen
+    // im Auswahlfeld und niemand fände ihn wieder.
+    if (cmd.field === 'abschnitt' && !abschnittBekannt(state, cmd.value))
+      return 'Diesen Abschnitt gibt es nicht: ' + cmd.value;
     if (cmd.field === 'fuer' && cmd.value !== null) {
       if (cmd.value === cmd.id) return 'Ein Eintrag gehört nicht zu sich selbst.';
       if (!state.tasks.some((x) => x.id === cmd.value)) return 'Zugeordneter Eintrag nicht gefunden.';
@@ -355,21 +393,27 @@ const HANDLERS = {
    * `kompakt` heißt: tritt auf dem A3-Blatt zurück, wie ein Changeover.
    */
   addPunktTyp(state, cmd) {
-    const label = String(cmd.label || '').trim();
-    if (!label) return 'Die Art braucht einen Namen.';
-    if (label.length > 40) return 'Der Name ist zu lang (höchstens 40 Zeichen).';
-    // Gegen ALLE vergleichen, eingebaute eingeschlossen — sonst stünde
-    // «changeover» zweimal im Auswahlfeld und niemand wüsste, welches welches ist.
-    const alle = [...TYPEN_EINGEBAUT,
-      ...((state.project.punktTypen || []).map((t) => [t.id, t.label]))];
-    if (alle.some(([, l]) => String(l).toLowerCase() === label.toLowerCase()))
-      return 'Diese Art gibt es schon: ' + label;
-    // Lesbare id aus dem Namen; bei Kollision oder leerem Rest eine erzeugte.
-    let id = label.toLowerCase().replace(/[^a-z0-9]+/g, '');
-    if (!id || alle.some(([k]) => k === id)) id = newId('pt');
-    if (!Array.isArray(state.project.punktTypen)) state.project.punktTypen = [];
-    state.project.punktTypen.push({ id, label, kompakt: !!cmd.kompakt });
-    return ok({ id });
+    return neuerEintrag(state, {
+      feld: 'punktTypen', eingebaut: TYPEN_EINGEBAUT, praefix: 'pt',
+      wort: 'Art', label: cmd.label, extra: { kompakt: !!cmd.kompakt },
+    });
+  },
+
+  /**
+   * Einen eigenen Abschnitt anlegen (Load-in, Soundcheck, Aftershow …).
+   *
+   * Wie die Eintragsarten: im Plan, im Export, eingebaute nicht überschreibbar.
+   *
+   * **Er filtert die Ansicht nicht.** Der Umschalter oben kennt weiter Setup und
+   * Show; ein eigener Abschnitt ist ein Etikett am Eintrag und wird in der
+   * Show-Ansicht gezeigt (`abschnittOf` in ebene.js). Wer daran etwas ändert,
+   * muss den Umschalter mitdenken.
+   */
+  addAbschnitt(state, cmd) {
+    return neuerEintrag(state, {
+      feld: 'abschnitte', eingebaut: ABSCHNITTE_EINGEBAUT, praefix: 'ab',
+      wort: 'Abschnitt', label: cmd.label,
+    });
   },
 
   setProjectField(state, cmd) {

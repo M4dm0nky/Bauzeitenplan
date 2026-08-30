@@ -1,4 +1,4 @@
-import { artOf, abschnittOf, imAbschnitt, sichtGewerke, sichtTasks, programmFenster, punktLabel, punktTypen, punktKompakt, typHinweis, ART_FUER, ABSCHNITTE, EBENEN } from '../js/ebene.js';
+import { artOf, abschnittOf, imAbschnitt, sichtGewerke, sichtTasks, programmFenster, punktLabel, punktTypen, punktKompakt, typHinweis, abschnitte, abschnittLabel, ART_FUER, ABSCHNITTE, EBENEN } from '../js/ebene.js';
 import { toMin } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
@@ -203,6 +203,50 @@ test('die Live-Ansage nennt eine eigene Art', () => {
 test('auch bei eigenen Arten steht der Typ nicht doppelt', () => {
   const st = mitTypen([{ id: 'linecheck', label: 'Line-Check' }]);
   assert.equal(typHinweis({ title: 'Line-Check', punktTyp: 'linecheck' }, st), '');
+});
+
+console.log('\nEigene Abschnitte');
+const mitAbs = (eigene, tasks = []) => ({ project: { abschnitte: eigene }, tasks });
+
+test('ohne Plan bleiben es Setup und Show', () => {
+  assert.deepEqual(abschnitte().map(([k]) => k), ['setup', 'show']);
+  assert.deepEqual(abschnitte({ project: {} }).map(([k]) => k), ['setup', 'show']);
+});
+test('eigene stehen HINTER den eingebauten', () => {
+  const k = abschnitte(mitAbs([{ id: 'loadin', label: 'Load-in' }])).map(([x]) => x);
+  assert.deepEqual(k, ['setup', 'show', 'loadin']);
+});
+test('ein eigener Abschnitt wird beim Namen genannt', () => {
+  const st = mitAbs([{ id: 'loadin', label: 'Load-in' }]);
+  assert.equal(abschnittLabel('loadin', st), 'Load-in');
+  assert.equal(abschnittLabel('setup', st), 'Setup');
+  assert.equal(abschnittLabel('loadin'), 'loadin', 'ohne Plan bleibt die Kennung stehen');
+});
+test('EIGENE ORDNEN SICH NACH IHREM FRÜHESTEN EINTRAG', () => {
+  // Ein Load-in um 07:00 gehört vor eine Aftershow um 23:30 — ohne dass jemand
+  // etwas sortieren muss.
+  const st = mitAbs(
+    [{ id: 'after', label: 'Aftershow' }, { id: 'loadin', label: 'Load-in' }],
+    [{ ...T('a', 'b0', '2026-08-29T23:30', '2026-08-30T01:00'), abschnitt: 'after' },
+      { ...T('b', 'b0', '2026-08-29T07:00', '2026-08-29T09:00'), abschnitt: 'loadin' }],
+  );
+  assert.deepEqual(abschnitte(st).map(([k]) => k), ['setup', 'show', 'loadin', 'after']);
+});
+test('ein noch LEERER Abschnitt hängt hinten an, statt zu verschwinden', () => {
+  const st = mitAbs(
+    [{ id: 'leer', label: 'Leer' }, { id: 'loadin', label: 'Load-in' }],
+    [{ ...T('b', 'b0', '2026-08-29T07:00', '2026-08-29T09:00'), abschnitt: 'loadin' }],
+  );
+  assert.deepEqual(abschnitte(st).map(([k]) => k), ['setup', 'show', 'loadin', 'leer']);
+});
+test('DIE ANSICHT FILTERT WEITER NUR NACH SETUP UND SHOW', () => {
+  // Der Umschalter oben bleibt unverändert: ein eigener Abschnitt ist ein
+  // Etikett am Eintrag und zählt zur Show. Ohne diese Zusicherung wäre ein
+  // Eintrag mit «Load-in» in KEINER Ansicht zu sehen.
+  const t = { id: 'x', title: 'Load-in Bühne', abschnitt: 'loadin' };
+  assert.equal(abschnittOf(t), 'show');
+  assert.deepEqual(imAbschnitt([t], 'show').map((x) => x.id), ['x']);
+  assert.deepEqual(imAbschnitt([t], 'setup'), []);
 });
 
 console.log('\nZeilenhöhe auf dem Blatt');

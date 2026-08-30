@@ -3,6 +3,48 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.9 — 2026-08-30
+
+**Eigene Abschnitte — dieselbe Freiheit wie bei den Eintragsarten.**
+
+In der Spalte *Abschnitt* steht jetzt unten **«Neu»**: Name eintippen, fertig,
+und Load-in, Soundcheck oder Aftershow stehen zur Wahl. Setup und Show bleiben
+eingebaut und lassen sich nicht nachbauen. Die eigenen stehen in
+`project.abschnitte` und reisen im JSON-Export mit, aus demselben Grund wie die
+Arten: ein Eintrag trägt nur `abschnitt: "loadin"`.
+
+**Sortiert nach der Uhrzeit, nicht von Hand.** Die eigenen Abschnitte ordnen sich
+nach ihrem frühesten Eintrag — ein Load-in um 07:00 steht vor einer Aftershow um
+23:30, ohne dass jemand einen Sortierdialog öffnet. Noch leere hängen hinten an.
+
+**Der Umschalter oben bleibt unverändert.** Ein eigener Abschnitt filtert die
+Ansicht nicht; er ist ein Etikett am Eintrag und zählt zur Show. Je Abschnitt
+einen Knopf in die Werkzeugzeile zu setzen wurde verworfen — sie bricht schon
+heute um, und bei fünf Abschnitten schöbe sie Zoom und Live-Knöpfe eine Zeile
+tiefer.
+
+**Damit dabei nichts stumm verschwindet:** Wer im Setup steht und einen Eintrag
+auf «Load-in» stellt, verliert die Zeile im selben Moment aus dem Bild — sie
+zählt jetzt zur Show. Die App sagt das jetzt («Load-in» steht in der
+Show-Ansicht), statt es geschehen zu lassen. Genau diese Fehlerart steht in
+diesem Projekt schon einmal dokumentiert.
+
+### Behoben, bevor es jemand gemerkt hätte
+
+Eine Zeile in der Migration lautete `if (t.abschnitt !== 'setup') t.abschnitt =
+'show'`. Vor eigenen Abschnitten war das richtig — danach hätte sie **jeden
+selbst angelegten Abschnitt beim nächsten Laden gelöscht**, ohne Meldung und ohne
+Rückweg. Jetzt wird nur normalisiert, was der Plan nicht kennt; `setTaskField`
+und `addTask` lehnen unbekannte Abschnitte ab, damit gar keine Waise entsteht.
+Gefunden hat das ein Export-Import-Test, nicht das Auge.
+
+### Kleinigkeiten
+
+- Der Eintrag im Auswahlfeld heißt in beiden Spalten schlicht **«Neu»** statt
+  «+ Neue Art…» — man legt eine Zeile an und will wählen, was sie ist.
+- `addPunktTyp` und `addAbschnitt` teilen sich im Store eine Prüfung, statt sie
+  fast gleich zu verdoppeln.
+
 ## 0.9.8 — 2026-08-30
 
 **Eine Uhrzeit im Showablauf ließ sich nicht eintippen** — und jetzt gibt es

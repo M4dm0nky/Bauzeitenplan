@@ -10,7 +10,7 @@ import { parseDuration, fmtDuration, local, mitUhrzeit, endeNachStart } from './
 import { toMin, toDate, byStart } from './schedule.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, toInput, STATUS } from './dom.js';
-import { sichtGewerke, punktTypen, ABSCHNITTE, amTag, imAbschnitt } from './ebene.js';
+import { sichtGewerke, punktTypen, abschnitte, abschnittLabel, amTag, imAbschnitt } from './ebene.js';
 
 // Die Spalten hängen an der Ebene (js/ebene.js). Sie stehen an EINER Stelle und
 // bestimmen zugleich die Breite der Gruppenköpfe — zwei Listen liefen sonst
@@ -26,7 +26,7 @@ const SPALTEN = {
     ['Anforderungen', 'c-anf'], ['Material', 'c-mat'], ['Status', 'c-st'], ['', 'c-act']],
 };
 
-export function createTable(root, { store, onConflicts } = {}) {
+export function createTable(root, { store, onConflicts, onHinweis } = {}) {
   root.classList.add('tb');
   let conflicts = new Map();
   // Welche Ebene die Tabelle zeigt. Anzeige-Zustand wie `collapsed` — die App
@@ -229,14 +229,32 @@ export function createTable(root, { store, onConflicts } = {}) {
     if (ebene === 'show') {
       const ab = el('td', 'c-abs');
       const asel = el('select');
-      for (const [v, label] of ABSCHNITTE) {
+      // Der gespeicherte Wert, nicht der gefilterte: ein eigener Abschnitt wie
+      // «Load-in» soll in seiner Zeile stehen bleiben und nicht als «Show»
+      // erscheinen, nur weil die ANSICHT ihn dorthin zählt.
+      const jetztAbs = t.abschnitt || 'show';
+      for (const [v, label] of abschnitte(store.state)) {
         const o = el('option', null, label);
         o.value = v;
-        if (v === (t.abschnitt === 'setup' ? 'setup' : 'show')) o.selected = true;
+        if (v === jetztAbs) o.selected = true;
         asel.append(o);
       }
+      const atrenner = el('option', null, '─────────');
+      atrenner.disabled = true;
+      const aneu = el('option', null, 'Neu');
+      aneu.value = NEUE_ART;
+      asel.append(atrenner, aneu);
+
       asel.setAttribute('aria-label', 'Abschnitt');
-      asel.onchange = () => send({ type: 'setTaskField', id: t.id, field: 'abschnitt', value: asel.value });
+      asel.onchange = () => {
+        if (asel.value === NEUE_ART) {
+          asel.value = jetztAbs;
+          neuFragen(asel, { titel: 'Neuer Abschnitt', cmd: { type: 'addAbschnitt' } }, (id) =>
+            waehleAbschnitt(t.id, id));
+          return;
+        }
+        waehleAbschnitt(t.id, asel.value);
+      };
       ab.append(asel);
       tr.append(ab);
     }
@@ -259,7 +277,7 @@ export function createTable(root, { store, onConflicts } = {}) {
       // dass es keine Art ist, sondern eine Handlung.
       const trenner = el('option', null, '─────────');
       trenner.disabled = true;
-      const neu = el('option', null, '+ Neue Art…');
+      const neu = el('option', null, 'Neu');
       neu.value = NEUE_ART;
       tsel.append(trenner, neu);
 
@@ -267,10 +285,10 @@ export function createTable(root, { store, onConflicts } = {}) {
       tsel.onchange = () => {
         if (tsel.value === NEUE_ART) {
           // Auswahl SOFORT zurückstellen: bricht der Benutzer ab, stünde sonst
-          // «+ Neue Art…» als scheinbarer Wert in der Zeile.
+          // «Neu» als scheinbarer Wert in der Zeile.
           tsel.value = jetzt;
-          neueArtFragen(tsel, (id) =>
-            send({ type: 'setTaskField', id: t.id, field: 'punktTyp', value: id }));
+          neuFragen(tsel, { titel: 'Neue Art', kompaktFeld: true, cmd: { type: 'addPunktTyp' } },
+            (id) => send({ type: 'setTaskField', id: t.id, field: 'punktTyp', value: id }));
           return;
         }
         send({ type: 'setTaskField', id: t.id, field: 'punktTyp', value: tsel.value });
@@ -535,42 +553,76 @@ export function createTable(root, { store, onConflicts } = {}) {
   // Handler verglich gegen das inzwischen veraltete Aufgabenobjekt aus der
   // Closure und schickte denselben Befehl ein zweites Mal — jede Änderung lag
   // doppelt auf dem Undo-Stapel, ⌘Z wirkte kaputt.
-  // ── Eigene Eintragsarten ────────────────────────────────────────────────────
-  // Angelegt wird dort, wo man ohnehin steht: im Auswahlfeld der Zeile. Ein
-  // eigener Verwaltungsort wäre zwei Klicks weiter weg für etwas, das man
-  // mitten im Tippen braucht.
+  /**
+   * Den Abschnitt eines Eintrags setzen — und sagen, wenn er dadurch aus der
+   * gezeigten Ansicht fällt.
+   *
+   * Die Ansicht filtert nur nach Setup und Show; ein eigener Abschnitt zählt
+   * zur Show (`abschnittOf` in ebene.js). Wer im Setup steht und «Load-in»
+   * wählt, sähe seinen Eintrag sonst kommentarlos verschwinden — genau der
+   * Fehler, der in CLAUDE.md schon einmal steht: «ein im Setup angelegter
+   * Eintrag landete in der Show und war im gezeigten Abschnitt sofort
+   * unsichtbar». Der Knopf tut etwas, nur unsichtbar, und das fühlt sich an wie
+   * «geht nicht».
+   */
+  function waehleAbschnitt(id, wert) {
+    const r = send({ type: 'setTaskField', id, field: 'abschnitt', value: wert });
+    if (!r || r.ok === false) return;
+    const wo = wert === 'setup' ? 'setup' : 'show';
+    if (onHinweis && abschnitt !== 'alle' && abschnitt !== wo) {
+      onHinweis('«' + abschnittLabel(wert, store.state) + '» steht in der '
+        + (wo === 'setup' ? 'Setup' : 'Show') + '-Ansicht.');
+    }
+  }
+
+  // ── Selbst angelegte Auswahlwerte ───────────────────────────────────────────
+  // Eintragsarten und Abschnitte gehen denselben Weg: angelegt wird dort, wo man
+  // ohnehin steht — im Auswahlfeld der Zeile, beim Anlegen einer neuen Zeile.
+  // Ein eigener Verwaltungsort wäre zwei Klicks weiter weg.
   const NEUE_ART = '__neu__';
 
   /**
-   * Fragt Name und Blattverhalten ab und legt die Art an. Ruft `fertig(id)`
-   * nur, wenn der Store sie angenommen hat.
+   * Fragt einen Namen ab und legt den Wert an. Ruft `fertig(id)` nur, wenn der
+   * Store ihn angenommen hat.
+   *
+   * @param {HTMLElement} anker   Auswahlfeld, an dem der Kasten ausgerichtet wird
+   * @param {object} opt          { titel, kompaktFeld, cmd }
+   * @param {(id:string)=>void} fertig
    *
    * Hängt an `document.body`, nicht in die Tabelle: ein `render()` würde es
    * sonst mitten in der Eingabe wegräumen.
    */
-  function neueArtFragen(anker, fertig) {
+  function neuFragen(anker, opt, fertig) {
     document.querySelector('.tb-neuart')?.remove();
     const box = el('div', 'tb-neuart');
 
     // Eine Überschrift statt eines Platzhalters im Feld: ein Beispielwort IM
     // Feld sieht aus wie ein eingetragener Wert. Was das Feld will, sagt die
     // Beschriftung darüber — dieselbe Regel wie bei den Freitextspalten.
-    box.append(el('div', 'tb-neuart-h', 'Neue Art für Zeiteinträge'));
+    box.append(el('div', 'tb-neuart-h', opt.titel));
 
     const feld = el('input', 'tb-neuart-n');
-    feld.setAttribute('aria-label', 'Name der neuen Art');
+    feld.setAttribute('aria-label', opt.titel);
 
-    const hk = el('input');
-    hk.type = 'checkbox';
-    const lab = el('label', 'tb-neuart-k');
-    lab.append(hk, el('span', null, 'tritt auf dem Blatt zurück, wie ein Changeover'));
-    lab.title = 'Wie ein Changeover: niedrigere Zeile auf dem A3-Blatt, damit mehr Platz für die Acts bleibt.';
+    // Nur die Eintragsart kennt das Blattverhalten. Ein Abschnitt bestimmt
+    // keine Zeilenhöhe — dort wäre das Häkchen eine Frage ohne Wirkung.
+    let hk = null;
+    if (opt.kompaktFeld) {
+      hk = el('input');
+      hk.type = 'checkbox';
+      const lab = el('label', 'tb-neuart-k');
+      lab.append(hk, el('span', null, 'tritt auf dem Blatt zurück, wie ein Changeover'));
+      lab.title = 'Wie ein Changeover: niedrigere Zeile auf dem A3-Blatt, damit mehr Platz für die Acts bleibt.';
+      box.append(feld, lab);
+    } else {
+      box.append(feld);
+    }
 
     const ok = el('button', 'btn btn-p', 'Anlegen');
     const ab = el('button', 'btn', 'Abbrechen');
     const reihe = el('div', 'tb-neuart-a');
     reihe.append(ab, ok);
-    box.append(feld, lab, reihe);
+    box.append(reihe);
     document.body.append(box);
 
     const zu = () => {
@@ -584,7 +636,7 @@ export function createTable(root, { store, onConflicts } = {}) {
     };
     const aussen = (e) => { if (!box.contains(e.target)) zu(); };
     function anlegen() {
-      const r = send({ type: 'addPunktTyp', label: feld.value, kompakt: hk.checked });
+      const r = send({ ...opt.cmd, label: feld.value, kompakt: hk ? hk.checked : undefined });
       // Abgelehnt (leer oder doppelt): stehen lassen, der Fehler steht schon
       // oben. Sonst verschwände die Eingabe kommentarlos.
       if (!r || r.ok === false) { feld.focus(); feld.select(); return; }

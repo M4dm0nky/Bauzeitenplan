@@ -898,6 +898,56 @@ await check('sie überlebt das Neuladen und steht im Plan', async () => {
     ? true : 'im Plan steht: ' + JSON.stringify(imPlan);
 });
 
+await check('ein EIGENER ABSCHNITT lässt sich genauso anlegen', async () => {
+  const sel = p.locator('.tb-r .c-abs select').first();
+  await sel.selectOption('__neu__');
+  await p.waitForTimeout(400);
+  if (!(await p.locator('.tb-neuart').isVisible())) return 'kein Eingabefeld erschienen';
+  // Ein Abschnitt bestimmt keine Zeilenhöhe auf dem Blatt — das Häkchen wäre
+  // hier eine Frage ohne Wirkung und darf nicht stehen.
+  if (await p.locator('.tb-neuart-k').count()) return 'das Blattzeilen-Häkchen steht auch beim Abschnitt';
+  if ((await p.locator('.tb-neuart-h').textContent()).trim() !== 'Neuer Abschnitt')
+    return 'falsche Überschrift im Kasten';
+  await p.locator('.tb-neuart-n').fill('Load-in');
+  // Derselbe Kasten wie bei den Arten, nur ohne Häkchen — festhalten, damit
+  // sichtbar bleibt, dass er ohne die Zeile nicht schief aussieht.
+  await p.screenshot({ path: join(here, 'shots', 'showablauf-neuer-abschnitt.png') });
+  await p.locator('.tb-neuart .btn-p').click();
+  await p.waitForTimeout(700);
+  return (await p.locator('.tb-neuart').count()) ? 'der Kasten bleibt offen' : true;
+});
+
+await check('DER EINTRAG VERSCHWINDET NICHT STUMM AUS DER ANSICHT', async () => {
+  // Ein eigener Abschnitt zählt zur Show; wer im Setup steht, verliert die
+  // Zeile in dem Moment aus dem Bild. Genau dieser Fehler steht in CLAUDE.md
+  // schon einmal — «der Knopf tut etwas, nur unsichtbar». Deshalb sagt es die
+  // App, statt es geschehen zu lassen.
+  const zeilen = await p.locator('.tb-r').count();
+  if (zeilen !== 0) return zeilen + ' Zeilen im Setup — der Eintrag zählt jetzt zur Show';
+  const hinweis = await p.locator('#toast').textContent();
+  return /Load-in.*Show/.test(hinweis) ? true : 'kein Hinweis, sondern: «' + hinweis.trim() + '»';
+});
+
+await check('in der Show trägt die Zeile «Load-in», nicht «Show»', async () => {
+  // Das Auswahlfeld zeigt den GESPEICHERTEN Wert. Zeigte es «Show», nur weil die
+  // Ansicht ihn dorthin rechnet, wäre der eigene Abschnitt nach einem Blick auf
+  // die Zeile wieder verloren.
+  await p.locator('[data-ansicht="show"]').click();
+  await p.waitForTimeout(800);
+  const werte = await p.locator('.tb-r .c-abs select').evaluateAll((s) => s.map((x) => x.value));
+  if (!werte.includes('loadin')) return 'in der Show steht er als «' + [...new Set(werte)].join(',') + '»';
+
+  // Zurück auf Setup — dieser Eintrag gehört den folgenden Prüfungen, und die
+  // zählen 17 Show-Einträge. Ein Test, der den Zustand liegen lässt, bricht die
+  // nächsten.
+  const zeile = p.locator('.tb-r').filter({ has: p.locator('.c-abs select option[value="loadin"]:checked') }).first();
+  await zeile.locator('.c-abs select').selectOption('setup');
+  await p.waitForTimeout(700);
+  await p.locator('[data-ansicht="setup"]').click();
+  await p.waitForTimeout(700);
+  return (await p.locator('.tb-r').count()) === 1 ? true : 'der Eintrag kam nicht ins Setup zurück';
+});
+
 await check('dieselbe Art ein zweites Mal wird abgelehnt', async () => {
   const sel = p.locator('.tb-r .c-typ select').first();
   await sel.selectOption('__neu__');

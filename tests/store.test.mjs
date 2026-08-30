@@ -820,6 +820,69 @@ test('⌘Z nimmt die Art wieder zurück', () => {
   assert.deepEqual(s.state.project.punktTypen || [], []);
 });
 
+console.log('\nEigene Abschnitte');
+
+test('anlegen liefert eine id und hängt ihn an den Plan', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addAbschnitt', label: 'Load-in' });
+  assert.equal(r.ok, true);
+  assert.equal(r.id, 'loadin');
+  assert.deepEqual(s.state.project.abschnitte, [{ id: 'loadin', label: 'Load-in' }]);
+});
+
+test('ein Abschnitt trägt KEIN kompakt-Feld', () => {
+  // Er bestimmt keine Zeilenhöhe auf dem Blatt — ein Feld ohne Wirkung wäre
+  // beim Diff zweier Sicherungen nur Rauschen.
+  const s = createStore(seed());
+  s.apply({ type: 'addAbschnitt', label: 'Load-in', kompakt: true });
+  assert.equal('kompakt' in s.state.project.abschnitte[0], false);
+});
+
+test('Setup und Show lassen sich nicht nachbauen', () => {
+  const s = createStore(seed());
+  for (const n of ['Setup', 'setup', 'Show']) {
+    assert.equal(s.apply({ type: 'addAbschnitt', label: n }).ok, false, n);
+  }
+});
+
+test('ein leerer Abschnittsname wird abgelehnt und hinterlässt NICHTS', () => {
+  const s = createStore(seed());
+  const vorher = s.canUndo;
+  assert.equal(s.apply({ type: 'addAbschnitt', label: '  ' }).ok, false);
+  assert.deepEqual(s.state.project.abschnitte, undefined);
+  assert.equal(s.canUndo, vorher);
+});
+
+test('Arten und Abschnitte kommen sich nicht in die Quere', () => {
+  // Zwei getrennte Listen: ein Abschnitt «Act» ist erlaubt, auch wenn es die
+  // Eintragsart «Act» gibt — sie stehen in verschiedenen Auswahlfeldern.
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'addPunktTyp', label: 'Line-Check' }).ok, true);
+  assert.equal(s.apply({ type: 'addAbschnitt', label: 'Line-Check' }).ok, true);
+  assert.equal(s.state.project.punktTypen.length, 1);
+  assert.equal(s.state.project.abschnitte.length, 1);
+});
+
+test('⌘Z nimmt den Abschnitt wieder zurück', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addAbschnitt', label: 'Load-in' });
+  s.undo();
+  assert.deepEqual(s.state.project.abschnitte || [], []);
+});
+
+test('DIE KOPIE DER EINGEBAUTEN ABSCHNITTE LÄUFT NICHT AUSEINANDER', async () => {
+  // Dieselbe Begründung wie bei den Arten: store.js darf nicht auf ebene.js
+  // zeigen, also steht die Liste zweimal — und wird geprüft.
+  const { ABSCHNITTE } = await import('../js/ebene.js');
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../js/store.js', import.meta.url), 'utf8');
+  const roh = /const ABSCHNITTE_EINGEBAUT = \[([\s\S]*?)\];/.exec(src);
+  assert.ok(roh, 'ABSCHNITTE_EINGEBAUT nicht gefunden — wurde es umbenannt?');
+  const imStore = [...roh[1].matchAll(/\['([^']+)',\s*'([^']+)'\]/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(imStore, ABSCHNITTE.map(([k, l]) => [k, l]),
+    'store.js und ebene.js führen verschiedene eingebaute Abschnitte');
+});
+
 test('DIE KOPIE DER EINGEBAUTEN ARTEN LÄUFT NICHT AUSEINANDER', async () => {
   // store.js führt die eingebauten Arten bewusst doppelt: ein Import aus
   // ebene.js liefe verkehrt herum (Kern → Ansichtsschicht), dieselbe Begründung

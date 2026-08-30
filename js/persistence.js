@@ -40,6 +40,9 @@ export function migrate(plan) {
   // Projekt und reisen dadurch im Export mit, ohne dass deserialize einen
   // weiteren Zweig durchreichen müsste. Altpläne kennen nur die eingebauten.
   if (!Array.isArray(p.project.punktTypen)) p.project.punktTypen = [];
+  // Ebenso die selbst angelegten Abschnitte (Load-in, Aftershow …). Sie sind
+  // Etiketten am Eintrag; gefiltert wird weiter nach Setup und Show.
+  if (!Array.isArray(p.project.abschnitte)) p.project.abschnitte = [];
 
   // Der Farbplatz ist Identität und muss stabil sein — beim Umsortieren darf
   // sich nichts umfärben. Bestandsdaten bekommen ihn aus der Reihenfolge.
@@ -133,7 +136,12 @@ export function migrate(plan) {
     // dass es dort je greift — ein Feld, das je nach Band bedeutungslos ist,
     // aber überall gleich aussieht, ist billiger als eine Ausnahme.
     t.abschnitt ??= setupBand.has(t.gewerk) ? 'setup' : 'show';
-    if (t.abschnitt !== 'setup') t.abschnitt = 'show';
+    // Nur noch UNBEKANNTES auf «show» ziehen. Vorher wurde alles außer 'setup'
+    // plattgemacht — mit selbst angelegten Abschnitten hätte das jeden
+    // «Load-in» beim nächsten Laden gelöscht, still und ohne Rückweg.
+    const bekannt = t.abschnitt === 'setup' || t.abschnitt === 'show'
+      || (p.project.abschnitte || []).some((a) => a.id === t.abschnitt);
+    if (!bekannt) t.abschnitt = 'show';
   }
   for (const d of p.deps) {
     d.type ??= 'FS';

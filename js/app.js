@@ -200,7 +200,11 @@ function mount() {
       $('date-jump').value = gantt.centerDayIso();
     },
   });
-  table = createTable($('tb'), { store, onConflicts: ({ error }) => toast(error, 'bad') });
+  table = createTable($('tb'), {
+    store,
+    onConflicts: ({ error }) => toast(error, 'bad'),
+    onHinweis: (text) => toast(text),
+  });
   inspector = createInspector($('ins'), {
     store,
     onError: (msg) => toast(msg, 'bad'),

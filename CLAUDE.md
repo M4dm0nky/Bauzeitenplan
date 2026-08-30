@@ -487,6 +487,29 @@ Feld für Feld auf; was dort fehlt, fällt beim Anlegen still weg. `abschnitt` h
 genau das erlebt: ein im Setup angelegter Eintrag landete in der Show und war im
 gezeigten Abschnitt sofort unsichtbar. Wer ein Feld ergänzt, prüft `addTask` mit.
 
+**Abschnitte gehen denselben Weg wie die Eintragsarten — aber sie FILTERN
+weiter nur nach Setup und Show.** Eigene stehen in `project.abschnitte`,
+`abschnitte(state)` führt sie mit den eingebauten zusammen, angelegt wird im
+Auswahlfeld der Spalte («Neu»). Sortiert werden sie nach ihrem FRÜHESTEN
+Eintrag: ein Load-in um 07:00 steht vor einer Aftershow um 23:30, ohne dass
+jemand sortiert; noch leere hängen hinten an.
+
+**Der Umschalter oben bleibt unverändert** — er kennt Bauzeitenplan, Setup und
+Show. Ein eigener Abschnitt ist ein Etikett am Eintrag und zählt über
+`abschnittOf` zur SHOW-Ansicht. Daraus folgt eine Falle, die schon einmal in
+diesem Projekt zugeschlagen hat: wer im Setup steht und «Load-in» wählt, verliert
+die Zeile sofort aus dem Bild. Deshalb sagt die Tabelle es (`waehleAbschnitt` →
+`onHinweis`), statt es geschehen zu lassen — «der Knopf tut etwas, nur
+unsichtbar» ist genau das Gefühl von «geht nicht». Wer den Umschalter dynamisch
+machen will, muss hier ansetzen.
+
+**`migrate` darf einen eigenen Abschnitt nicht plattmachen.** Die Zeile hieß
+einmal `if (t.abschnitt !== 'setup') t.abschnitt = 'show'` — mit selbst
+angelegten Abschnitten hätte sie jeden «Load-in» beim nächsten Laden gelöscht,
+still und ohne Rückweg. Normalisiert wird nur noch, was der Plan NICHT kennt;
+`setTaskField` und `addTask` lehnen unbekannte Abschnitte entsprechend ab, damit
+gar keine Waise entsteht.
+
 **Eintragsarten stehen an EINER Stelle — und eigene gehören in den PLAN.**
 Die vier eingebauten (`PUNKT_TYPEN` in ebene.js) tragen jetzt ein drittes Feld
 `kompakt`: tritt die Art auf dem A3-Blatt zurück? Selbst angelegte liegen in
