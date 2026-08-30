@@ -122,6 +122,14 @@ body {
 .sh-next .sh-v { color: var(--ink-2); }
 .sh-clock .sh-v { font-variant-numeric: tabular-nums; }
 .sh-late.is-late .sh-v, .sh-late.is-late .sh-z { color: var(--crit); }
+/* ── Neue Eintragsart ─────────────────────────────────────────────────────── */
+/* Schwebt über der Tabelle — ohne eigene Fläche stünde die Eingabe
+   durchsichtig auf den Zeilen darunter. */
+.tb-neuart { background: var(--panel); border: 1px solid var(--line-2); box-shadow: 0 14px 40px -10px rgba(20,20,30,.28); }
+.tb-neuart-n { border: 1px solid var(--line-2); background: var(--panel2); color: var(--ink); }
+.tb-neuart-h { color: var(--ink); }
+.tb-neuart-k { color: var(--ink-2); }
+
 /* ── Versatz-Stepper ──────────────────────────────────────────────────────── */
 /* Dieselbe Sprache wie die Live-Leiste: Delay rot, Vorlauf grün. Die Knöpfe
    selbst tragen `seg` und sind damit schon gestaltet. */

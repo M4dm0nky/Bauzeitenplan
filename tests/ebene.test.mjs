@@ -1,4 +1,4 @@
-import { artOf, abschnittOf, imAbschnitt, sichtGewerke, sichtTasks, programmFenster, punktLabel, ART_FUER, ABSCHNITTE, EBENEN } from '../js/ebene.js';
+import { artOf, abschnittOf, imAbschnitt, sichtGewerke, sichtTasks, programmFenster, punktLabel, punktTypen, punktKompakt, typHinweis, ART_FUER, ABSCHNITTE, EBENEN } from '../js/ebene.js';
 import { toMin } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
@@ -177,6 +177,50 @@ test('ein unbekannter Typ verschwindet nicht, sondern steht da', () => {
 
 test('jede Ebene hat eine Gewerk-Art', () => {
   for (const [key] of EBENEN) assert.ok(ART_FUER[key], 'keine Art für ' + key);
+});
+
+console.log('\nEigene Eintragsarten');
+const mitTypen = (eigene) => ({ project: { punktTypen: eigene } });
+
+test('ohne Plan bleiben es die eingebauten vier', () => {
+  assert.deepEqual(punktTypen().map(([k]) => k), ['act', 'changeover', 'doors', 'ende']);
+  assert.deepEqual(punktTypen({ project: {} }).map(([k]) => k), ['act', 'changeover', 'doors', 'ende']);
+});
+test('eigene stehen HINTER den eingebauten', () => {
+  const k = punktTypen(mitTypen([{ id: 'linecheck', label: 'Line-Check' }])).map(([x]) => x);
+  assert.deepEqual(k, ['act', 'changeover', 'doors', 'ende', 'linecheck']);
+});
+test('eine eigene Art wird beim Namen genannt — sonst stünde die id im Bild', () => {
+  const st = mitTypen([{ id: 'linecheck', label: 'Line-Check' }]);
+  assert.equal(punktLabel('linecheck', st), 'Line-Check');
+  // Ohne den Plan kennt niemand den Namen — genau deshalb reist die Liste mit.
+  assert.equal(punktLabel('linecheck'), 'linecheck');
+});
+test('die Live-Ansage nennt eine eigene Art', () => {
+  const st = mitTypen([{ id: 'linecheck', label: 'Line-Check' }]);
+  assert.equal(typHinweis({ title: 'SIDO', punktTyp: 'linecheck' }, st), 'Line-Check');
+});
+test('auch bei eigenen Arten steht der Typ nicht doppelt', () => {
+  const st = mitTypen([{ id: 'linecheck', label: 'Line-Check' }]);
+  assert.equal(typHinweis({ title: 'Line-Check', punktTyp: 'linecheck' }, st), '');
+});
+
+console.log('\nZeilenhöhe auf dem Blatt');
+test('Changeover tritt zurück, Act nicht', () => {
+  assert.equal(punktKompakt('changeover'), true);
+  assert.equal(punktKompakt('act'), false);
+});
+test('eine eigene Art kann zurücktreten — oder eben nicht', () => {
+  const st = mitTypen([
+    { id: 'pause', label: 'Umbaupause', kompakt: true },
+    { id: 'gast', label: 'Gastauftritt', kompakt: false },
+  ]);
+  assert.equal(punktKompakt('pause', st), true);
+  assert.equal(punktKompakt('gast', st), false);
+});
+test('ein unbekannter Typ tritt nicht zurück', () => {
+  // Sonst schrumpfte eine Zeile, deren Art aus dem Plan gefallen ist.
+  assert.equal(punktKompakt('gibtsnicht'), false);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

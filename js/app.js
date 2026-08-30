@@ -547,7 +547,7 @@ function refreshShowhead() {
   // Titel das Wort schon, bleibt es bei einem: «Changeover: Changeover» war das
   // erste, was auf dem Probebild auffiel.
   const ansage = (t) => {
-    const typ = typHinweis(t);
+    const typ = typHinweis(t, store.state);
     return typ ? typ + ': ' + t.title : t.title;
   };
   const titelVon = (id) => punkte.find((t) => t.id === id);

@@ -29,16 +29,44 @@ export const ART_FUER = { bau: 'gewerk', show: 'buehne' };
 /** Altdaten ohne `art` sind Gewerke — sonst verschwände der halbe Bestand. */
 export const artOf = (g) => g.art || 'gewerk';
 
-/** Arten eines Zeiteintrags. Der Typ steuert Darstellung und Live-Ansage, nie Zeiten. */
+/**
+ * EINGEBAUTE Arten eines Zeiteintrags: `[id, Name, kompakt]`.
+ *
+ * Der Typ steuert Darstellung und Live-Ansage, nie Zeiten. `kompakt` heißt:
+ * tritt auf dem A3-Blatt zurück und bekommt eine niedrigere Zeile — auf dem
+ * Blatt zählt, wer spielt. Bisher stand dafür ein fest verdrahteter Vergleich
+ * auf 'changeover' in print.js; jetzt trägt jede Art die Eigenschaft selbst,
+ * damit eigene Arten sie auch haben können.
+ */
 export const PUNKT_TYPEN = [
-  ['act', 'Act'],
-  ['changeover', 'Changeover'],
-  ['doors', 'Doors'],
-  ['ende', 'Show-Ende'],
+  ['act', 'Act', false],
+  ['changeover', 'Changeover', true],
+  ['doors', 'Doors', false],
+  ['ende', 'Show-Ende', false],
 ];
 
+/**
+ * Alle Arten: eingebaute zuerst, dann die im PLAN angelegten.
+ *
+ * Die eigenen stehen in `project.punktTypen` und reisen damit im Export mit —
+ * ohne die Namensliste in derselben Datei sähe ein Empfänger nur den Rohwert
+ * «linecheck» statt «Line-Check». EINE Quelle für alle: Dropdown, Live-Ansage
+ * und Druckblatt fragen hier, sonst kennt das Auswahlfeld eine Art, die der
+ * Kopfzeile fehlt.
+ * @returns {[string, string, boolean][]}
+ */
+export function punktTypen(state) {
+  const eigene = (state && state.project && state.project.punktTypen) || [];
+  return [...PUNKT_TYPEN, ...eigene.map((t) => [t.id, t.label, !!t.kompakt])];
+}
+
 /** Anzeigename einer Eintragsart. Unbekanntes bleibt unverändert stehen. */
-export const punktLabel = (v) => (PUNKT_TYPEN.find(([k]) => k === v) || [v, v])[1];
+export const punktLabel = (v, state) =>
+  (punktTypen(state).find(([k]) => k === v) || [v, v])[1];
+
+/** Tritt diese Art auf dem Blatt zurück (niedrigere Zeile)? */
+export const punktKompakt = (v, state) =>
+  !!(punktTypen(state).find(([k]) => k === v) || [])[2];
 
 /**
  * Der Typ als HINWEIS — leer, wenn der Titel ihn schon sagt.
@@ -48,8 +76,8 @@ export const punktLabel = (v) => (PUNKT_TYPEN.find(([k]) => k === v) || [v, v])[
  * normalisiert und in beide Richtungen, damit auch «SHOW END» / «Show-Ende»
  * als dasselbe erkannt wird.
  */
-export function typHinweis(t) {
-  const typ = t.punktTyp && t.punktTyp !== 'act' ? punktLabel(t.punktTyp) : '';
+export function typHinweis(t, state) {
+  const typ = t.punktTyp && t.punktTyp !== 'act' ? punktLabel(t.punktTyp, state) : '';
   if (!typ) return '';
   const k = (x) => String(x || '').toLowerCase().replace(/[^a-zäöüß]/g, '');
   const a = k(t.title), b = k(typ);

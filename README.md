@@ -15,13 +15,14 @@ der Load-In läuft stundengenau.
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
 mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
-**Dazugekommen (bis v0.9.7):** Gewerke per Drag & Drop umsortieren · Gantt und
+**Dazugekommen (bis v0.9.8):** Gewerke per Drag & Drop umsortieren · Gantt und
 Tabelle in gleicher Reihenfolge (nach Startzeit) · **Untervorgänge** (einklappbar,
 Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für kritische
 Vorgänge und Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
 statt endlosem Dropdown · Hell/Dunkel-Umschalter im Kopf · **Tagesblätter zum
 Drucken** · **Showablauf-Ebene** (siehe unten) · **Verknüpfen per Ziehen** im Gantt ·
-**Live-Versatz** («wir hängen 5 Minuten hinterher») · CallBoard-Marke.
+**Live-Versatz** («wir hängen 5 Minuten hinterher») · **eigene Arten für
+Zeiteinträge** · CallBoard-Marke.
 
 ## Zwei Ebenen: Bauzeitenplan und Showablauf
 
@@ -58,9 +59,16 @@ Show-Ansichten, sie heißt einmal und ist dieselbe.
 Angelegt wird in der **Tabelle**: im Bühnenkopf sitzt ein `+ Zeiteintrag`. Der
 neue Eintrag landet im gezeigten Abschnitt und am gezeigten Tag und schließt
 zeitlich an den letzten an. In der **Tabelle** kommen vier Spalten dazu, genau dort wo du den Zeitstrahl
-anlegst: Abschnitt (Setup/Show), Typ (Act · Changeover · Doors · Show-Ende),
-Kontakt und die Freitexte **Anforderungen** und **Benötigtes Material**. Start
-und Ende zeigen dort nur die Uhrzeit — der Tag steht ja oben.
+anlegst: Abschnitt (Setup/Show), Typ, Kontakt und die Freitexte
+**Anforderungen** und **Benötigtes Material**. Start und Ende zeigen dort nur die
+Uhrzeit — der Tag steht ja oben.
+
+**Eigene Arten legst du selbst an.** Neben Act, Changeover, Doors und Show-Ende
+steht im Typ-Auswahlfeld unten **«+ Neue Art…»** — Name eintippen, fertig, die
+Art ist angelegt und für diese Zeile gewählt. Ein Häkchen bestimmt, ob sie auf
+dem A3-Blatt **zurücktritt** wie ein Changeover (niedrigere Zeile: auf dem Blatt
+zählt, wer spielt). Deine Arten gehören zum Plan und reisen im JSON-Export mit —
+wer die Datei bekommt, sieht «Line-Check» und nicht bloß eine Kennung.
 
 **Soundchecks** legst du im Panel eines Acts an: ein Klick, und es entsteht ein
 eigener Zeiteintrag im Setup-Abschnitt mit Start und Dauer. Als **Balken** — nur
@@ -340,6 +348,7 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | Farbe je Zeiteintrag (zehn Töne × Schraffur), Schrift auf der Farbe gerechnet |
 | ✅ | Verknüpfen per Ziehen · Pfeile anklickbar (Typ, Versatz, `Entf`) |
 | ✅ | Live-Versatz: «wir hängen 5 Minuten hinterher», der Ablauf rutscht, die Uhr nicht |
+| ✅ | Eigene Arten für Zeiteinträge, je Art die Blattzeile wählbar |
 | → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen |
 | | Ansichten & Export: öffentlicher Link, PDF/ICS |
 | ❄️ | PocketBase, Login, Rollen — auf Eis, Stand im Branch `pocketbase-vorbereitung` |

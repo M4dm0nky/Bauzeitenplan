@@ -25,6 +25,18 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 // wären — dieselbe Prüfung, die schon den `el`-Vorfall gefangen hat.
 const artVon = (g) => g.art || 'gewerk';
 
+// Die EINGEBAUTEN Eintragsarten, aus demselben Grund hier wiederholt statt aus
+// ebene.js importiert. Gebraucht werden sie nur, damit `addPunktTyp` eine
+// eigene Art nicht doppelt zu einer vorhandenen anlegt — «Changeover» zweimal
+// im Auswahlfeld wäre für den Benutzer nicht auseinanderzuhalten.
+//
+// Eine Kopie läuft irgendwann auseinander, deshalb hält ein Test in
+// `tests/store.test.mjs` sie gegen `PUNKT_TYPEN` — dasselbe Muster wie bei den
+// Versionsstellen: doppelt geführt ist erlaubt, ungeprüft doppelt nicht.
+const TYPEN_EINGEBAUT = [
+  ['act', 'Act'], ['changeover', 'Changeover'], ['doors', 'Doors'], ['ende', 'Show-Ende'],
+];
+
 const UNDO_MAX = 100;
 
 const ok = (extra = {}) => ({ ok: true, ...extra });
@@ -331,6 +343,33 @@ const HANDLERS = {
     }
     g[cmd.field] = cmd.value;
     return ok();
+  },
+
+  /**
+   * Eine eigene Art für Zeiteinträge anlegen (Line-Check, Catering …).
+   *
+   * Sie steht im PLAN (`project.punktTypen`) und reist damit im Export mit:
+   * ein Eintrag trägt nur `punktTyp: "linecheck"`, und ohne die Namensliste
+   * daneben sähe der Empfänger genau das statt «Line-Check».
+   *
+   * `kompakt` heißt: tritt auf dem A3-Blatt zurück, wie ein Changeover.
+   */
+  addPunktTyp(state, cmd) {
+    const label = String(cmd.label || '').trim();
+    if (!label) return 'Die Art braucht einen Namen.';
+    if (label.length > 40) return 'Der Name ist zu lang (höchstens 40 Zeichen).';
+    // Gegen ALLE vergleichen, eingebaute eingeschlossen — sonst stünde
+    // «changeover» zweimal im Auswahlfeld und niemand wüsste, welches welches ist.
+    const alle = [...TYPEN_EINGEBAUT,
+      ...((state.project.punktTypen || []).map((t) => [t.id, t.label]))];
+    if (alle.some(([, l]) => String(l).toLowerCase() === label.toLowerCase()))
+      return 'Diese Art gibt es schon: ' + label;
+    // Lesbare id aus dem Namen; bei Kollision oder leerem Rest eine erzeugte.
+    let id = label.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (!id || alle.some(([k]) => k === id)) id = newId('pt');
+    if (!Array.isArray(state.project.punktTypen)) state.project.punktTypen = [];
+    state.project.punktTypen.push({ id, label, kompakt: !!cmd.kompakt });
+    return ok({ id });
   },
 
   setProjectField(state, cmd) {

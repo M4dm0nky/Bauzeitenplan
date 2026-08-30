@@ -36,6 +36,10 @@ export function migrate(plan) {
   p.gewerke ??= [];
   p.project ??= {};
   p.project.timezone ??= Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Selbst angelegte Eintragsarten (Line-Check, Catering …). Sie stehen am
+  // Projekt und reisen dadurch im Export mit, ohne dass deserialize einen
+  // weiteren Zweig durchreichen müsste. Altpläne kennen nur die eingebauten.
+  if (!Array.isArray(p.project.punktTypen)) p.project.punktTypen = [];
 
   // Der Farbplatz ist Identität und muss stabil sein — beim Umsortieren darf
   // sich nichts umfärben. Bestandsdaten bekommen ihn aus der Reihenfolge.

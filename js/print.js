@@ -17,7 +17,7 @@ import { ticksFor, fmtDay } from './timeaxis.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { local } from './conflicts.js';
 import { el, $ } from './dom.js';
-import { sichtGewerke, typHinweis, imAbschnitt, ABSCHNITTE } from './ebene.js';
+import { sichtGewerke, typHinweis, punktKompakt, imAbschnitt, ABSCHNITTE } from './ebene.js';
 import { VERSION } from './version.js';
 
 // Mitgelieferte Pläne — dieselben Kennungen wie in app.js.
@@ -301,9 +301,14 @@ function roBlatt({ tag, b, drauf }, nr, gesamt) {
   // Gewichtet gerechnet: eine Umbauzeile ist 0,62 hoch (siehe print.css). Zählte
   // man nur Zeilen, blieb bei siebzehn Punkten ein Viertel des Blattes leer,
   // weil die Hälfte davon Umbauten sind.
+  //
+  // Welche Art zurücktritt, sagt die Art selbst (`kompakt`), nicht mehr ein
+  // fester Vergleich auf 'changeover' — sonst nähme eine selbst angelegte
+  // «Umbaupause» genauso viel Platz weg wie ein Act.
   const platzMM = 277 - 10 - 6 - 12;
   const UM = 0.62;
-  const gewicht = drauf.reduce((n, s) => n + ((s.task.punktTyp || 'act') === 'changeover' ? UM : 1), 1);
+  const kompakt = (t) => punktKompakt(t.punktTyp || 'act', PLAN);
+  const gewicht = drauf.reduce((n, s) => n + (kompakt(s.task) ? UM : 1), 1);
   const hoehe = Math.max(6, Math.min(18, platzMM / gewicht));
   sheet.style.setProperty('--pr-ro-h', hoehe.toFixed(2) + 'mm');
 
@@ -312,7 +317,7 @@ function roBlatt({ tag, b, drauf }, nr, gesamt) {
     const r = el('div', 'pr-ro-r');
     r.dataset.typ = t.punktTyp || 'act';
     // Umbauten treten zurück: auf dem Blatt zählt, wer spielt.
-    if ((t.punktTyp || 'act') === 'changeover') r.classList.add('is-um');
+    if (kompakt(t)) r.classList.add('is-um');
 
     const a = toDate(s.von), e = toDate(s.bis);
     const zeit = el('div', 'pr-ro-z');
@@ -328,7 +333,7 @@ function roBlatt({ tag, b, drauf }, nr, gesamt) {
     // Typ, Kontakt und Soundcheck stehen klein unter dem Namen — je eine Zeile
     // mehr wäre eine Spalte, die meistens leer ist.
     const unten = [];
-    const typ = typHinweis(t);
+    const typ = typHinweis(t, PLAN);
     if (typ) unten.push(typ);
     if (t.kontakt) unten.push(t.kontakt);
     if (t.soundcheck) unten.push('SC ' + String(t.soundcheck).slice(11, 16));

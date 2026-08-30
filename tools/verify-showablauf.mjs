@@ -801,7 +801,132 @@ await check('EIN NEUER ZEITEINTRAG LANDET IM GEZEIGTEN ABSCHNITT UND TAG', async
   return balken === 1 ? true : balken + ' Balken im Gantt, erwartet 1';
 });
 
+await check('EINE UHRZEIT LÄSST SICH ZIFFER FÜR ZIFFER EINTIPPEN', async () => {
+  // Der Fehler, den Marco gemeldet hat: «die aktualisiert sich nach jeder
+  // Ziffer». `type="time"` feuert `change`, sobald ein VOLLSTÄNDIGER Wert
+  // dasteht — beim vorbelegten Feld also schon nach der Stunde. Das change
+  // schickte einen Store-Befehl, der die Tabelle per replaceChildren neu baute;
+  // das Eingabefeld war danach ein anderer Knoten, der Fokus weg, und die
+  // Minuten landeten nirgends.
+  //
+  // Getippt wird bewusst Ziffer für Ziffer über die Tastatur, nicht per fill():
+  // fill() setzt den Wert in einem Rutsch und hätte den Fehler nie gesehen.
+  await p.locator('[data-view="tabelle"]').click();
+  await p.waitForTimeout(600);
+  const feld = p.locator('.tb-r .c-start input').first();
+  // Auf den LINKEN Rand klicken: ein Klick in die Feldmitte landet im
+  // Minuten-Segment, und der Test prüfte dann etwas anderes als das, was ein
+  // Mensch tut, der die Uhrzeit von vorne eintippt.
+  await feld.click({ position: { x: 6, y: 10 } });
+  for (const z of '0930') {
+    await p.keyboard.press(z);
+    await p.waitForTimeout(120);          // Zeit für ein Re-Render, falls es kommt
+  }
+  const wert = await feld.inputValue();
+  const drin = await p.evaluate(() => {
+    const a = document.activeElement;
+    return !!a && a.closest('.c-start') !== null;
+  });
+  if (wert !== '09:30') return `Feld zeigt «${wert}» statt 09:30`;
+  if (!drin) return 'der Fokus wurde aus dem Feld geworfen';
+
+  // Jetzt das Feld verlassen: der aufgeschobene Neuaufbau muss nachgeholt
+  // werden, und der Auto-Save (800 ms) den Stand in die Ablage schreiben.
+  await p.locator('.tb-r .c-title input').first().click();
+  await p.waitForTimeout(1200);
+  const gespeichert = await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const neu = (raw.tasks || []).find((t) => t.title === 'Neuer Zeiteintrag');
+    return neu ? neu.start : '(weg)';
+  });
+  if (!gespeichert.endsWith('T09:30')) return 'gespeichert wurde ' + gespeichert;
+  // Und die Tabelle zeigt danach den echten Stand — nicht den aufgeschobenen.
+  const nachher = await p.locator('.tb-r .c-start input').first().inputValue();
+  return nachher === '09:30' ? true : `nach dem Verlassen steht «${nachher}» im Feld`;
+});
+
+await check('ein ⌘Z aus dem Feld heraus zeichnet SOFORT neu', async () => {
+  // Die Gegenprobe zum Aufschieben: verschluckte der Neuaufbau jede Änderung,
+  // solange irgendwo ein Cursor steht, zeigte die Tabelle nach einem Undo stumm
+  // Veraltetes. Aufgeschoben wird nur, was das fokussierte Feld SELBST ausgelöst
+  // hat.
+  await p.keyboard.press('Meta+z');
+  await p.waitForTimeout(500);
+  const wert = await p.locator('.tb-r .c-start input').first().inputValue();
+  return wert !== '09:30' ? true : 'die Tabelle zeigt nach dem Undo noch 09:30';
+});
+
+await check('eine EIGENE ART lässt sich im Dropdown anlegen', async () => {
+  // Angelegt wird dort, wo man ohnehin steht. Geprüft wird der ganze Weg:
+  // Auswahl «+ Neue Art…» → Name eintippen → die Art ist da UND für diese Zeile
+  // gewählt.
+  const sel = p.locator('.tb-r .c-typ select').first();
+  await sel.selectOption('__neu__');
+  await p.waitForTimeout(400);
+  if (!(await p.locator('.tb-neuart').isVisible())) return 'kein Eingabefeld erschienen';
+  // Die Auswahl darf NICHT auf «+ Neue Art…» stehen bleiben — sonst sähe die
+  // Zeile so aus, als wäre das ein Typ.
+  if ((await sel.inputValue()) === '__neu__') return 'die Auswahl steht auf «+ Neue Art…»';
+  await p.locator('.tb-neuart-n').fill('Line-Check');
+  await p.locator('.tb-neuart-k input').check();      // tritt auf dem Blatt zurück
+  // Das offene Feld festhalten — es ist der einzige neue Baustein dieser
+  // Version, und ob er lesbar über der Tabelle steht, sagt kein Häkchen.
+  await p.screenshot({ path: join(here, 'shots', 'showablauf-neue-art.png') });
+  await p.locator('.tb-neuart .btn-p').click();
+  await p.waitForTimeout(600);
+  if (await p.locator('.tb-neuart').count()) return 'das Eingabefeld bleibt offen';
+  const gewaehlt = await p.locator('.tb-r .c-typ select').first().inputValue();
+  if (gewaehlt !== 'linecheck') return 'gewählt ist «' + gewaehlt + '» statt der neuen Art';
+  const labels = await p.locator('.tb-r .c-typ select option').allTextContents();
+  return labels.includes('Line-Check') ? true : 'nicht im Dropdown: ' + labels.join(' · ');
+});
+await p.screenshot({ path: join(here, 'shots', 'showablauf-eigene-art.png') });
+
+await check('sie überlebt das Neuladen und steht im Plan', async () => {
+  await p.waitForTimeout(900);              // Auto-Save
+  await p.reload();
+  await p.waitForTimeout(1200);
+  await p.locator('[data-view="tabelle"]').click();
+  await p.waitForTimeout(600);
+  const labels = await p.locator('.tb-r .c-typ select option').allTextContents();
+  if (!labels.includes('Line-Check')) return 'nach dem Neuladen weg: ' + labels.join(' · ');
+  const imPlan = await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    return (raw.project && raw.project.punktTypen) || [];
+  });
+  return imPlan.some((t) => t.id === 'linecheck' && t.kompakt === true)
+    ? true : 'im Plan steht: ' + JSON.stringify(imPlan);
+});
+
+await check('dieselbe Art ein zweites Mal wird abgelehnt', async () => {
+  const sel = p.locator('.tb-r .c-typ select').first();
+  await sel.selectOption('__neu__');
+  await p.waitForTimeout(400);
+  await p.locator('.tb-neuart-n').fill('line-check');   // andere Schreibweise
+  await p.locator('.tb-neuart .btn-p').click();
+  await p.waitForTimeout(500);
+  const offen = await p.locator('.tb-neuart').count();
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(300);
+  return offen ? true : 'das Feld schloss sich, die Dopplung wurde also angelegt';
+});
+
+await check('Escape bricht ab, ohne etwas anzulegen', async () => {
+  const vorher = (await p.locator('.tb-r .c-typ select option').allTextContents()).length;
+  const sel = p.locator('.tb-r .c-typ select').first();
+  await sel.selectOption('__neu__');
+  await p.waitForTimeout(300);
+  await p.locator('.tb-neuart-n').fill('Wegwerf');
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(400);
+  if (await p.locator('.tb-neuart').count()) return 'das Feld bleibt offen';
+  const nachher = (await p.locator('.tb-r .c-typ select option').allTextContents()).length;
+  return nachher === vorher ? true : `${vorher} → ${nachher} Einträge im Dropdown`;
+});
+
 await check('im Show-Abschnitt ist er WEG — dieselbe Bühne, anderer Ablauf', async () => {
+  await p.locator('[data-view="gantt"]').click();
+  await p.waitForTimeout(500);
   await p.locator('[data-ansicht="show"]').click();
   await p.waitForTimeout(800);
   const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
@@ -828,6 +953,29 @@ await check('der Setup-View rechnet seine eigene Zeitachse', async () => {
     .map((x) => Number(x.trim())).filter((n) => !Number.isNaN(n));
   if (!ticks.length) return 'keine Stundenmarken';
   return ticks[0] < 12 ? true : 'die Achse beginnt erst bei ' + ticks[0] + ' Uhr';
+});
+
+await check('eine eigene Art TRITT AUF DEM BLATT ZURÜCK, wenn sie soll', async () => {
+  // Bisher entschied ein fest verdrahteter Vergleich auf 'changeover', wer eine
+  // niedrigere Zeile bekommt. Jetzt sagt es die Art selbst — sonst nähme eine
+  // selbst angelegte «Umbaupause» genauso viel Platz weg wie ein Act.
+  // ctx.newPage(), nicht b.newPage(): ein neuer Context hätte einen eigenen
+  // localStorage, print.html fiele auf die mitgelieferte JSON zurück und kennte
+  // die eben angelegte Art gar nicht.
+  const seite = await ctx.newPage();
+  await seite.goto(BASE + '/print.html?plan=klassentreffen&ansicht=show&abschnitt=setup');
+  await seite.waitForSelector('.pr-ro-r', { timeout: 20000 });
+  await seite.waitForTimeout(600);
+  const treffer = await seite.evaluate(() => {
+    const r = [...document.querySelectorAll('.pr-ro-r')]
+      .find((x) => /Neuer Zeiteintrag/.test(x.textContent));
+    if (!r) return { fehler: 'der Setup-Eintrag steht nicht auf dem Blatt' };
+    return { typ: r.dataset.typ, um: r.classList.contains('is-um') };
+  });
+  await seite.close();
+  if (treffer.fehler) return treffer.fehler;
+  if (treffer.typ !== 'linecheck') return 'die Zeile trägt den Typ «' + treffer.typ + '»';
+  return treffer.um ? true : 'die Zeile tritt nicht zurück, obwohl die Art kompakt ist';
 });
 
 if ((await p.locator('#live').getAttribute('aria-pressed')) === 'true') {

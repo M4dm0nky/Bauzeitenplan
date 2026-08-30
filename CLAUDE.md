@@ -185,6 +185,21 @@ Gegenbefehl wäre eine Fehlerquelle, die erst Stunden später beim ⌘Z auffäll
 früher für `status: geplant` belegt — das ist jetzt ein umrandeter Balken. Nicht
 zurückdrehen, sonst bedeutet dasselbe Muster zwei Dinge.
 
+**Ein `render()` der Tabelle wartet, solange in dem Feld getippt wird, das ihn
+ausgelöst hat.** `render()` baut mit `replaceChildren` neu auf — wer gerade tippt,
+verliert dabei den Fokus, sein Knoten existiert nicht mehr. Bei Textfeldern fällt
+das nicht auf (`change` kommt erst beim Verlassen), bei `<input type="time">` im
+Showablauf schon: es feuert, sobald ein VOLLSTÄNDIGER Wert dasteht, und das Feld
+ist vorbelegt — also bereits nach der getippten Stunde. Aus «0930» wurde «08:09».
+Nachgeholt wird beim `focusout`; wandert der Fokus in ein anderes Feld derselben
+Tabelle, zieht er mit. **Die Einschränkung auf das AUSLÖSENDE Feld ist
+wesentlich** — sonst verschluckte die Tabelle auch ein ⌘Z, während der Cursor
+zufällig irgendwo steht, und zeigte stumm Veraltetes. Zwei Umwege, die nicht
+funktionieren: den Fokus danach wiederherzustellen greift bei `type="time"` nicht
+(für das aktive Segment gibt es keine API), und `document.activeElement` ist
+während des `change` in Firefox kurzzeitig `body` — sofort geprüft hält eine
+Absicherung jedes Tippen für ein Verlassen.
+
 **In der Tabelle nur an `change` hängen, nie zusätzlich an `blur`.** Das erste
 `change` baut die Tabelle neu, der alte Knoten wird abgehängt und feuert danach
 trotzdem sein `blur` — mit dem veralteten Objekt aus der Closure. Jede Änderung
@@ -471,6 +486,22 @@ Im **Bauzeitenplan bleiben die Felder datiert**: der läuft über vierzehn Tage.
 Feld für Feld auf; was dort fehlt, fällt beim Anlegen still weg. `abschnitt` hat
 genau das erlebt: ein im Setup angelegter Eintrag landete in der Show und war im
 gezeigten Abschnitt sofort unsichtbar. Wer ein Feld ergänzt, prüft `addTask` mit.
+
+**Eintragsarten stehen an EINER Stelle — und eigene gehören in den PLAN.**
+Die vier eingebauten (`PUNKT_TYPEN` in ebene.js) tragen jetzt ein drittes Feld
+`kompakt`: tritt die Art auf dem A3-Blatt zurück? Selbst angelegte liegen in
+`project.punktTypen` und reisen damit im Export mit — ein Eintrag trägt nur
+`punktTyp: "linecheck"`, und ohne die Namensliste in derselben Datei sähe der
+Empfänger genau das. `punktTypen(state)` führt beide zusammen; Dropdown,
+Live-Ansage (`typHinweis`) und Druckblatt fragen dort, nie an PUNKT_TYPEN vorbei.
+Angelegt wird im Auswahlfeld der Tabelle («+ Neue Art…»), nicht an einem zweiten
+Ort — das braucht man mitten im Tippen.
+
+**`store.js` führt die eingebauten Arten bewusst DOPPELT.** Ein Import aus
+ebene.js liefe verkehrt herum (Kern → Ansichtsschicht), dieselbe Begründung wie
+bei `clone` und `artVon`. Damit die Kopie nicht auseinanderläuft, vergleicht ein
+Test in `tests/store.test.mjs` sie gegen `PUNKT_TYPEN` — doppelt geführt ist
+erlaubt, ungeprüft doppelt nicht. Genau das Muster der Versionsstellen.
 
 **Das Wort ist «Zeiteintrag», nicht «Programmpunkt».** Im Showablauf heißt jede
 Zeile so — Spalte, Knopf, Zähler, Ecke der Seitenspalte, Vorgabename, Kennzahl.

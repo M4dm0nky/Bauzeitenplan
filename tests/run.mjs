@@ -126,7 +126,10 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     'bz-link', 'bz-dep-ghost', 'is-link-no',
     // Versatz-Stepper: ohne Farbe ist «Delay» von «vor Plan» nicht zu
     // unterscheiden — und rot/grün ist die halbe Aussage.
-    'vz-n', 'vz-txt'];
+    'vz-n', 'vz-txt',
+    // Neue Eintragsart: schwebt über der Tabelle. Ohne eigene Fläche stünde die
+    // Eingabe durchsichtig auf den Zeilen darunter.
+    'tb-neuart'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

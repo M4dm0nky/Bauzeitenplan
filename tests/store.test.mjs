@@ -764,5 +764,76 @@ test('⌘Z nimmt eine Farbe zurück', () => {
   assert.equal(taskById(s, 'a').slot, undefined);
 });
 
+console.log('\nEigene Eintragsarten');
+
+test('anlegen liefert eine id und hängt sie an den Plan', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addPunktTyp', label: 'Line-Check' });
+  assert.equal(r.ok, true);
+  assert.equal(r.id, 'linecheck', 'lesbare id aus dem Namen');
+  assert.deepEqual(s.state.project.punktTypen, [{ id: 'linecheck', label: 'Line-Check', kompakt: false }]);
+});
+
+test('«tritt auf dem Blatt zurück» wird mitgeführt', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addPunktTyp', label: 'Umbaupause', kompakt: true });
+  assert.equal(s.state.project.punktTypen[0].kompakt, true);
+});
+
+test('ein leerer Name wird abgelehnt und hinterlässt NICHTS', () => {
+  const s = createStore(seed());
+  const vorher = s.canUndo;
+  const r = s.apply({ type: 'addPunktTyp', label: '   ' });
+  assert.equal(r.ok, false);
+  assert.deepEqual(s.state.project.punktTypen, undefined, 'keine halbe Liste angelegt');
+  assert.equal(s.canUndo, vorher, 'kein Undo-Eintrag für einen abgelehnten Befehl');
+});
+
+test('derselbe Name zweimal wird abgelehnt — auch anders geschrieben', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addPunktTyp', label: 'Line-Check' });
+  const r = s.apply({ type: 'addPunktTyp', label: 'line-check' });
+  assert.equal(r.ok, false);
+  assert.equal(s.state.project.punktTypen.length, 1);
+});
+
+test('eine EINGEBAUTE Art lässt sich nicht nachbauen', () => {
+  // Sonst stünde «Changeover» zweimal im Auswahlfeld und niemand wüsste, welches
+  // welches ist.
+  const s = createStore(seed());
+  for (const n of ['Changeover', 'changeover', 'Act', 'Show-Ende']) {
+    assert.equal(s.apply({ type: 'addPunktTyp', label: n }).ok, false, n);
+  }
+});
+
+test('ein Name ohne brauchbare Zeichen bekommt trotzdem eine id', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addPunktTyp', label: '★★★' });
+  assert.equal(r.ok, true);
+  assert.ok(r.id && r.id.length > 1, 'id: ' + r.id);
+});
+
+test('⌘Z nimmt die Art wieder zurück', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addPunktTyp', label: 'Line-Check' });
+  s.undo();
+  assert.deepEqual(s.state.project.punktTypen || [], []);
+});
+
+test('DIE KOPIE DER EINGEBAUTEN ARTEN LÄUFT NICHT AUSEINANDER', async () => {
+  // store.js führt die eingebauten Arten bewusst doppelt: ein Import aus
+  // ebene.js liefe verkehrt herum (Kern → Ansichtsschicht), dieselbe Begründung
+  // wie bei `clone` und `artVon`. Doppelt geführt ist erlaubt, ungeprüft
+  // doppelt nicht — genau wie bei den Versionsstellen.
+  const { PUNKT_TYPEN } = await import('../js/ebene.js');
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../js/store.js', import.meta.url), 'utf8');
+  const roh = /const TYPEN_EINGEBAUT = \[([\s\S]*?)\];/.exec(src);
+  assert.ok(roh, 'TYPEN_EINGEBAUT nicht gefunden — wurde es umbenannt?');
+  const imStore = [...roh[1].matchAll(/\['([^']+)',\s*'([^']+)'\]/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(imStore, PUNKT_TYPEN.map(([k, l]) => [k, l]),
+    'store.js und ebene.js führen verschiedene eingebaute Arten');
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

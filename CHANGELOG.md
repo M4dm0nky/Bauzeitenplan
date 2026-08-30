@@ -3,6 +3,68 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.8 — 2026-08-30
+
+**Eine Uhrzeit im Showablauf ließ sich nicht eintippen** — und jetzt gibt es
+eigene Arten für Zeiteinträge.
+
+### Die Uhrzeit sprang nach jeder Ziffer
+
+Wer im Setup einen neuen Zeiteintrag anlegte und die Startzeit tippen wollte,
+bekam Unsinn: aus «0930» wurde **08:09**. Zwei Dinge trafen zusammen.
+
+`<input type="time">` feuert `change`, sobald ein **vollständiger** Wert dasteht.
+Das Feld ist beim neuen Eintrag mit 08:00 vorbelegt — also bereits nach der
+getippten Stunde. Dieses `change` schickte einen Store-Befehl, und der baute die
+Tabelle per `replaceChildren` neu auf. Das Eingabefeld war danach ein anderer
+Knoten, der Fokus lag auf `body`, und die restlichen Ziffern landeten nirgends.
+
+Im Bauzeitenplan fiel das nie auf: dort steht `datetime-local` und löst erst nach
+dem vollständigen Datum aus. Textfelder ebenso wenig — ihr `change` kommt
+ohnehin erst beim Verlassen.
+
+**Die Tabelle baut sich jetzt nicht neu auf, solange in dem Feld getippt wird,
+das die Änderung ausgelöst hat.** Der Aufbau wird nachgeholt, sobald der Fokus
+das Feld verlässt; wandert er in ein anderes Feld derselben Tabelle, zieht er
+mit. Die Einschränkung auf das *auslösende* Feld ist wesentlich — sonst
+verschluckte die Tabelle auch ein ⌘Z, während der Cursor zufällig irgendwo steht,
+und zeigte stumm Veraltetes. Beides ist als Prüfung festgehalten, die
+Uhrzeit-Eingabe Ziffer für Ziffer über die Tastatur.
+
+Zwei Umwege dabei, die nicht funktioniert haben und deshalb im Code stehen:
+den Fokus nach dem Neuaufbau wiederherzustellen hilft bei `type="time"` nicht
+(für das aktive Segment gibt es keine API, der Cursor stünde wieder auf der
+Stunde), und Firefox meldet **während** des `change` kurzzeitig `body` als
+aktives Element — eine Absicherung, die das sofort prüfte, hielt jedes Tippen für
+ein Verlassen und baute doch neu auf.
+
+### Eigene Arten für Zeiteinträge
+
+Act, Changeover, Doors und Show-Ende reichten nicht. Im Auswahlfeld der Tabelle
+steht jetzt unten **«+ Neue Art…»**: Name eintippen, fertig — die Art ist
+angelegt und für diese Zeile gewählt. Angelegt wird dort, wo man ohnehin steht;
+ein eigener Verwaltungsort wäre zwei Klicks weiter weg für etwas, das man mitten
+im Tippen braucht.
+
+**Je Art wählbar: «tritt auf dem Blatt zurück, wie ein Changeover».** Damit
+bekommt eine eigene Umbaupause oder ein Line-Check auf dem A3-Blatt eine
+niedrigere Zeile — auf dem Blatt zählt, wer spielt. Bisher entschied das ein fest
+verdrahteter Vergleich auf `changeover`; jetzt trägt jede Art die Eigenschaft
+selbst.
+
+Die Arten stehen in **`project.punktTypen`** und reisen damit im JSON-Export mit:
+ein Eintrag trägt nur `punktTyp: "linecheck"`, und ohne die Namensliste in
+derselben Datei sähe der Empfänger genau das statt «Line-Check». Eingebaute und
+eigene führt `punktTypen()` zu **einer** Liste zusammen — sonst kennte das
+Auswahlfeld eine Art, die der Live-Kopfzeile fehlt.
+
+Der Store lehnt leere und doppelte Namen ab, auch gegen die eingebauten und ohne
+Rücksicht auf Groß- und Kleinschreibung; ⌘Z nimmt eine Art wieder zurück.
+
+**Noch nicht dabei:** Umbenennen, Sortieren und Löschen von Arten. Dafür bräuchte
+es einen Verwaltungsdialog; eine versehentlich angelegte Art bleibt vorerst im
+Auswahlfeld stehen.
+
 ## 0.9.7 — 2026-08-29
 
 **Zwei Dinge, die man im Gantt bisher nicht konnte: Pfeile ziehen und dem Plan

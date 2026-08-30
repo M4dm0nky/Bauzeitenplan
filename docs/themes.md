@@ -101,6 +101,10 @@ hier `vz-n` (die Zahl) und `vz-txt` (die Aussage), denn **Delay rot und Vorlauf
 grün ist die halbe Information** — ohne Farbe wäre «5 Min Delay» von «5 Min vor
 Plan» nur am Wortlaut zu unterscheiden. Beide stehen in der `needed`-Liste.
 
+Ebenso `tb-neuart` (v0.9.8): der Kasten zum Anlegen einer eigenen Eintragsart
+schwebt über der Tabelle. Ohne eigene Fläche stünde die Eingabe durchsichtig auf
+den Zeilen darunter.
+
 ## Farbpalette der Gewerke
 
 Die ersten **acht Farben sind gerechnet, nicht ausgesucht** (`docs/entscheidungen.md`).

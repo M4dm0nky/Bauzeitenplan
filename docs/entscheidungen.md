@@ -315,6 +315,71 @@ unsichtbar und 12 px stark; nur er nimmt Zeigerereignisse an. Die Ebene bleibt
 sonst `pointer-events: none`, sonst fingen die Pfeile Klicks auf die Balken darunter
 ab.
 
+## Die Tabelle wartet mit dem Neuaufbau, solange getippt wird
+
+`render()` baut mit `replaceChildren` neu auf. Wer dabei in einem Feld steht,
+verliert den Fokus — sein Knoten existiert nicht mehr. Bei Textfeldern fällt das
+nicht auf, weil ihr `change` erst beim Verlassen kommt. Bei `<input type="time">`
+schon: es feuert, sobald ein **vollständiger** Wert dasteht, und das Feld ist beim
+neuen Eintrag mit 08:00 vorbelegt — also bereits nach der getippten Stunde. Aus
+«0930» wurde **08:09**.
+
+Drei Wege wurden probiert, zwei funktionieren nicht:
+
+1. **Fokus nach dem Neuaufbau wiederherstellen.** Scheitert an `type="time"`: für
+   das aktive Segment gibt es keine API (`selectionStart` greift dort nicht). Der
+   Fokus käme zurück, der Cursor stünde wieder auf der Stunde, und die Minuten
+   landeten erneut dort.
+2. **Auf `blur` statt `change` umstellen.** Kleiner, behebt aber nur die
+   Zeitfelder und läuft der Regel gegen Handler an abgehängten Knoten entgegen.
+3. **Den Neuaufbau aufschieben.** Gewählt.
+
+Aufgeschoben wird **nur, was das fokussierte Feld selbst ausgelöst hat**. Ohne
+diese Einschränkung verschluckte die Tabelle auch ein ⌘Z oder eine Änderung aus
+dem Panel, während der Cursor zufällig irgendwo steht — sie zeigte dann stumm
+Veraltetes. Nachgeholt wird beim `focusout`; wandert der Fokus in ein anderes Feld
+derselben Tabelle, zieht er mit (sonst stünde dort eine veraltete Dauer).
+
+**Eine Falle beim Absichern:** Für den Fall «`change` feuert, aber der Fokus ist
+schon weiter» (Verlassen per Tab) braucht es ein sofortiges Nachziehen — sonst
+käme kein `focusout` mehr. Diese Absicherung darf `document.activeElement` aber
+**nicht sofort** prüfen: Firefox meldet während des `change` eines `type="time"`
+kurzzeitig `body`, obwohl der Cursor im Feld bleibt. Sofort geprüft hielt sie
+jedes Tippen für ein Verlassen und baute doch neu auf — sie hat den Fehler, den
+sie absichern sollte, selbst wieder eingeführt. Die Prüfung steht deshalb einen
+Tick später.
+
+In Kauf genommen: Dauer und Ende aktualisieren sich erst beim Verlassen des
+Feldes. Beim Tippen ist das ohnehin das erwartete Verhalten.
+
+## Eigene Eintragsarten stehen im PLAN, nicht im Browser
+
+Die vier eingebauten Arten reichten nicht. Beim Speicherort standen zwei
+Möglichkeiten gegeneinander: browserweit für alle Projekte (bequem, wenn man
+immer dieselben nutzt) oder am Projekt. Entschieden wurde **am Projekt**
+(`project.punktTypen`), und der Grund ist der Export: ein Eintrag trägt nur
+`punktTyp: "linecheck"`. Ohne die Namensliste in derselben Datei sähe der
+Empfänger genau diese Kennung statt «Line-Check» — die JSON wäre nicht mehr aus
+sich heraus lesbar. `project` wird in `deserialize` als Ganzes durchgereicht,
+deshalb kostet das keinen zusätzlichen Zweig im Import.
+
+**Angelegt wird im Auswahlfeld, nicht an einem zweiten Ort.** «+ Neue Art…» steht
+unten im Dropdown; das braucht man mitten im Tippen, und ein Verwaltungsdialog
+wäre zwei Klicks weiter weg. Preis dafür: Umbenennen, Sortieren und Löschen gibt
+es (noch) nicht — eine versehentlich angelegte Art bleibt stehen.
+
+**`kompakt` gehört der Art, nicht dem Code.** Dass ein Changeover auf dem A3-Blatt
+eine niedrigere Zeile bekommt, entschied vorher ein fest verdrahteter Vergleich in
+print.js. Jetzt trägt jede Art die Eigenschaft selbst — sonst nähme eine selbst
+angelegte «Umbaupause» genauso viel Platz weg wie ein Act.
+
+**store.js führt die eingebauten Arten doppelt.** Ein Import aus ebene.js liefe
+verkehrt herum (Kern → Ansichtsschicht), dieselbe Begründung wie bei `clone` und
+`artVon`. Gebraucht werden sie nur, damit `addPunktTyp` keine Dopplung zu einer
+vorhandenen Art anlegt. Damit die Kopie nicht auseinanderläuft, vergleicht ein
+Test sie gegen `PUNKT_TYPEN` — doppelt geführt ist erlaubt, ungeprüft doppelt
+nicht. Dasselbe Muster wie bei den Versionsstellen.
+
 ## PocketBase liegt auf Eis
 
 Eine fertige Login- und Rollenschicht lag von v0.3.0 bis v0.7.1 **bewusst uncommittet**
@@ -366,7 +431,7 @@ Das Ziehen der **Balken und Dauern** im Gantt sowie Ansichten & Export
 Gummiband und Zielprüfung stehen dort als Muster für den Rest.
 
 Darstellung, Bearbeiten, Live-Modus mit Versatz, Untervorgänge, Prüf-Liste,
-Verknüpfungs-Suche, Tagesblätter und der Showablauf mit Setup, Farben und
-Soundchecks stehen (Stand v0.9.7). Startdaten kommen aus den
+Verknüpfungs-Suche, Tagesblätter und der Showablauf mit Setup, Farben,
+Soundchecks und eigenen Eintragsarten stehen (Stand v0.9.8). Startdaten kommen aus den
 Vorlagen (`js/templates.js`) bzw. importierten JSON-Plänen — einen
 `js/data.js`-Demo-Datensatz gibt es nicht mehr.

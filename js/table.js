@@ -10,7 +10,7 @@ import { parseDuration, fmtDuration, local, mitUhrzeit, endeNachStart } from './
 import { toMin, toDate, byStart } from './schedule.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, toInput, STATUS } from './dom.js';
-import { sichtGewerke, PUNKT_TYPEN, ABSCHNITTE, amTag, imAbschnitt } from './ebene.js';
+import { sichtGewerke, punktTypen, ABSCHNITTE, amTag, imAbschnitt } from './ebene.js';
 
 // Die Spalten hängen an der Ebene (js/ebene.js). Sie stehen an EINER Stelle und
 // bestimmen zugleich die Breite der Gruppenköpfe — zwei Listen liefen sonst
@@ -40,6 +40,18 @@ export function createTable(root, { store, onConflicts } = {}) {
   const collapsed = new Set();
 
   function render() {
+    // Kommt dieser Aufbau aus einem Feld, in dem gerade getippt wird? Dann
+    // später — sonst reißt er dem Cursor die Eingabe weg. Siehe `commitOn`.
+    //
+    // Bewusst NICHT zusätzlich gegen `document.activeElement` geprüft: Firefox
+    // hat den Fokus beim `change` eines `type="time"` bereits abgegeben, der
+    // Vergleich war immer falsch und der Schutz damit wirkungslos. Ob wirklich
+    // noch jemand im Feld steht, entscheidet `commitOn` nach dem Befehl — dort
+    // ist der Fokus verlässlich zu lesen.
+    if (sendendesFeld) {
+      nachholen = true;
+      return;
+    }
     const S = store.state;
     const scrollTop = root.scrollTop;
     root.replaceChildren();
@@ -235,14 +247,34 @@ export function createTable(root, { store, onConflicts } = {}) {
     if (ebene === 'show') {
       const ty = el('td', 'c-typ');
       const tsel = el('select');
-      for (const [v, label] of PUNKT_TYPEN) {
+      const jetzt = t.punktTyp || 'act';
+      // Eingebaute UND selbst angelegte — punktTypen() führt beide zusammen.
+      for (const [v, label] of punktTypen(store.state)) {
         const o = el('option', null, label);
         o.value = v;
-        if (v === (t.punktTyp || 'act')) o.selected = true;
+        if (v === jetzt) o.selected = true;
         tsel.append(o);
       }
+      // Anlegen dort, wo man ohnehin steht. Der Trenner davor macht sichtbar,
+      // dass es keine Art ist, sondern eine Handlung.
+      const trenner = el('option', null, '─────────');
+      trenner.disabled = true;
+      const neu = el('option', null, '+ Neue Art…');
+      neu.value = NEUE_ART;
+      tsel.append(trenner, neu);
+
       tsel.setAttribute('aria-label', 'Art des Zeiteintrags');
-      tsel.onchange = () => send({ type: 'setTaskField', id: t.id, field: 'punktTyp', value: tsel.value });
+      tsel.onchange = () => {
+        if (tsel.value === NEUE_ART) {
+          // Auswahl SOFORT zurückstellen: bricht der Benutzer ab, stünde sonst
+          // «+ Neue Art…» als scheinbarer Wert in der Zeile.
+          tsel.value = jetzt;
+          neueArtFragen(tsel, (id) =>
+            send({ type: 'setTaskField', id: t.id, field: 'punktTyp', value: id }));
+          return;
+        }
+        send({ type: 'setTaskField', id: t.id, field: 'punktTyp', value: tsel.value });
+      };
       ty.append(tsel);
       tr.append(ty);
     }
@@ -503,9 +535,148 @@ export function createTable(root, { store, onConflicts } = {}) {
   // Handler verglich gegen das inzwischen veraltete Aufgabenobjekt aus der
   // Closure und schickte denselben Befehl ein zweites Mal — jede Änderung lag
   // doppelt auf dem Undo-Stapel, ⌘Z wirkte kaputt.
-  function commitOn(input, fn) {
-    input.addEventListener('change', fn);
+  // ── Eigene Eintragsarten ────────────────────────────────────────────────────
+  // Angelegt wird dort, wo man ohnehin steht: im Auswahlfeld der Zeile. Ein
+  // eigener Verwaltungsort wäre zwei Klicks weiter weg für etwas, das man
+  // mitten im Tippen braucht.
+  const NEUE_ART = '__neu__';
+
+  /**
+   * Fragt Name und Blattverhalten ab und legt die Art an. Ruft `fertig(id)`
+   * nur, wenn der Store sie angenommen hat.
+   *
+   * Hängt an `document.body`, nicht in die Tabelle: ein `render()` würde es
+   * sonst mitten in der Eingabe wegräumen.
+   */
+  function neueArtFragen(anker, fertig) {
+    document.querySelector('.tb-neuart')?.remove();
+    const box = el('div', 'tb-neuart');
+
+    // Eine Überschrift statt eines Platzhalters im Feld: ein Beispielwort IM
+    // Feld sieht aus wie ein eingetragener Wert. Was das Feld will, sagt die
+    // Beschriftung darüber — dieselbe Regel wie bei den Freitextspalten.
+    box.append(el('div', 'tb-neuart-h', 'Neue Art für Zeiteinträge'));
+
+    const feld = el('input', 'tb-neuart-n');
+    feld.setAttribute('aria-label', 'Name der neuen Art');
+
+    const hk = el('input');
+    hk.type = 'checkbox';
+    const lab = el('label', 'tb-neuart-k');
+    lab.append(hk, el('span', null, 'tritt auf dem Blatt zurück, wie ein Changeover'));
+    lab.title = 'Wie ein Changeover: niedrigere Zeile auf dem A3-Blatt, damit mehr Platz für die Acts bleibt.';
+
+    const ok = el('button', 'btn btn-p', 'Anlegen');
+    const ab = el('button', 'btn', 'Abbrechen');
+    const reihe = el('div', 'tb-neuart-a');
+    reihe.append(ab, ok);
+    box.append(feld, lab, reihe);
+    document.body.append(box);
+
+    const zu = () => {
+      box.remove();
+      window.removeEventListener('keydown', aufTaste, true);
+      document.removeEventListener('pointerdown', aussen, true);
+    };
+    const aufTaste = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); zu(); }
+      else if (e.key === 'Enter' && box.contains(e.target)) { e.preventDefault(); anlegen(); }
+    };
+    const aussen = (e) => { if (!box.contains(e.target)) zu(); };
+    function anlegen() {
+      const r = send({ type: 'addPunktTyp', label: feld.value, kompakt: hk.checked });
+      // Abgelehnt (leer oder doppelt): stehen lassen, der Fehler steht schon
+      // oben. Sonst verschwände die Eingabe kommentarlos.
+      if (!r || r.ok === false) { feld.focus(); feld.select(); return; }
+      zu();
+      fertig(r.id);
+    }
+    ok.onclick = anlegen;
+    ab.onclick = zu;
+    window.addEventListener('keydown', aufTaste, true);
+    document.addEventListener('pointerdown', aussen, true);
+
+    // Am Auswahlfeld ausrichten, am Rand umklappen — wie das Kontextmenü.
+    const a = anker.getBoundingClientRect();
+    const r = box.getBoundingClientRect();
+    box.style.left = Math.max(8, Math.min(a.left, window.innerWidth - r.width - 8)) + 'px';
+    box.style.top = (a.bottom + r.height > window.innerHeight - 8
+      ? Math.max(8, a.top - r.height - 4) : a.bottom + 4) + 'px';
+    feld.focus();
   }
+
+  // ── Tippen überlebt den Neuaufbau ───────────────────────────────────────────
+  // `render()` baut die Tabelle mit replaceChildren neu auf. Wer gerade in einem
+  // Feld tippt, verliert dabei den Fokus — sein Knoten existiert nicht mehr.
+  //
+  // Bei Textfeldern fällt das nicht auf: ihr `change` kommt erst beim Verlassen.
+  // Bei `<input type="time">` im Showablauf schon: es feuert, sobald ein
+  // VOLLSTÄNDIGER Wert dasteht, und das Feld ist vorbelegt — also bereits nach
+  // der getippten Stunde. Aus «0930» wurde so «08:09».
+  //
+  // Deshalb: einen Neuaufbau, den das fokussierte Feld SELBST ausgelöst hat,
+  // aufschieben, bis der Fokus dieses Feld verlässt. Die Einschränkung auf das
+  // auslösende Feld ist wesentlich — sonst verschluckte die Tabelle auch ein ⌘Z
+  // oder eine Änderung aus dem Panel, während der Cursor zufällig irgendwo
+  // steht, und zeigte stumm Veraltetes.
+  let sendendesFeld = null;    // Feld, dessen change gerade einen Befehl schickt
+  let nachholen = false;       // ein Aufbau wurde aufgeschoben
+
+  function commitOn(input, fn) {
+    input.addEventListener('change', () => {
+      sendendesFeld = input;
+      // `send()` läuft synchron bis in `render()` hinein — der Merker muss
+      // danach wieder weg, auch wenn der Befehl unterwegs wirft.
+      try { fn(); } finally { sendendesFeld = null; }
+      // Aufgeschoben, obwohl hier gar niemand mehr tippt? Das ist der Fall beim
+      // Verlassen per Tab oder Klick: `change` feuert, der Fokus ist schon
+      // weiter, und ein `focusout` kommt nicht mehr — die Tabelle bliebe auf
+      // altem Stand stehen.
+      //
+      // Erst im nächsten Tick prüfen, NICHT sofort: Firefox meldet während des
+      // `change` eines `type="time"` kurzzeitig `body` als aktives Element,
+      // obwohl der Cursor im Feld bleibt. Sofort geprüft hielt diese Absicherung
+      // jedes Tippen für ein Verlassen und baute die Tabelle doch neu auf — sie
+      // hat den Fehler, den sie absichern sollte, selbst wieder eingeführt.
+      setTimeout(() => {
+        if (!nachholen || document.activeElement === input) return;
+        nachholen = false;
+        render();
+      }, 0);
+    });
+  }
+
+  // Wo steht der Fokus? Als Kennung aus Zeile und Spalte, nicht als Knoten:
+  // nach dem Neuaufbau gibt es den alten Knoten nicht mehr.
+  function fokusJetzt() {
+    const a = document.activeElement;
+    if (!a || !root.contains(a)) return null;
+    const tr = a.closest('tr[data-id]'), td = a.closest('td');
+    return tr && td ? { id: tr.dataset.id, cls: td.className } : null;
+  }
+
+  function fokusZurueck(k) {
+    if (!k) return;
+    const feld = root.querySelector(`tr[data-id="${CSS.escape(k.id)}"] td.${k.cls.split(' ')[0]} input, `
+      + `tr[data-id="${CSS.escape(k.id)}"] td.${k.cls.split(' ')[0]} select`);
+    if (feld) feld.focus();
+  }
+
+  // Aufgeschobenes nachholen, sobald der Fokus kein Eingabefeld der Tabelle mehr
+  // ist. Delegation auf root, damit der Handler jeden Neuaufbau überlebt.
+  // Das setTimeout ist nötig, weil `document.activeElement` während focusout
+  // noch das alte Feld ist — der neue Fokus steht erst danach fest.
+  root.addEventListener('focusout', () => {
+    setTimeout(() => {
+      if (!nachholen) return;
+      const k = fokusJetzt();
+      // Weitergetabbt in ein anderes Feld derselben Tabelle: jetzt neu zeichnen
+      // (sonst stünde dort eine veraltete Dauer) und den Fokus mitnehmen.
+      nachholen = false;
+      render();
+      fokusZurueck(k);
+    }, 0);
+  });
 
   // Immer den aktuellen Stand aus dem Store lesen, nie den aus der Closure.
   // Der Knoten kann längst abgehängt sein, wenn sein Ereignis eintrifft.

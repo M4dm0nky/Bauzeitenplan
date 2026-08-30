@@ -22,7 +22,7 @@ const fakeStorage = () => {
 };
 
 const plan = (name = 'Test') => ({
-  project: { id: 'p1', name, venue: 'Halle', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin' },
+  project: { id: 'p1', name, venue: 'Halle', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin', punktTypen: [] },
   gewerke: [{ id: 'g1', name: 'Bühne', sort: 0, slot: 0, art: 'gewerk' }],
   tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null, punktTyp: 'act', anforderungen: '', material: '', kontakt: '', slot: null, abschnitt: 'show', fuer: null }],
   deps: [],
@@ -319,6 +319,26 @@ test('Anforderungen und Material überleben Export → Import', () => {
   });
   const back = deserialize(serialize(raw));
   assert.deepEqual(back.plan.tasks[0], raw.tasks[0]);
+});
+
+test('eigene Eintragsarten überleben Export → Import', () => {
+  // Der ganze Grund, warum sie im Plan stehen und nicht im Browser: ein Eintrag
+  // trägt nur `punktTyp: "linecheck"`. Ohne die Namensliste in derselben Datei
+  // sähe der Empfänger genau das statt «Line-Check».
+  const raw = plan();
+  raw.project.punktTypen = [{ id: 'linecheck', label: 'Line-Check', kompakt: true }];
+  raw.tasks[0].punktTyp = 'linecheck';
+  const back = deserialize(serialize(raw));
+  assert.deepEqual(back.plan.project.punktTypen, raw.project.punktTypen);
+  assert.equal(back.plan.tasks[0].punktTyp, 'linecheck');
+});
+
+test('ein Altplan bekommt eine leere Artenliste, keine fehlende', () => {
+  // Ein Feld, das mal da ist und mal nicht, ist beim Diff zweier Sicherungen
+  // Rauschen — dieselbe Begründung wie bei den übrigen Showablauf-Feldern.
+  const roh = plan();
+  delete roh.project.punktTypen;
+  assert.deepEqual(migrate(roh).project.punktTypen, []);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
