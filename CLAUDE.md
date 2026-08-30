@@ -487,6 +487,28 @@ Feld für Feld auf; was dort fehlt, fällt beim Anlegen still weg. `abschnitt` h
 genau das erlebt: ein im Setup angelegter Eintrag landete in der Show und war im
 gezeigten Abschnitt sofort unsichtbar. Wer ein Feld ergänzt, prüft `addTask` mit.
 
+**Verwaltet werden beide Listen über DIESELBEN drei Befehle** (`setAuswahlLabel`,
+`removeAuswahl`, `reorderAuswahl` mit `liste: 'punktTypen'|'abschnitte'`), nicht
+über sechs fast gleiche. Drei Regeln daran:
+
+- **Umbenennen ändert nur das Label, nie die id.** Die id ist die Zuordnung;
+  änderte sie sich mit, verlöre jeder Eintrag still seine Art — `punktLabel`
+  reicht einen unbekannten Wert einfach durch, im Bild stünde die Kennung.
+- **Gelöscht wird nur, was niemand benutzt.** Die Alternative (Einträge auf den
+  Standard zurücksetzen) ändert fünf Zeilen hinter dem Rücken. Der Store nennt
+  die Zahl, der Knopf ist vorher schon gesperrt und sagt warum.
+- **Sortieren setzt `sort` bei ALLEN oder keinem.** Ab dem ersten Mal schlägt die
+  Handreihenfolge die Uhrzeit-Automatik der Abschnitte — eine Automatik, die den
+  Betrachter überstimmt, wäre keine Hilfe. Halbes `sort` ergäbe eine Reihenfolge,
+  die niemand gewählt hat, deshalb lehnt `reorderAuswahl` unvollständige Listen ab.
+
+**Ein Kasten, der über der Tabelle schwebt, merkt sich seine Position BEIM
+ÖFFNEN.** Nach jedem Befehl baut die Tabelle neu auf; rechnet der Kasten seine
+Lage dann am inzwischen abgehängten Auswahlfeld neu, liefert
+`getBoundingClientRect()` lauter Nullen und er springt in die linke obere Ecke.
+Genau das war so — im Screenshot gesehen, von keiner Zusicherung bemerkt.
+`platziere()` nimmt deshalb ein Rechteck, keinen Knoten.
+
 **Abschnitte gehen denselben Weg wie die Eintragsarten — aber sie FILTERN
 weiter nur nach Setup und Show.** Eigene stehen in `project.abschnitte`,
 `abschnitte(state)` führt sie mit den eingebauten zusammen, angelegt wird im

@@ -70,6 +70,13 @@ eigener Abschnitt ist ein Etikett am Eintrag und wird in der **Show-Ansicht**
 gezeigt. Stellst du einen Setup-Eintrag darauf um, sagt die App dir das, damit
 die Zeile nicht kommentarlos aus dem Bild verschwindet.
 
+**Verwalten:** Unter «Neu» steht **«Verwalten…»** — dort benennst du deine Arten
+und Abschnitte um, sortierst sie mit ↑↓ und löschst sie. Gelöscht wird nur, was
+niemand benutzt; sonst sagt der Knopf, wie viele Zeiteinträge daran hängen.
+Sobald du einmal von Hand sortierst, gilt deine Reihenfolge — auch bei den
+Abschnitten, deren Uhrzeit-Automatik damit aus ist. Umbenennen ändert nur den
+Namen: die Zuordnung der Zeilen bleibt.
+
 **Eigene Arten legst du selbst an.** Neben Act, Changeover, Doors und Show-Ende
 steht im Typ-Auswahlfeld unten **«Neu»** — Name eintippen, fertig, die
 Art ist angelegt und für diese Zeile gewählt. Ein Häkchen bestimmt, ob sie auf
@@ -357,6 +364,7 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | Live-Versatz: «wir hängen 5 Minuten hinterher», der Ablauf rutscht, die Uhr nicht |
 | ✅ | Eigene Arten für Zeiteinträge, je Art die Blattzeile wählbar |
 | ✅ | Eigene Abschnitte (Load-in, Soundcheck, Aftershow …) |
+| ✅ | Arten und Abschnitte verwalten: umbenennen, sortieren, löschen |
 | → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen |
 | | Ansichten & Export: öffentlicher Link, PDF/ICS |
 | ❄️ | PocketBase, Login, Rollen — auf Eis, Stand im Branch `pocketbase-vorbereitung` |

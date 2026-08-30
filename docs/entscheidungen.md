@@ -352,6 +352,36 @@ Tick später.
 In Kauf genommen: Dauer und Ende aktualisieren sich erst beim Verlassen des
 Feldes. Beim Tippen ist das ohnehin das erwartete Verhalten.
 
+## Verwalten: löschen nur, was niemand benutzt
+
+Umbenennen, Sortieren und Löschen kamen nach, als die beiden Listen im Gebrauch
+waren. Drei Entscheidungen, die nicht auf der Hand lagen:
+
+**Umbenennen ändert nur das Label.** Die id bleibt — sie ist die Zuordnung. Ein
+«sprechender» Neuaufbau der id wäre bequem zu lesen und ein stiller Datenverlust:
+`punktLabel` reicht einen unbekannten Wert einfach durch, im Bild stünde plötzlich
+die Kennung statt des Namens.
+
+**Löschen nur bei Nichtgebrauch.** Die Alternative wäre, die betroffenen Einträge
+auf den Standard zurückzusetzen. Das ändert aber fünf Zeilen auf einmal hinter dem
+Rücken — und ⌘Z holt zwar alles zurück, nur merkt man es womöglich erst später.
+Jetzt nennt der Store die Zahl, und der Knopf im Kasten ist schon vorher gesperrt:
+lieber vorher sagen als hinterher melden.
+
+**Handsortierung schlägt die Automatik.** Die Abschnitte ordnen sich sonst nach
+ihrem frühesten Eintrag. Sobald jemand sortiert, gilt seine Reihenfolge — eine
+Automatik, die den Betrachter überstimmt, wäre keine Hilfe. `reorderAuswahl`
+verlangt deshalb ALLE ids: halbes `sort` ergäbe eine Reihenfolge, die niemand
+gewählt hat.
+
+**Und ein Fehler, den nur das Bild gezeigt hat:** Der Verwaltungskasten sprang
+nach jedem Klick in die linke obere Ecke. Nach einem Befehl baut die Tabelle neu
+auf, das Auswahlfeld ist abgehängt, und `getBoundingClientRect()` liefert dann
+Nullen — die Neupositionierung rechnete gegen ein Rechteck aus lauter Nullen. Alle
+Zusicherungen waren grün, die Reihenfolge stimmte ja. `platziere()` nimmt seither
+ein Rechteck, das beim Öffnen einmal gemerkt wird, und eine Prüfung hält fest,
+dass der Kasten nicht in der Ecke landet.
+
 ## Eigene Abschnitte sind Etiketten, keine neuen Ansichten
 
 Nach den Eintragsarten kam derselbe Wunsch für die Spalte **Abschnitt**: nicht

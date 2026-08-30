@@ -239,6 +239,24 @@ test('ein noch LEERER Abschnitt hängt hinten an, statt zu verschwinden', () => 
   );
   assert.deepEqual(abschnitte(st).map(([k]) => k), ['setup', 'show', 'loadin', 'leer']);
 });
+test('HANDSORTIERUNG SCHLÄGT DIE UHRZEIT', () => {
+  // Sobald jemand sortiert hat, gilt seine Reihenfolge — eine Automatik, die
+  // den Betrachter überstimmt, wäre keine Hilfe.
+  const st = mitAbs(
+    [{ id: 'after', label: 'Aftershow', sort: 0 }, { id: 'loadin', label: 'Load-in', sort: 1 }],
+    [{ ...T('a', 'b0', '2026-08-29T23:30', '2026-08-30T01:00'), abschnitt: 'after' },
+      { ...T('b', 'b0', '2026-08-29T07:00', '2026-08-29T09:00'), abschnitt: 'loadin' }],
+  );
+  assert.deepEqual(abschnitte(st).map(([k]) => k), ['setup', 'show', 'after', 'loadin']);
+});
+test('auch die Arten lassen sich von Hand ordnen', () => {
+  const st = { project: { punktTypen: [
+    { id: 'a1', label: 'Zuerst angelegt', sort: 1 },
+    { id: 'a2', label: 'Danach', sort: 0 },
+  ] } };
+  assert.deepEqual(punktTypen(st).map(([k]) => k), ['act', 'changeover', 'doors', 'ende', 'a2', 'a1']);
+});
+
 test('DIE ANSICHT FILTERT WEITER NUR NACH SETUP UND SHOW', () => {
   // Der Umschalter oben bleibt unverändert: ein eigener Abschnitt ist ein
   // Etikett am Eintrag und zählt zur Show. Ohne diese Zusicherung wäre ein

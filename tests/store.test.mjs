@@ -820,6 +820,110 @@ test('⌘Z nimmt die Art wieder zurück', () => {
   assert.deepEqual(s.state.project.punktTypen || [], []);
 });
 
+console.log('\nAuswahlwerte verwalten — umbenennen, löschen, sortieren');
+
+// Ein Plan mit zwei eigenen Arten und einem Eintrag, der die erste benutzt.
+const mitAuswahl = () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addPunktTyp', label: 'Line-Check' });
+  s.apply({ type: 'addPunktTyp', label: 'Catering' });
+  s.apply({ type: 'setTaskField', id: 'a', field: 'punktTyp', value: 'linecheck' });
+  return s;
+};
+
+test('umbenennen ändert das Label und LÄSST DIE ID STEHEN', () => {
+  // Die id ist die Zuordnung. Änderte sie sich mit, verlöre jeder Eintrag seine
+  // Art — und zwar still, weil punktLabel den Rohwert einfach durchreicht.
+  const s = mitAuswahl();
+  const r = s.apply({ type: 'setAuswahlLabel', liste: 'punktTypen', id: 'linecheck', label: 'Linecheck Bühne' });
+  assert.equal(r.ok, true);
+  assert.deepEqual(s.state.project.punktTypen[0], { id: 'linecheck', label: 'Linecheck Bühne', kompakt: false });
+  assert.equal(taskById(s, 'a').punktTyp, 'linecheck', 'der Eintrag hängt weiter an derselben id');
+});
+
+test('umbenennen auf einen vergebenen Namen wird abgelehnt', () => {
+  const s = mitAuswahl();
+  assert.equal(s.apply({ type: 'setAuswahlLabel', liste: 'punktTypen', id: 'linecheck', label: 'Catering' }).ok, false);
+  assert.equal(s.apply({ type: 'setAuswahlLabel', liste: 'punktTypen', id: 'linecheck', label: 'Act' }).ok,
+    false, 'auch gegen die eingebauten');
+  // Sich selbst darf man behalten (etwa nur Groß-/Kleinschreibung ändern).
+  assert.equal(s.apply({ type: 'setAuswahlLabel', liste: 'punktTypen', id: 'linecheck', label: 'LINE-CHECK' }).ok, true);
+});
+
+test('umbenennen auf leer wird abgelehnt', () => {
+  const s = mitAuswahl();
+  assert.equal(s.apply({ type: 'setAuswahlLabel', liste: 'punktTypen', id: 'linecheck', label: '  ' }).ok, false);
+  assert.equal(s.state.project.punktTypen[0].label, 'Line-Check');
+});
+
+test('EINE BENUTZTE ART LÄSST SICH NICHT LÖSCHEN — und die Meldung zählt', () => {
+  const s = mitAuswahl();
+  const r = s.apply({ type: 'removeAuswahl', liste: 'punktTypen', id: 'linecheck' });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /1 /, 'die Meldung nennt die Zahl: ' + r.error);
+  assert.equal(s.state.project.punktTypen.length, 2, 'nichts gelöscht');
+});
+
+test('eine unbenutzte Art lässt sich löschen', () => {
+  const s = mitAuswahl();
+  assert.equal(s.apply({ type: 'removeAuswahl', liste: 'punktTypen', id: 'catering' }).ok, true);
+  assert.deepEqual(s.state.project.punktTypen.map((x) => x.id), ['linecheck']);
+});
+
+test('ein benutzter ABSCHNITT lässt sich ebenso wenig löschen', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addAbschnitt', label: 'Load-in' });
+  s.apply({ type: 'setTaskField', id: 'a', field: 'abschnitt', value: 'loadin' });
+  assert.equal(s.apply({ type: 'removeAuswahl', liste: 'abschnitte', id: 'loadin' }).ok, false);
+  s.apply({ type: 'setTaskField', id: 'a', field: 'abschnitt', value: 'show' });
+  assert.equal(s.apply({ type: 'removeAuswahl', liste: 'abschnitte', id: 'loadin' }).ok, true);
+});
+
+test('eingebaute lassen sich weder umbenennen noch löschen', () => {
+  const s = mitAuswahl();
+  assert.equal(s.apply({ type: 'setAuswahlLabel', liste: 'punktTypen', id: 'act', label: 'Auftritt' }).ok, false);
+  assert.equal(s.apply({ type: 'removeAuswahl', liste: 'abschnitte', id: 'show' }).ok, false);
+});
+
+test('sortieren setzt sort in der übergebenen Reihenfolge', () => {
+  const s = mitAuswahl();
+  const r = s.apply({ type: 'reorderAuswahl', liste: 'punktTypen', ids: ['catering', 'linecheck'] });
+  assert.equal(r.ok, true);
+  assert.deepEqual(s.state.project.punktTypen.map((x) => [x.id, x.sort]),
+    [['linecheck', 1], ['catering', 0]]);
+});
+
+test('eine unvollständige Reihenfolge wird abgelehnt', () => {
+  // Sonst hätte die Hälfte ein sort und die andere nicht — die Liste stünde
+  // danach in einer Reihenfolge, die niemand gewählt hat.
+  const s = mitAuswahl();
+  assert.equal(s.apply({ type: 'reorderAuswahl', liste: 'punktTypen', ids: ['linecheck'] }).ok, false);
+  assert.equal(s.apply({ type: 'reorderAuswahl', liste: 'punktTypen', ids: ['linecheck', 'gibtsnicht'] }).ok, false);
+  assert.equal(s.state.project.punktTypen.some((x) => x.sort != null), false, 'nichts angefasst');
+});
+
+test('eine unbekannte Liste wird abgelehnt', () => {
+  const s = mitAuswahl();
+  for (const cmd of [
+    { type: 'setAuswahlLabel', liste: 'gewerke', id: 'x', label: 'y' },
+    { type: 'removeAuswahl', liste: 'tasks', id: 'a' },
+    { type: 'reorderAuswahl', liste: 'quatsch', ids: [] },
+  ]) assert.equal(s.apply(cmd).ok, false, cmd.type);
+});
+
+test('⌘Z nimmt umbenennen, löschen und sortieren zurück', () => {
+  const s = mitAuswahl();
+  s.apply({ type: 'setAuswahlLabel', liste: 'punktTypen', id: 'catering', label: 'Buffet' });
+  s.undo();
+  assert.equal(s.state.project.punktTypen[1].label, 'Catering');
+  s.apply({ type: 'removeAuswahl', liste: 'punktTypen', id: 'catering' });
+  s.undo();
+  assert.equal(s.state.project.punktTypen.length, 2);
+  s.apply({ type: 'reorderAuswahl', liste: 'punktTypen', ids: ['catering', 'linecheck'] });
+  s.undo();
+  assert.equal(s.state.project.punktTypen[0].sort, undefined);
+});
+
 console.log('\nEigene Abschnitte');
 
 test('anlegen liefert eine id und hängt ihn an den Plan', () => {

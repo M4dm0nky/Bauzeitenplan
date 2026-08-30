@@ -135,6 +135,11 @@ body {
 .tb-neuart-n { border: 1px solid var(--line-2); background: var(--panel2); color: var(--ink); }
 .tb-neuart-h { color: var(--ink); }
 .tb-neuart-k { color: var(--ink-2); }
+.tb-verw-n { border: 1px solid var(--line-2); background: var(--panel2); color: var(--ink); }
+.tb-verw-b { border: 1px solid var(--line-2); background: var(--panel2); color: var(--ink-2); }
+.tb-verw-b:hover:not(:disabled) { color: var(--ink); border-color: var(--ink); }
+.tb-verw-x:hover:not(:disabled) { color: var(--crit); border-color: var(--crit); }
+.tb-verw-leer { color: var(--muted, var(--ink-3)); }
 
 /* ── Versatz-Stepper ──────────────────────────────────────────────────────── */
 /* Dieselbe Sprache wie die Live-Leiste: Delay rot, Vorlauf grün. Die Knöpfe

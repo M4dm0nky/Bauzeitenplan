@@ -243,7 +243,9 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
       atrenner.disabled = true;
       const aneu = el('option', null, 'Neu');
       aneu.value = NEUE_ART;
-      asel.append(atrenner, aneu);
+      const averw = el('option', null, 'Verwalten…');
+      averw.value = VERWALTEN;
+      asel.append(atrenner, aneu, averw);
 
       asel.setAttribute('aria-label', 'Abschnitt');
       asel.onchange = () => {
@@ -251,6 +253,11 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
           asel.value = jetztAbs;
           neuFragen(asel, { titel: 'Neuer Abschnitt', cmd: { type: 'addAbschnitt' } }, (id) =>
             waehleAbschnitt(t.id, id));
+          return;
+        }
+        if (asel.value === VERWALTEN) {
+          asel.value = jetztAbs;
+          verwalten(asel, { liste: 'abschnitte', taskFeld: 'abschnitt', titel: 'Abschnitte verwalten' });
           return;
         }
         waehleAbschnitt(t.id, asel.value);
@@ -279,7 +286,9 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
       trenner.disabled = true;
       const neu = el('option', null, 'Neu');
       neu.value = NEUE_ART;
-      tsel.append(trenner, neu);
+      const verw = el('option', null, 'Verwalten…');
+      verw.value = VERWALTEN;
+      tsel.append(trenner, neu, verw);
 
       tsel.setAttribute('aria-label', 'Art des Zeiteintrags');
       tsel.onchange = () => {
@@ -289,6 +298,11 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
           tsel.value = jetzt;
           neuFragen(tsel, { titel: 'Neue Art', kompaktFeld: true, cmd: { type: 'addPunktTyp' } },
             (id) => send({ type: 'setTaskField', id: t.id, field: 'punktTyp', value: id }));
+          return;
+        }
+        if (tsel.value === VERWALTEN) {
+          tsel.value = jetzt;
+          verwalten(tsel, { liste: 'punktTypen', taskFeld: 'punktTyp', titel: 'Arten verwalten' });
           return;
         }
         send({ type: 'setTaskField', id: t.id, field: 'punktTyp', value: tsel.value });
@@ -580,6 +594,7 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
   // ohnehin steht — im Auswahlfeld der Zeile, beim Anlegen einer neuen Zeile.
   // Ein eigener Verwaltungsort wäre zwei Klicks weiter weg.
   const NEUE_ART = '__neu__';
+  const VERWALTEN = '__verw__';
 
   /**
    * Fragt einen Namen ab und legt den Wert an. Ruft `fertig(id)` nur, wenn der
@@ -647,14 +662,117 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
     ab.onclick = zu;
     window.addEventListener('keydown', aufTaste, true);
     document.addEventListener('pointerdown', aussen, true);
+    platziere(box, anker.getBoundingClientRect());
+    feld.focus();
+  }
 
-    // Am Auswahlfeld ausrichten, am Rand umklappen — wie das Kontextmenü.
-    const a = anker.getBoundingClientRect();
+  /**
+   * Am Auswahlfeld ausrichten, am Rand umklappen — wie das Kontextmenü.
+   *
+   * Nimmt ein RECHTECK, keinen Knoten: nach jedem Befehl baut die Tabelle neu
+   * auf, das Auswahlfeld ist dann abgehängt und `getBoundingClientRect()`
+   * liefert lauter Nullen. Der Kasten sprang dadurch beim Sortieren in die linke
+   * obere Ecke — gesehen im Screenshot, von keiner Zusicherung bemerkt.
+   */
+  function platziere(box, a) {
     const r = box.getBoundingClientRect();
     box.style.left = Math.max(8, Math.min(a.left, window.innerWidth - r.width - 8)) + 'px';
     box.style.top = (a.bottom + r.height > window.innerHeight - 8
       ? Math.max(8, a.top - r.height - 4) : a.bottom + 4) + 'px';
-    feld.focus();
+  }
+
+  /**
+   * Die selbst angelegten Werte einer Liste verwalten: umbenennen, sortieren,
+   * löschen. Die eingebauten stehen nicht darin — sie sind fest.
+   *
+   * Gezeichnet wird bei jeder Änderung neu AUS DEM STORE, nie aus dem, was im
+   * Kasten steht: ein abgelehnter Befehl (doppelter Name, noch benutzt) darf
+   * keinen Zustand hinterlassen, den nur dieser Kasten kennt.
+   */
+  function verwalten(anker, opt) {
+    // Einmal beim Öffnen merken — siehe `platziere`.
+    const ankerRect = anker.getBoundingClientRect();
+    document.querySelector('.tb-neuart')?.remove();
+    const box = el('div', 'tb-neuart tb-verw');
+    document.body.append(box);
+
+    const zu = () => {
+      box.remove();
+      window.removeEventListener('keydown', aufTaste, true);
+      document.removeEventListener('pointerdown', aussen, true);
+    };
+    const aufTaste = (e) => { if (e.key === 'Escape') { e.preventDefault(); zu(); } };
+    const aussen = (e) => { if (!box.contains(e.target)) zu(); };
+    window.addEventListener('keydown', aufTaste, true);
+    document.addEventListener('pointerdown', aussen, true);
+
+    const zeichne = () => {
+      // In DERSELBEN Reihenfolge wie das Auswahlfeld: `reorderAuswahl` setzt nur
+      // `sort`, es dreht das Array nicht um. Ohne das Sortieren hier bliebe die
+      // Liste nach einem Klick auf ↑ sichtbar unverändert — und man klickte
+      // weiter, bis die Reihenfolge irgendwo landete.
+      const roh = (store.state.project[opt.liste] || []);
+      const eigene = roh.some((e) => e.sort != null)
+        ? [...roh].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+        : roh;
+      box.replaceChildren();
+      box.append(el('div', 'tb-neuart-h', opt.titel));
+
+      if (!eigene.length) {
+        box.append(el('div', 'tb-verw-leer', 'Noch nichts Eigenes angelegt.'));
+      }
+      for (const [i, x] of eigene.entries()) {
+        const zeile = el('div', 'tb-verw-z');
+
+        const nam = el('input', 'tb-verw-n');
+        nam.value = x.label;
+        nam.setAttribute('aria-label', 'Name');
+        nam.onchange = () => {
+          const r = send({ type: 'setAuswahlLabel', liste: opt.liste, id: x.id, label: nam.value });
+          zeichne();                       // auch bei Ablehnung: zurück auf den echten Stand
+          if (r && r.ok === false) nam.focus();
+        };
+
+        const hoch = el('button', 'tb-verw-b', '↑');
+        hoch.title = 'Nach oben';
+        hoch.disabled = i === 0;
+        const runter = el('button', 'tb-verw-b', '↓');
+        runter.title = 'Nach unten';
+        runter.disabled = i === eigene.length - 1;
+        const tausche = (j) => {
+          const ids = eigene.map((e) => e.id);
+          [ids[i], ids[j]] = [ids[j], ids[i]];
+          send({ type: 'reorderAuswahl', liste: opt.liste, ids });
+          zeichne();
+        };
+        hoch.onclick = () => tausche(i - 1);
+        runter.onclick = () => tausche(i + 1);
+
+        // Wie viele hängen dran? Der Store lehnt das Löschen sonst ab — besser,
+        // der Knopf sagt es vorher, als dass er es hinterher meldet.
+        const benutzt = store.state.tasks.filter((t) => t[opt.taskFeld] === x.id).length;
+        const weg = el('button', 'tb-verw-b tb-verw-x', '×');
+        if (benutzt) {
+          weg.disabled = true;
+          weg.title = `Wird von ${benutzt} ${benutzt === 1 ? 'Zeiteintrag' : 'Zeiteinträgen'} benutzt`;
+        } else {
+          weg.title = 'Löschen';
+          weg.onclick = () => { send({ type: 'removeAuswahl', liste: opt.liste, id: x.id }); zeichne(); };
+        }
+
+        zeile.append(nam, hoch, runter, weg);
+        box.append(zeile);
+      }
+
+      const fertig = el('button', 'btn btn-p', 'Fertig');
+      fertig.onclick = zu;
+      const reihe = el('div', 'tb-neuart-a');
+      reihe.append(fertig);
+      box.append(reihe);
+      platziere(box, ankerRect);
+    };
+
+    zeichne();
   }
 
   // ── Tippen überlebt den Neuaufbau ───────────────────────────────────────────

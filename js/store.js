@@ -39,6 +39,15 @@ const TYPEN_EINGEBAUT = [
 // Dasselbe für die Abschnitte, aus demselben Grund und mit demselben Test.
 const ABSCHNITTE_EINGEBAUT = [['setup', 'Setup'], ['show', 'Show']];
 
+// Die beiden selbst befüllbaren Auswahllisten. `taskFeld` sagt, welches Feld am
+// Vorgang darauf zeigt — daran hängt, ob ein Wert noch benutzt wird und sich
+// deshalb nicht löschen lässt.
+const LISTEN = {
+  punktTypen: { eingebaut: TYPEN_EINGEBAUT, taskFeld: 'punktTyp' },
+  abschnitte: { eingebaut: ABSCHNITTE_EINGEBAUT, taskFeld: 'abschnitt' },
+};
+const abschnittOderArt = (L, id) => (L.eingebaut.find(([k]) => k === id) || [id, id])[1];
+
 /** Kennt der Plan diesen Abschnitt — eingebaut oder selbst angelegt? */
 const abschnittBekannt = (state, v) =>
   ABSCHNITTE_EINGEBAUT.some(([k]) => k === v)
@@ -414,6 +423,76 @@ const HANDLERS = {
       feld: 'abschnitte', eingebaut: ABSCHNITTE_EINGEBAUT, praefix: 'ab',
       wort: 'Abschnitt', label: cmd.label,
     });
+  },
+
+  /**
+   * Eine selbst angelegte Auswahl umbenennen. Die **id bleibt** — sie ist die
+   * Zuordnung. Änderte sie sich mit, verlöre jeder Eintrag seine Art bzw.
+   * seinen Abschnitt, und zwar still: `punktLabel` reicht einen unbekannten
+   * Wert einfach durch, im Bild stünde plötzlich die Kennung.
+   */
+  setAuswahlLabel(state, cmd) {
+    const L = LISTEN[cmd.liste];
+    if (!L) return 'Unbekannte Liste: ' + cmd.liste;
+    const eigene = state.project[cmd.liste] || [];
+    const x = eigene.find((e) => e.id === cmd.id);
+    if (!x) return L.eingebaut.some(([k]) => k === cmd.id)
+      ? `«${abschnittOderArt(L, cmd.id)}» ist fest eingebaut und lässt sich nicht umbenennen.`
+      : 'Nicht gefunden: ' + cmd.id;
+    const label = String(cmd.label || '').trim();
+    if (!label) return 'Der Name darf nicht leer sein.';
+    if (label.length > 40) return 'Der Name ist zu lang (höchstens 40 Zeichen).';
+    // Gegen alle anderen prüfen, sich selbst ausgenommen — sonst ließe sich
+    // nicht einmal die Groß-/Kleinschreibung des eigenen Namens ändern.
+    const andere = [...L.eingebaut, ...eigene.filter((e) => e.id !== cmd.id).map((e) => [e.id, e.label])];
+    if (andere.some(([, l]) => String(l).toLowerCase() === label.toLowerCase()))
+      return 'Diesen Namen gibt es schon: ' + label;
+    x.label = label;
+    return ok();
+  },
+
+  /**
+   * Eine selbst angelegte Auswahl löschen — nur, wenn sie niemand benutzt.
+   *
+   * Die Alternative wäre, die betroffenen Einträge auf den Standard
+   * zurückzusetzen. Das ändert aber fünf Zeilen auf einmal hinter dem Rücken;
+   * lieber sagt der Store, wie viele im Weg stehen, und man räumt sie selbst um.
+   */
+  removeAuswahl(state, cmd) {
+    const L = LISTEN[cmd.liste];
+    if (!L) return 'Unbekannte Liste: ' + cmd.liste;
+    const eigene = state.project[cmd.liste] || [];
+    const i = eigene.findIndex((e) => e.id === cmd.id);
+    if (i < 0) return L.eingebaut.some(([k]) => k === cmd.id)
+      ? `«${abschnittOderArt(L, cmd.id)}» ist fest eingebaut und lässt sich nicht löschen.`
+      : 'Nicht gefunden: ' + cmd.id;
+    const benutzt = state.tasks.filter((t) => t[L.taskFeld] === cmd.id).length;
+    if (benutzt) {
+      return `«${eigene[i].label}» wird von ${benutzt} ${benutzt === 1 ? 'Zeiteintrag' : 'Zeiteinträgen'} benutzt.`;
+    }
+    eigene.splice(i, 1);
+    return ok();
+  },
+
+  /**
+   * Die Reihenfolge der selbst angelegten Auswahl festlegen.
+   *
+   * Ab dem ersten Sortieren schlägt die Handreihenfolge die Automatik (bei den
+   * Abschnitten: die Uhrzeit ihres frühesten Eintrags). Deshalb müssen ALLE
+   * genannt sein — mit halbem `sort` stünde die Liste danach in einer
+   * Reihenfolge, die niemand gewählt hat.
+   */
+  reorderAuswahl(state, cmd) {
+    const L = LISTEN[cmd.liste];
+    if (!L) return 'Unbekannte Liste: ' + cmd.liste;
+    const eigene = state.project[cmd.liste] || [];
+    const ids = cmd.ids || [];
+    if (ids.length !== eigene.length || new Set(ids).size !== ids.length
+      || !ids.every((id) => eigene.some((e) => e.id === id))) {
+      return 'Die Reihenfolge muss genau die vorhandenen Einträge nennen.';
+    }
+    ids.forEach((id, n) => { eigene.find((e) => e.id === id).sort = n; });
+    return ok();
   },
 
   setProjectField(state, cmd) {

@@ -3,6 +3,47 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.10 — 2026-08-30
+
+**Arten und Abschnitte verwalten: umbenennen, sortieren, löschen.**
+
+Unter «Neu» steht jetzt **«Verwalten…»** — in beiden Spalten. Es öffnet denselben
+Kasten, nur mit der Liste darin: je Zeile ein Namensfeld, ↑↓ und ×. Die
+eingebauten (Act, Changeover, Doors, Show-Ende, Setup, Show) stehen nicht darin,
+sie bleiben fest.
+
+**Umbenennen ändert nur den Namen, nie die id.** Die id ist die Zuordnung —
+änderte sie sich mit, verlöre jeder Zeiteintrag still seine Art, denn ein
+unbekannter Wert wird einfach durchgereicht und stünde als Kennung im Bild.
+
+**Gelöscht wird nur, was niemand benutzt.** Der Knopf ist vorher gesperrt und
+sagt, wie viele Zeiteinträge daran hängen. Die Alternative — die betroffenen
+Zeilen auf den Standard zurückzusetzen — ändert fünf Zeilen hinter dem Rücken;
+lieber vorher sagen als hinterher melden.
+
+**Handsortierung schlägt die Uhrzeit.** Die Abschnitte ordneten sich bisher nach
+ihrem frühesten Eintrag. Sobald du einmal sortierst, gilt deine Reihenfolge — eine
+Automatik, die den Betrachter überstimmt, wäre keine Hilfe. Sortiert wird immer
+vollständig: halbes `sort` ergäbe eine Reihenfolge, die niemand gewählt hat.
+
+Alles läuft über die üblichen drei Wege: Undo, Auto-Save, Export. ⌘Z nimmt jedes
+Umbenennen, Löschen und Sortieren zurück.
+
+### Ein Fehler, den nur das Bild gezeigt hat
+
+Der Verwaltungskasten **sprang nach jedem Klick in die linke obere Ecke**. Nach
+einem Befehl baut die Tabelle neu auf, das Auswahlfeld ist dann abgehängt, und
+`getBoundingClientRect()` liefert lauter Nullen — die Neupositionierung rechnete
+gegen ein Rechteck aus Nullen. Alle Zusicherungen waren grün, die Reihenfolge
+stimmte ja. `platziere()` nimmt seither ein Rechteck, das beim Öffnen einmal
+gemerkt wird, und eine Prüfung hält fest, dass der Kasten nicht in der Ecke
+landet.
+
+Dabei fiel ein zweiter auf: `reorderAuswahl` setzt nur `sort`, es dreht das Array
+nicht um — die Verwaltungsliste las es aber unsortiert und zeigte nach einem Klick
+auf ↑ sichtbar nichts. Man hätte weitergeklickt, bis die Reihenfolge irgendwo
+landet.
+
 ## 0.9.9 — 2026-08-30
 
 **Eigene Abschnitte — dieselbe Freiheit wie bei den Eintragsarten.**

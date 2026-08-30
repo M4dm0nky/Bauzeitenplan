@@ -57,7 +57,12 @@ export const PUNKT_TYPEN = [
  */
 export function punktTypen(state) {
   const eigene = (state && state.project && state.project.punktTypen) || [];
-  return [...PUNKT_TYPEN, ...eigene.map((t) => [t.id, t.label, !!t.kompakt])];
+  // Von Hand sortiert? Sonst in der Reihenfolge, in der sie angelegt wurden —
+  // eine Art hat keine Uhrzeit, an der man sie einordnen könnte.
+  const liste = eigene.some((t) => t.sort != null)
+    ? [...eigene].sort((x, y) => (x.sort ?? 0) - (y.sort ?? 0))
+    : eigene;
+  return [...PUNKT_TYPEN, ...liste.map((t) => [t.id, t.label, !!t.kompakt])];
 }
 
 /** Anzeigename einer Eintragsart. Unbekanntes bleibt unverändert stehen. */
@@ -127,6 +132,14 @@ export const ABSCHNITTE = [['setup', 'Setup'], ['show', 'Show']];
  */
 export function abschnitte(state) {
   const eigene = (state && state.project && state.project.abschnitte) || [];
+  // Von Hand sortiert? Dann gilt das — die Automatik wäre sonst eine, die den
+  // Betrachter überstimmt. Sobald EINER ein `sort` trägt, hat jemand sortiert
+  // (der Store setzt es nur vollständig).
+  if (eigene.some((a) => a.sort != null)) {
+    return [...ABSCHNITTE, ...[...eigene]
+      .sort((x, y) => (x.sort ?? 0) - (y.sort ?? 0))
+      .map((a) => [a.id, a.label])];
+  }
   const tasks = (state && state.tasks) || [];
   const frueh = new Map();
   for (const t of tasks) {

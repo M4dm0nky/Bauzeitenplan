@@ -129,7 +129,9 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     'vz-n', 'vz-txt',
     // Neue Eintragsart: schwebt über der Tabelle. Ohne eigene Fläche stünde die
     // Eingabe durchsichtig auf den Zeilen darunter.
-    'tb-neuart'];
+    'tb-neuart',
+    // Verwalten: ohne Rahmen sind Namensfeld und Knöpfe nicht zu unterscheiden.
+    'tb-verw-n', 'tb-verw-b'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

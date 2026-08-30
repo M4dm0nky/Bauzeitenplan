@@ -961,6 +961,115 @@ await check('dieselbe Art ein zweites Mal wird abgelehnt', async () => {
   return offen ? true : 'das Feld schloss sich, die Dopplung wurde also angelegt';
 });
 
+await check('VERWALTEN: umbenennen behält die Zuordnung der Zeile', async () => {
+  // Die id ist die Zuordnung. Änderte sie sich beim Umbenennen mit, verlöre der
+  // Eintrag seine Art — und zwar still, weil ein unbekannter Wert einfach
+  // durchgereicht wird.
+  const sel = p.locator('.tb-r .c-typ select').first();
+  const vorher = await sel.inputValue();
+  await sel.selectOption('__verw__');
+  await p.waitForTimeout(400);
+  if (!(await p.locator('.tb-verw').isVisible())) return 'die Verwaltung öffnete nicht';
+  const nam = p.locator('.tb-verw-n').first();
+  await nam.fill('Linecheck Bühne');
+  await nam.press('Enter');
+  await p.waitForTimeout(500);
+  await p.locator('.tb-verw .btn-p').click();
+  await p.waitForTimeout(400);
+  const nachher = await p.locator('.tb-r .c-typ select').first().inputValue();
+  if (nachher !== vorher) return `die Zeile hängt jetzt an «${nachher}» statt «${vorher}»`;
+  const labels = await p.locator('.tb-r .c-typ select option').allTextContents();
+  return labels.includes('Linecheck Bühne') ? true : 'der neue Name steht nicht im Dropdown';
+});
+
+await check('VERWALTEN: eine benutzte Art ist gegen Löschen gesperrt', async () => {
+  await p.locator('.tb-r .c-typ select').first().selectOption('__verw__');
+  await p.waitForTimeout(400);
+  const x = p.locator('.tb-verw-x').first();
+  if (!(await x.isDisabled())) return 'der Löschknopf ist offen, obwohl die Art benutzt wird';
+  const grund = await x.getAttribute('title');
+  return /benutzt/.test(grund || '') ? true : 'ohne Begründung: ' + grund;
+});
+
+await check('VERWALTEN: sortieren, und die Reihenfolge hält', async () => {
+  // Zweite Art anlegen, damit es etwas zu sortieren gibt.
+  await p.locator('.tb-verw .btn-p').click();
+  await p.waitForTimeout(300);
+  const sel = p.locator('.tb-r .c-typ select').first();
+  await sel.selectOption('__neu__');
+  await p.waitForTimeout(300);
+  await p.locator('.tb-neuart-n').fill('Catering');
+  await p.locator('.tb-neuart .btn-p').click();
+  await p.waitForTimeout(500);
+
+  await p.locator('.tb-r .c-typ select').first().selectOption('__verw__');
+  await p.waitForTimeout(400);
+  const vorher = await p.locator('.tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
+  if (vorher.length !== 2) return vorher.length + ' eigene Arten statt 2';
+  // Die zweite nach oben.
+  await p.locator('.tb-verw-z').nth(1).locator('.tb-verw-b').first().click();
+  await p.waitForTimeout(400);
+  const nachher = await p.locator('.tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
+  if (nachher[0] !== vorher[1]) return 'nach dem Sortieren: ' + nachher.join(' · ');
+
+  // Der Kasten muss beim Auswahlfeld STEHEN BLEIBEN. Nach jedem Befehl baut die
+  // Tabelle neu auf; wird die Position dann am abgehängten Feld neu gerechnet,
+  // liefert getBoundingClientRect() Nullen und der Kasten springt in die linke
+  // obere Ecke. Genau das war so — im Bild gesehen, von keiner Zahl bemerkt.
+  const pos = await p.locator('.tb-verw').evaluate((n) => {
+    const r = n.getBoundingClientRect();
+    return { x: r.left, y: r.top };
+  });
+  if (pos.x < 20 && pos.y < 40) return `der Kasten sprang in die Ecke (${pos.x}/${pos.y})`;
+  await p.screenshot({ path: join(here, 'shots', 'showablauf-verwalten.png') });
+  await p.locator('.tb-verw .btn-p').click();
+  await p.waitForTimeout(300);
+  // Und im Dropdown steht sie genauso.
+  const opts = (await p.locator('.tb-r .c-typ select option').allTextContents())
+    .filter((x) => vorher.includes(x));
+  return opts[0] === vorher[1] ? true : 'das Dropdown sortiert anders: ' + opts.join(' · ');
+});
+
+await check('VERWALTEN: unbenutzte Art löschen, ⌘Z holt sie zurück', async () => {
+  await p.locator('.tb-r .c-typ select').first().selectOption('__verw__');
+  await p.waitForTimeout(400);
+  // Catering steht jetzt oben und ist unbenutzt.
+  const frei = p.locator('.tb-verw-z').filter({ has: p.locator('.tb-verw-x:not([disabled])') }).first();
+  const name = await frei.locator('.tb-verw-n').inputValue();
+  await frei.locator('.tb-verw-x').click();
+  await p.waitForTimeout(400);
+  const rest = await p.locator('.tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
+  if (rest.includes(name)) return '«' + name + '» steht noch da';
+  await p.locator('.tb-verw .btn-p').click();
+  await p.waitForTimeout(300);
+  await p.keyboard.press('Meta+z');
+  await p.waitForTimeout(500);
+  const labels = await p.locator('.tb-r .c-typ select option').allTextContents();
+  if (!labels.includes(name)) return '⌘Z holte «' + name + '» nicht zurück';
+
+  // Aufräumen: die Zeile trug zwischendurch «Catering». Die folgenden Prüfungen
+  // (A3-Blatt) erwarten den Line-Check — ein Test, der den Zustand liegen lässt,
+  // bricht die nächsten.
+  await p.locator('.tb-r .c-typ select').first().selectOption('linecheck');
+  await p.waitForTimeout(500);
+  return true;
+});
+
+await check('auch die Abschnitte lassen sich verwalten', async () => {
+  // Derselbe Kasten, andere Liste — geprüft wird, dass er die RICHTIGE zeigt.
+  const sel = p.locator('.tb-r .c-abs select').first();
+  await sel.selectOption('__verw__');
+  await p.waitForTimeout(400);
+  const titel = (await p.locator('.tb-neuart-h').textContent()).trim();
+  if (titel !== 'Abschnitte verwalten') return 'Überschrift: ' + titel;
+  const namen = await p.locator('.tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(300);
+  // Setup und Show stehen NICHT darin — sie sind fest.
+  if (namen.some((x) => /^(Setup|Show)$/.test(x))) return 'die eingebauten stehen in der Liste: ' + namen.join(' · ');
+  return namen.includes('Load-in') ? true : 'Load-in fehlt: ' + namen.join(' · ');
+});
+
 await check('Escape bricht ab, ohne etwas anzulegen', async () => {
   const vorher = (await p.locator('.tb-r .c-typ select option').allTextContents()).length;
   const sel = p.locator('.tb-r .c-typ select').first();
