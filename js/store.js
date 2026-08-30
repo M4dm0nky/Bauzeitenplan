@@ -48,6 +48,21 @@ const LISTEN = {
 };
 const abschnittOderArt = (L, id) => (L.eingebaut.find(([k]) => k === id) || [id, id])[1];
 
+/**
+ * Wie viele Vorgänge benutzen diesen Auswahlwert?
+ *
+ * Exportiert, damit die Oberfläche NICHT selbst wissen muss, welches Feld am
+ * Vorgang auf welche Liste zeigt. Die Verwaltung führte diese Zuordnung vorher
+ * ein zweites Mal — lief sie auseinander, meldete der Löschknopf «0 Einträge»
+ * und war offen, während der Store gleich darauf ablehnte.
+ * @returns {number} 0, wenn die Liste unbekannt ist
+ */
+export function benutztVon(state, liste, id) {
+  const L = LISTEN[liste];
+  if (!L) return 0;
+  return (state.tasks || []).filter((t) => t[L.taskFeld] === id).length;
+}
+
 /** Kennt der Plan diesen Abschnitt — eingebaut oder selbst angelegt? */
 const abschnittBekannt = (state, v) =>
   ABSCHNITTE_EINGEBAUT.some(([k]) => k === v)
@@ -74,18 +89,27 @@ const newId = (prefix) => prefix + Date.now().toString(36) + (idSeq++).toString(
  * auseinanderzuhalten.
  * @returns {string|{ok:true,id:string}} Fehlertext oder Erfolg
  */
-function neuerEintrag(state, { feld, eingebaut, praefix, wort, label: roh, extra = {} }) {
+function neuerEintrag(state, { feld, eingebaut, praefix, fehlt, doppelt, label: roh, extra = {} }) {
   const label = String(roh || '').trim();
-  if (!label) return `${wort === 'Art' ? 'Die Art' : 'Der Abschnitt'} braucht einen Namen.`;
+  if (!label) return fehlt;
   if (label.length > 40) return 'Der Name ist zu lang (höchstens 40 Zeichen).';
-  const alle = [...eingebaut, ...((state.project[feld] || []).map((x) => [x.id, x.label]))];
+  const vorhanden = state.project[feld] || [];
+  const alle = [...eingebaut, ...vorhanden.map((x) => [x.id, x.label])];
   if (alle.some(([, l]) => String(l).toLowerCase() === label.toLowerCase()))
-    return `${wort === 'Art' ? 'Diese Art' : 'Diesen Abschnitt'} gibt es schon: ${label}`;
+    return doppelt + label;
   // Lesbare id aus dem Namen; bei Kollision oder leerem Rest eine erzeugte.
   let id = label.toLowerCase().replace(/[^a-z0-9]+/g, '');
   if (!id || alle.some(([k]) => k === id)) id = newId(praefix);
   if (!Array.isArray(state.project[feld])) state.project[feld] = [];
-  state.project[feld].push({ id, label, ...extra });
+  // Wurde schon einmal von Hand sortiert, bekommt der neue Wert das nächste
+  // `sort` — sonst hinge er ohne eines am Ende der Liste, und ein späteres
+  // Sortieren müsste ihn erst einsammeln. Vorher war das der Fehler aus dem
+  // Review: ohne `sort` sprang er beim Anzeigen nach vorn.
+  const sortiert = vorhanden.some((x) => x.sort != null);
+  const naechstes = sortiert
+    ? Math.max(-1, ...vorhanden.map((x) => (x.sort == null ? -1 : x.sort))) + 1
+    : undefined;
+  state.project[feld].push({ id, label, ...extra, ...(sortiert ? { sort: naechstes } : {}) });
   return ok({ id });
 }
 
@@ -404,7 +428,8 @@ const HANDLERS = {
   addPunktTyp(state, cmd) {
     return neuerEintrag(state, {
       feld: 'punktTypen', eingebaut: TYPEN_EINGEBAUT, praefix: 'pt',
-      wort: 'Art', label: cmd.label, extra: { kompakt: !!cmd.kompakt },
+      fehlt: 'Die Art braucht einen Namen.', doppelt: 'Diese Art gibt es schon: ',
+      label: cmd.label, extra: { kompakt: !!cmd.kompakt },
     });
   },
 
@@ -421,7 +446,8 @@ const HANDLERS = {
   addAbschnitt(state, cmd) {
     return neuerEintrag(state, {
       feld: 'abschnitte', eingebaut: ABSCHNITTE_EINGEBAUT, praefix: 'ab',
-      wort: 'Abschnitt', label: cmd.label,
+      fehlt: 'Der Abschnitt braucht einen Namen.', doppelt: 'Diesen Abschnitt gibt es schon: ',
+      label: cmd.label,
     });
   },
 
@@ -466,7 +492,7 @@ const HANDLERS = {
     if (i < 0) return L.eingebaut.some(([k]) => k === cmd.id)
       ? `«${abschnittOderArt(L, cmd.id)}» ist fest eingebaut und lässt sich nicht löschen.`
       : 'Nicht gefunden: ' + cmd.id;
-    const benutzt = state.tasks.filter((t) => t[L.taskFeld] === cmd.id).length;
+    const benutzt = benutztVon(state, cmd.liste, cmd.id);
     if (benutzt) {
       return `«${eigene[i].label}» wird von ${benutzt} ${benutzt === 1 ? 'Zeiteintrag' : 'Zeiteinträgen'} benutzt.`;
     }

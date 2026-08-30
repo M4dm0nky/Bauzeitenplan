@@ -55,14 +55,29 @@ export const PUNKT_TYPEN = [
  * Kopfzeile fehlt.
  * @returns {[string, string, boolean][]}
  */
+/**
+ * Selbst angelegte Werte in ihrer Reihenfolge: von Hand sortiert, sonst wie
+ * übergeben. **Die EINE Stelle** — Eintragsarten, Abschnitte und die
+ * Verwaltungsliste in table.js lasen das vorher je selbst, und der Fehler
+ * darin war entsprechend dreimal zu beheben.
+ *
+ * `?? Infinity`, nicht `?? 0`: ein Wert ohne `sort` gehört ans ENDE. Mit 0
+ * sprang ein neu angelegter Eintrag vor alles Sortierte, und bei Gleichstand
+ * entschied die Array-Position — wer einmal sortiert hatte, bekam jede neue Art
+ * an unvorhersehbarer Stelle.
+ */
+export function nachSort(eigene) {
+  const liste = eigene || [];
+  return liste.some((x) => x.sort != null)
+    ? [...liste].sort((x, y) => (x.sort ?? Infinity) - (y.sort ?? Infinity))
+    : liste;
+}
+
 export function punktTypen(state) {
   const eigene = (state && state.project && state.project.punktTypen) || [];
   // Von Hand sortiert? Sonst in der Reihenfolge, in der sie angelegt wurden —
   // eine Art hat keine Uhrzeit, an der man sie einordnen könnte.
-  const liste = eigene.some((t) => t.sort != null)
-    ? [...eigene].sort((x, y) => (x.sort ?? 0) - (y.sort ?? 0))
-    : eigene;
-  return [...PUNKT_TYPEN, ...liste.map((t) => [t.id, t.label, !!t.kompakt])];
+  return [...PUNKT_TYPEN, ...nachSort(eigene).map((t) => [t.id, t.label, !!t.kompakt])];
 }
 
 /** Anzeigename einer Eintragsart. Unbekanntes bleibt unverändert stehen. */
@@ -136,9 +151,7 @@ export function abschnitte(state) {
   // Betrachter überstimmt. Sobald EINER ein `sort` trägt, hat jemand sortiert
   // (der Store setzt es nur vollständig).
   if (eigene.some((a) => a.sort != null)) {
-    return [...ABSCHNITTE, ...[...eigene]
-      .sort((x, y) => (x.sort ?? 0) - (y.sort ?? 0))
-      .map((a) => [a.id, a.label])];
+    return [...ABSCHNITTE, ...nachSort(eigene).map((a) => [a.id, a.label])];
   }
   const tasks = (state && state.tasks) || [];
   const frueh = new Map();

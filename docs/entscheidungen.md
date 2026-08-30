@@ -374,6 +374,25 @@ Automatik, die den Betrachter überstimmt, wäre keine Hilfe. `reorderAuswahl`
 verlangt deshalb ALLE ids: halbes `sort` ergäbe eine Reihenfolge, die niemand
 gewählt hat.
 
+**Zwei Fehler kamen erst im Code-Review heraus**, nachdem alle Prüfläufe grün
+waren. Beide hatten dieselbe Wurzel: Kopien.
+
+Die Sortierlogik stand dreimal (Arten, Abschnitte, Verwaltungsliste). Sie las
+`(x.sort ?? 0)` — ein neu angelegter Wert ohne `sort` sprang damit vor alles
+Sortierte, bei Gleichstand entschied die Array-Position. Wer einmal sortiert
+hatte, bekam jede weitere Art an unvorhersehbarer Stelle. `nachSort()` in
+ebene.js ist jetzt die eine Stelle, und der Store vergibt beim Anlegen das
+nächste `sort`.
+
+Die Zuordnung «welches Feld am Vorgang zeigt auf welche Liste» stand zweimal —
+im Store und in der Verwaltung. Wären sie auseinandergelaufen, hätte der
+Löschknopf «0 Einträge» versprochen und offen gestanden, während der Store gleich
+darauf ablehnt. `benutztVon()` im Store ist jetzt die Quelle.
+
+Die Lehre ist die des Projekts, nur eine Stufe weiter: doppelt geführt ist
+erlaubt, **wenn ein Test es zusammenhält** (so wie bei den eingebauten Listen).
+Ohne diesen Test ist eine Kopie nur ein Fehler, der noch nicht passiert ist.
+
 **Und ein Fehler, den nur das Bild gezeigt hat:** Der Verwaltungskasten sprang
 nach jedem Klick in die linke obere Ecke. Nach einem Befehl baut die Tabelle neu
 auf, das Auswahlfeld ist abgehängt, und `getBoundingClientRect()` liefert dann

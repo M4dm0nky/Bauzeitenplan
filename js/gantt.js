@@ -704,7 +704,16 @@ export function createGantt(root, opts = {}) {
     // sonst die Quelle aus statt der neuen Verknüpfung. Nur nach einer echten
     // Ziehbewegung abfangen — bei einem bloßen Klick auf den Griff ist
     // Auswählen das richtige Verhalten.
-    if (moved) window.addEventListener('click', (c) => { c.stopPropagation(); }, { capture: true, once: true });
+    // Nach einer Ziehbewegung den folgenden `click` abfangen. `once` allein
+    // genügt nicht: endet der Zug im Leeren, folgt unter Umständen gar kein
+    // click (etwa wenn die Maus über der Browser-Oberfläche losgelassen wird) —
+    // der Handler bliebe liegen und schluckte irgendwann einen echten Klick auf
+    // einen ganz anderen Knopf. Deshalb wird er im nächsten Tick abgeräumt.
+    if (moved) {
+      const schlucke = (c) => c.stopPropagation();
+      window.addEventListener('click', schlucke, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener('click', schlucke, { capture: true }), 0);
+    }
     if (ziel && O.onLink) O.onLink(from, ziel.dataset.task);
   });
 

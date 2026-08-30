@@ -487,6 +487,18 @@ Feld für Feld auf; was dort fehlt, fällt beim Anlegen still weg. `abschnitt` h
 genau das erlebt: ein im Setup angelegter Eintrag landete in der Show und war im
 gezeigten Abschnitt sofort unsichtbar. Wer ein Feld ergänzt, prüft `addTask` mit.
 
+**Die Reihenfolge selbst angelegter Werte steht in `nachSort` (ebene.js) — an
+EINER Stelle.** Sie lag dreimal herum (Arten, Abschnitte, Verwaltungsliste), und
+ein Fehler darin war entsprechend dreimal zu beheben: `?? 0` setzte einen Wert
+ohne `sort` auf Position 0, ein neu angelegter sprang damit vor alles Sortierte.
+Richtig ist `?? Infinity` — was keines hat, hängt hinten an —, und der Store
+vergibt beim Anlegen das nächste `sort`, sobald überhaupt sortiert wurde.
+
+**Welches Feld am Vorgang auf welche Auswahlliste zeigt, weiß NUR der Store**
+(`LISTEN`, `benutztVon`). Die Verwaltung fragt danach, statt es selbst zu wissen:
+liefen die beiden auseinander, meldete der Löschknopf «0 Einträge» und stünde
+offen, während der Store gleich darauf ablehnt.
+
 **Verwaltet werden beide Listen über DIESELBEN drei Befehle** (`setAuswahlLabel`,
 `removeAuswahl`, `reorderAuswahl` mit `liste: 'punktTypen'|'abschnitte'`), nicht
 über sechs fast gleiche. Drei Regeln daran:

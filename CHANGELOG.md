@@ -3,6 +3,54 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.9.11 — 2026-08-30
+
+**Sechs Befunde aus einem Code-Review, alle behoben.** Einer davon war für
+Benutzer sichtbar, der Rest war die Ursache dahinter.
+
+### Neu angelegte Werte landeten nach dem Sortieren mittendrin
+
+Wer seine Arten einmal von Hand sortiert hatte und danach eine neue anlegte,
+bekam sie an unvorhersehbarer Stelle:
+
+```
+zwei Arten anlegen → sortieren (Zweite, Erste) → dritte anlegen
+erwartet:     Zweite · Erste · Neu angelegt
+tatsächlich:  Zweite · Neu angelegt · Erste
+```
+
+`neuerEintrag` setzte kein `sort`, und die Anzeige las `(x.sort ?? 0)` — der neue
+Wert bekam damit 0 und sprang vor alles mit `sort >= 1`. Bei Gleichstand
+entschied sogar die Reihenfolge im Array. Jetzt vergibt der Store das nächste
+`sort`, sobald die Liste überhaupt sortiert ist, und die Anzeige rechnet mit
+`?? Infinity`: was keines hat, hängt hinten an.
+
+### Und die Ursache: dieselbe Logik an drei Stellen
+
+Der Einzeiler oben war dreimal zu reparieren — `punktTypen()`, `abschnitte()` und
+die Verwaltungsliste trugen je eine eigene Kopie der Sortierung. Sie steht jetzt
+als `nachSort()` an **einer** Stelle in `ebene.js`.
+
+Dasselbe bei der Frage, welches Feld am Vorgang auf welche Liste zeigt: der Store
+wusste es (`LISTEN`), die Verwaltung führte es noch einmal mit. Wären die beiden
+auseinandergelaufen, hätte der Löschknopf «0 Einträge» gemeldet und offen
+gestanden, während der Store gleich darauf ablehnt. Jetzt zählt `benutztVon()` im
+Store, und die Oberfläche fragt.
+
+### Zwei Handler, die liegen bleiben konnten
+
+- Nach dem Verknüpfen-Ziehen fängt ein `click`-Handler den folgenden Klick ab.
+  Endet der Zug im Leeren, folgt unter Umständen gar kein Klick — dann blieb er
+  liegen und schluckte irgendwann einen echten Knopfdruck. (Gemessen: im
+  Normalfall trat das nicht ein; abgeräumt wird er jetzt trotzdem.)
+- Ein Auswahl-Kasten wurde beim Öffnen des nächsten per `.remove()` entfernt —
+  seine Handler auf `window` und `document` blieben dabei zurück.
+
+### Kleinigkeit
+
+`neuerEintrag` verzweigte seine Fehlermeldungen über einen Vergleich auf das
+Anzeigewort «Art». Die Meldungen kommen jetzt als Parameter.
+
 ## 0.9.10 — 2026-08-30
 
 **Arten und Abschnitte verwalten: umbenennen, sortieren, löschen.**

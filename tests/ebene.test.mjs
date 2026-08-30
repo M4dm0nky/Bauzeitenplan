@@ -249,6 +249,26 @@ test('HANDSORTIERUNG SCHLÄGT DIE UHRZEIT', () => {
   );
   assert.deepEqual(abschnitte(st).map(([k]) => k), ['setup', 'show', 'after', 'loadin']);
 });
+test('EIN NEUER WERT OHNE sort HÄNGT HINTEN AN, nicht mittendrin', () => {
+  // Der Fehler aus dem Review: `(x.sort ?? 0)` setzte einen Wert ohne `sort`
+  // auf Position 0 — er sprang vor alles Sortierte. Wer einmal sortiert hatte,
+  // bekam jede neue Art an unvorhersehbarer Stelle.
+  const st = { project: { punktTypen: [
+    { id: 'a1', label: 'Erste', sort: 1 },
+    { id: 'a2', label: 'Zweite', sort: 0 },
+    { id: 'a3', label: 'Ohne sort' },
+  ] } };
+  assert.deepEqual(punktTypen(st).slice(4).map(([, l]) => l), ['Zweite', 'Erste', 'Ohne sort']);
+});
+test('dasselbe gilt für die Abschnitte', () => {
+  const st = mitAbs([
+    { id: 'b1', label: 'Erster', sort: 1 },
+    { id: 'b2', label: 'Zweiter', sort: 0 },
+    { id: 'b3', label: 'Ohne sort' },
+  ]);
+  assert.deepEqual(abschnitte(st).slice(2).map(([, l]) => l), ['Zweiter', 'Erster', 'Ohne sort']);
+});
+
 test('auch die Arten lassen sich von Hand ordnen', () => {
   const st = { project: { punktTypen: [
     { id: 'a1', label: 'Zuerst angelegt', sort: 1 },

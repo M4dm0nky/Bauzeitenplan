@@ -10,7 +10,8 @@ import { parseDuration, fmtDuration, local, mitUhrzeit, endeNachStart } from './
 import { toMin, toDate, byStart } from './schedule.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, toInput, STATUS } from './dom.js';
-import { sichtGewerke, punktTypen, abschnitte, abschnittLabel, amTag, imAbschnitt } from './ebene.js';
+import { sichtGewerke, punktTypen, abschnitte, abschnittLabel, nachSort, amTag, imAbschnitt } from './ebene.js';
+import { benutztVon } from './store.js';
 
 // Die Spalten hängen an der Ebene (js/ebene.js). Sie stehen an EINER Stelle und
 // bestimmen zugleich die Breite der Gruppenköpfe — zwei Listen liefen sonst
@@ -257,7 +258,7 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
         }
         if (asel.value === VERWALTEN) {
           asel.value = jetztAbs;
-          verwalten(asel, { liste: 'abschnitte', taskFeld: 'abschnitt', titel: 'Abschnitte verwalten' });
+          verwalten(asel, { liste: 'abschnitte', titel: 'Abschnitte verwalten' });
           return;
         }
         waehleAbschnitt(t.id, asel.value);
@@ -302,7 +303,7 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
         }
         if (tsel.value === VERWALTEN) {
           tsel.value = jetzt;
-          verwalten(tsel, { liste: 'punktTypen', taskFeld: 'punktTyp', titel: 'Arten verwalten' });
+          verwalten(tsel, { liste: 'punktTypen', titel: 'Arten verwalten' });
           return;
         }
         send({ type: 'setTaskField', id: t.id, field: 'punktTyp', value: tsel.value });
@@ -595,6 +596,10 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
   // Ein eigener Verwaltungsort wäre zwei Klicks weiter weg.
   const NEUE_ART = '__neu__';
   const VERWALTEN = '__verw__';
+  // Der gerade offene Kasten. `.remove()` nimmt nur den Knoten, nicht seine
+  // Handler auf window/document — die blieben sonst liegen und reagierten auf
+  // Escape, obwohl ihr Kasten längst weg ist.
+  let kastenZu = null;
 
   /**
    * Fragt einen Namen ab und legt den Wert an. Ruft `fertig(id)` nur, wenn der
@@ -608,7 +613,7 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
    * sonst mitten in der Eingabe wegräumen.
    */
   function neuFragen(anker, opt, fertig) {
-    document.querySelector('.tb-neuart')?.remove();
+    kastenZu?.();
     const box = el('div', 'tb-neuart');
 
     // Eine Überschrift statt eines Platzhalters im Feld: ein Beispielwort IM
@@ -644,7 +649,9 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
       box.remove();
       window.removeEventListener('keydown', aufTaste, true);
       document.removeEventListener('pointerdown', aussen, true);
+      if (kastenZu === zu) kastenZu = null;
     };
+    kastenZu = zu;
     const aufTaste = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); zu(); }
       else if (e.key === 'Enter' && box.contains(e.target)) { e.preventDefault(); anlegen(); }
@@ -692,7 +699,7 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
   function verwalten(anker, opt) {
     // Einmal beim Öffnen merken — siehe `platziere`.
     const ankerRect = anker.getBoundingClientRect();
-    document.querySelector('.tb-neuart')?.remove();
+    kastenZu?.();
     const box = el('div', 'tb-neuart tb-verw');
     document.body.append(box);
 
@@ -700,7 +707,9 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
       box.remove();
       window.removeEventListener('keydown', aufTaste, true);
       document.removeEventListener('pointerdown', aussen, true);
+      if (kastenZu === zu) kastenZu = null;
     };
+    kastenZu = zu;
     const aufTaste = (e) => { if (e.key === 'Escape') { e.preventDefault(); zu(); } };
     const aussen = (e) => { if (!box.contains(e.target)) zu(); };
     window.addEventListener('keydown', aufTaste, true);
@@ -711,10 +720,7 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
       // `sort`, es dreht das Array nicht um. Ohne das Sortieren hier bliebe die
       // Liste nach einem Klick auf ↑ sichtbar unverändert — und man klickte
       // weiter, bis die Reihenfolge irgendwo landete.
-      const roh = (store.state.project[opt.liste] || []);
-      const eigene = roh.some((e) => e.sort != null)
-        ? [...roh].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
-        : roh;
+      const eigene = nachSort(store.state.project[opt.liste]);
       box.replaceChildren();
       box.append(el('div', 'tb-neuart-h', opt.titel));
 
@@ -748,9 +754,10 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
         hoch.onclick = () => tausche(i - 1);
         runter.onclick = () => tausche(i + 1);
 
-        // Wie viele hängen dran? Der Store lehnt das Löschen sonst ab — besser,
-        // der Knopf sagt es vorher, als dass er es hinterher meldet.
-        const benutzt = store.state.tasks.filter((t) => t[opt.taskFeld] === x.id).length;
+        // Wie viele hängen dran? Der STORE zählt — er weiß, welches Feld am
+        // Vorgang auf diese Liste zeigt. Wüsste die Verwaltung es auch, wären es
+        // zwei Wahrheiten, und bei einer dritten Liste vergisst man eine davon.
+        const benutzt = benutztVon(store.state, opt.liste, x.id);
         const weg = el('button', 'tb-verw-b tb-verw-x', '×');
         if (benutzt) {
           weg.disabled = true;

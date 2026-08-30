@@ -893,6 +893,28 @@ test('sortieren setzt sort in der übergebenen Reihenfolge', () => {
     [['linecheck', 1], ['catering', 0]]);
 });
 
+test('WER NACH DEM SORTIEREN ANLEGT, BEKOMMT DEN NEUEN WERT HINTEN', () => {
+  // Vorher landete er mittendrin: `neuerEintrag` setzte kein `sort`, und die
+  // Sortierung las `(x.sort ?? 0)` — der neue Wert bekam damit 0 und rutschte
+  // vor alles mit sort >= 1. Bei Gleichstand entschied sogar die Array-Position.
+  const s = mitAuswahl();
+  s.apply({ type: 'reorderAuswahl', liste: 'punktTypen', ids: ['catering', 'linecheck'] });
+  s.apply({ type: 'addPunktTyp', label: 'Zuletzt' });
+  const neu = s.state.project.punktTypen.find((x) => x.label === 'Zuletzt');
+  const hoechste = Math.max(...s.state.project.punktTypen
+    .filter((x) => x.label !== 'Zuletzt').map((x) => x.sort));
+  assert.notEqual(neu.sort, undefined, 'ohne sort rutscht der neue Wert nach vorn');
+  assert.ok(neu.sort > hoechste, `sort ${neu.sort} liegt nicht hinter ${hoechste}`);
+});
+
+test('ohne vorheriges Sortieren bleibt der neue Wert ohne sort', () => {
+  // Sonst trüge die Liste eine Reihenfolge, die niemand gewählt hat — und die
+  // Uhrzeit-Automatik der Abschnitte wäre ab dem ersten Anlegen aus.
+  const s = createStore(seed());
+  s.apply({ type: 'addAbschnitt', label: 'Load-in' });
+  assert.equal(s.state.project.abschnitte[0].sort, undefined);
+});
+
 test('eine unvollständige Reihenfolge wird abgelehnt', () => {
   // Sonst hätte die Hälfte ein sort und die andere nicht — die Liste stünde
   // danach in einer Reihenfolge, die niemand gewählt hat.

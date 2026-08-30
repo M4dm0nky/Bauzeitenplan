@@ -1030,6 +1030,25 @@ await check('VERWALTEN: sortieren, und die Reihenfolge hält', async () => {
   return opts[0] === vorher[1] ? true : 'das Dropdown sortiert anders: ' + opts.join(' · ');
 });
 
+await check('NACH DEM SORTIEREN ANGELEGT: die neue Art steht HINTEN', async () => {
+  // Der Fehler aus dem Review: ohne `sort` sprang ein neu angelegter Wert vor
+  // alles Sortierte — wer einmal sortiert hatte, bekam jede weitere Art an
+  // unvorhersehbarer Stelle.
+  const sel = p.locator('.tb-r .c-typ select').first();
+  await sel.selectOption('__neu__');
+  await p.waitForTimeout(300);
+  await p.locator('.tb-neuart-n').fill('Zuletzt');
+  await p.locator('.tb-neuart .btn-p').click();
+  await p.waitForTimeout(500);
+  await p.locator('.tb-r .c-typ select').first().selectOption('__verw__');
+  await p.waitForTimeout(400);
+  const namen = await p.locator('.tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
+  await p.locator('.tb-verw .btn-p').click();
+  await p.waitForTimeout(300);
+  return namen[namen.length - 1] === 'Zuletzt'
+    ? true : 'Reihenfolge: ' + namen.join(' · ');
+});
+
 await check('VERWALTEN: unbenutzte Art löschen, ⌘Z holt sie zurück', async () => {
   await p.locator('.tb-r .c-typ select').first().selectOption('__verw__');
   await p.waitForTimeout(400);
