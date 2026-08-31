@@ -28,11 +28,28 @@ const plan = (name = 'Test') => ({
   deps: [],
 });
 
+// `plan()` trägt die alte blanke Zahl `crew` — bewusst, sie steht für Pläne aus
+// der Zeit vor den Ressourcen. `migrate()` wandelt sie beim Laden in eine
+// Ressourcen-Zuweisung um (siehe persistence.js). Wer den zurückgelesenen
+// Stand gegen die Eingabe vergleicht, muss also gegen die MIGRIERTE Form
+// vergleichen, nicht gegen `plan()` selbst.
+const migriert = (p) => {
+  const q = JSON.parse(JSON.stringify(p));
+  q.project.ressourcen = [{ id: 'crew', label: 'Crew', kind: 'personal' }];
+  for (const t of q.tasks) {
+    if (!t.crew) continue;
+    t.res = [{ rid: 'crew', n: t.crew, von: null, bis: null }];
+    t.bereitstellung = false;
+    delete t.crew;
+  }
+  return q;
+};
+
 console.log('\nSpeichern & Laden');
 test('gespeichertes Projekt lässt sich identisch zurücklesen', () => {
   const r = createRepo(fakeStorage());
   r.save(plan());
-  assert.deepEqual(r.load('p1'), plan());
+  assert.deepEqual(r.load('p1'), migriert(plan()));
 });
 test('unbekanntes Projekt liefert null statt zu werfen', () => {
   assert.equal(createRepo(fakeStorage()).load('gibtsnicht'), null);
@@ -140,7 +157,7 @@ test('Export enthält Schema-Version und Plan', () => {
 });
 test('Export → Import ergibt denselben Plan', () => {
   const back = deserialize(serialize(plan()));
-  assert.deepEqual(back.plan, plan());
+  assert.deepEqual(back.plan, migriert(plan()));
 });
 test('Import von Unsinn meldet einen Fehler', () => {
   const r = deserialize('kein json');
@@ -318,7 +335,7 @@ test('Anforderungen und Material überleben Export → Import', () => {
     material: '1 Riser 2×1 m', kontakt: 'Max Mustermann', slot: 13,
   });
   const back = deserialize(serialize(raw));
-  assert.deepEqual(back.plan.tasks[0], raw.tasks[0]);
+  assert.deepEqual(back.plan.tasks[0], migriert(raw).tasks[0]);
 });
 
 test('eigene Eintragsarten überleben Export → Import', () => {

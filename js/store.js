@@ -39,12 +39,14 @@ const TYPEN_EINGEBAUT = [
 // Dasselbe für die Abschnitte, aus demselben Grund und mit demselben Test.
 const ABSCHNITTE_EINGEBAUT = [['setup', 'Setup'], ['show', 'Show']];
 
-// Die beiden selbst befüllbaren Auswahllisten. `taskFeld` sagt, welches Feld am
+// Die selbst befüllbaren Auswahllisten. `taskFeld` sagt, welches Feld am
 // Vorgang darauf zeigt — daran hängt, ob ein Wert noch benutzt wird und sich
-// deshalb nicht löschen lässt.
+// deshalb nicht löschen lässt. Ressourcen stehen nicht in einem FELD, sondern
+// in der Liste `t.res` — dafür trägt der Eintrag statt `taskFeld` ein `zaehlt`.
 const LISTEN = {
   punktTypen: { eingebaut: TYPEN_EINGEBAUT, taskFeld: 'punktTyp' },
   abschnitte: { eingebaut: ABSCHNITTE_EINGEBAUT, taskFeld: 'abschnitt' },
+  ressourcen: { eingebaut: [], zaehlt: (t, id) => (t.res || []).some((z) => z.rid === id) },
 };
 const abschnittOderArt = (L, id) => (L.eingebaut.find(([k]) => k === id) || [id, id])[1];
 
@@ -60,13 +62,18 @@ const abschnittOderArt = (L, id) => (L.eingebaut.find(([k]) => k === id) || [id,
 export function benutztVon(state, liste, id) {
   const L = LISTEN[liste];
   if (!L) return 0;
-  return (state.tasks || []).filter((t) => t[L.taskFeld] === id).length;
+  const test = L.zaehlt ? (t) => L.zaehlt(t, id) : (t) => t[L.taskFeld] === id;
+  return (state.tasks || []).filter(test).length;
 }
 
 /** Kennt der Plan diesen Abschnitt — eingebaut oder selbst angelegt? */
 const abschnittBekannt = (state, v) =>
   ABSCHNITTE_EINGEBAUT.some(([k]) => k === v)
   || ((state.project && state.project.abschnitte) || []).some((a) => a.id === v);
+
+/** Kennt der Plan diese Ressource (Personal/Maschine)? Keine eingebauten. */
+const resBekannt = (state, id) =>
+  ((state.project && state.project.ressourcen) || []).some((r) => r.id === id);
 
 const UNDO_MAX = 100;
 
@@ -187,11 +194,17 @@ const HANDLERS = {
     if (bad) return bad;
     const id = t.id || newId('t');
     if (state.tasks.some((x) => x.id === id)) return 'Diese id gibt es schon: ' + id;
+    // Zuweisungen nur übernehmen, wenn sie auf bekannte Ressourcen zeigen —
+    // sonst käme ein importierter/getippter Vertipper still in den Export und
+    // hinge im Bedarfsraster nirgends ein.
+    const res = (Array.isArray(t.res) ? t.res : [])
+      .filter((z) => resBekannt(state, z.rid) && Number.isInteger(z.n) && z.n > 0)
+      .map((z) => ({ rid: z.rid, n: z.n, von: z.von ?? null, bis: z.bis ?? null }));
     state.tasks.push({
       id, gewerk, title: String(t.title).trim(),
       start: t.start, end: t.end, milestone,
       progress: t.progress ?? 0, status: t.status || 'geplant',
-      crew: t.crew ?? null, notes: t.notes || '', parent,
+      notes: t.notes || '', parent,
       // Setup oder Show. MUSS hier durch: wer im Setup-Abschnitt anlegt, will
       // dort einen Eintrag — fiel das Feld weg, landete er in der Show und war
       // im gerade gezeigten Abschnitt sofort unsichtbar.
@@ -199,6 +212,11 @@ const HANDLERS = {
       // Wem gehört der Eintrag? Ein Soundcheck zeigt auf seinen Act. MUSS hier
       // durch — was der Handler nicht aufzählt, fällt beim Anlegen still weg.
       fuer: t.fuer ?? null,
+      // Personal & Maschinen: `res` ist der Bedarf, `bereitstellung` macht
+      // daraus ein Angebot — der Pool, aus dem andere Vorgänge ihre Zuweisung
+      // nehmen. MUSS hier durch, sonst fällt eine mitgegebene Zuweisung beim
+      // Anlegen (z. B. Duplizieren, Import) still weg.
+      res, bereitstellung: !!t.bereitstellung,
     });
     return ok({ id });
   },
@@ -252,6 +270,14 @@ const HANDLERS = {
       if (cmd.value === cmd.id) return 'Ein Eintrag gehört nicht zu sich selbst.';
       if (!state.tasks.some((x) => x.id === cmd.value)) return 'Zugeordneter Eintrag nicht gefunden.';
     }
+    // Zuweisungen ändert man über setTaskRes — dort steckt die Prüfung von
+    // Zeitfenster und Anzahl. Über setTaskField käme das ungeprüft rein.
+    if (cmd.field === 'res') return 'Zuweisungen ändert man über setTaskRes.';
+    // Eine Bereitstellung nimmt keine Verknüpfung an — sie ist ein Pool, kein
+    // Ablaufschritt. Erst die Verknüpfungen entfernen, dann umschalten.
+    if (cmd.field === 'bereitstellung' && cmd.value
+      && state.deps.some((d) => d.from === cmd.id || d.to === cmd.id))
+      return 'Erst die Verknüpfungen entfernen — eine Bereitstellung nimmt keine an.';
     // Der Farbplatz ist intern 0-basiert (0…MAX_SLOTS-1), in der Oberfläche
     // 1-basiert («Platz 3 von 20», inspector.js). Die Meldung nennt deshalb
     // keinen Zahlenbereich: gewählt wird über Knöpfe, hier tippt niemand einen
@@ -283,8 +309,13 @@ const HANDLERS = {
   addDep(state, cmd) {
     const d = cmd.dep || {};
     if (d.from === d.to) return 'Ein Vorgang kann nicht von sich selbst abhängen.';
-    if (!state.tasks.some((t) => t.id === d.from)) return 'Vorgänger nicht gefunden.';
-    if (!state.tasks.some((t) => t.id === d.to)) return 'Nachfolger nicht gefunden.';
+    const from = state.tasks.find((t) => t.id === d.from);
+    const to = state.tasks.find((t) => t.id === d.to);
+    if (!from) return 'Vorgänger nicht gefunden.';
+    if (!to) return 'Nachfolger nicht gefunden.';
+    // Eine Bereitstellung ist ein Pool, kein Ablaufschritt — ein Pfeil auf sie
+    // ergäbe keine Aussage über eine Abhängigkeit.
+    if (from.bereitstellung || to.bereitstellung) return 'Eine Bereitstellung nimmt keine Verknüpfung an.';
     if (state.deps.some((x) => x.from === d.from && x.to === d.to)) return 'Diese Verknüpfung gibt es schon.';
     if (!['FS', 'SS', 'FF', 'SF'].includes(d.type || 'FS')) return 'Unbekannter Verknüpfungstyp: ' + d.type;
     const next = [...state.deps, { from: d.from, to: d.to }];
@@ -452,6 +483,65 @@ const HANDLERS = {
   },
 
   /**
+   * Eine eigene Bezeichnung für Personal oder Maschinen anlegen (Stagehand,
+   * Gabelstapler …). Anders als Eintragsarten/Abschnitte gibt es KEINE
+   * eingebauten — «Stagehand» heißt bei der nächsten Produktion «Helfer», eine
+   * Vorgabe wäre also nur eine weitere Löschkandidatin.
+   *
+   * Steht im Plan (`project.ressourcen`) und reist im Export mit — ohne die
+   * Namensliste sähe der Empfänger nur `rid:"stagehand"`.
+   */
+  addRessource(state, cmd) {
+    return neuerEintrag(state, {
+      feld: 'ressourcen', eingebaut: [], praefix: 'r',
+      fehlt: 'Die Bezeichnung braucht einen Namen.', doppelt: 'Diese Bezeichnung gibt es schon: ',
+      label: cmd.label, extra: { kind: cmd.kind === 'maschine' ? 'maschine' : 'personal' },
+    });
+  },
+
+  /**
+   * Eine Zuweisung am Vorgang setzen, ändern oder löschen — der EINZIGE Weg,
+   * `t.res` zu ändern (setTaskField lehnt das Feld ab). `index: null` hängt an,
+   * ein vorhandener Index ersetzt; `value: null` löscht den Eintrag am Index.
+   *
+   * Das Zeitfenster ist optional: `von`/`bis` fehlen heißt »der ganze
+   * Vorgang« — der Normalfall, dabei tippt niemand ein Datum. Ist eines
+   * gesetzt, muss es INNERHALB der Vorgangsdauer liegen — ein Helfer, der vor
+   * dem Vorgang anfängt, ist ein Tippfehler, kein Fall.
+   */
+  setTaskRes(state, cmd) {
+    const t = state.tasks.find((x) => x.id === cmd.id);
+    if (!t) return 'Vorgang nicht gefunden.';
+    if (hasChildren(state, cmd.id)) return 'Ressourcen weist man den Untervorgängen zu, nicht dem Sammelvorgang.';
+    const list = [...(t.res || [])];
+    const idx = cmd.index ?? null;
+
+    if (cmd.value === null) {
+      if (idx == null || idx < 0 || idx >= list.length) return 'Zuweisung nicht gefunden.';
+      list.splice(idx, 1);
+    } else {
+      const v = cmd.value;
+      if (!resBekannt(state, v.rid)) return 'Unbekannte Bezeichnung: ' + v.rid;
+      if (!Number.isInteger(v.n) || v.n <= 0) return 'Die Anzahl muss eine ganze Zahl größer 0 sein.';
+      const von = v.von ?? null, bis = v.bis ?? null;
+      if ((von == null) !== (bis == null)) return 'Start und Ende gehören zusammen — oder beide leer für den ganzen Vorgang.';
+      if (von != null) {
+        if (toMin(bis) <= toMin(von)) return 'Das Ende muss nach dem Start liegen.';
+        if (toMin(von) < toMin(t.start) || toMin(bis) > toMin(t.end))
+          return 'Das Zeitfenster muss innerhalb des Vorgangs liegen.';
+      }
+      const eintrag = { rid: v.rid, n: v.n, von, bis };
+      if (idx == null) list.push(eintrag);
+      else {
+        if (idx < 0 || idx >= list.length) return 'Zuweisung nicht gefunden.';
+        list[idx] = eintrag;
+      }
+    }
+    t.res = list;
+    return ok();
+  },
+
+  /**
    * Eine selbst angelegte Auswahl umbenennen. Die **id bleibt** — sie ist die
    * Zuordnung. Änderte sie sich mit, verlöre jeder Eintrag seine Art bzw.
    * seinen Abschnitt, und zwar still: `punktLabel` reicht einen unbekannten
@@ -552,7 +642,13 @@ export function createStore(initial) {
   if (!state.gewerke) state.gewerke = [];
   // Bestandsdaten ohne Farbplatz nachrüsten
   state.gewerke.forEach((g, i) => { if (g.slot == null) g.slot = i; });
-  state.tasks.forEach((t) => { if (t.parent === undefined) t.parent = null; });
+  state.tasks.forEach((t) => {
+    if (t.parent === undefined) t.parent = null;
+    // Robust gegen jeden Einstiegsweg (Vorlage, Import, Duplizieren): egal ob
+    // das Feld je gesetzt wurde, hier steht danach immer ein Array bzw. bool.
+    if (!Array.isArray(t.res)) t.res = [];
+    t.bereitstellung = !!t.bereitstellung;
+  });
   reflowParents(state);   // Sammelvorgänge gleich auf ihre Hülle setzen
 
   const undoStack = [];
@@ -627,7 +723,11 @@ export function createStore(initial) {
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
     replace(next) {           // Projektwechsel / Import
       state = clone(next);
-      state.tasks.forEach((t) => { if (t.parent === undefined) t.parent = null; });
+      state.tasks.forEach((t) => {
+        if (t.parent === undefined) t.parent = null;
+        if (!Array.isArray(t.res)) t.res = [];
+        t.bereitstellung = !!t.bereitstellung;
+      });
       reflowParents(state);
       undoStack.length = 0;
       redoStack.length = 0;

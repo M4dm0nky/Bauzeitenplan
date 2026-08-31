@@ -3,6 +3,56 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.10.0 — 2026-08-31
+
+**Personal & Maschinen.** Zu jedem Vorgang — im Bauzeitenplan wie im
+Showablauf — lässt sich jetzt eintragen, wer und was gebraucht wird: eine
+selbst angelegte Bezeichnung (Stagehand, Gabelstapler, Rigger …), eine Anzahl
+und, wenn nötig, ein eigenes Zeitfenster innerhalb des Vorgangs. Bedient wird
+es an zwei Stellen — im Panel eines angeklickten Balkens und in der Tabelle,
+ganz hinten in der Spalte *Ressourcen* — beide öffnen denselben Kasten.
+
+Eine Bezeichnung legt man mit **«+ Neu…»** mitten im Tippen an, wie schon bei
+den Eintragsarten; sie bleibt danach dauerhaft im Plan und reist im
+JSON-Export mit. Anders als Eintragsarten und Abschnitte gibt es dabei
+**keine eingebauten Bezeichnungen** — «Stagehand» heißt bei der nächsten
+Produktion vielleicht «Helfer», eine Vorgabe wäre nur eine weitere
+Löschkandidatin.
+
+### Bereitstellung: der Pool, aus dem ein Vorgang seine Zuweisung nimmt
+
+Ein Häkchen im Panel macht aus einem Vorgang eine **Bereitstellung**: seine
+Zuweisungen sind dann kein Bedarf mehr, sondern ein Angebot — «10 Stagehands,
+08:00–22:00», ohne eigene Funktion im Ablauf. Sie ist ein ganz normaler
+Vorgang (Balken, Zeitfenster, Notiz, Undo) mit zwei Ausnahmen: sie nimmt keine
+Verknüpfung an, und sie steht nie im Konflikt oder auf dem kritischen Pfad.
+
+Läuft der Bühnenbau 10–20 Uhr und sind die Helfer nur bis 18 Uhr eingeplant,
+sagt der Balken jetzt «2 Std ohne Personal» — im Panel im Klartext, ohne
+Alarmfarbe: unbesetzte Zeit ist oft gewollt (Trocknungszeit, Wartezeit), kein
+Fehler.
+
+### Zwei neue Reiter: Personalbedarf, Maschinenbedarf
+
+Neben Gantt und Tabelle stehen jetzt **Personalbedarf** und
+**Maschinenbedarf** — je Bezeichnung, je Zeitscheibe (Tage im Bauzeitenplan,
+Stunden im Showablauf) bereitgestellt · belegt · frei. Stehen zehn Stagehands
+den Nachmittag über bereit und braucht ein Act um 20 Uhr sechs davon, zeigt
+der Reiter dort «+4» — der Rest des Pools, mit einem Blick.
+
+### Was aus `crew` wurde
+
+Das alte Feld `crew` (eine blanke Zahl je Vorgang) ist einer Ressourcen-
+Zuweisung auf die Bezeichnung «Crew» gewichen. Bestehende Pläne werden beim
+Laden automatisch umgestellt — die Zahl bleibt erhalten, nur die Form ändert
+sich. Die vier Vorlagen (Festival, Tour, Corporate, Messe) tragen ihre
+Crew-Zahlen jetzt ebenfalls als Ressourcen-Zuweisung.
+
+_Noch offen: die Werkzeugzeile bleibt vorerst wie sie ist — eine eigene
+«Einrichten»-Ansicht, die die administrativen Knöpfe (Export, Import, Gewerke,
+Ressourcen verwalten) aus der Ansichtsleiste herauslöst, folgt in einer der
+nächsten Versionen._
+
 ## 0.9.11 — 2026-08-30
 
 **Sechs Befunde aus einem Code-Review, alle behoben.** Einer davon war für

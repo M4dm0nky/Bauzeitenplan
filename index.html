@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CallBoard — Bauzeitenplan</title>
-<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.9.11">
+<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.10.0">
 
 <script>
   // Hell/Dunkel VOR dem CSS festlegen, damit beim Laden nichts aufblitzt.
@@ -40,8 +40,8 @@
      Der Theme-Link wählt die Gestaltungsebene: styles/themes/ enthält fünf
      fertige Ebenen (callboard = aktiv). Hell/Dunkel schaltet der Betrachter
      über data-theme (Knopf im Kopf). Siehe docs/themes.md. -->
-<link rel="stylesheet" href="styles/base.css?v=0.9.11">
-<link rel="stylesheet" href="styles/themes/callboard.css?v=0.9.11" id="theme-css" data-theme-name="callboard">
+<link rel="stylesheet" href="styles/base.css?v=0.10.0">
+<link rel="stylesheet" href="styles/themes/callboard.css?v=0.10.0" id="theme-css" data-theme-name="callboard">
 </head>
 <body>
 
@@ -88,6 +88,8 @@
       <div class="seg" role="group" aria-label="Darstellung">
         <button data-view="gantt">Gantt</button>
         <button data-view="tabelle">Tabelle</button>
+        <button data-view="personal">Personalbedarf</button>
+        <button data-view="maschine">Maschinenbedarf</button>
       </div>
 
       <!-- Bühnen-Häkchen. Nur im Showablauf sichtbar; das Wegklicken ändert
@@ -168,6 +170,7 @@
   <div class="work">
     <div class="bz" id="bz" tabindex="-1"></div>
     <div class="tb" id="tb" hidden></div>
+    <div class="bd" id="bd" hidden></div>
     <aside class="ins" id="ins" hidden></aside>
   </div>
 
@@ -189,6 +192,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="import-file" accept="application/json,.json" hidden>
 
-<script type="module" src="js/app.js?v=0.9.11"></script>
+<script type="module" src="js/app.js?v=0.10.0"></script>
 </body>
 </html>

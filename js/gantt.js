@@ -11,6 +11,14 @@ import { runningAt, delaysAt, verschoben } from './live.js';
 import { sichtGewerke, programmFenster, amTag, imAbschnitt } from './ebene.js';
 import { gewerkVar, gewerkTexture, gewerkInkVar } from './palette.js';
 import { el, svgEl } from './dom.js';
+import { resLabel } from './resources.js';
+
+// Summe der Personal-Zuweisungen eines Vorgangs — ersetzt die frühere blanke
+// Zahl `crew`. Maschinen zählen hier nicht mit: die Kopfzeile fragte schon
+// vorher nur nach Personen.
+const personalSum = (t, state) =>
+  (t.res || []).filter((z) => (state.project.ressourcen || []).find((r) => r.id === z.rid)?.kind !== 'maschine')
+    .reduce((a, z) => a + z.n, 0);
 import {
   ZOOM, clampZoom, zoomAnchored, nearestPreset, fitPx, tickScale, ticksFor,
   weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat,
@@ -404,7 +412,10 @@ export function createGantt(root, opts = {}) {
           const m = el('span', 'bz-lab-meta', alle.length + '×');
           m.title = alle.length + ' Termine' + (r.s.lanes > 1 ? ', zeitweise parallel' : '');
           lab.append(m);
-        } else if (r.t.crew) lab.append(el('span', 'bz-lab-meta', r.t.crew + ' P'));
+        } else {
+          const pSum = personalSum(r.t, S);
+          if (pSum) lab.append(el('span', 'bz-lab-meta', pSum + ' P'));
+        }
         // ALLE ids der Serie: app.js sucht die Zeile zu einem Vorgang über
         // [data-task~="id"], nicht über Gleichheit — sonst fände das Umbenennen
         // aus dem Kontextmenü nur den ersten Balken einer Serie.
@@ -486,7 +497,7 @@ export function createGantt(root, opts = {}) {
             bindLink(d, r, t, toMin(t.start));
             rowById.set('task:' + t.id, d);
           } else {
-            const b = el('div', 'bz-bar bz-st-' + t.status + (r.parent ? ' is-summary' : ''));
+            const b = el('div', 'bz-bar bz-st-' + t.status + (r.parent ? ' is-summary' : '') + (t.bereitstellung ? ' bz-bereit' : ''));
             const bslot = slotVon(t, r.g);
             b.style.setProperty('--gw', gewerkVar(bslot));
             // Die Schrift auf der Farbe hängt am Ton, nicht am Theme (base.css).
@@ -1106,7 +1117,9 @@ export function createGantt(root, opts = {}) {
         add('Ende', fmtDay(ed) + ', ' + fmtTime(ed));
         add('Dauer', fmtDur(toMin(t.end) - toMin(t.start)));
       }
-      if (t.crew) add('Crew', t.crew + ' Personen');
+      if ((t.res || []).length) {
+        add(t.bereitstellung ? 'Bietet' : 'Braucht', t.res.map((z) => z.n + '× ' + resLabel(z.rid, S)).join(', '));
+      }
       const conf = CONFLICTS.get(t.id);
       if (conf) add('Konflikt', conf.message);
       add('Puffer', s.critical ? 'kritischer Pfad' : fmtFloat(s.float));
@@ -1436,7 +1449,7 @@ export function createGantt(root, opts = {}) {
       const crit = S.tasks.filter((t) => (SCHED.get(t.id) || {}).critical && !t.ackCrit).length;
       const done = VT.filter((t) => t.status === 'fertig').length;
       const run = VT.filter((t) => t.status === 'laeuft').length;
-      const crew = VT.filter((t) => t.status === 'laeuft').reduce((a, t) => a + (t.crew || 0), 0);
+      const crew = VT.filter((t) => t.status === 'laeuft').reduce((a, t) => a + personalSum(t, S), 0);
       return { total: VT.length, crit, done, run, crew, gewerke: VG.length, conflicts: CONFLICTS.size };
     },
     relayout: layout,

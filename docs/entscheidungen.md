@@ -507,6 +507,38 @@ dauert, wäre der Umbau ein Tausch von belegter Einfachheit gegen vermutete
 Geschwindigkeit. `computeSchedule` ist denselben Weg gegangen: erst messen (3,4 ms
 bei 500 Vorgängen), dann die Zahl der Aufrufe senken statt einen Cache einzuziehen.
 
+## Personal & Maschinen: Anzahlen statt Namen, Bereitstellung als Vorgang
+
+Drei Entscheidungen, die nicht auf der Hand lagen.
+
+**Anzahlen, keine Einzelpersonen.** Bei zehn austauschbaren Stagehands hilft
+ein Name nicht — «Max K.» und «Tom B.» sind für die Disposition dieselbe
+Einheit. Eine Namensebene wäre reiner Pflegeaufwand ohne Gegenwert, solange
+niemand Dienstpläne pro Person braucht. Das Modell hält die Tür trotzdem offen:
+eine Zuweisung ist ein Objekt (`{rid, n, von, bis}`), kein Skalar — eine
+spätere `namen: []` daran wäre eine Erweiterung, kein Umbau.
+
+**Die Bereitstellung ist ein Vorgang, kein zweites Konzept.** Die Alternative
+— eine separate „Verfügbarkeitsliste" mit Zeitfenster und Menge, getrennt vom
+Ablauf gepflegt — wäre ein zweiter Ort für dieselbe Art von Information
+(Bezeichnung, Menge, Zeitfenster) und unsichtbar im Gantt: eine frisch
+gebuchte Zusatzcrew stünde nirgends im Bild, bis jemand in ein separates Menü
+wechselt. Als Vorgang mit `bereitstellung: true` bekommt sie Balken,
+Verschieben, Undo, Export und Tagesfilter GESCHENKT — es ist dieselbe Maschine,
+die schon jeden anderen Vorgang trägt. Der Preis: zwei Ausnahmen im Store
+(keine Verknüpfung, kein Konfliktbeitrag), beide dort begründet, wo sie
+greifen (`addDep`, `findConflicts`).
+
+**Die Deckungslücke ist kein Konflikt.** Ein Konflikt in diesem Plan bedeutet
+immer: eine Abhängigkeit ist verletzt, eine Zusage widerspricht sich selbst.
+Zwei Stunden ohne zugewiesenes Personal am Ende eines Bühnenbaus ist keine
+Widersprüchlichkeit — oft ist es Absicht (die Bühne trocknet, wartet auf
+Abnahme). Sie in die Prüf-Liste zu heben hieße, sie wie einen Fehler zu
+behandeln, den man beheben oder wegdrücken muss. Stattdessen steht sie da, wo
+man ohnehin hinschaut, wenn man Personal plant: am Balken und im Panel des
+betroffenen Vorgangs — ohne Alarmfarbe, denn eine Lücke ist eine Information,
+kein Fehler.
+
 ## Was bewusst noch fehlt
 
 Das Ziehen der **Balken und Dauern** im Gantt sowie Ansichten & Export

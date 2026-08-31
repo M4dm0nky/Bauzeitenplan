@@ -27,6 +27,18 @@ test('stimmiger Plan hat keine Konflikte', () => {
   assert.deepEqual(findConflicts(s), []);
 });
 
+test('eine Bereitstellung wird nie als Konflikt gemeldet', () => {
+  // Der Store lässt an einer Bereitstellung gar keine Verknüpfung zu — aber
+  // findConflicts prüft direkt am Zustand, nicht über den Store, und muss sie
+  // deshalb selbst ausnehmen. Ohne die Ausnahme wäre das hier ein Konflikt:
+  // 'a' startet 08:00, hängt aber (künstlich) an 'b', das erst um 10:00 endet.
+  const s = seed(
+    [T('a', 'g1', 'Pool', '2026-07-13T08:00', '2026-07-13T20:00', { bereitstellung: true }),
+     T('b', 'g2', 'Show', '2026-07-13T09:00', '2026-07-13T10:00')],
+    [{ id: 'd1', from: 'b', to: 'a', type: 'FS', lag: 0 }]);
+  assert.deepEqual(findConflicts(s), []);
+});
+
 test('Nachfolger startet zu früh → Konflikt', () => {
   // b müsste um 12:00 starten, startet aber um 10:00
   const s = seed(

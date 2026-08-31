@@ -398,7 +398,9 @@ await check('der Bauzeitenplan hat KEINE der neuen Spalten', async () => {
   const th = (await p.locator('.tb-t th').allTextContents()).map((x) => x.trim());
   const zuviel = ['Typ', 'Abschnitt', 'Kontakt', 'Anforderungen', 'Material'].filter((x) => th.includes(x));
   if (zuviel.length) return 'im Bauzeitenplan sichtbar: ' + zuviel.join(', ');
-  return th.includes('Crew') ? true : 'die Crew-Spalte ist verschwunden: ' + th.join('|');
+  // «Crew» ist die Ressourcen-Spalte gewichen (Personal & Maschinen, v0.10.0) —
+  // sie steht in beiden Ebenen, ist also selbst keine der show-spezifischen.
+  return th.includes('Ressourcen') ? true : 'die Ressourcen-Spalte ist verschwunden: ' + th.join('|');
 });
 
 // ── Live-Kopfzeile ──────────────────────────────────────────────────────────

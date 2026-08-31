@@ -43,6 +43,8 @@ export function migrate(plan) {
   // Ebenso die selbst angelegten Abschnitte (Load-in, Aftershow …). Sie sind
   // Etiketten am Eintrag; gefiltert wird weiter nach Setup und Show.
   if (!Array.isArray(p.project.abschnitte)) p.project.abschnitte = [];
+  // Und die selbst angelegten Bezeichnungen für Personal & Maschinen.
+  if (!Array.isArray(p.project.ressourcen)) p.project.ressourcen = [];
 
   // Der Farbplatz ist Identität und muss stabil sein — beim Umsortieren darf
   // sich nichts umfärben. Bestandsdaten bekommen ihn aus der Reihenfolge.
@@ -94,12 +96,37 @@ export function migrate(plan) {
   const da = new Set(p.tasks.map((t) => t.id));
   for (const sc of geboren) if (!da.has(sc.id)) p.tasks.push(sc);
 
+  // `crew` war eine blanke Zahl je Vorgang — eine Person ohne Bezeichnung,
+  // ohne eigenes Zeitfenster, ohne Gegenrechnung. Ersetzt durch `res`: eine
+  // ganz normale Ressourcen-Zuweisung auf die Bezeichnung «Crew», über die
+  // volle Vorgangsdauer (von/bis: null).
+  //
+  // ERZEUGEND wie die Soundcheck-Migration — sie muss besonders sauber
+  // einmalig sein: läuft NUR, solange `t.crew` noch da ist. Danach wird es
+  // gelöscht, damit ein zweiter Durchlauf keine zweite Zuweisung anlegt.
+  if (p.tasks.some((t) => t.crew)) {
+    if (!p.project.ressourcen.some((r) => r.id === 'crew')) {
+      p.project.ressourcen.push({ id: 'crew', label: 'Crew', kind: 'personal' });
+    }
+    for (const t of p.tasks) {
+      if (!t.crew) continue;
+      if (!Array.isArray(t.res)) t.res = [];
+      if (!t.res.some((z) => z.rid === 'crew')) {
+        t.res.push({ rid: 'crew', n: t.crew, von: null, bis: null });
+      }
+    }
+  }
+  for (const t of p.tasks) delete t.crew;
+
   for (const t of p.tasks) {
     t.milestone = !!t.milestone;
     t.progress ??= 0;
     t.status ??= 'geplant';
-    t.crew ??= null;
     t.notes ??= '';
+    // Personal & Maschinen: `res` ist der Bedarf, `bereitstellung` macht daraus
+    // ein Angebot (der Pool, aus dem andere Vorgänge ihre Zuweisung nehmen).
+    if (!Array.isArray(t.res)) t.res = [];
+    t.bereitstellung = !!t.bereitstellung;
     // Untervorgänge: parent = id des Elternvorgangs, sonst null. Altpläne ohne
     // das Feld sind reine top-level → voll abwärtskompatibel.
     t.parent ??= null;

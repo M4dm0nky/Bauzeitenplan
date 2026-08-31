@@ -8,6 +8,7 @@ import { createRepo, serialize, deserialize } from './persistence.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
+import { createBedarf } from './bedarf.js';
 import { resolveConflictsCmd, local } from './conflicts.js';
 import { slotsExhausted, MAX_SLOTS, gewerkVar, gewerkTexture } from './palette.js';
 import { createInspector } from './inspector.js';
@@ -21,7 +22,7 @@ import { VERSION } from './version.js';
 // Der Speicher wird in main() gesetzt. Bis dahin null — nichts greift vorher
 // darauf zu.
 let repo = null;
-let store = null, gantt = null, table = null, inspector = null, view = 'gantt';
+let store = null, gantt = null, table = null, bedarf = null, inspector = null, view = 'gantt';
 
 // ── Ansicht ─────────────────────────────────────────────────────────────────
 // DREI gleichrangige Ansichten in EINER Leiste, in der Reihenfolge des Tages:
@@ -205,6 +206,7 @@ function mount() {
     onConflicts: ({ error }) => toast(error, 'bad'),
     onHinweis: (text) => toast(text),
   });
+  bedarf = createBedarf($('bd'), { store });
   inspector = createInspector($('ins'), {
     store,
     onError: (msg) => toast(msg, 'bad'),
@@ -230,6 +232,7 @@ function mount() {
     refreshLive();
     scheduleSave();
     if (view === 'tabelle') renderTable();
+    if (view === 'personal' || view === 'maschine') bedarf.render();
     inspector.render();       // Panel zeigt sonst veraltete Werte
     syncPanel();
   });
@@ -322,10 +325,12 @@ function setView(v) {
   document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
   $('bz').hidden = v !== 'gantt';
   $('tb').hidden = v !== 'tabelle';
+  $('bd').hidden = v !== 'personal' && v !== 'maschine';
   syncPanel();
   document.querySelector('.hd-zoom').hidden = v !== 'gantt';
   syncBuehnen();
   if (v === 'tabelle') { renderTable(); return; }
+  if (v === 'personal' || v === 'maschine') { bedarf.setKind(v); bedarf.render(); return; }
   gantt.relayout();
   // Kein Nachziehen per Zeitschätzung: der Gantt passt sich beim
   // Wiederauftauchen selbst ein (ResizeObserver) und meldet das über onView.
@@ -356,6 +361,7 @@ function setAnsicht(name) {
 
   gantt.setEbene(ebene, ausBlend, showTag, abschnitt);
   table.setEbene(ebene, ausBlend, showTag, abschnitt);
+  bedarf.setEbene(ebene, ausBlend, showTag, abschnitt);
   // Die Auswahl gehört der anderen Ebene und zeigt ins Leere.
   gantt.select(null);
   syncPanel();
@@ -363,6 +369,7 @@ function setAnsicht(name) {
   $('add-gewerk').textContent = ebene === 'show' ? '+ Bühne' : '+ Gewerk';
   $('fold').hidden = ebene === 'show';   // wenige Zeilen brauchen kein Zuklappen
   if (view === 'tabelle') renderTable();
+  if (view === 'personal' || view === 'maschine') bedarf.render();
   refreshChrome();
   refreshLive();
   // Die Zoom-Markierung gehört zum Bild: setEbene stellt die Stufe neu, ohne
@@ -408,7 +415,9 @@ function syncBuehnen() {
       cb.checked ? ausBlend.delete(g.id) : ausBlend.add(g.id);
       gantt.setEbene(ebene, ausBlend, showTag, abschnitt);
       table.setEbene(ebene, ausBlend, showTag, abschnitt);
+      bedarf.setEbene(ebene, ausBlend, showTag, abschnitt);
       if (view === 'tabelle') renderTable();
+      if (view === 'personal' || view === 'maschine') bedarf.render();
       refreshChrome();
     };
     const dot = el('span', 'bz-dot');

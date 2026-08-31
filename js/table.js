@@ -12,6 +12,7 @@ import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, toInput, STATUS } from './dom.js';
 import { sichtGewerke, punktTypen, abschnitte, abschnittLabel, nachSort, amTag, imAbschnitt } from './ebene.js';
 import { benutztVon } from './store.js';
+import { ressourcen, resKind } from './resources.js';
 
 // Die Spalten hängen an der Ebene (js/ebene.js). Sie stehen an EINER Stelle und
 // bestimmen zugleich die Breite der Gruppenköpfe — zwei Listen liefen sonst
@@ -19,12 +20,14 @@ import { benutztVon } from './store.js';
 //
 // Der Showablauf trägt vier Spalten mehr: Typ, Soundcheck, Kontakt und die
 // beiden Freitexte, die beim Anlegen des Zeitstrahls direkt mitgetippt werden.
+// «Ressourcen» steht in BEIDEN Ebenen — Personal und Maschinen betrifft den
+// Aufbau genauso wie die Bühne.
 const SPALTEN = {
   bau: [['Gewerk', 'c-gw'], ['Vorgang', 'c-title'], ['Start', 'c-start'],
-    ['Dauer', 'c-dur'], ['Ende', 'c-end'], ['Crew', 'c-crew'], ['Status', 'c-st'], ['', 'c-act']],
+    ['Dauer', 'c-dur'], ['Ende', 'c-end'], ['Ressourcen', 'c-res'], ['Status', 'c-st'], ['', 'c-act']],
   show: [['Bühne', 'c-gw'], ['Zeiteintrag', 'c-title'], ['Abschnitt', 'c-abs'], ['Typ', 'c-typ'], ['Start', 'c-start'],
     ['Dauer', 'c-dur'], ['Ende', 'c-end'], ['Kontakt', 'c-kon'],
-    ['Anforderungen', 'c-anf'], ['Material', 'c-mat'], ['Status', 'c-st'], ['', 'c-act']],
+    ['Anforderungen', 'c-anf'], ['Material', 'c-mat'], ['Ressourcen', 'c-res'], ['Status', 'c-st'], ['', 'c-act']],
 };
 
 export function createTable(root, { store, onConflicts, onHinweis } = {}) {
@@ -408,24 +411,12 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
         td.append(inp);
         tr.append(td);
       }
-    } else {
-      // ── Crew ──
-      const cr = el('td', 'c-crew');
-      const cin = el('input');
-      cin.type = 'number';
-      cin.min = '0';
-      cin.value = t.crew ?? '';
-      cin.setAttribute('aria-label', 'Crew');
-      commitOn(cin, () => {
-        const now = cur(t.id);
-        if (!now) return;
-        const v = cin.value === '' ? null : Math.max(0, parseInt(cin.value, 10) || 0);
-        if (v === now.crew) return;
-        send({ type: 'setTaskField', id: t.id, field: 'crew', value: v });
-      });
-      cr.append(cin);
-      tr.append(cr);
     }
+
+    // ── Ressourcen (beide Ebenen) ──
+    // Kompakte Zusammenfassung; ein Klick öffnet denselben Kasten wie das
+    // Panel — eine Quelle für die Bedienung, zwei Aufrufstellen.
+    tr.append(resCell(t));
 
     // ── Status ──
     const stt = el('td', 'c-st');
@@ -774,6 +765,129 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
       const fertig = el('button', 'btn btn-p', 'Fertig');
       fertig.onclick = zu;
       const reihe = el('div', 'tb-neuart-a');
+      reihe.append(fertig);
+      box.append(reihe);
+      platziere(box, ankerRect);
+    };
+
+    zeichne();
+  }
+
+  // ── Ressourcen-Zelle ────────────────────────────────────────────────────────
+  // Kompakte Zusammenfassung («6× Stagehand · 1× Stapler»); ein Klick öffnet
+  // denselben schwebenden Kasten wie »Verwalten…« — eine Quelle für die
+  // Bedienung (auch im Panel, js/inspector.js), zwei Aufrufstellen.
+  function resCell(t) {
+    const td = el('td', 'c-res');
+    const btn = el('button', 'tb-res-btn');
+    const teile = (t.res || []).map((z) => {
+      const eigen = z.von != null ? ' (' + String(z.von).slice(11, 16) + '–' + String(z.bis).slice(11, 16) + ')' : '';
+      return z.n + '× ' + resName(z.rid) + eigen;
+    });
+    btn.textContent = teile.length ? teile.join(' · ') : (t.bereitstellung ? '+ bereitstellen' : '+ zuweisen');
+    // Ohne eigene CSS-Regel: geliehen von der Arten-/Abschnitte-Verwaltung
+    // (tb-verw-leer) statt eine vierte Leer-Optik zu erfinden.
+    if (!teile.length) btn.classList.add('tb-verw-leer');
+    btn.onclick = () => resKasten(btn, t);
+    td.append(btn);
+    return td;
+  }
+
+  const resName = (rid) => (ressourcen(store.state).find((r) => r.id === rid) || { label: rid }).label;
+
+  const NEUE_RES = '__neu__';
+
+  /** Der schwebende Kasten mit den Zuweisungen eines Vorgangs. */
+  function resKasten(anker, task) {
+    const ankerRect = anker.getBoundingClientRect();
+    kastenZu?.();
+    const box = el('div', 'tb-neuart tb-verw tb-res-box');
+    document.body.append(box);
+
+    const zu = () => {
+      box.remove();
+      window.removeEventListener('keydown', aufTaste, true);
+      document.removeEventListener('pointerdown', aussen, true);
+      if (kastenZu === zu) kastenZu = null;
+    };
+    kastenZu = zu;
+    const aufTaste = (e) => { if (e.key === 'Escape') { e.preventDefault(); zu(); } };
+    const aussen = (e) => { if (!box.contains(e.target)) zu(); };
+    window.addEventListener('keydown', aufTaste, true);
+    document.addEventListener('pointerdown', aussen, true);
+
+    const zeichne = () => {
+      const now = cur(task.id);
+      if (!now) { zu(); return; }
+      box.replaceChildren();
+      box.append(el('div', 'tb-neuart-h', 'Personal & Maschinen'));
+
+      (now.res || []).forEach((z, idx) => {
+        const kind = resKind(z.rid, store.state);
+        const zeile = el('div', 'tb-verw-z tb-res-z');
+
+        const nIn = el('input', 'tb-verw-n tb-res-n');
+        nIn.type = 'number'; nIn.min = '1'; nIn.value = z.n;
+        nIn.style.flex = '0 0 44px';
+        nIn.onchange = () => {
+          const n = Math.max(1, parseInt(nIn.value, 10) || 1);
+          send({ type: 'setTaskRes', id: task.id, index: idx, value: { rid: z.rid, n, von: z.von, bis: z.bis } });
+          zeichne();
+        };
+
+        const rsel = el('select', 'tb-verw-n');
+        for (const r of ressourcen(store.state, kind)) {
+          const o = el('option', null, r.label);
+          o.value = r.id;
+          if (r.id === z.rid) o.selected = true;
+          rsel.append(o);
+        }
+        const neu = el('option', null, '+ Neu…'); neu.value = NEUE_RES;
+        rsel.append(neu);
+        rsel.onchange = () => {
+          if (rsel.value === NEUE_RES) {
+            const name = prompt('Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + '):');
+            if (!name) { zeichne(); return; }
+            const r = send({ type: 'addRessource', label: name, kind });
+            if (r && r.ok !== false) {
+              send({ type: 'setTaskRes', id: task.id, index: idx, value: { rid: r.id, n: z.n, von: z.von, bis: z.bis } });
+            }
+            zeichne();
+            return;
+          }
+          send({ type: 'setTaskRes', id: task.id, index: idx, value: { rid: rsel.value, n: z.n, von: z.von, bis: z.bis } });
+          zeichne();
+        };
+
+        const weg = el('button', 'tb-verw-b tb-verw-x', '×');
+        weg.title = 'Zuweisung entfernen';
+        weg.onclick = () => { send({ type: 'setTaskRes', id: task.id, index: idx, value: null }); zeichne(); };
+
+        zeile.append(nIn, rsel, weg);
+        box.append(zeile);
+      });
+
+      const addBtn = (kind, label) => {
+        const b = el('button', 'btn', label);
+        b.onclick = () => {
+          const vorhanden = ressourcen(store.state, kind);
+          let rid = vorhanden[0] && vorhanden[0].id;
+          if (!rid) {
+            const name = prompt('Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + '):');
+            if (!name) return;
+            const r = send({ type: 'addRessource', label: name, kind });
+            if (!r || r.ok === false) return;
+            rid = r.id;
+          }
+          send({ type: 'setTaskRes', id: task.id, index: null, value: { rid, n: 1, von: null, bis: null } });
+          zeichne();
+        };
+        return b;
+      };
+      const reihe = el('div', 'tb-neuart-a');
+      reihe.append(addBtn('personal', '+ Personal'), addBtn('maschine', '+ Maschine'));
+      const fertig = el('button', 'btn btn-p', 'Fertig');
+      fertig.onclick = zu;
       reihe.append(fertig);
       box.append(reihe);
       platziere(box, ankerRect);

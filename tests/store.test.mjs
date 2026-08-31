@@ -1024,5 +1024,117 @@ test('DIE KOPIE DER EINGEBAUTEN ARTEN LÄUFT NICHT AUSEINANDER', async () => {
     'store.js und ebene.js führen verschiedene eingebaute Arten');
 });
 
+console.log('\nPersonal & Maschinen');
+
+test('addRessource legt eine Bezeichnung an, die im Plan bleibt', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  assert.equal(r.ok, true);
+  assert.equal(s.state.project.ressourcen.length, 1);
+  assert.equal(s.state.project.ressourcen[0].kind, 'personal');
+});
+
+test('addRessource ohne Namen wird abgelehnt', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'addRessource', label: '  ', kind: 'personal' }).ok, false);
+});
+
+test('addRessource lehnt doppelte Bezeichnungen ab, unabhängig von Groß/Klein', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addRessource', label: 'Stapler', kind: 'maschine' });
+  assert.equal(s.apply({ type: 'addRessource', label: 'stapler', kind: 'maschine' }).ok, false);
+});
+
+test('setTaskRes hängt eine Zuweisung an, für den ganzen Vorgang', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  const rid = s.state.project.ressourcen[0].id;
+  const r = s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 6, von: null, bis: null } });
+  assert.equal(r.ok, true);
+  assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 6, von: null, bis: null }]);
+});
+
+test('setTaskRes lehnt eine unbekannte Bezeichnung ab', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'nix', n: 1, von: null, bis: null } }).ok, false);
+});
+
+test('setTaskRes lehnt eine Anzahl von 0 oder darunter ab', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  const rid = s.state.project.ressourcen[0].id;
+  assert.equal(s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 0, von: null, bis: null } }).ok, false);
+  assert.equal(s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: -2, von: null, bis: null } }).ok, false);
+});
+
+test('setTaskRes lehnt ein Zeitfenster außerhalb des Vorgangs ab', () => {
+  // Vorgang a läuft 08:00–12:00 — ein Helfer, der vor dem Vorgang anfängt, ist
+  // ein Tippfehler, kein Fall (docs/entscheidungen.md).
+  const s = createStore(seed());
+  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  const rid = s.state.project.ressourcen[0].id;
+  const r = s.apply({ type: 'setTaskRes', id: 'a', index: null,
+    value: { rid, n: 2, von: '2026-07-13T07:00', bis: '2026-07-13T10:00' } });
+  assert.equal(r.ok, false);
+});
+
+test('setTaskRes: die Lücke bleibt aus, wenn das Fenster den ganzen Vorgang deckt', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  const rid = s.state.project.ressourcen[0].id;
+  const r = s.apply({ type: 'setTaskRes', id: 'a', index: null,
+    value: { rid, n: 2, von: '2026-07-13T08:00', bis: '2026-07-13T10:00' } });
+  assert.equal(r.ok, true);
+});
+
+test('setTaskRes mit value:null löscht die Zuweisung am Index', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  const rid = s.state.project.ressourcen[0].id;
+  s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 2, von: null, bis: null } });
+  const r = s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: null });
+  assert.equal(r.ok, true);
+  assert.deepEqual(taskById(s, 'a').res, []);
+});
+
+test('setTaskField lehnt das Feld res ab — Zuweisungen laufen über setTaskRes', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'res', value: [] }).ok, false);
+});
+
+test('Ressourcen gehen denselben Verwaltungsweg wie Arten und Abschnitte', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  const rid = s.state.project.ressourcen[0].id;
+  assert.equal(s.apply({ type: 'setAuswahlLabel', liste: 'ressourcen', id: rid, label: 'Helfer' }).ok, true);
+  assert.equal(s.state.project.ressourcen[0].label, 'Helfer');
+  // Benutzt → nicht löschbar, genau wie bei Arten/Abschnitten.
+  s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 1, von: null, bis: null } });
+  assert.equal(s.apply({ type: 'removeAuswahl', liste: 'ressourcen', id: rid }).ok, false);
+  s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: null });
+  assert.equal(s.apply({ type: 'removeAuswahl', liste: 'ressourcen', id: rid }).ok, true);
+});
+
+test('addDep lehnt eine Verknüpfung an oder von einer Bereitstellung ab', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'setTaskField', id: 'a', field: 'bereitstellung', value: true });
+  const r = s.apply({ type: 'addDep', dep: { from: 'a', to: 'b', type: 'FS' } });
+  assert.equal(r.ok, false);
+});
+
+test('bereitstellung lässt sich nicht setzen, solange Verknüpfungen bestehen', () => {
+  const s = createStore(seed());   // a → b ist schon verknüpft (seed)
+  const r = s.apply({ type: 'setTaskField', id: 'a', field: 'bereitstellung', value: true });
+  assert.equal(r.ok, false);
+});
+
+test('ein abgelehnter setTaskRes-Befehl hinterlässt nichts', () => {
+  const s = createStore(seed());
+  const vorher = s.canUndo;
+  s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'nix', n: 1, von: null, bis: null } });
+  assert.equal(s.canUndo, vorher);
+  assert.deepEqual(taskById(s, 'a').res, []);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

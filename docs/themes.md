@@ -105,6 +105,26 @@ Ebenso `tb-neuart` (v0.9.8): der Kasten zum Anlegen einer eigenen Eintragsart
 schwebt über der Tabelle. Ohne eigene Fläche stünde die Eingabe durchsichtig auf
 den Zeilen darunter.
 
+Der Verwalten-Kasten (v0.9.10) erbt genau deshalb dessen Fläche — er trägt
+`tb-neuart tb-verw`, keine zweite Flächendefinition. Eigene Regeln brauchen nur
+die Bedienelemente darin: `tb-verw-n` (das Namensfeld je Zeile) und `tb-verw-b`
+(↑↓ und ×) stehen in der `needed`-Liste und damit in allen fünf Themes; dazu
+`tb-verw-x` (das ×, im Hover **rot** über `--crit` — Löschen sieht anders aus als
+Sortieren) und `tb-verw-leer` (der Satz, wenn noch nichts Eigenes angelegt ist).
+Die Ressourcen-Zelle in der Tabelle (Personal & Maschinen) und ihr schwebender
+Kasten leihen sich `tb-neuart`/`tb-verw`/`tb-verw-z`/`tb-verw-n`/`tb-verw-x`
+komplett — kein einziger neuer Klassenname dort.
+
+Und `bz-bereit` (Personal & Maschinen, v0.10.0) — die gestrichelte Kontur einer
+Bereitstellung im Gantt — braucht **gar keine Theme-Zeile**: `outline: dashed
+currentColor` erbt seine Farbe vom Umfeld, weil der Balken selbst keine eigene
+`color` trägt. Dasselbe Prinzip wie `is-estimated` (die gestrichelte Kante bei
+geschätzter Dauer, seit v0.1). Deshalb steht `bz-bereit` auch NICHT in der
+`needed`-Liste — die Prüfung verlangt den Namen in jedem Theme, und hier
+bräuchte ihn keines. Vor fünf neuen Theme-Zeilen lohnt sich immer die Frage:
+kommt die Optik nicht schon mit `currentColor`, einem geerbten `border`-Wert
+oder einer vorhandenen Klasse?
+
 ## Farbpalette der Gewerke
 
 Die ersten **acht Farben sind gerechnet, nicht ausgesucht** (`docs/entscheidungen.md`).

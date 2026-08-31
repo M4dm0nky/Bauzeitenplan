@@ -9,6 +9,7 @@ import { gewerkVar, gewerkTexture, hueVon, slotAus, HUES, MAX_SLOTS } from './pa
 import { artOf, abschnittOf, ABSCHNITTE } from './ebene.js';
 import { fmtFloat } from './timeaxis.js';
 import { el, toInput, STATUS } from './dom.js';
+import { ressourcen, resKind, deckung, RES_KINDS } from './resources.js';
 
 const DEP_TYPES = [
   ['FS', 'Ende → Start'], ['SS', 'Start → Start'],
@@ -208,15 +209,22 @@ export function createInspector(root, { store, onError, onClose } = {}) {
     msWrap.append(ms, el('span', null, 'Meilenstein (ohne Dauer)'));
     root.append(msWrap);
 
-    if (!isProj) {
-      const cr = el('input');
-      cr.type = 'number';
-      cr.min = '0';
-      cr.value = t.crew ?? '';
-      cr.onchange = () => send({ type: 'setTaskField', id: t.id, field: 'crew',
-        value: cr.value === '' ? null : Math.max(0, parseInt(cr.value, 10) || 0) });
-      root.append(field('Crew', cr));
+    if (!isProj && !t.milestone) {
+      // Bereitstellung: dieser Vorgang BIETET seine Zuweisungen an, statt sie
+      // zu brauchen — der Pool, aus dem andere ihre Zuweisung nehmen («10
+      // Stagehands, 08:00–22:00»). Nimmt keine Verknüpfung an (Store-Regel).
+      const bw = el('label', 'ins-check');
+      const bc = el('input');
+      bc.type = 'checkbox';
+      bc.checked = !!t.bereitstellung;
+      bc.onchange = () => send({ type: 'setTaskField', id: t.id, field: 'bereitstellung', value: bc.checked });
+      bw.append(bc, el('span', null, 'Bereitstellung (kein Bedarf, sondern Angebot)'));
+      root.append(bw);
 
+      root.append(resBlock(t));
+    }
+
+    if (!isProj) {
       const stt = el('select');
       for (const [v, label] of STATUS) {
         const o = el('option', null, label);
@@ -560,6 +568,125 @@ export function createInspector(root, { store, onError, onClose } = {}) {
 
     if (!eigen) box.append(el('div', 'ins-hint', 'Erbt die Farbe von «' + band.name + '». Ein Klick auf einen Ton gibt dem Punkt eine eigene.'));
     return box;
+  }
+
+  // ── Personal & Maschinen ──────────────────────────────────────────────────
+  // Beliebig viele Zuweisungen {Bezeichnung, Anzahl, Zeitfenster}. Läuft
+  // ausschließlich über setTaskRes (setTaskField lehnt das Feld `res` ab) —
+  // die Prüfung von Anzahl und Zeitfenster steckt dort im Store.
+  const NEUE_RES = '__neu__';
+
+  function resBlock(t) {
+    const box = el('div', 'ins-res');
+    box.append(el('div', 'ins-l', 'Personal & Maschinen'));
+
+    (t.res || []).forEach((z, idx) => box.append(resRow(t, z, idx)));
+
+    const addBtn = (kind, label) => {
+      const b = el('button', 'btn ins-res-add', label);
+      b.onclick = () => {
+        const vorhanden = ressourcen(store.state, kind);
+        let rid = vorhanden[0] && vorhanden[0].id;
+        if (!rid) {
+          const name = prompt('Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + '):');
+          if (!name) return;
+          const r = send({ type: 'addRessource', label: name, kind });
+          if (!r || r.ok === false) return;
+          rid = r.id;
+        }
+        send({ type: 'setTaskRes', id: t.id, index: null, value: { rid, n: 1, von: null, bis: null } });
+      };
+      return b;
+    };
+    const addRow = el('div', 'ins-res-add-row');
+    for (const [k, wort] of RES_KINDS) addRow.append(addBtn(k, '+ ' + wort));
+    box.append(addRow);
+
+    // Deckungslücke: nur, solange der Vorgang überhaupt eine Zuweisung dieser
+    // Art hat — ein Vorgang ganz ohne Personal sagt nichts über Personal aus.
+    // Für eine Bereitstellung selbst ergibt der Begriff keinen Sinn (sie IST
+    // das Angebot).
+    if (!t.bereitstellung) {
+      for (const [kind, wort] of [['personal', 'Personal'], ['maschine', 'Maschinen']]) {
+        const g = deckung(t, kind, store.state);
+        if (g && g.luecktMin > 0) {
+          const zeit = (m) => local(toDate(m)).slice(11, 16) + ' Uhr';
+          const spannen = g.luecken.map(([a, b]) => zeit(a) + '–' + zeit(b)).join(', ');
+          // ins-hint geliehen: dieselbe zurückhaltende Optik wie jeder andere
+          // Hinweistext im Panel — kein roter Alarm, unbesetzte Zeit ist oft
+          // gewollt (Trocknungszeit, Wartezeit).
+          box.append(el('div', 'ins-res-luecke ins-hint', fmtDuration(g.luecktMin) + ' ohne ' + wort + ' (' + spannen + ')'));
+        }
+      }
+    }
+    return box;
+  }
+
+  function resRow(t, z, idx) {
+    const row = el('div', 'ins-res-row');
+    const kind = resKind(z.rid, store.state);
+
+    const nIn = el('input', 'ins-res-n');
+    nIn.type = 'number'; nIn.min = '1'; nIn.value = z.n;
+    nIn.setAttribute('aria-label', 'Anzahl');
+    nIn.onchange = () => {
+      const n = Math.max(1, parseInt(nIn.value, 10) || 1);
+      send({ type: 'setTaskRes', id: t.id, index: idx, value: { rid: z.rid, n, von: z.von, bis: z.bis } });
+    };
+    row.append(nIn, el('span', 'ins-res-x2', '×'));
+
+    const rsel = el('select', 'ins-res-r');
+    for (const r of ressourcen(store.state, kind)) {
+      const o = el('option', null, r.label);
+      o.value = r.id;
+      if (r.id === z.rid) o.selected = true;
+      rsel.append(o);
+    }
+    const neu = el('option', null, '+ Neu…');
+    neu.value = NEUE_RES;
+    rsel.append(neu);
+    rsel.onchange = () => {
+      if (rsel.value === NEUE_RES) {
+        const name = prompt('Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + '):');
+        rsel.value = z.rid;
+        if (!name) return;
+        const r = send({ type: 'addRessource', label: name, kind });
+        if (!r || r.ok === false) return;
+        send({ type: 'setTaskRes', id: t.id, index: idx, value: { rid: r.id, n: z.n, von: z.von, bis: z.bis } });
+        return;
+      }
+      send({ type: 'setTaskRes', id: t.id, index: idx, value: { rid: rsel.value, n: z.n, von: z.von, bis: z.bis } });
+    };
+    row.append(rsel);
+
+    // Zeitfenster: «(ganzer Vorgang)» ist die Vorgabe (von/bis null) — dabei
+    // tippt niemand ein Datum. Ein Klick klappt zwei Zeitfelder auf.
+    if (z.von == null) {
+      const btn = el('button', 'ins-res-zeitbtn', '(ganzer Vorgang)');
+      btn.title = 'Eigenes Zeitfenster für diese Zuweisung setzen';
+      btn.onclick = () => send({ type: 'setTaskRes', id: t.id, index: idx,
+        value: { rid: z.rid, n: z.n, von: t.start, bis: t.end } });
+      row.append(btn);
+    } else {
+      const vIn = el('input'); vIn.type = 'datetime-local'; vIn.value = toInput(z.von);
+      const bIn = el('input'); bIn.type = 'datetime-local'; bIn.value = toInput(z.bis);
+      const commitZeit = () => send({ type: 'setTaskRes', id: t.id, index: idx,
+        value: { rid: z.rid, n: z.n, von: vIn.value, bis: bIn.value } });
+      vIn.onchange = commitZeit;
+      bIn.onchange = commitZeit;
+      const reset = el('button', 'ins-res-zeitreset', '↺');
+      reset.title = 'Auf die volle Vorgangsdauer zurücksetzen';
+      reset.onclick = () => send({ type: 'setTaskRes', id: t.id, index: idx,
+        value: { rid: z.rid, n: z.n, von: null, bis: null } });
+      row.append(vIn, el('span', null, '–'), bIn, reset);
+    }
+
+    const del = el('button', 'ins-res-x', '×');
+    del.title = 'Zuweisung entfernen';
+    del.onclick = () => send({ type: 'setTaskRes', id: t.id, index: idx, value: null });
+    row.append(del);
+
+    return row;
   }
 
   function field(label, node, hint) {

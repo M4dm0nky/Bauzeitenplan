@@ -43,6 +43,10 @@ export function findConflicts(state, vorab) {
 
   for (const t of state.tasks) {
     if (parentIds.has(t.id)) continue;
+    // Eine Bereitstellung ist ein Pool, kein Ablaufschritt — sie hat keine
+    // Verknüpfungen (der Store lehnt sie ab) und kann folglich nie im
+    // Konflikt stehen. Sie trotzdem zu prüfen wäre reine Rechenzeit.
+    if (t.bereitstellung) continue;
     const r = sched.get(t.id);
     if (!r) continue;
     const planned = toMin(t.start);

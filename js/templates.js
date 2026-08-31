@@ -269,7 +269,11 @@ export function planFromTemplate(key, { name, venue = '', loadIn, timezone } = {
       milestone: !!x.milestone,
       progress: x.progress ?? 0,
       status: x.status || 'geplant',
-      crew: x.crew ?? null,
+      // Die Vorlagen tragen ihre Zahlen weiter als `crew` (lesbarer als
+      // `res: [{...}]` in jeder Zeile) — hier einmal in eine Ressourcen-
+      // Zuweisung übersetzt, mit vollem Vorgangsfenster (von/bis: null).
+      res: x.crew ? [{ rid: 'crew', n: x.crew, von: null, bis: null }] : [],
+      bereitstellung: false,
       notes: '',
     };
   });
@@ -287,6 +291,9 @@ export function planFromTemplate(key, { name, venue = '', loadIn, timezone } = {
       end: shift(anchor, tpl.spanAfter),
       timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
       template: tpl.key,
+      // Jede Vorlage benutzt dieselbe Bezeichnung «Crew» — sie muss trotzdem im
+      // Plan stehen, sonst zeigt der Bedarfs-Reiter nur die Kennung «crew».
+      ressourcen: [{ id: 'crew', label: 'Crew', kind: 'personal' }],
     },
     gewerke,
     tasks,

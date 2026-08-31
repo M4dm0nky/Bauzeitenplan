@@ -15,14 +15,18 @@ der Load-In läuft stundengenau.
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
 mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
-**Dazugekommen (bis v0.9.8):** Gewerke per Drag & Drop umsortieren · Gantt und
+**Dazugekommen (bis v0.10.0):** **Personal & Maschinen** je Vorgang — eigene
+Bezeichnungen, Anzahl und Zeitfenster, dazu **Bereitstellungen** (ein Pool ohne
+Vorgangs-Funktion) und die Reiter **Personalbedarf**/**Maschinenbedarf**
+(siehe unten) · Gewerke per Drag & Drop umsortieren · Gantt und
 Tabelle in gleicher Reihenfolge (nach Startzeit) · **Untervorgänge** (einklappbar,
 Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für kritische
 Vorgänge und Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
 statt endlosem Dropdown · Hell/Dunkel-Umschalter im Kopf · **Tagesblätter zum
 Drucken** · **Showablauf-Ebene** (siehe unten) · **Verknüpfen per Ziehen** im Gantt ·
 **Live-Versatz** («wir hängen 5 Minuten hinterher») · **eigene Arten für
-Zeiteinträge** · CallBoard-Marke.
+Zeiteinträge** · **eigene Abschnitte** (Load-in, Aftershow …) · **Arten und
+Abschnitte verwalten** (umbenennen, sortieren, löschen) · CallBoard-Marke.
 
 ## Zwei Ebenen: Bauzeitenplan und Showablauf
 
@@ -99,6 +103,24 @@ die Schrift darauf ist je Farbton so gewählt, dass sie in Hell und Dunkel über
 Für den Monitor am FOH gibt es eine **Live-Kopfzeile**: was JETZT läuft, was ALS
 NÄCHSTES kommt, der Verzug und die Uhr. Ein Changeover wird als Umbau angesagt,
 nicht als Act.
+
+## Personal & Maschinen
+
+Zu jedem Vorgang — im Bauzeitenplan wie im Showablauf — trägst du ein, wer und
+was gebraucht wird: Klick auf einen Balken öffnet das Panel, dort **+ Personal**
+oder **+ Maschine**. Eine Bezeichnung wählst du aus einer Liste oder legst sie
+mit **«+ Neu…»** selbst an — «Stagehand», «Gabelstapler», «Rigger» — sie bleibt
+danach dauerhaft im Plan, wie die eigenen Eintragsarten. Dazu eine Anzahl und,
+wenn nötig, ein eigenes Zeitfenster: läuft der Bühnenbau 10–20 Uhr und die
+Helfer nur bis 18 Uhr, sagt der Balken «2 Std ohne Personal». In der **Tabelle**
+steht dieselbe Bedienung hinten in der Spalte *Ressourcen*.
+
+**Bereitstellung:** ein Häkchen macht aus einem Vorgang einen Pool statt eines
+Bedarfs — «10 Stagehands, 08:00–22:00», ohne eigene Funktion im Ablauf. Dagegen
+rechnen die beiden Reiter **Personalbedarf** und **Maschinenbedarf** (neben
+Gantt und Tabelle): je Bezeichnung, je Stunde oder Tag, bereitgestellt · belegt
+· frei. Stehen zehn Stagehands am Nachmittag bereit und braucht SIDO um 20 Uhr
+sechs davon, zeigt der Reiter genau dort «+4» — der Rest deines Pools.
 
 **Running-Order-Blatt:** Unter *Drucken → Running Order* kommt ein A3 quer je Tag
 und Bühne — als Liste (`Zeit · Programmpunkt · Anforderungen · Material`). Leere
@@ -307,9 +329,11 @@ js/
   persistence.js        localStorage, Export/Import, Migration — DOM-frei
   palette.js            Gewerk-Farben: 10 Töne × 2 Schraffuren = 20 Plätze
   ebene.js              Ansichten: Bänder, Abschnitt, Showtage, Zeitfenster — DOM-frei
+  resources.js          Personal & Maschinen: Bezeichnungen, Deckung, Bedarfsraster — DOM-frei
   live.js               Verzug + laufende Vorgänge — DOM-frei
   inspector.js          Seitenpanel (mit Verknüpfungs-Suche)
   menu.js               Kontextmenü
+  bedarf.js             Bedarfs-Reiter: Personalbedarf · Maschinenbedarf
   print.js              Tagesblätter (A3 quer) — eigene Seite, print.html
 styles/
   base.css              Nur Geometrie + Verhalten. Dazu die Gewerk-Farben.
@@ -365,6 +389,7 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | Eigene Arten für Zeiteinträge, je Art die Blattzeile wählbar |
 | ✅ | Eigene Abschnitte (Load-in, Soundcheck, Aftershow …) |
 | ✅ | Arten und Abschnitte verwalten: umbenennen, sortieren, löschen |
+| ✅ | Personal & Maschinen je Vorgang, Bereitstellungen, Bedarfsraster nach Tag/Stunde |
 | → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen |
 | | Ansichten & Export: öffentlicher Link, PDF/ICS |
 | ❄️ | PocketBase, Login, Rollen — auf Eis, Stand im Branch `pocketbase-vorbereitung` |

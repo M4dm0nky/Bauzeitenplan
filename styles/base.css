@@ -348,6 +348,17 @@ body { margin: 0; }
 .tb-t { width: 100%; border-collapse: collapse; }
 .tb-t th { position: sticky; top: 0; z-index: 2; text-align: left; white-space: nowrap; }
 .tb-t th, .tb-t td { padding: 0; }
+
+/* ── Bedarfs-Reiter: Personalbedarf · Maschinenbedarf ────────────────────── */
+.bd { flex: 1; min-height: 0; overflow: auto; padding: 12px; }
+.bd-scroll { overflow-x: auto; }
+.bd-t { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.bd-t th, .bd-t td { padding: 3px 8px; text-align: right; white-space: nowrap; }
+.bd-h-name { text-align: left; position: sticky; left: 0; z-index: 1; min-width: 120px; }
+.bd-h-zeit { font-weight: 400; }
+.bd-group td { font-weight: 600; padding-top: 10px; }
+.bd-z.is-over { color: var(--crit); font-weight: 600; }
+.bd-empty { padding: 16px 4px; }
 .tb-r input, .tb-r select {
   width: 100%; border: 0; background: none; font: inherit; color: inherit;
   padding: 4px 6px; min-width: 0;
@@ -457,7 +468,7 @@ body { margin: 0; }
 
 /* ── Arbeitsfläche: Gantt/Tabelle + Panel ─────────────────────────────────── */
 .work { flex: 1; min-height: 0; display: flex; }
-.work > .bz, .work > .tb { flex: 1; min-width: 0; }
+.work > .bz, .work > .tb, .work > .bd { flex: 1; min-width: 0; }
 .ins { flex: none; width: 320px; overflow-y: auto; display: flex; flex-direction: column; }
 
 .ins-head { display: flex; align-items: center; justify-content: space-between; }
@@ -515,6 +526,21 @@ body { margin: 0; }
 .ins-dep-opt-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ins-dep-none { padding: 6px 8px; }
 .ins .is-bad { outline: 2px solid var(--crit, red); outline-offset: -2px; }
+
+/* ── Personal & Maschinen (Panel) ─────────────────────────────────────────── */
+.ins-res { display: flex; flex-direction: column; gap: 5px; margin-top: 2px; }
+.ins-res-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.ins-res-n { width: 44px; flex: none; font: inherit; }
+.ins-res-x2 { flex: none; }
+.ins-res-r { flex: 1 1 auto; min-width: 90px; font: inherit; }
+.ins-res-zeitbtn, .ins-res-zeitreset, .ins-res-x {
+  flex: none; font: inherit; background: none; border: 0; cursor: pointer; padding: 2px 4px;
+}
+.ins-res-zeitbtn { border: 1px dashed currentColor; opacity: .8; }
+.ins-res-zeitbtn:hover { opacity: 1; }
+.ins-res-row input[type="datetime-local"] { flex: 1 1 auto; min-width: 0; font: inherit; }
+.ins-res-add-row { display: flex; gap: 6px; margin-top: 2px; }
+.ins-res-add-row .btn { flex: 1; }
 
 /* ── Kontextmenü ──────────────────────────────────────────────────────────── */
 .mn { position: fixed; z-index: 70; min-width: 190px; }
@@ -577,6 +603,13 @@ body { margin: 0; }
 .bz-lab-edit { width: 100%; font: inherit; border: 0; padding: 0; background: none; color: inherit; }
 .bz-lab.is-sel, .bz-bar.is-sel, .bz-ms.is-sel .bz-ms-d { outline: 2px solid var(--sel, currentColor); outline-offset: 1px; }
 
+/* Bereitstellung: ein Pool, kein Ablaufschritt («10 Stagehands, 08–22 Uhr»).
+   Eine gestrichelte KONTUR statt Schraffur — Schraffur gehört der
+   Gewerk-Identität (Platz 9–20 der Palette), nicht diesem Status. currentColor
+   statt eines Tokens: der Balken trägt keine eigene `color`, die Kontur erbt
+   sie vom Umfeld und braucht damit keine Theme-Anpassung. */
+.bz-bar.bz-bereit { outline: 2px dashed currentColor; outline-offset: -3px; }
+
 /* Dauer geschätzt: die rechte Kante ist offen, weil das Ende nicht feststeht.
    Nur die Kante — der Balken selbst muss seine Gewerk-Farbe behalten. */
 .bz-bar.is-estimated::before {
@@ -609,6 +642,11 @@ body { margin: 0; }
      über den rechten Rand (Zoomleiste im Gantt, Knopfblock in der Tabelle) —
      das ist die eigentliche Ursache des horizontalen Seiten-Scrolls. */
   .hd-zoom, .hd-right, .kpis { flex-wrap: wrap; }
+  /* Die Darstellungs-Gruppe trägt seit den Bedarfs-Reitern vier Knöpfe statt
+     zwei (Gantt · Tabelle · Personalbedarf · Maschinenbedarf) — als EIN
+     unwrapped Flex-Kind war sie damit selbst breiter als 390 px und schob die
+     Seite seitlich weg, obwohl .hd-bar als Ganzes längst umbricht. */
+  .hd-bar .seg { flex-wrap: wrap; }
 
   /* Fingergerechte Tap-Ziele (≥ 40 px hoch). */
   .seg button, .btn, .tb-ico, .ins-x { min-height: 40px; }

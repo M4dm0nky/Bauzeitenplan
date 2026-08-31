@@ -651,6 +651,75 @@ GRÖSSER, meldet er sich wieder (kein stilles Wegdrücken). Läuft über `setTas
 lesen alle `findConflicts` — nie einen zweiten Zähler danebenstellen. „Kritisch" bleibt
 Information (kein automatisches Verschieben), nur die Sichtbarkeit wird abhakbar.
 
+**Personal & Maschinen: eine Zuweisung ist `{Bezeichnung, Anzahl, Zeitfenster}`,
+keine blanke Zahl.** `t.res = [{rid, n, von, bis}]` ersetzt das frühere `crew`
+(eine Person je Vorgang, ohne Bezeichnung, ohne eigenes Fenster). `von`/`bis`
+= `null` heißt „der ganze Vorgang" — der Normalfall, dabei tippt niemand ein
+Datum; gesetzt sind es Zeitstempel wie `start`/`end` und MÜSSEN innerhalb der
+Vorgangsdauer liegen (`setTaskRes` in store.js) — ein Helfer, der vor dem
+Vorgang anfängt, ist ein Tippfehler, kein Fall. Bezeichnungen (Stagehand,
+Gabelstapler …) stehen in `project.ressourcen` (`kind: 'personal'|'maschine'`)
+und reisen im Export mit, genau wie Eintragsarten und Abschnitte — und gehen
+denselben Verwaltungsweg: `addRessource` plus dieselben drei generischen
+Befehle `setAuswahlLabel`/`removeAuswahl`/`reorderAuswahl` mit
+`liste:'ressourcen'`. **Anders als bei Arten und Abschnitten gibt es keine
+eingebauten** — «Stagehand» heißt bei der nächsten Produktion «Helfer», eine
+Vorgabe wäre nur eine weitere Löschkandidatin. `res` MUSS durch `addTask` —
+was der Handler nicht aufzählt, fällt beim Anlegen still weg, dieselbe Falle
+wie bei `abschnitt`.
+
+**Eine Bereitstellung ist ein ganz normaler Vorgang, kein zweites Datenmodell.**
+`t.bereitstellung: true` macht aus einem Vorgang einen POOL: seine `res` sind
+nicht Bedarf, sondern Angebot — «10 Stagehands, 08:00–22:00», gegen das andere
+Vorgänge ihre Zuweisung rechnen (`bedarfsRaster` in resources.js). Er hat
+Balken, Zeitfenster, Notiz und Undo geschenkt, genau wie jeder Vorgang. Zwei
+Ausnahmen: `addDep` lehnt ihn als Quelle UND Ziel ab (ein Pfeil auf einen
+Vorrat ergibt keine Aussage), und `findConflicts`/der kritische Pfad nehmen ihn
+aus — er ist isoliert (keine Verknüpfungen möglich) und stünde nie im
+Konflikt. `setTaskField` verweigert `bereitstellung: true`, solange noch
+Verknüpfungen bestehen — erst lösen, dann umschalten.
+
+**Die Deckungslücke wird NUR gemeldet, wenn der Vorgang überhaupt eine
+Zuweisung dieser Art hat.** `deckung(t, kind, state)` in resources.js liefert
+`null`, solange `t.res` keine Zuweisung von `kind` enthält — ein Vorgang ganz
+ohne Personal sagt nichts über Personal aus. Ohne diese Regel wären im
+Klassentreffen-Plan alle 353 Vorgänge „ungedeckt" und die Anzeige wertlos.
+Gerechnet wird je KIND (Personal ODER Maschine), nicht je Bezeichnung: „2 Std
+ohne Personal" ist die Aussage, nicht „2 Std ohne Rigger". Die Lücke ist kein
+Konflikt und steht nicht in der Prüf-Liste — unbesetzte Zeit ist oft gewollt
+(Trocknungszeit, Wartezeit); sie steht am Balken (`bz-bereit`, Panel) und im
+Panel im Klartext, ohne Alarmfarbe.
+
+**`crew` ist keine Ressource — es ist die MIGRIERTE Ressource «Crew».** Beim
+Laden wandelt `persistence.js` jede blanke `crew: N` einmalig in
+`res: [{rid:'crew', n:N, von:null, bis:null}]` und legt bei Bedarf die
+Bezeichnung «Crew» im Plan an; danach ist `crew` gelöscht. Erzeugend wie die
+Soundcheck-Migration (v0.9.3) — sie darf beim zweiten Durchlauf keine zweite
+Zuweisung anlegen, geprüft in `tests/persistence.test.mjs`. Die vier Vorlagen
+(`js/templates.js`) bauen ihre Pläne direkt und laufen NICHT durch `migrate()`
+— `planFromTemplate` übersetzt ihr `crew`-Extra deshalb selbst in `res` und
+trägt die Bezeichnung «Crew» ins neue Projekt.
+
+**`bz-bereit` (die Kontur der Bereitstellung) braucht KEINE Theme-Anpassung.**
+Sie nutzt `outline: dashed currentColor` statt eines Farbtokens — der Balken
+trägt keine eigene `color`, die Kontur erbt sie vom Umfeld. Deshalb steht sie
+auch nicht in der `needed`-Liste in `tests/run.mjs`: die Prüfung verlangt den
+Klassennamen in JEDEM Theme, und keines braucht ihn. Dasselbe Muster wie
+`is-estimated` (die gestrichelte Kante bei geschätzter Dauer). Wer einen neuen
+Baustein NICHT farbig machen muss, sollte diesen Weg zuerst prüfen, bevor er
+fünf Theme-Dateien anfasst.
+
+**Personalbedarf und Maschinenbedarf sind zwei DARSTELLUNGEN, keine zweite
+Ansicht.** Sie stehen neben Gantt und Tabelle im selben Umschalter
+(`data-view="personal"|"maschine"`) und bekommen dieselbe Ebene, denselben
+Bühnen-Filter, denselben Showtag und Abschnitt gereicht wie Gantt und Tabelle
+(`bedarf.setEbene(...)` läuft überall dort mit, wo auch `gantt.setEbene`/
+`table.setEbene` laufen — sonst zeigt der Reiter einen anderen Ausschnitt als
+der Rest der App gerade offen hat). Das Zeitraster ist ebenenabhängig: Tage im
+Bauzeitenplan (vierzehn Tage in Stunden wären unlesbar), Stunden im Showablauf
+(ein Tag ist dort ohnehin tagesbezogen). `js/bedarf.js` rendert nur — gerechnet
+wird ausschließlich in `bedarfsRaster()` (resources.js).
+
 ## Aus Crewplaner gelernt — aufgehoben für den Tag, an dem ein Backend kommt
 
 - `project_id` & Co. als **Text**, niemals als Relation. Coolify-Reimport kippt
@@ -675,9 +744,11 @@ Information (kein automatisches Verschieben), nur die Sichtbarkeit wird abhakbar
 | `js/templates.js` | Vier Vorlagen |
 | `js/palette.js` | 10 Farbtöne × 2 Schraffuren = 20 Gewerke (HUES=10, MAX_SLOTS=20) |
 | `js/ebene.js` | Bauzeitenplan ↔ Showablauf: Bänder, Showtage, Typ-Hinweis — **DOM-frei** |
+| `js/resources.js` | Personal & Maschinen: Bezeichnungen, Deckung, Bedarfsraster — **DOM-frei** |
 | `js/live.js` | Verzug, laufende Vorgänge, Versatz (`verschoben`, `versatzText`) — **DOM-frei** |
 | `js/inspector.js` | Seitenpanel |
 | `js/menu.js` | Kontextmenü (Muster: Crewplaner dropdown.js) |
+| `js/bedarf.js` | Bedarfs-Reiter: Personalbedarf · Maschinenbedarf |
 | `tools/build-prototypes.mjs` | **Nur** für die Design-Artifacts (CSP verlangt alles inline). Die App braucht keinen Build. |
 
 Warum was so ist: `docs/entscheidungen.md`. Besonders der kritische Pfad hat eine
