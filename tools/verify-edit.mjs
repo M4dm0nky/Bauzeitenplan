@@ -229,11 +229,16 @@ await check(`das ${HUES + 1}. Gewerk (Platz ${HUES}) bekommt Schraffur`, async (
   // HUES besetzt ist — dann muss es GENAU EINEN schraffierten Punkt geben.
   // Der Store lehnt Namensdubletten ab, deshalb jedes Mal ein eigener Name.
   const start = await page.locator('.legend-i').count();
+  // «+ Gewerk» steht auf der Einrichten-Seite.
+  await page.locator('[data-reiter="einrichten"]').click();
+  await page.waitForTimeout(200);
   for (let slot = start; slot <= HUES; slot++) {
     await page.evaluate((name) => { window.prompt = () => name; }, 'Extra-Gewerk ' + slot);
     await page.locator('#add-gewerk').click();
     await page.waitForTimeout(250);
   }
+  await page.locator('[data-reiter="ansicht"]').click();
+  await page.waitForTimeout(200);
   const n = await page.locator('.legend-i .bz-dot[data-tex]').count();
   return n === 1 ? true : `${n} schraffierte Punkte (erwartet 1 bei Platz ${HUES})`;
 });
@@ -626,6 +631,10 @@ await check('Escape verwirft', async () => {
 
 console.log('\nPROJEKTWECHSEL');
 await check('zweites Projekt mit ganz anderem Zeitraum anlegen', async () => {
+  // Projekt/Export/Import/+Gewerk stehen auf der Einrichten-Seite, nicht mehr
+  // in der Arbeitsleiste (siehe "Ansicht | Einrichten" oben im Kopf).
+  await page.locator('[data-reiter="einrichten"]').click();
+  await page.waitForTimeout(200);
   await page.locator('#new-proj').click();
   await page.waitForTimeout(400);
   await page.fill('.dlg-f:first-child input', 'Weit weg 2027');
@@ -642,6 +651,10 @@ await check('nach dem Wechsel steht die Ansicht beim AUFBAU, nicht irgendwo', as
   await page.waitForTimeout(400);
   await page.locator('.dlg-open', { hasText: 'Testprojekt Halle 7' }).click();
   await page.waitForTimeout(1000);
+  // Zurück zur Arbeitsleiste — sonst steht der Gantt hinter «Einrichten» und
+  // jeder .bz-bar hat eine leere Bounding-Box.
+  await page.locator('[data-reiter="ansicht"]').click();
+  await page.waitForTimeout(300);
   // Die Tagesansicht zieht GENAU EINEN Kalendertag auf die Breite (volle
   // Tagesansicht) — sichtbar sind also nur die Balken des Aufbau-Tags, nicht
   // «möglichst viele». Richtig positioniert ist die Ansicht, wenn die ersten
@@ -854,6 +867,8 @@ await page.screenshot({ path: join(here, 'shots', 'edit-9-sub-gantt.png') });
 
 console.log('\nEXPORT');
 await check('Export lädt eine JSON-Datei herunter', async () => {
+  await page.locator('[data-reiter="einrichten"]').click();
+  await page.waitForTimeout(200);
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), page.locator('#export').click()]);
   const n = dl.suggestedFilename();
   return n.endsWith('.json') ? true : 'Dateiname: ' + n;

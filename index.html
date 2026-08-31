@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CallBoard — Bauzeitenplan</title>
-<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.10.0">
+<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.11.0">
 
 <script>
   // Hell/Dunkel VOR dem CSS festlegen, damit beim Laden nichts aufblitzt.
@@ -40,8 +40,8 @@
      Der Theme-Link wählt die Gestaltungsebene: styles/themes/ enthält fünf
      fertige Ebenen (callboard = aktiv). Hell/Dunkel schaltet der Betrachter
      über data-theme (Knopf im Kopf). Siehe docs/themes.md. -->
-<link rel="stylesheet" href="styles/base.css?v=0.10.0">
-<link rel="stylesheet" href="styles/themes/callboard.css?v=0.10.0" id="theme-css" data-theme-name="callboard">
+<link rel="stylesheet" href="styles/base.css?v=0.11.0">
+<link rel="stylesheet" href="styles/themes/callboard.css?v=0.11.0" id="theme-css" data-theme-name="callboard">
 </head>
 <body>
 
@@ -71,6 +71,20 @@
         </div>
       </div>
       <div class="kpis" id="kpis"></div>
+    </div>
+
+    <!-- Zwei Bereiche, EINE Leiste, genau einer gedrückt. «Ansicht» ist die
+         Arbeitsleiste von vorher; «Einrichten» sammelt die administrativen
+         Knöpfe (Projekt, Gewerke, Ressourcen, Arten/Abschnitte, Darstellung),
+         die vorher zwischen Zoomleiste und Live-Anzeige standen. Eigene Klasse
+         `seg-reiter`, nicht `seg-ansicht` — zwei gleich aussehende Gruppen
+         nebeneinander sind sonst optisch eine, wie beim Ebenen/Abschnitt-Fehler
+         aus v0.9.0. -->
+    <div class="hd-row hd-reiter">
+      <div class="seg seg-reiter" role="group" aria-label="Bereich">
+        <button data-reiter="ansicht">Ansicht</button>
+        <button data-reiter="einrichten">Einrichten</button>
+      </div>
     </div>
 
     <div class="hd-row hd-bar">
@@ -146,16 +160,6 @@
 
       <div class="hd-right">
         <span class="save-state" id="save-state" data-state="saved">gesichert</span>
-        <button class="btn" id="add-gewerk">+ Gewerk</button>
-        <!-- Bewusst ein Link ohne id: der Testlauf verlangt für jede id in
-             index.html eine Entsprechung in app.js, und print.html braucht
-             keine Verdrahtung — es lädt das aktive Projekt selbst. -->
-        <a class="btn" href="print.html" title="Tagesblätter drucken (A3 quer)">Drucken</a>
-        <button class="btn" id="export" title="Sicherung herunterladen">Export</button>
-        <button class="btn" id="import">Import</button>
-        <button class="btn" id="new-proj">Neu</button>
-        <button class="btn" id="proj-menu">Projekte</button>
-        <button class="btn hd-mode" id="theme-toggle" title="Hell/Dunkel umschalten" aria-label="Hell/Dunkel umschalten">☾</button>
       </div>
     </div>
 
@@ -172,6 +176,59 @@
     <div class="tb" id="tb" hidden></div>
     <div class="bd" id="bd" hidden></div>
     <aside class="ins" id="ins" hidden></aside>
+
+    <!-- Einrichten: eine eigene Seite, kein Menü über dem Gantt. Die Befehle
+         dahinter sind dieselben wie eh und je (store.apply); hier steht nur
+         eine zweite Oberfläche dafür. -->
+    <div class="einrichten" id="einrichten" hidden>
+      <div class="ei-sec">
+        <h2 class="ei-h">Projekt</h2>
+        <div class="ei-row">
+          <button class="btn" id="new-proj">Neu</button>
+          <button class="btn" id="proj-menu">Projekte</button>
+          <button class="btn" id="export" title="Sicherung herunterladen">Export</button>
+          <button class="btn" id="import">Import</button>
+          <!-- Bewusst ein Link ohne id: der Testlauf verlangt für jede id in
+               index.html eine Entsprechung in app.js, und print.html braucht
+               keine Verdrahtung — es lädt das aktive Projekt selbst. -->
+          <a class="btn" href="print.html" title="Tagesblätter drucken (A3 quer)">Drucken</a>
+        </div>
+      </div>
+
+      <div class="ei-sec">
+        <h2 class="ei-h">Gewerke &amp; Bühnen</h2>
+        <div class="ei-row">
+          <button class="btn" id="add-gewerk">+ Gewerk</button>
+        </div>
+        <p class="ei-hint">Umbenennen, sortieren und löschen: Rechtsklick auf ein Gewerk im Bauzeitenplan.</p>
+      </div>
+
+      <div class="ei-sec">
+        <h2 class="ei-h">Personal &amp; Maschinen</h2>
+        <div class="ei-row">
+          <button class="btn" id="ei-res-personal">+ Personal</button>
+          <button class="btn" id="ei-res-maschine">+ Maschine</button>
+          <button class="btn" id="ei-res-verwalten">Verwalten…</button>
+        </div>
+        <p class="ei-hint">Zuweisen tust du am Vorgang selbst — im Panel oder in der Tabelle, Spalte «Ressourcen».</p>
+      </div>
+
+      <div class="ei-sec">
+        <h2 class="ei-h">Eintragsarten &amp; Abschnitte</h2>
+        <div class="ei-row">
+          <button class="btn" id="ei-typen-verwalten">Arten verwalten…</button>
+          <button class="btn" id="ei-abschnitte-verwalten">Abschnitte verwalten…</button>
+        </div>
+        <p class="ei-hint">Angelegt wird «+ Neu…» im Auswahlfeld der Tabelle, mitten im Tippen.</p>
+      </div>
+
+      <div class="ei-sec">
+        <h2 class="ei-h">Darstellung</h2>
+        <div class="ei-row">
+          <button class="btn hd-mode" id="theme-toggle" title="Hell/Dunkel umschalten" aria-label="Hell/Dunkel umschalten">☾</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <footer class="ft">
@@ -192,6 +249,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="import-file" accept="application/json,.json" hidden>
 
-<script type="module" src="js/app.js?v=0.10.0"></script>
+<script type="module" src="js/app.js?v=0.11.0"></script>
 </body>
 </html>

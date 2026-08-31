@@ -15,10 +15,11 @@ der Load-In läuft stundengenau.
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
 mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
-**Dazugekommen (bis v0.10.0):** **Personal & Maschinen** je Vorgang — eigene
-Bezeichnungen, Anzahl und Zeitfenster, dazu **Bereitstellungen** (ein Pool ohne
-Vorgangs-Funktion) und die Reiter **Personalbedarf**/**Maschinenbedarf**
-(siehe unten) · Gewerke per Drag & Drop umsortieren · Gantt und
+**Dazugekommen (bis v0.11.0):** **Ansicht und Einrichten** — administrative
+Knöpfe auf einer eigenen Seite (siehe unten) · **Personal & Maschinen** je
+Vorgang — eigene Bezeichnungen, Anzahl und Zeitfenster, dazu
+**Bereitstellungen** (ein Pool ohne Vorgangs-Funktion) und die Reiter
+**Personalbedarf**/**Maschinenbedarf** · Gewerke per Drag & Drop umsortieren · Gantt und
 Tabelle in gleicher Reihenfolge (nach Startzeit) · **Untervorgänge** (einklappbar,
 Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für kritische
 Vorgänge und Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
@@ -209,6 +210,22 @@ python3 -m http.server 8080
 
 Kein Build, keine Abhängigkeiten zur Laufzeit.
 
+### Ansicht und Einrichten
+
+Ganz oben im Kopf steht ein Umschalter mit zwei gleichrangigen Bereichen:
+
+**Ansicht** — die Arbeitsleiste: Bauzeitenplan/Setup/Show, Gantt/Tabelle/
+Personalbedarf/Maschinenbedarf, Zoom, Undo, Prüfen, Live und Versatz. Hier
+verbringst du die meiste Zeit.
+
+**Einrichten** — eine eigene Seite für die administrativen Dinge, die vorher
+zwischen Zoomleiste und Live-Anzeige standen: Projekt anlegen/wechseln,
+Export/Import, Drucken, Gewerke & Bühnen anlegen, **Personal & Maschinen**
+anlegen und verwalten, **Eintragsarten & Abschnitte verwalten**, Hell/Dunkel.
+Die schnellen Wege bleiben daneben bestehen — eine Bezeichnung legst du weiter
+mit „+ Neu…" im Auswahlfeld an, mitten im Tippen; Einrichten ist der Weg zum
+Aufräumen danach.
+
 ### Bedienung
 
 | | |
@@ -390,6 +407,7 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | Eigene Abschnitte (Load-in, Soundcheck, Aftershow …) |
 | ✅ | Arten und Abschnitte verwalten: umbenennen, sortieren, löschen |
 | ✅ | Personal & Maschinen je Vorgang, Bereitstellungen, Bedarfsraster nach Tag/Stunde |
+| ✅ | «Ansicht» und «Einrichten»: administrative Knöpfe auf einer eigenen Seite |
 | → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen |
 | | Ansichten & Export: öffentlicher Link, PDF/ICS |
 | ❄️ | PocketBase, Login, Rollen — auf Eis, Stand im Branch `pocketbase-vorbereitung` |

@@ -24,6 +24,14 @@ import { VERSION } from './version.js';
 let repo = null;
 let store = null, gantt = null, table = null, bedarf = null, inspector = null, view = 'gantt';
 
+// ── Reiter: Ansicht ↔ Einrichten ─────────────────────────────────────────────
+// Zwei Bereiche, EINE Leiste. «Ansicht» ist die Arbeitsleiste von vorher
+// (Bauzeitenplan/Setup/Show, Darstellung, Zoom, Live, Prüfen); «Einrichten»
+// sammelt die administrativen Knöpfe (Projekt, Gewerke, Ressourcen, Arten,
+// Abschnitte, Darstellung) auf einer eigenen Seite. `setReiter()` ist der
+// einzige Schreiber — dasselbe Prinzip wie `setAnsicht()`.
+let reiter = 'ansicht';
+
 // ── Ansicht ─────────────────────────────────────────────────────────────────
 // DREI gleichrangige Ansichten in EINER Leiste, in der Reihenfolge des Tages:
 // Bauzeitenplan · Setup · Show. Genau eine ist gedrückt.
@@ -287,10 +295,24 @@ function mount() {
   });
   setAnsicht(startAnsicht());
 
+  // ── Reiter: Ansicht ↔ Einrichten ──
+  document.querySelectorAll('button[data-reiter]').forEach((b) => {
+    b.onclick = () => setReiter(b.dataset.reiter);
+  });
+  setReiter('ansicht');
+
   // ── Projekt ──
   $('proj-menu').onclick = () => showProjectDialog({});
   $('export').onclick = doExport;
   $('add-gewerk').onclick = addGewerk;
+  $('ei-res-personal').onclick = () => neuerRessourcenKnopf('personal');
+  $('ei-res-maschine').onclick = () => neuerRessourcenKnopf('maschine');
+  $('ei-res-verwalten').onclick = () => table.openVerwalten(
+    { liste: 'ressourcen', titel: 'Personal & Maschinen verwalten' }, $('ei-res-verwalten'));
+  $('ei-typen-verwalten').onclick = () => table.openVerwalten(
+    { liste: 'punktTypen', titel: 'Arten verwalten' }, $('ei-typen-verwalten'));
+  $('ei-abschnitte-verwalten').onclick = () => table.openVerwalten(
+    { liste: 'abschnitte', titel: 'Abschnitte verwalten' }, $('ei-abschnitte-verwalten'));
   // Der Konflikt-Knopf zeigt jetzt die Liste, statt blind alle zu verschieben —
   // im Popup entscheidet man je Konflikt (zeigen · lösen · ist ok) oder auf einmal.
   $('resolve').onclick = () => openReview('konflikt');
@@ -334,6 +356,43 @@ function setView(v) {
   gantt.relayout();
   // Kein Nachziehen per Zeitschätzung: der Gantt passt sich beim
   // Wiederauftauchen selbst ein (ResizeObserver) und meldet das über onView.
+}
+
+// ── Reiter: Ansicht ↔ Einrichten ─────────────────────────────────────────────
+// Der EINZIGE Ort, der über den Bereich entscheidet — dasselbe Prinzip wie
+// setAnsicht() für die Ebene. «Einrichten» ersetzt die Arbeitsleiste UND den
+// Arbeitsbereich durch eine eigene Seite; beim Zurückwechseln stellt setView()
+// die normale Sichtbarkeit von Gantt/Tabelle/Bedarf/Panel wieder her — sie
+// selbst zu erraten wäre eine zweite Kopie derselben Entscheidung.
+function setReiter(name) {
+  reiter = name === 'einrichten' ? 'einrichten' : 'ansicht';
+  document.querySelectorAll('button[data-reiter]')
+    .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.reiter === reiter)));
+  const ein = reiter === 'einrichten';
+  document.querySelector('.hd-bar').hidden = ein;
+  $('legend').hidden = ein;
+  $('einrichten').hidden = !ein;
+  if (ein) {
+    $('bz').hidden = true;
+    $('tb').hidden = true;
+    $('bd').hidden = true;
+    $('ins').hidden = true;
+    $('showhead').hidden = true;
+  } else {
+    setView(view);
+    refreshLive();   // stellt u. a. die Show-Kopfzeile wieder her, wenn nötig
+  }
+}
+
+// «+ Neu…» aus der Einrichten-Seite: derselbe schwebende Kasten wie beim
+// Anlegen mitten im Tippen, nur ohne anschließende Zuweisung an einen
+// Vorgang — hier wird nur die Bezeichnung angelegt.
+function neuerRessourcenKnopf(kind) {
+  const btn = $(kind === 'maschine' ? 'ei-res-maschine' : 'ei-res-personal');
+  table.openNeuFragen({
+    titel: 'Neue Bezeichnung (' + (kind === 'maschine' ? 'Maschine' : 'Personal') + ')',
+    cmd: { type: 'addRessource', kind },
+  }, btn, () => {});
 }
 
 // ── Ebene wechseln ──────────────────────────────────────────────────────────

@@ -1529,7 +1529,12 @@ export function createGantt(root, opts = {}) {
       collapsed.clear();
       selected = null;
       if (O.onSelect) O.onSelect(null);
-      goToInitial();
+      // Der Gantt kann beim Wechsel unsichtbar sein (Einrichten-Seite offen,
+      // Tabelle sichtbar) — bei Breite 0 wäre jede Einpass-Rechnung Unsinn und
+      // bliebe für immer falsch, weil der Scrollstand aus ihr hervorgeht. Erst
+      // beim WIEDERAUFTAUCHEN einpassen (ResizeObserver unten).
+      if (scroller.clientWidth === 0) projektEinpassenAusstehend = true;
+      else goToInitial();
     } else {
       scroller.scrollLeft = keepLeft;
       scroller.scrollTop = keepTop;
@@ -1559,6 +1564,9 @@ export function createGantt(root, opts = {}) {
   // Tabelle sichtbar und der Gantt versteckt war, war die gemessene Breite fast
   // null und der Showtag füllte nur zwei Drittel des Blattes.
   let letzteBreite = 0;
+  // Ein Projektwechsel während der Gantt unsichtbar war (Breite 0) holt seine
+  // Einpassung beim Wiederauftauchen nach — siehe refresh() oben.
+  let projektEinpassenAusstehend = false;
   new ResizeObserver(() => {
     const b = scroller.clientWidth;
     // Verschwunden (die Tabelle ist sichtbar): merken, dass die nächste
@@ -1569,10 +1577,14 @@ export function createGantt(root, opts = {}) {
     if (Math.abs(b - letzteBreite) > 1) {
       const vorher = letzteBreite;
       letzteBreite = b;
+      // Nachgeholter Projektwechsel geht vor: «zentriere den aktuellen Tag»
+      // (fitDay(centerDayIso())) würde nur den ohnehin falschen Stand aus der
+      // Breite-0-Rechnung festschreiben, nicht die Aufbauphase des NEUEN Projekts.
+      if (projektEinpassenAusstehend) { projektEinpassenAusstehend = false; goToInitial(); }
       // «Die Spanne füllt die Breite» ist eine Zusage, die bei JEDER Breite gilt.
       // Nur beim ersten Messen und beim Wiederauftauchen (Breite war 0, weil die
       // Tabelle sichtbar war) neu einpassen — nicht bei jedem freien Zoom.
-      if (ebene === 'show' && vorher === 0) fitSpanne();
+      else if (ebene === 'show' && vorher === 0) fitSpanne();
       else if (zoomMode === 'tage') fitDay(centerDayIso());
     }
     renderAxis(true);

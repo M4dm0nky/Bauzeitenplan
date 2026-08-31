@@ -539,6 +539,39 @@ man ohnehin hinschaut, wenn man Personal plant: am Balken und im Panel des
 betroffenen Vorgangs — ohne Alarmfarbe, denn eine Lücke ist eine Information,
 kein Fehler.
 
+## Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand
+
+Die administrativen Knöpfe (Projekt, Gewerke, Ressourcen, Arten, Abschnitte,
+Darstellung) standen zwischen Zoomleiste und Live-Anzeige — sieben Knöpfe, die
+niemand während der eigentlichen Arbeit braucht, aber jederzeit im Bild
+mitliefen. Eine eigene Seite `#einrichten` löst sie heraus, ohne sie ein
+zweites Mal zu verdrahten: dieselben ids, dieselben Handler aus `mount()`,
+nur woanders im Markup. `setReiter()` ist der einzige Schreiber, wie
+`setAnsicht()` für die Ebene — dasselbe Muster, ein neuer Anwendungsfall.
+
+**Der Fehler, den nur ein Playwright-Lauf gefunden hat.** Ein Projektwechsel
+über «Einrichten → Projekte → auswählen» ließ den Gantt bei nur 1 von 36
+Balken im Bild stehen, statt bei der Aufbauphase des neuen Projekts. Ursache:
+`refresh()` in gantt.js passt beim Projektwechsel sofort ein (`goToInitial()`)
+— aber während «Einrichten» offen ist, hat der Gantt-Container die Breite 0,
+und jede Rechnung, die auf der Breite beruht (`fitDay`, `centerDayIso`), ist
+dann für immer falsch: der `ResizeObserver` holt beim Wiederauftauchen zwar
+nach, aber er zentrierte bisher nur den ohnehin schon falschen „aktuellen Tag"
+nach, statt die Aufbauphase des NEUEN Projekts zu suchen. Die Lösung ist ein
+eigenes Merkzeichen (`projektEinpassenAusstehend`): fand der Projektwechsel
+bei Breite 0 statt, holt der ResizeObserver `goToInitial()` selbst nach, nicht
+den generischen „Tag zentrieren"-Pfad. Wer künftig etwas hinter einem Reiter
+versteckt, das beim Sichtbarwerden auf eine gemessene Breite angewiesen ist,
+stößt auf dieselbe Falle.
+
+**Warum Personal und Maschinen keine zwei getrennten Verwalten-Listen
+bekommen haben:** `reorderAuswahl` (store.js) verlangt beim Sortieren ALLE
+ids der Liste — eine gefilterte Teilansicht („nur Personal") ließe sich also
+nicht sortieren, ohne den Store-Befehl selbst aufzubohren. Eine gemischte
+Liste mit einem Kürzel je Zeile (👤/⚙) war der günstigere Kompromiss:
+Umbenennen und Löschen funktionieren unverändert, nur das Sortieren gilt über
+beide Arten hinweg.
+
 ## Was bewusst noch fehlt
 
 Das Ziehen der **Balken und Dauern** im Gantt sowie Ansichten & Export

@@ -758,6 +758,11 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
           weg.onclick = () => { send({ type: 'removeAuswahl', liste: opt.liste, id: x.id }); zeichne(); };
         }
 
+        // Ressourcen mischen Personal und Maschinen in EINER Liste (Sortieren
+        // ist geteilt über die ganze Liste — reorderAuswahl verlangt ALLE ids,
+        // eine Ebene tiefer als «nur Personal» ginge das nicht). Ein Kürzel
+        // sagt wenigstens, was man vor sich hat.
+        if (x.kind) zeile.append(el('span', 'tb-verw-kind', x.kind === 'maschine' ? '⚙' : '👤'));
         zeile.append(nam, hoch, runter, weg);
         box.append(zeile);
       }
@@ -1042,6 +1047,14 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
     },
     get ebene() { return ebene; },
     setConflicts(list) { conflicts = new Map(list.map((c) => [c.taskId, c])); },
+    /**
+     * Die schwebenden Kästen von außen öffnen (Einrichten-Seite) — dieselbe
+     * Bedienung wie beim Anlegen mitten im Tippen, nur ohne Auswahlfeld als
+     * Anker. `ankerEl` ist ein beliebiges Element, an dem `platziere()` sich
+     * ausrichtet (hier: der Knopf, der den Kasten geöffnet hat).
+     */
+    openVerwalten(opt, ankerEl) { verwalten(ankerEl, opt); },
+    openNeuFragen(opt, ankerEl, fertig) { neuFragen(ankerEl, opt, fertig); },
     get lastError() { return lastError; },
     focusFirst() {
       const i = root.querySelector('.c-title input');

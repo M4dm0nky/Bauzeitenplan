@@ -468,7 +468,14 @@ body { margin: 0; }
 
 /* ── Arbeitsfläche: Gantt/Tabelle + Panel ─────────────────────────────────── */
 .work { flex: 1; min-height: 0; display: flex; }
-.work > .bz, .work > .tb, .work > .bd { flex: 1; min-width: 0; }
+.work > .bz, .work > .tb, .work > .bd, .work > .einrichten { flex: 1; min-width: 0; }
+
+/* ── Einrichten: eigene Seite statt Menü über dem Gantt ──────────────────── */
+.einrichten { overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
+.ei-sec { display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+.ei-h { font: inherit; margin: 0; }
+.ei-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.ei-hint { margin: 0; }
 .ins { flex: none; width: 320px; overflow-y: auto; display: flex; flex-direction: column; }
 
 .ins-head { display: flex; align-items: center; justify-content: space-between; }
@@ -568,6 +575,7 @@ body { margin: 0; }
    fingergroß — auf dem Tablet steht man sonst zwischen zwei Zielen. */
 .tb-verw { min-width: 300px; }
 .tb-verw-z { display: flex; align-items: center; gap: 4px; }
+.tb-verw-kind { flex: none; }
 .tb-verw-n { flex: 1; min-width: 0; padding: 4px 6px; font: inherit; }
 .tb-verw-b {
   flex: none; width: 26px; height: 26px; padding: 0; cursor: pointer;

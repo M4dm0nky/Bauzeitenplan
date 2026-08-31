@@ -720,6 +720,49 @@ Bauzeitenplan (vierzehn Tage in Stunden wären unlesbar), Stunden im Showablauf
 (ein Tag ist dort ohnehin tagesbezogen). `js/bedarf.js` rendert nur — gerechnet
 wird ausschließlich in `bedarfsRaster()` (resources.js).
 
+**Zwei Bereiche, EINE Leiste: «Ansicht» und «Einrichten».** `setReiter()` in
+app.js ist der einzige Schreiber, dasselbe Prinzip wie `setAnsicht()`.
+**Ansicht** ist die Arbeitsleiste von vorher (Bauzeitenplan/Setup/Show,
+Darstellung, Bühnen, Zoom, Undo, Prüfen, Live+Versatz) — unverändert.
+**Einrichten** ersetzt Arbeitsleiste UND Arbeitsbereich durch eine eigene
+Seite mit den administrativen Knöpfen: Projekt (Neu, Projekte, Export,
+Import, Drucken), Gewerke & Bühnen (`+ Gewerk`), Personal & Maschinen
+(anlegen, verwalten), Eintragsarten & Abschnitte (verwalten), Darstellung
+(Hell/Dunkel). Eigene Klasse `seg-reiter`, nicht `seg-ansicht` — zwei gleich
+aussehende Segmentgruppen nebeneinander sind sonst optisch eine, wie beim
+Ebenen/Abschnitt-Fehler aus v0.9.0.
+
+**Die Knöpfe sind dieselben Elemente, nur umgezogen — keine zweite
+Verdrahtung.** `#export`, `#import`, `#new-proj`, `#proj-menu`, `#add-gewerk`,
+`#theme-toggle` behalten ihre ids und ihre Handler aus `mount()`/Modulebene;
+sie stehen jetzt im Markup unter `#einrichten` statt in `.hd-right`. Wer eine
+dieser ids programmatisch anklickt (Prüfwerkzeuge!), muss vorher auf
+`[data-reiter="einrichten"]` klicken — sie sind sonst unsichtbar und ein
+Playwright-Klick schlägt fehl. `tools/verify-edit.mjs` macht das an allen vier
+Stellen vor.
+
+**Beim Zurückwechseln zu «Ansicht» entscheidet `setView(view)` neu, was
+sichtbar ist — nicht `setReiter()` selbst.** Der aktuelle `view`
+(Gantt/Tabelle/Personalbedarf/Maschinenbedarf) ist während «Einrichten»
+eingefroren; `setReiter('ansicht')` ruft `setView(view)` erneut auf, statt die
+Sichtbarkeitslogik ein zweites Mal zu kennen. Zwei Wahrheiten darüber, was
+gerade zu sehen ist, liefen sonst irgendwann auseinander.
+
+**Verwalten-Kästen lassen sich von außen öffnen.** `table.openVerwalten(opt,
+ankerEl)` und `table.openNeuFragen(opt, ankerEl, fertig)` rufen dieselben
+privaten Funktionen wie das Auswahlfeld in der Tabelle — die Einrichten-Seite
+bekommt damit „Arten verwalten…", „Abschnitte verwalten…" und „Personal &
+Maschinen verwalten…" GESCHENKT, ohne die Kasten-Logik (rename, sortieren,
+löschen, Fokus, Escape, Klick daneben) ein zweites Mal zu schreiben.
+
+**Personal und Maschinen stehen in DERSELBEN Verwalten-Liste, nicht in zwei
+getrennten.** `reorderAuswahl` verlangt ALLE ids der Liste, nicht eine
+gefilterte Teilmenge — zwei Listen zu trennen hieße, eine gemeinsame
+Sortierung über beide Arten zu verlieren oder den Store-Befehl aufzubohren.
+Ein Kürzel je Zeile (`tb-verw-kind`, 👤/⚙) sagt wenigstens, was man vor sich
+hat. Anlegen geht trotzdem getrennt — zwei Knöpfe „+ Personal"/„+ Maschine"
+in Einrichten, weil `addRessource` das `kind` beim Anlegen braucht.
+
 ## Aus Crewplaner gelernt — aufgehoben für den Tag, an dem ein Backend kommt
 
 - `project_id` & Co. als **Text**, niemals als Relation. Coolify-Reimport kippt

@@ -3,6 +3,35 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.11.0 — 2026-08-31
+
+**Ansicht und Einrichten.** Ganz oben im Kopf steht jetzt ein Umschalter mit
+zwei gleichrangigen Bereichen. **Ansicht** ist die Arbeitsleiste von vorher —
+unverändert. **Einrichten** ist eine eigene Seite für die administrativen
+Knöpfe, die bisher zwischen Zoomleiste und Live-Anzeige standen: Projekt
+anlegen/wechseln, Export/Import, Drucken, Gewerke & Bühnen anlegen, Personal &
+Maschinen anlegen und verwalten, Eintragsarten & Abschnitte verwalten,
+Hell/Dunkel. Dieselben Knöpfe, derselbe Weg dorthin (`store.apply`) — nur eine
+zweite Oberfläche statt eines zweiten Speicherorts.
+
+Die schnellen Wege bleiben daneben bestehen: eine Eintragsart, ein Abschnitt
+oder eine Ressourcen-Bezeichnung legst du weiterhin mit „+ Neu…" im
+Auswahlfeld an, mitten im Tippen. Einrichten ist der Weg zum Aufräumen danach
+— umbenennen, sortieren, löschen — und jetzt auch der Ort, an dem sich Personal-
+und Maschinen-Bezeichnungen anlegen lassen, ohne sie gleich einem Vorgang
+zuzuweisen.
+
+### Ein Fehler, den nur ein Testlauf gefunden hat
+
+Ein Projektwechsel über Einrichten ließ den Gantt bei nur einem von 36 Balken
+im Bild stehen, statt bei der Aufbauphase des neuen Projekts. Der Gantt passt
+sich beim Projektwechsel sofort ein — aber während «Einrichten» offen ist, hat
+sein Container die Breite 0, und jede Rechnung, die auf der Breite beruht,
+bleibt dann für immer falsch. Die Einpassung wird jetzt aufgeschoben und beim
+Wiederauftauchen sauber nachgeholt (`docs/entscheidungen.md`).
+
+Acht Prüfläufe grün, Bild angesehen.
+
 ## 0.10.0 — 2026-08-31
 
 **Personal & Maschinen.** Zu jedem Vorgang — im Bauzeitenplan wie im
