@@ -77,7 +77,7 @@ await check('drei Meilensteine', async () => {
   const n = await p.locator('.bz-ms').count();
   return n === 3 ? true : n + ' statt 3';
 });
-await p.locator('[data-z="stunden"]').click();
+await p.selectOption('#zoom-stufe', 'stunden');
 await p.waitForTimeout(300);
 await p.click('#now'); await p.waitForTimeout(500);
 await p.screenshot({ path: join(here, 'shots', 'amk-aufbau.png') });
@@ -101,7 +101,7 @@ await check('Häkchen «Dauer geschätzt» ist gesetzt', async () => {
 await p.screenshot({ path: join(here, 'shots', 'amk-panel.png') });
 
 console.log('\nDIE EINE VERKNÜPFUNG AUS DEM PDF');
-await p.locator('[data-z="wochen"]').click(); await p.waitForTimeout(300);
+await p.selectOption('#zoom-stufe', 'wochen'); await p.waitForTimeout(300);
 await check('«Leitern runter» hat zwei Vorgänger', async () => {
   const id = await p.evaluate(() => {
     const l = [...document.querySelectorAll('.bz-lab-name')].find((x) => x.textContent === 'Leitern runter');

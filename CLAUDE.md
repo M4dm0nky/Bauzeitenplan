@@ -720,7 +720,52 @@ Bauzeitenplan (vierzehn Tage in Stunden wären unlesbar), Stunden im Showablauf
 (ein Tag ist dort ohnehin tagesbezogen). `js/bedarf.js` rendert nur — gerechnet
 wird ausschließlich in `bedarfsRaster()` (resources.js).
 
-**Zwei Bereiche, EINE Leiste: «Ansicht» und «Einrichten».** `setReiter()` in
+**Die Schiene links ist der MODUS und die ZEITNAVIGATION des Modus**
+(`js/rail.js`). Genau ein Modus ist aktiv — Bauzeitenplan ODER Showablauf —,
+und unter dem aktiven stehen SEINE Tage: im Showablauf die Showtage, im
+Bauzeitenplan die Bautage mit KW-Trennern. Deshalb gibt es kein `◀▶` und keine
+Showtag-Segmentgruppe mehr; die Navigation liegt an EINEM Ort. Drei Regeln:
+
+- **Nur die Tagesliste scrollt, nie die Schiene** (`.rail { overflow: hidden }`,
+  `.rail-tage { flex: 0 1 auto; overflow-y: auto }`). Beim ersten Versuch schoben
+  vierzehn Bautage «Showablauf» und «Einrichten» unter den Fensterrand — der
+  andere Modus war dann nicht mehr einen Klick weit. Im Screenshot gesehen,
+  von keiner Zusicherung bemerkt; jetzt hält eine in `verify-edit.mjs` es fest.
+- **Die Schiene rendert nur.** Sie schreibt nie an `ansicht`, `showTag` oder am
+  Gantt, sondern meldet über Rückrufe (`on.modus`/`on.showTag`/`on.bauTag`/
+  `on.einrichten`) nach app.js — `setAnsicht()` bleibt der einzige Schreiber.
+  Dieselbe Arbeitsteilung wie bei `js/bedarf.js`.
+- **Der markierte Tag wird ins Bild gescrollt** (`scrollIntoView({block:'nearest'})`
+  in `render()` UND in `markBauTag`). Eine Markierung in einer scrollenden Liste,
+  die niemand sieht, ist keine Auskunft.
+
+**Was im aktiven Modus nichts bedeutet, steht nicht da.** `setAnsicht()` blendet
+`#seg-abschnitt` außerhalb des Showablaufs aus und `.hd-zoom` außerhalb von
+Bauzeitenplan+Plan-Darstellung; `syncBuehnen()` zeigt die Bühnen-Häkchen nur im
+Showablauf. So sind aus 22 gleichzeitig sichtbaren Bedienelementen 13 im
+Bauzeitenplan und 9 im Showablauf geworden. Wer einen Knopf hinzufügt, sagt
+zuerst, in welchem Modus er etwas bedeutet — und blendet ihn im anderen aus.
+
+**Einrichten ist ein FENSTER über dem Plan, keine Seite** (`#ein-dlg`, vier
+Reiter über eine `.seg`). Als Seite ersetzte es den Arbeitsbereich, und der
+Gantt-Container hatte dabei die Breite 0 — daraus entstand der
+Projektwechsel-Fehler, den `projektEinpassenAusstehend` bis heute abfängt.
+`openEinrichten`/`closeEinrichten` stehen auf **Modulebene**, nicht in `mount()`:
+Import, Neu und Projekte müssen beim allerersten Start ohne offenes Projekt
+funktionieren. Wer einen Knopf ins Fenster legt, legt ihn in EINEN Reiter — und
+ein Prüfwerkzeug, das ihn anklickt, muss vorher dessen `[data-ein="…"]` klicken.
+
+**Die Tabelle bleibt EIN Modul**, auch wenn sonst alles getrennt ist. Zwei
+Module wären zwei Orte für Tippsperre, `commitOn`, `defaultStart` und die drei
+schwebenden Kästen. Getrennt sind die SPALTENSÄTZE (`SPALTEN.bau`/`SPALTEN.show`
+in table.js); sichtbar trennt die Schiene daneben. Im Showablauf sind
+`c-start`/`c-end` schmaler (112 statt 175 px) — dort steht kein Datum im Feld,
+und 175 px ist die Breite eines `datetime-local`.
+
+**Zwei Bereiche, EINE Leiste: «Ansicht» und «Einrichten».**
+*(Historisch, bis v0.11.1 — seit v0.12.0 ersetzt durch Schiene + Fenster, siehe
+oben. Der Absatz bleibt stehen, weil die Begründung für `setReiter()` als
+einziger Schreiber unverändert für `setAnsicht()` gilt.)* `setReiter()` in
 app.js ist der einzige Schreiber, dasselbe Prinzip wie `setAnsicht()`.
 **Ansicht** ist die Arbeitsleiste von vorher (Bauzeitenplan/Setup/Show,
 Darstellung, Bühnen, Zoom, Undo, Prüfen, Live+Versatz) — unverändert.
@@ -735,22 +780,15 @@ Ebenen/Abschnitt-Fehler aus v0.9.0.
 **Die Knöpfe sind dieselben Elemente, nur umgezogen — keine zweite
 Verdrahtung.** `#export`, `#import`, `#new-proj`, `#proj-menu`, `#add-gewerk`,
 `#theme-toggle` behalten ihre ids und ihre Handler aus `mount()`/Modulebene;
-sie stehen jetzt im Markup unter `#einrichten` statt in `.hd-right`. Wer eine
-dieser ids programmatisch anklickt (Prüfwerkzeuge!), muss vorher auf
-`[data-reiter="einrichten"]` klicken — sie sind sonst unsichtbar und ein
-Playwright-Klick schlägt fehl. `tools/verify-edit.mjs` macht das an allen vier
-Stellen vor.
-
-**Beim Zurückwechseln zu «Ansicht» entscheidet `setView(view)` neu, was
-sichtbar ist — nicht `setReiter()` selbst.** Der aktuelle `view`
-(Gantt/Tabelle/Personalbedarf/Maschinenbedarf) ist während «Einrichten»
-eingefroren; `setReiter('ansicht')` ruft `setView(view)` erneut auf, statt die
-Sichtbarkeitslogik ein zweites Mal zu kennen. Zwei Wahrheiten darüber, was
-gerade zu sehen ist, liefen sonst irgendwann auseinander.
+sie stehen seit v0.12.0 im Fenster `#ein-dlg`, je Reiter eine `.ei-sec` mit
+`data-ein-tab`. Wer eine dieser ids programmatisch anklickt (Prüfwerkzeuge!),
+muss vorher `#rail-ein` klicken UND den Reiter, in dem der Knopf liegt
+(`[data-ein="baender"]` für `#add-gewerk`) — sonst ist er unsichtbar und der
+Playwright-Klick schlägt fehl. `tools/verify-edit.mjs` macht das vor.
 
 **Verwalten-Kästen lassen sich von außen öffnen.** `table.openVerwalten(opt,
 ankerEl)` und `table.openNeuFragen(opt, ankerEl, fertig)` rufen dieselben
-privaten Funktionen wie das Auswahlfeld in der Tabelle — die Einrichten-Seite
+privaten Funktionen wie das Auswahlfeld in der Tabelle — das Einrichten-Fenster
 bekommt damit „Arten verwalten…", „Abschnitte verwalten…" und „Personal &
 Maschinen verwalten…" GESCHENKT, ohne die Kasten-Logik (rename, sortieren,
 löschen, Fokus, Escape, Klick daneben) ein zweites Mal zu schreiben.
@@ -770,7 +808,7 @@ läuft über `askDialog({title, message, buttons})` (app.js, liefert den `value`
 des gewählten Knopfs, `null` bei Abbruch); eine Namenseingabe mitten im Tippen
 läuft über den schwebenden Kasten `tb-neuart` (`neuFragen` in table.js,
 exportiert als `table.openNeuFragen(opt, ankerEl, fertig)` für Aufrufer
-außerhalb der Tabelle — Panel, Einrichten-Seite). `neuFragen` akzeptiert neben
+außerhalb der Tabelle — Panel, Einrichten-Fenster). `neuFragen` akzeptiert neben
 `cmd` (Name landet als `label` obenauf) auch `buildCmd(wert, kompakt)`, wenn
 der Name woanders im Befehl gehört (`addGewerk` z. B. in `gewerk.name`).
 `grep -rn "window\.prompt\|[^.]prompt(\|confirm(\|alert(" js/*.js` muss leer
@@ -805,6 +843,7 @@ bleiben (Kommentare ausgenommen).
 | `js/inspector.js` | Seitenpanel |
 | `js/menu.js` | Kontextmenü (Muster: Crewplaner dropdown.js) |
 | `js/bedarf.js` | Bedarfs-Reiter: Personalbedarf · Maschinenbedarf |
+| `js/rail.js` | Die Schiene: Modus + Zeitnavigation des Modus — rendert nur |
 | `tools/build-prototypes.mjs` | **Nur** für die Design-Artifacts (CSP verlangt alles inline). Die App braucht keinen Build. |
 
 Warum was so ist: `docs/entscheidungen.md`. Besonders der kritische Pfad hat eine

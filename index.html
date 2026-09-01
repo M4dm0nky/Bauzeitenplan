@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CallBoard — Bauzeitenplan</title>
-<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.11.1">
+<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.12.0">
 
 <script>
   // Hell/Dunkel VOR dem CSS festlegen, damit beim Laden nichts aufblitzt.
@@ -40,31 +40,38 @@
      Der Theme-Link wählt die Gestaltungsebene: styles/themes/ enthält fünf
      fertige Ebenen (callboard = aktiv). Hell/Dunkel schaltet der Betrachter
      über data-theme (Knopf im Kopf). Siehe docs/themes.md. -->
-<link rel="stylesheet" href="styles/base.css?v=0.11.1">
-<link rel="stylesheet" href="styles/themes/callboard.css?v=0.11.1" id="theme-css" data-theme-name="callboard">
+<link rel="stylesheet" href="styles/base.css?v=0.12.0">
+<link rel="stylesheet" href="styles/themes/callboard.css?v=0.12.0" id="theme-css" data-theme-name="callboard">
 </head>
 <body>
 
 <div class="app">
+  <!-- Die Schiene ist der MODUS und zugleich die ZEITNAVIGATION dieses Modus.
+       Genau ein Modus ist aktiv, und unter ihm stehen seine Tage: im Showablauf
+       die Showtage, im Bauzeitenplan die Bautage. Damit verschwinden ◀▶ aus der
+       Werkzeugzeile — und mit ihnen der halbe Grund, warum dort 22 Elemente
+       nebeneinander standen. Gefüllt wird sie von js/rail.js; hier steht nur
+       das Markenzeichen, das aus der Kopfzeile hierher gezogen ist. -->
+  <nav class="rail" aria-label="Modus">
+    <div class="rail-kopf">
+      <svg class="hd-mark" viewBox="0 0 56 56" fill="none" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" role="img" aria-label="CallBoard">
+        <path d="M28 3 L49 14 L49 42 L28 53 L7 42 L7 14 Z" stroke="currentColor"/>
+        <rect x="23.5" y="13" width="9" height="5.5" rx="1.4" stroke="currentColor"/>
+        <rect x="17" y="17" width="22" height="26" rx="2.2" stroke="currentColor"/>
+        <circle cx="28" cy="30.5" r="8" stroke="currentColor"/>
+        <line x1="28" y1="30.5" x2="28" y2="24.5" stroke="#f7c948" stroke-width="3"/>
+        <line x1="28" y1="30.5" x2="32" y2="32" stroke="currentColor"/>
+        <circle cx="28" cy="30.5" r="1" fill="currentColor" stroke="none"/>
+      </svg>
+      <span class="rail-wort">CallBoard</span>
+    </div>
+    <div class="rail-nav" id="rail-nav"></div>
+  </nav>
+
+  <div class="col">
   <header class="hd">
     <div class="hd-row hd-top">
       <div class="hd-id">
-        <div class="hd-brand">
-          <svg class="hd-mark" viewBox="0 0 56 56" fill="none" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" role="img" aria-label="CallBoard">
-            <path d="M28 3 L49 14 L49 42 L28 53 L7 42 L7 14 Z" stroke="currentColor"/>
-            <rect x="23.5" y="13" width="9" height="5.5" rx="1.4" stroke="currentColor"/>
-            <rect x="17" y="17" width="22" height="26" rx="2.2" stroke="currentColor"/>
-            <circle cx="28" cy="30.5" r="8" stroke="currentColor"/>
-            <line x1="28" y1="30.5" x2="28" y2="24.5" stroke="#f7c948" stroke-width="3"/>
-            <line x1="28" y1="30.5" x2="32" y2="32" stroke="currentColor"/>
-            <circle cx="28" cy="30.5" r="1" fill="currentColor" stroke="none"/>
-          </svg>
-          <div class="hd-brandtext">
-            <span class="hd-name">CallBoard</span>
-            <span class="hd-eyebrow">Bauzeitenplan · Event</span>
-          </div>
-        </div>
-        <div class="hd-div"></div>
         <div class="hd-proj">
           <h1 class="hd-title" id="proj-name">—</h1>
           <div class="hd-sub" id="proj-venue"></div>
@@ -73,60 +80,60 @@
       <div class="kpis" id="kpis"></div>
     </div>
 
-    <!-- Zwei Bereiche, EINE Leiste, genau einer gedrückt. «Ansicht» ist die
-         Arbeitsleiste von vorher; «Einrichten» sammelt die administrativen
-         Knöpfe (Projekt, Gewerke, Ressourcen, Arten/Abschnitte, Darstellung),
-         die vorher zwischen Zoomleiste und Live-Anzeige standen. Eigene Klasse
-         `seg-reiter`, nicht `seg-ansicht` — zwei gleich aussehende Gruppen
-         nebeneinander sind sonst optisch eine, wie beim Ebenen/Abschnitt-Fehler
-         aus v0.9.0. -->
-    <div class="hd-row hd-reiter">
-      <div class="seg seg-reiter" role="group" aria-label="Bereich">
-        <button data-reiter="ansicht">Ansicht</button>
-        <button data-reiter="einrichten">Einrichten</button>
-      </div>
-    </div>
-
     <div class="hd-row hd-bar">
-      <!-- EINE Leiste, drei gleichrangige Ansichten, genau eine gedrückt.
-           Vorher waren es zwei Gruppen — Ebene und Abschnitt — im selben Stil
-           nebeneinander, mit je einem dunklen Knopf: das las sich als eine
-           Leiste, in der zwei Dinge gleichzeitig angewählt sind.
-           Erst der Aufbau, dann die Show — die Reihenfolge des Tages. -->
-      <div class="seg seg-ansicht" role="group" aria-label="Ansicht">
-        <button data-ansicht="bau">Bauzeitenplan</button>
+      <!-- Setup und Show sind zwei ABSCHNITTE desselben Tages, kein Modus —
+           deshalb stehen sie hier und nicht in der Schiene. Im Bauzeitenplan
+           ist die Gruppe unsichtbar: dort gibt es keine Abschnitte — und
+           «bau» hat folgerichtig keinen Knopf mehr, es ist ein Modus in der
+           Schiene. setAnsicht() markiert weiter über `button[data-ansicht]`;
+           bei ansicht='bau' ist schlicht keiner davon gedrückt. -->
+      <div class="seg seg-ansicht" id="seg-abschnitt" role="group" aria-label="Abschnitt">
         <button data-ansicht="setup">Setup</button>
         <button data-ansicht="show">Show</button>
       </div>
 
       <div class="seg" role="group" aria-label="Darstellung">
-        <button data-view="gantt">Gantt</button>
+        <button data-view="gantt">Plan</button>
         <button data-view="tabelle">Tabelle</button>
-        <button data-view="personal">Personalbedarf</button>
-        <button data-view="maschine">Maschinenbedarf</button>
+        <button data-view="bedarf">Bedarf</button>
+      </div>
+
+      <!-- Personal oder Maschinen — erscheint erst, wenn «Bedarf» gewählt ist.
+           Vorher standen beide als eigene Knöpfe in der Darstellungsgruppe und
+           waren mit «Personalbedarf»/«Maschinenbedarf» die zwei längsten
+           Beschriftungen der ganzen Leiste (und die Ursache des
+           Handy-Überlaufs in v0.11.0). -->
+      <div class="seg" id="seg-bedarf" role="group" aria-label="Bedarfsart" hidden>
+        <button data-bedarf="personal">Personal</button>
+        <button data-bedarf="maschine">Maschinen</button>
       </div>
 
       <!-- Bühnen-Häkchen. Nur im Showablauf sichtbar; das Wegklicken ändert
            Zeilen UND Maßstab, nicht bloß die Sichtbarkeit. -->
       <div class="buehnen" id="buehnen" hidden></div>
 
+      <!-- Zeitwerkzeuge. Nur in der Plan-Darstellung UND nur im
+           Bauzeitenplan: der Showablauf ist tagesbezogen, dort sagen «Monate»,
+           «Wochen» und «Alle zuklappen» nichts.
+           Die vier Zoomstufen sind ein Klappmenü statt vier Knöpfen — sie
+           werden selten gewechselt und kosteten als Segmentgruppe ein Viertel
+           der Leistenbreite. ◀▶ sind ersatzlos weg: das macht die Schiene. -->
       <div class="hd-zoom">
-        <div class="seg" role="group" aria-label="Zoomstufe">
-          <button data-z="monate">Monate</button>
-          <button data-z="wochen">Wochen</button>
-          <button data-z="tage">Tage</button>
-          <button data-z="stunden">Stunden</button>
-        </div>
+        <label class="zoom-sel">
+          <span class="vh">Zoomstufe</span>
+          <select id="zoom-stufe">
+            <option value="monate">Monate</option>
+            <option value="wochen">Wochen</option>
+            <option value="tage">Tage</option>
+            <option value="stunden">Stunden</option>
+          </select>
+        </label>
         <div class="seg seg-icon" role="group" aria-label="Zoom">
           <button id="zout" aria-label="Herauszoomen">−</button>
           <button id="zin" aria-label="Hineinzoomen">+</button>
         </div>
         <button class="btn" id="now">Heute</button>
         <input type="date" class="date-jump" id="date-jump" title="Zu einem Datum springen" aria-label="Zu einem Datum springen">
-        <div class="seg seg-icon" role="group" aria-label="Tag wechseln">
-          <button id="date-prev" title="Ein Tag zurück" aria-label="Ein Tag zurück">◀</button>
-          <button id="date-next" title="Ein Tag vor" aria-label="Ein Tag vor">▶</button>
-        </div>
         <button class="btn" id="fold">Alle zuklappen</button>
       </div>
 
@@ -176,59 +183,6 @@
     <div class="tb" id="tb" hidden></div>
     <div class="bd" id="bd" hidden></div>
     <aside class="ins" id="ins" hidden></aside>
-
-    <!-- Einrichten: eine eigene Seite, kein Menü über dem Gantt. Die Befehle
-         dahinter sind dieselben wie eh und je (store.apply); hier steht nur
-         eine zweite Oberfläche dafür. -->
-    <div class="einrichten" id="einrichten" hidden>
-      <div class="ei-sec">
-        <h2 class="ei-h">Projekt</h2>
-        <div class="ei-row">
-          <button class="btn" id="new-proj">Neu</button>
-          <button class="btn" id="proj-menu">Projekte</button>
-          <button class="btn" id="export" title="Sicherung herunterladen">Export</button>
-          <button class="btn" id="import">Import</button>
-          <!-- Bewusst ein Link ohne id: der Testlauf verlangt für jede id in
-               index.html eine Entsprechung in app.js, und print.html braucht
-               keine Verdrahtung — es lädt das aktive Projekt selbst. -->
-          <a class="btn" href="print.html" title="Tagesblätter drucken (A3 quer)">Drucken</a>
-        </div>
-      </div>
-
-      <div class="ei-sec">
-        <h2 class="ei-h">Gewerke &amp; Bühnen</h2>
-        <div class="ei-row">
-          <button class="btn" id="add-gewerk">+ Gewerk</button>
-        </div>
-        <p class="ei-hint">Umbenennen, sortieren und löschen: Rechtsklick auf ein Gewerk im Bauzeitenplan.</p>
-      </div>
-
-      <div class="ei-sec">
-        <h2 class="ei-h">Personal &amp; Maschinen</h2>
-        <div class="ei-row">
-          <button class="btn" id="ei-res-personal">+ Personal</button>
-          <button class="btn" id="ei-res-maschine">+ Maschine</button>
-          <button class="btn" id="ei-res-verwalten">Verwalten…</button>
-        </div>
-        <p class="ei-hint">Zuweisen tust du am Vorgang selbst — im Panel oder in der Tabelle, Spalte «Ressourcen».</p>
-      </div>
-
-      <div class="ei-sec">
-        <h2 class="ei-h">Eintragsarten &amp; Abschnitte</h2>
-        <div class="ei-row">
-          <button class="btn" id="ei-typen-verwalten">Arten verwalten…</button>
-          <button class="btn" id="ei-abschnitte-verwalten">Abschnitte verwalten…</button>
-        </div>
-        <p class="ei-hint">Angelegt wird «+ Neu…» im Auswahlfeld der Tabelle, mitten im Tippen.</p>
-      </div>
-
-      <div class="ei-sec">
-        <h2 class="ei-h">Darstellung</h2>
-        <div class="ei-row">
-          <button class="btn hd-mode" id="theme-toggle" title="Hell/Dunkel umschalten" aria-label="Hell/Dunkel umschalten">☾</button>
-        </div>
-      </div>
-    </div>
   </div>
 
   <footer class="ft">
@@ -243,12 +197,75 @@
       <span class="ft-ver" id="ver" title="Version — node tools/version.mjs zeigt sie, node tools/version.mjs 0.2.0 setzt sie"></span>
     </div>
   </footer>
+  </div>
+</div>
+
+<!-- Einrichten: ein FENSTER über dem Plan, keine Seite, die ihn ersetzt. Der
+     Plan bleibt dahinter stehen, und beim Schließen ist man genau dort, wo man
+     war — bei einer eigenen Seite kostete jeder Blick in die Verwaltung den
+     Ausschnitt, auf den man gerade schaute.
+     Die Knöpfe sind DIESELBEN Elemente mit denselben ids wie vorher: ihre
+     Handler in app.js bleiben unverändert, hier ist nur eine andere Hülle. -->
+<div class="dlg" id="ein-dlg" hidden>
+  <div class="dlg-box ein-box">
+    <div class="ein-kopf">
+      <h2 class="dlg-h">Einrichten</h2>
+      <button class="btn" id="ein-zu" aria-label="Schließen">Fertig</button>
+    </div>
+    <div class="seg ein-reiter" role="group" aria-label="Bereich">
+      <button data-ein="projekt">Projekt</button>
+      <button data-ein="baender">Gewerke &amp; Bühnen</button>
+      <button data-ein="res">Personal &amp; Maschinen</button>
+      <button data-ein="arten">Arten &amp; Abschnitte</button>
+    </div>
+
+    <div class="einrichten">
+      <div class="ei-sec" data-ein-tab="projekt">
+        <div class="ei-row">
+          <button class="btn" id="new-proj">Neu</button>
+          <button class="btn" id="proj-menu">Projekte</button>
+          <button class="btn" id="export" title="Sicherung herunterladen">Export</button>
+          <button class="btn" id="import">Import</button>
+          <!-- Bewusst ein Link ohne id: der Testlauf verlangt für jede id in
+               index.html eine Entsprechung in app.js, und print.html braucht
+               keine Verdrahtung — es lädt das aktive Projekt selbst. -->
+          <a class="btn" href="print.html" title="Tagesblätter drucken (A3 quer)">Drucken</a>
+          <button class="btn hd-mode" id="theme-toggle" title="Hell/Dunkel umschalten" aria-label="Hell/Dunkel umschalten">☾</button>
+        </div>
+        <p class="ei-hint">«Drucken» öffnet die Tagesblätter (A3 quer) in einem eigenen Fenster.</p>
+      </div>
+
+      <div class="ei-sec" data-ein-tab="baender" hidden>
+        <div class="ei-row">
+          <button class="btn" id="add-gewerk">+ Gewerk</button>
+        </div>
+        <p class="ei-hint">Umbenennen, sortieren und löschen: Rechtsklick auf ein Gewerk im Plan.</p>
+      </div>
+
+      <div class="ei-sec" data-ein-tab="res" hidden>
+        <div class="ei-row">
+          <button class="btn" id="ei-res-personal">+ Personal</button>
+          <button class="btn" id="ei-res-maschine">+ Maschine</button>
+          <button class="btn" id="ei-res-verwalten">Verwalten…</button>
+        </div>
+        <p class="ei-hint">Zuweisen tust du am Vorgang selbst — im Panel oder in der Tabelle, Spalte «Ressourcen».</p>
+      </div>
+
+      <div class="ei-sec" data-ein-tab="arten" hidden>
+        <div class="ei-row">
+          <button class="btn" id="ei-typen-verwalten">Arten verwalten…</button>
+          <button class="btn" id="ei-abschnitte-verwalten">Abschnitte verwalten…</button>
+        </div>
+        <p class="ei-hint">Angelegt wird «+ Neu…» im Auswahlfeld der Tabelle, mitten im Tippen.</p>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="dlg" id="dlg" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="import-file" accept="application/json,.json" hidden>
 
-<script type="module" src="js/app.js?v=0.11.1"></script>
+<script type="module" src="js/app.js?v=0.12.0"></script>
 </body>
 </html>

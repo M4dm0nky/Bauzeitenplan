@@ -371,3 +371,21 @@ kbd { font: inherit; border: 1px solid var(--rule-2); background: var(--panel2);
 .ins-check input { accent-color: var(--accent); }
 
 .ft-ver { color: var(--muted); font-size: calc(8.5px * var(--fs)); letter-spacing: .06em; padding-left: 4px; }
+
+/* ── Schiene: Modus + Zeitnavigation ─────────────────────────────────────── */
+.rail { background: var(--panel); border-right: 1px solid var(--rule-2); }
+.rail-kopf { color: var(--ink); border-bottom: 1px solid var(--rule); }
+.rail-wort { font-size: calc(8px * var(--fs)); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.rail-m { color: var(--ink-2); border-bottom: 1px solid var(--rule); }
+.rail-m:hover { background: var(--panel2); color: var(--ink); }
+.rail-m[aria-pressed="true"] { background: var(--accent-b); color: #1b1a17; font-weight: 600; }
+.rail-z { font-size: calc(16px * var(--fs)); }
+.rail-w { font-size: calc(8.5px * var(--fs)); letter-spacing: .07em; text-transform: uppercase; }
+.rail-t { color: var(--ink-2); font-size: calc(9.5px * var(--fs)); }
+.rail-t:hover { background: var(--panel2); color: var(--ink); }
+.rail-t[aria-pressed="true"] { background: var(--panel2); color: var(--ink); font-weight: 700; box-shadow: inset 3px 0 0 var(--accent); }
+.rail-kw { font-size: calc(7.5px * var(--fs)); color: var(--muted); }
+.rail-leer { font-size: calc(8px * var(--fs)); color: var(--muted); }
+.rail-ein { margin-top: auto; border-top: 1px solid var(--rule); border-bottom: 0; }
+.ei-h { font-size: calc(9px * var(--fs)); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.ei-hint { font-size: calc(9.5px * var(--fs)); color: var(--muted); line-height: 1.5; }

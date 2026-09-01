@@ -15,8 +15,9 @@ der Load-In läuft stundengenau.
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
 mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
-**Dazugekommen (bis v0.11.0):** **Ansicht und Einrichten** — administrative
-Knöpfe auf einer eigenen Seite (siehe unten) · **Personal & Maschinen** je
+**Dazugekommen (bis v0.12.0):** **Die Schiene links** — Bauzeitenplan und
+Showablauf sind zwei getrennte Modi mit je eigener Leiste, eigener Tabelle und
+eigener Zeitnavigation, «Einrichten» als Fenster über dem Plan · **Personal & Maschinen** je
 Vorgang — eigene Bezeichnungen, Anzahl und Zeitfenster, dazu
 **Bereitstellungen** (ein Pool ohne Vorgangs-Funktion) und die Reiter
 **Personalbedarf**/**Maschinenbedarf** · Gewerke per Drag & Drop umsortieren · Gantt und
@@ -50,15 +51,14 @@ Seitenspalte ist damit allein schon der Ablaufplan.
 ```
 
 Bühnen legst du an wie ein Gewerk (`+ Bühne`), benennst und sortierst sie genauso.
-Ein Umschalter über dem Gantt wählt den Showtag, Häkchen blenden einzelne Bühnen
-aus.
+Den Showtag wählst du in der Schiene links, Häkchen in der Leiste blenden
+einzelne Bühnen aus.
 
 **Setup und Show sind zwei Ansichten derselben Bühne.** Am Showtag gibt es zwei
 Abläufe mit ganz verschiedenen Uhrzeiten: Load-in und Setup bis zum Showstart,
 danach die Running Order. Jeder **Zeiteintrag** gehört einem der beiden
-Abschnitte. Oben steht ein Umschalter mit drei gleichrangigen Ansichten in der
-Reihenfolge des Tages — **Bauzeitenplan · Setup · Show** —, und genau eine ist
-gewählt. Jede rechnet ihre eigene Zeitachse. Die Bühne steht in beiden
+Abschnitte, und oben in der Leiste steht **Setup · Show** — genau einer ist
+gewählt. Jeder rechnet seine eigene Zeitachse. Die Bühne steht in beiden
 Show-Ansichten, sie heißt einmal und ist dieselbe.
 
 Angelegt wird in der **Tabelle**: im Bühnenkopf sitzt ein `+ Zeiteintrag`. Der
@@ -70,7 +70,7 @@ Uhrzeit — der Tag steht ja oben.
 
 **Eigene Abschnitte auch.** Dieselbe Mechanik in der Spalte *Abschnitt*: unten
 im Auswahlfeld steht **«Neu»**, und schon hast du Load-in, Soundcheck oder
-Aftershow. Der Umschalter oben bleibt bei Bauzeitenplan · Setup · Show — ein
+Aftershow. Der Umschalter oben bleibt bei Setup · Show — ein
 eigener Abschnitt ist ein Etikett am Eintrag und wird in der **Show-Ansicht**
 gezeigt. Stellst du einen Setup-Eintrag darauf um, sagt die App dir das, damit
 die Zeile nicht kommentarlos aus dem Bild verschwindet.
@@ -210,21 +210,29 @@ python3 -m http.server 8080
 
 Kein Build, keine Abhängigkeiten zur Laufzeit.
 
-### Ansicht und Einrichten
+### Die Schiene links
 
-Ganz oben im Kopf steht ein Umschalter mit zwei gleichrangigen Bereichen:
+Am linken Rand steht eine schmale Schiene mit **zwei Modi**: Bauzeitenplan und
+Showablauf. Genau einer ist aktiv, und du siehst nur, was in ihm etwas bedeutet
+— im Bauzeitenplan keine Bühnen-Häkchen, im Showablauf keine Zoomstufen und
+kein „Alle zuklappen". Der andere Modus ist immer einen Klick weit.
 
-**Ansicht** — die Arbeitsleiste: Bauzeitenplan/Setup/Show, Gantt/Tabelle/
-Personalbedarf/Maschinenbedarf, Zoom, Undo, Prüfen, Live und Versatz. Hier
-verbringst du die meiste Zeit.
+Unter dem aktiven Modus stehen **seine Tage**: im Showablauf die Showtage, im
+Bauzeitenplan die Bautage mit Kalenderwochen dazwischen. Ein Klick springt hin
+— ein Datumsfeld brauchst du nur für den weiten Sprung.
 
-**Einrichten** — eine eigene Seite für die administrativen Dinge, die vorher
-zwischen Zoomleiste und Live-Anzeige standen: Projekt anlegen/wechseln,
-Export/Import, Drucken, Gewerke & Bühnen anlegen, **Personal & Maschinen**
-anlegen und verwalten, **Eintragsarten & Abschnitte verwalten**, Hell/Dunkel.
-Die schnellen Wege bleiben daneben bestehen — eine Bezeichnung legst du weiter
-mit „+ Neu…" im Auswahlfeld an, mitten im Tippen; Einrichten ist der Weg zum
-Aufräumen danach.
+Ganz unten das Zahnrad: **Einrichten** öffnet als Fenster über dem Plan, mit
+vier Reitern — Projekt (anlegen/wechseln, Export/Import, Drucken, Hell/Dunkel),
+Gewerke & Bühnen, **Personal & Maschinen**, **Arten & Abschnitte**. Der Plan
+bleibt dahinter stehen; „Fertig" gibt dir genau den Ausschnitt zurück, bei dem
+du warst. Die schnellen Wege bleiben daneben bestehen — eine Bezeichnung legst
+du weiter mit „+ Neu…" im Auswahlfeld an, mitten im Tippen; Einrichten ist der
+Weg zum Aufräumen danach.
+
+Darüber die Arbeitsleiste, jetzt kurz: im Showablauf Setup/Show ·
+Plan/Tabelle/Bedarf · Bühnen · Undo · Prüfen · Live mit Versatz, im
+Bauzeitenplan dieselbe Reihe plus die Zeitwerkzeuge (Zoomstufe, Heute, Datum,
+Zuklappen).
 
 ### Bedienung
 

@@ -76,6 +76,15 @@ const PAGES = [
   ...(argBase ? [] : ['console', 'blueprint', 'studio', 'board'].map((v) =>
     ({ name: 'Prototyp ' + v, url: BASE + '/tools/out/' + v + '.html', key: v }))),
 ];
+// Die Zoomstufe ist in der APP ein Klappmenü (seit v0.12.0), in den PROTOTYPEN
+// weiter eine Segmentgruppe: tools/prototype-shell.html ist eine 104-Zeilen-
+// Vorschau der Render-Engine je Theme, nicht die Oberfläche der App — sie
+// bekommt deren Werkzeugzeile bewusst nicht nachgebaut.
+const setZoom = async (page, z) => {
+  if (await page.locator('#zoom-stufe').count()) await page.selectOption('#zoom-stufe', z);
+  else await page.click(`[data-z="${z}"]`);
+};
+
 const browser = await firefox.launch({ executablePath: exe });
 let problems = 0;
 
@@ -266,7 +275,7 @@ for (const pg of PAGES) {
   // Nach jedem Zoom zurück auf «heute», sonst hält der Zoom-Anker die Mitte
   // fest und die Bilder landen in der Mai-Planung statt im Aufbau.
   for (const z of ['monate', 'wochen', 'tage', 'stunden']) {
-    await page.click(`[data-z="${z}"]`);
+    await setZoom(page, z);
     await page.waitForTimeout(120);
     await page.click('#now');
     await page.waitForTimeout(420);
@@ -280,7 +289,7 @@ for (const pg of PAGES) {
   }
 
   // Wieder auf Tage + Heute für den Hauptshot
-  await page.click('[data-z="tage"]');
+  await setZoom(page, 'tage');
   await page.click('#now');
   await page.waitForTimeout(400);
 

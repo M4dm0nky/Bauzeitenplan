@@ -131,7 +131,11 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // Eingabe durchsichtig auf den Zeilen darunter.
     'tb-neuart',
     // Verwalten: ohne Rahmen sind Namensfeld und Knöpfe nicht zu unterscheiden.
-    'tb-verw-n', 'tb-verw-b'];
+    'tb-verw-n', 'tb-verw-b',
+    // Die Schiene (v0.12.0): sie ist die einzige Stelle, an der der Modus
+    // gewechselt wird. Ohne eigene Fläche und ohne Markierung des aktiven
+    // Eintrags wäre nicht zu sehen, in welcher der beiden Welten man steht.
+    'rail', 'rail-m', 'rail-t'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

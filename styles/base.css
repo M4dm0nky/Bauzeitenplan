@@ -72,7 +72,40 @@
 
 body { margin: 0; }
 
-.app { display: flex; flex-direction: column; height: 100vh; min-height: 0; }
+/* Zwei Spalten: die Schiene links, alles andere rechts. Die Schiene ist der
+   MODUS und zugleich seine Zeitnavigation — deshalb steht sie neben dem Kopf
+   und nicht darin. NUR Geometrie; Fläche und Markierung bringt das Theme. */
+.app { display: flex; flex-direction: row; height: 100vh; min-height: 0; }
+.col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+/* overflow:hidden, NICHT auto: scrollte die Schiene als Ganzes, schöben vierzehn
+   Bautage «Showablauf» und «Einrichten» unter den Rand — der andere Modus wäre
+   dann nicht mehr einen Klick weit, sondern erst nach dem Suchen. Scrollen darf
+   nur die Tagesliste (.rail-tage). */
+.rail { flex: none; width: 108px; display: flex; flex-direction: column; overflow: hidden; }
+.rail-kopf { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; }
+.rail-wort { line-height: 1; }
+.rail-nav { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+/* Ein Moduseintrag ist ein großes Ziel: Zeichen über Wort, volle Breite. */
+.rail-m {
+  flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 10px 4px; border: 0; background: none; font: inherit; cursor: pointer;
+  text-align: center; line-height: 1.2;
+}
+.rail-z { display: block; line-height: 1; }
+.rail-w { display: block; }
+/* Schrumpfbar, aber nicht wachsend: zwei Showtage bleiben kompakt am
+   Modus-Knopf, vierzehn Bautage nehmen den Rest und scrollen in sich. */
+.rail-tage { flex: 0 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.rail-t {
+  flex: none; border: 0; background: none; font: inherit; cursor: pointer;
+  padding: 6px 4px; text-align: center; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.rail-kw { padding: 6px 4px 2px; text-align: center; letter-spacing: .08em; text-transform: uppercase; }
+.rail-leer { padding: 6px 8px; text-align: center; }
+/* Schiebt das Zahnrad ans untere Ende — Verwaltung ist kein Arbeitsschritt. */
+.rail-sp { flex: 1; min-height: 12px; }
 
 /* ── Gantt-Rahmen ─────────────────────────────────────────────────────────── */
 .bz { position: relative; flex: 1; min-height: 0; display: flex; }
@@ -323,6 +356,15 @@ body { margin: 0; }
    Nur Geometrie. Farben und Schrift kommen aus der Theme-Ebene.               */
 
 .hd-zoom { display: flex; align-items: center; gap: 8px; }
+/* Die Zoomstufe als Klappmenü: vier Knöpfe kosteten ein Viertel der Leiste. */
+.zoom-sel { display: flex; align-items: center; }
+.zoom-sel select { font: inherit; }
+/* Nur für Screenreader — das Klappmenü braucht eine Beschriftung, das Auge
+   nicht: die vier Werte sagen selbst, worum es geht. */
+.vh {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
 
 /* Bühnen-Häkchen (nur Showablauf). Umbrechend, damit acht Bühnen die
    Werkzeugzeile nicht aus dem Fenster schieben. */
@@ -386,10 +428,19 @@ body { margin: 0; }
 /* Ohne Datum reicht die halbe Breite — der Tag steht oben im Umschalter. */
 .tb-t[data-tb-ebene="show"] .c-start,
 .tb-t[data-tb-ebene="show"] .c-end { width: 96px; }
+/* Im Showablauf tragen Start und Ende KEINE Datumsangabe (siehe conflicts.js:
+   mitUhrzeit/endeNachStart) — 175 px sind die Breite eines datetime-local und
+   verschenken hier über hundert Pixel an eine Information, die gar nicht
+   dasteht. Genau dieselbe Begründung, aus der das Datum verschwunden ist. */
+.tb-t[data-tb-ebene="show"] .c-start, .tb-t[data-tb-ebene="show"] .c-end { width: 112px; }
 .c-abs { width: 118px; }
 .c-typ { width: 142px; }
 .c-kon { width: 176px; }
-.c-anf, .c-mat { width: auto; min-width: 230px; }
+/* Die Untergrenze, nicht die Wunschbreite: bei viel Platz wachsen beide von
+   selbst (bei 2200 px auf über 300). Sie liegt bei 210 und nicht bei 230, weil
+   die Schiene der Tabelle gut hundert Pixel Breite abnimmt — mit 230 lief die
+   Showtabelle auf einem 1700er Bildschirm um 28 px seitlich über. */
+.c-anf, .c-mat { width: auto; min-width: 210px; }
 .tb-group td { padding: 8px 8px 5px; }
 .tb-group .bz-dot { display: inline-block; vertical-align: middle; margin-right: 6px; }
 .tb-gname { vertical-align: middle; }
@@ -468,12 +519,20 @@ body { margin: 0; }
 
 /* ── Arbeitsfläche: Gantt/Tabelle + Panel ─────────────────────────────────── */
 .work { flex: 1; min-height: 0; display: flex; }
-.work > .bz, .work > .tb, .work > .bd, .work > .einrichten { flex: 1; min-width: 0; }
+.work > .bz, .work > .tb, .work > .bd { flex: 1; min-width: 0; }
 
 /* ── Einrichten: eigene Seite statt Menü über dem Gantt ──────────────────── */
-.einrichten { overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
-.ei-sec { display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+/* Einrichten liegt jetzt in einem Fenster (.dlg-box), nicht mehr als eigene
+   Seite im Arbeitsbereich — der Plan bleibt dahinter stehen. */
+.einrichten { display: flex; flex-direction: column; gap: 18px; }
+.ei-sec { display: flex; flex-direction: column; gap: 8px; }
 .ei-h { font: inherit; margin: 0; }
+.ein-box { width: min(680px, 100%); }
+.ein-kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* `width: max-content`, sonst spannt die Segmentgruppe als Blockkind des
+   Fensters die volle Breite und ihre Trennfarbe steht rechts als leerer Kasten
+   hinter dem letzten Reiter — im Screenshot gesehen. */
+.ein-reiter { flex-wrap: wrap; width: max-content; max-width: 100%; margin: 14px 0 16px; }
 .ei-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .ei-hint { margin: 0; }
 .ins { flex: none; width: 320px; overflow-y: auto; display: flex; flex-direction: column; }
@@ -639,7 +698,24 @@ body { margin: 0; }
 @media (max-width: 820px) {
   /* Dynamische Viewport-Höhe: 100vh schlösse unter iOS die ein-/ausfahrende
      URL-Leiste ein und schnitte die Fußzeile ab. */
-  .app { height: 100dvh; }
+  .app { height: 100dvh; flex-direction: column; }
+
+  /* Die Schiene legt sich waagerecht über den Kopf: eine senkrechte Spalte
+     kostet auf 390 px ein Viertel der Breite. Sie scrollt IN SICH seitwärts —
+     die Seite darf das nicht, dafür gibt es eine Prüfung. */
+  .rail {
+    flex: none; width: auto; flex-direction: row; align-items: center;
+    gap: 4px; overflow-x: auto; overflow-y: hidden; padding: 0 8px;
+  }
+  .rail-kopf { flex-direction: row; padding: 6px; gap: 6px; }
+  .rail-wort { display: none; }
+  .rail-nav { flex-direction: row; align-items: center; gap: 4px; }
+  .rail-m { flex-direction: row; gap: 6px; padding: 8px 10px; white-space: nowrap; }
+  /* Waagerecht scrollt die Schiene als Ganzes — die Liste darf dann nicht
+     zusätzlich einen eigenen (senkrechten) Scroller aufmachen. */
+  .rail-tage { flex: none; overflow: visible; flex-direction: row; align-items: center; }
+  .rail-kw { display: none; }   /* waagerecht trennt die Woche nichts mehr */
+  .rail-sp { display: none; }
 
   /* Kopf kompakter: beide Reihen dürfen umbrechen, Logo kleiner, Unterzeile und
      Trenner sparen die Höhe. */

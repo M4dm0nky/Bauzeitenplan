@@ -3,6 +3,49 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.12.0 — 2026-09-01
+
+**Neues Bedienkonzept: die Schiene links.** Bauzeitenplan und Showablauf sind
+jetzt zwei getrennte Modi. Am linken Rand steht eine schmale Schiene, genau ein
+Modus ist aktiv, der andere ist einen Klick weit — und man sieht nur, was im
+aktiven Modus etwas bedeutet. Aus **22 gleichzeitig sichtbaren Bedienelementen**
+in der Werkzeugzeile sind **13 im Bauzeitenplan und 9 im Showablauf** geworden.
+
+**Die Schiene ist zugleich die Zeitnavigation.** Unter dem aktiven Modus stehen
+seine Tage: im Showablauf die Showtage, im Bauzeitenplan die Bautage mit
+Kalenderwochen dazwischen. Dafür sind `◀▶` und die Showtag-Segmentgruppe über
+dem Gantt ersatzlos verschwunden — die Navigation liegt an einem Ort statt an
+dreien. Das Datumsfeld bleibt für den weiten Sprung.
+
+**«Einrichten» ist ein Fenster über dem Plan**, keine Seite mehr, die den
+Arbeitsbereich ersetzt: vier Reiter (Projekt · Gewerke & Bühnen · Personal &
+Maschinen · Arten & Abschnitte), der Plan bleibt dahinter stehen, und „Fertig"
+gibt genau den Ausschnitt zurück, bei dem man war. Der Ansicht/Einrichten-
+Umschalter im Kopf entfällt; das Zahnrad unten in der Schiene ersetzt ihn.
+
+Weiter aufgeräumt:
+
+- **Personalbedarf und Maschinenbedarf sind ein Knopf «Bedarf»** mit einer
+  Unterwahl, die erst erscheint, wenn er gedrückt ist. Die beiden alten
+  Beschriftungen waren die längsten der ganzen Leiste.
+- **Die vier Zoomstufen sind ein Klappmenü.** Sie werden selten gewechselt und
+  kosteten als Segmentgruppe ein Viertel der Leistenbreite.
+- **Setup/Show steht nur im Showablauf, die Zeitwerkzeuge nur im
+  Bauzeitenplan.** „Alle zuklappen" und „Monate" sagten im Showablauf nichts.
+- Das Markenzeichen zieht in den Schienenkopf; eine Kopfzeile fällt weg.
+- Im Showablauf sind Start und Ende schmaler (112 statt 175 px) — dort steht
+  kein Datum im Feld, und 175 px ist die Breite eines `datetime-local`.
+
+Neu: `js/rail.js` (rendert nur, meldet über Rückrufe — wie `js/bedarf.js`).
+Die Bausteine `rail`, `rail-m` und `rail-t` sind in allen fünf Themes gestaltet
+und stehen in der `needed`-Liste. Das Datenmodell ist unverändert: ein Plan aus
+0.11.x lädt ohne Migration, `?ansicht=`/`?ebene=`/`?abschnitt=` gelten weiter.
+
+Vier neue Zusicherungen in `verify-edit.mjs` halten das Konzept fest — unter
+anderem, dass vierzehn Bautage «Showablauf» und «Einrichten» nicht unter den
+Fensterrand schieben. Genau das passierte im ersten Versuch und fiel erst im
+Screenshot auf.
+
 ## 0.11.1 — 2026-09-01
 
 **Keine nativen Browser-Dialoge mehr.** `window.prompt()`/`window.confirm()`

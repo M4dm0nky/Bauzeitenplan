@@ -229,9 +229,11 @@ await check(`das ${HUES + 1}. Gewerk (Platz ${HUES}) bekommt Schraffur`, async (
   // HUES besetzt ist — dann muss es GENAU EINEN schraffierten Punkt geben.
   // Der Store lehnt Namensdubletten ab, deshalb jedes Mal ein eigener Name.
   const start = await page.locator('.legend-i').count();
-  // «+ Gewerk» steht auf der Einrichten-Seite.
-  await page.locator('[data-reiter="einrichten"]').click();
+  // «+ Gewerk» steht im Einrichten-Fenster, Reiter «Gewerke & Bühnen».
+  await page.locator('#rail-ein').click();
   await page.waitForTimeout(200);
+  await page.locator('[data-ein="baender"]').click();
+  await page.waitForTimeout(150);
   for (let slot = start; slot <= HUES; slot++) {
     // Eigener Kasten statt window.prompt — Name tippen, «Anlegen» klicken.
     await page.locator('#add-gewerk').click();
@@ -240,7 +242,7 @@ await check(`das ${HUES + 1}. Gewerk (Platz ${HUES}) bekommt Schraffur`, async (
     await page.locator('.tb-neuart-a .btn-p').click();
     await page.waitForTimeout(250);
   }
-  await page.locator('[data-reiter="ansicht"]').click();
+  await page.locator('#ein-zu').click();
   await page.waitForTimeout(200);
   const n = await page.locator('.legend-i .bz-dot[data-tex]').count();
   return n === 1 ? true : `${n} schraffierte Punkte (erwartet 1 bei Platz ${HUES})`;
@@ -373,6 +375,13 @@ const griffPunkt = (id) => page.locator(`.bz-link[data-link-from="${id}"]`).firs
 // Balkens liegt dann weit außerhalb. Die Maus drückte ins Leere.
 // Nutzbarer Bereich: links steht die Gewerk-Spalte, rechts das Panel.
 const RAND = { l: 330, r: 390, t: 140, b: 140 };
+// Der linke Rand muss die GEWERK-SPALTE freihalten: sie klebt sticky über dem
+// Canvas, und ein dorthin geklemmter Zielpunkt liegt auf ihr statt auf dem
+// Balken. Die 330 px waren dafür gerechnet, dass die Spalte am Fensterrand
+// beginnt — seit der Schiene tut sie das nicht mehr, und der Punkt landete
+// mitten in den Gewerknamen. Also fragen statt raten.
+RAND.l = await page.evaluate(() =>
+  Math.ceil(document.querySelector('.bz-side').getBoundingClientRect().right) + 34);
 
 // Der Griff eines Vorgangs, ins Bild geholt. Blind den ersten Balken zu nehmen
 // schlug fehl: an dieser Stelle im Lauf ist der Gantt längst gezoomt und
@@ -636,7 +645,7 @@ console.log('\nPROJEKTWECHSEL');
 await check('zweites Projekt mit ganz anderem Zeitraum anlegen', async () => {
   // Projekt/Export/Import/+Gewerk stehen auf der Einrichten-Seite, nicht mehr
   // in der Arbeitsleiste (siehe "Ansicht | Einrichten" oben im Kopf).
-  await page.locator('[data-reiter="einrichten"]').click();
+  await page.locator('#rail-ein').click();
   await page.waitForTimeout(200);
   await page.locator('#new-proj').click();
   await page.waitForTimeout(400);
@@ -656,7 +665,7 @@ await check('nach dem Wechsel steht die Ansicht beim AUFBAU, nicht irgendwo', as
   await page.waitForTimeout(1000);
   // Zurück zur Arbeitsleiste — sonst steht der Gantt hinter «Einrichten» und
   // jeder .bz-bar hat eine leere Bounding-Box.
-  await page.locator('[data-reiter="ansicht"]').click();
+  await page.locator('#ein-zu').click();
   await page.waitForTimeout(300);
   // Die Tagesansicht zieht GENAU EINEN Kalendertag auf die Breite (volle
   // Tagesansicht) — sichtbar sind also nur die Balken des Aufbau-Tags, nicht
@@ -870,12 +879,73 @@ await page.screenshot({ path: join(here, 'shots', 'edit-9-sub-gantt.png') });
 
 console.log('\nEXPORT');
 await check('Export lädt eine JSON-Datei herunter', async () => {
-  await page.locator('[data-reiter="einrichten"]').click();
+  await page.locator('#rail-ein').click();
   await page.waitForTimeout(200);
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), page.locator('#export').click()]);
   const n = dl.suggestedFilename();
   return n.endsWith('.json') ? true : 'Dateiname: ' + n;
 });
+
+// ── Bedienkonzept: die Schiene ──────────────────────────────────────────────
+// Der ganze Umbau von v0.12.0 hat EIN Versprechen: man sieht nur, was im
+// aktiven Modus etwas bedeutet, und der andere Modus ist einen Klick weit.
+// Diese vier Prüfungen halten genau das fest.
+console.log('\nBEDIENKONZEPT (Schiene + Einrichten-Fenster)');
+
+await check('Einrichten schließen — der Plan steht unverändert dahinter', async () => {
+  // Das Fenster ist vom Export-Test her noch offen.
+  const bzVorher = await page.locator('#bz').isVisible();
+  await page.screenshot({ path: join(here, 'shots', 'edit-10-einrichten.png') });
+  if (!bzVorher) return 'der Gantt ist hinter dem Fenster verschwunden — dann wäre es wieder eine Seite';
+  const links = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
+  await page.locator('#ein-zu').click();
+  await page.waitForTimeout(400);
+  if (!(await page.locator('#ein-dlg').isHidden())) return 'das Fenster bleibt offen';
+  const danach = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
+  return Math.abs(danach - links) < 2 ? true
+    : 'der Ausschnitt ist um ' + Math.round(danach - links) + ' px gesprungen';
+});
+
+await check('im Bauzeitenplan steht nichts vom Showablauf', async () => {
+  await page.locator('.rail-m:not(.rail-ein)').first().click();
+  await page.waitForTimeout(700);
+  if (await page.locator('#seg-abschnitt').isVisible()) return 'Setup/Show steht im Bauzeitenplan';
+  if (await page.locator('#buehnen').isVisible()) return 'die Bühnen-Häkchen stehen im Bauzeitenplan';
+  // …und die Zeitwerkzeuge, die hierher gehören, stehen sehr wohl da.
+  return await page.locator('#zoom-stufe').isVisible() ? true : 'die Zoomstufe fehlt im Bauzeitenplan';
+});
+
+await check('beide Modi und das Zahnrad bleiben sichtbar, auch bei vielen Tagen', async () => {
+  // Die Bautage füllten die Schiene und schoben «Showablauf» und «Einrichten»
+  // unter den Rand — im Screenshot gesehen, von keiner Zusicherung bemerkt.
+  // Scrollen darf nur die Tagesliste, nie die Schiene als Ganzes.
+  const n = await page.locator('.rail-t').count();
+  if (n < 5) return 'nur ' + n + ' Bautage — die Prüfung sagt so nichts aus';
+  for (const sel of ['.rail-m:not(.rail-ein)', '#rail-ein']) {
+    const drin = await page.locator(sel).last().evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= innerHeight + 1;
+    });
+    if (!drin) return sel + ' liegt außerhalb des Fensters';
+  }
+  return true;
+});
+
+await check('ein Klick auf einen Bautag bewegt die Achse wirklich', async () => {
+  const tage = page.locator('.rail-t');
+  const vorher = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
+  await tage.first().click();
+  await page.waitForTimeout(500);
+  const erst = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
+  await tage.last().click();
+  await page.waitForTimeout(500);
+  const letzt = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
+  if (erst === letzt) return 'erster und letzter Tag führen zur selben Position (' + erst + ')';
+  const an = await page.locator('.rail-t[aria-pressed="true"]').count();
+  if (an !== 1) return an + ' Tage markiert';
+  return vorher !== undefined ? true : 'kein Ausgangswert';
+});
+await page.screenshot({ path: join(here, 'shots', 'edit-11-schiene.png') });
 
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');

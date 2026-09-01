@@ -9,6 +9,7 @@ import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
 import { createBedarf } from './bedarf.js';
+import { createRail } from './rail.js';
 import { resolveConflictsCmd, local } from './conflicts.js';
 import { slotsExhausted, MAX_SLOTS, gewerkVar, gewerkTexture } from './palette.js';
 import { createInspector } from './inspector.js';
@@ -22,15 +23,15 @@ import { VERSION } from './version.js';
 // Der Speicher wird in main() gesetzt. Bis dahin null — nichts greift vorher
 // darauf zu.
 let repo = null;
-let store = null, gantt = null, table = null, bedarf = null, inspector = null, view = 'gantt';
+let store = null, gantt = null, table = null, bedarf = null, inspector = null, rail = null;
 
-// ── Reiter: Ansicht ↔ Einrichten ─────────────────────────────────────────────
-// Zwei Bereiche, EINE Leiste. «Ansicht» ist die Arbeitsleiste von vorher
-// (Bauzeitenplan/Setup/Show, Darstellung, Zoom, Live, Prüfen); «Einrichten»
-// sammelt die administrativen Knöpfe (Projekt, Gewerke, Ressourcen, Arten,
-// Abschnitte, Darstellung) auf einer eigenen Seite. `setReiter()` ist der
-// einzige Schreiber — dasselbe Prinzip wie `setAnsicht()`.
-let reiter = 'ansicht';
+// ── Darstellung ─────────────────────────────────────────────────────────────
+// Plan · Tabelle · Bedarf. Personal und Maschinen sind KEINE eigenen
+// Darstellungen mehr, sondern eine Unterwahl innerhalb von «Bedarf» — als
+// «Personalbedarf» und «Maschinenbedarf» waren sie die zwei längsten
+// Beschriftungen der Werkzeugzeile und die Ursache des Handy-Überlaufs.
+let view = 'gantt';
+let bedarfKind = 'personal';
 
 // ── Ansicht ─────────────────────────────────────────────────────────────────
 // DREI gleichrangige Ansichten in EINER Leiste, in der Reihenfolge des Tages:
@@ -57,6 +58,9 @@ let ebene = 'bau';
 let abschnitt = 'alle';
 const ebeneVon = (a) => (a === 'bau' ? 'bau' : 'show');
 const abschnittVon = (a) => (a === 'bau' ? 'alle' : a);
+// Welcher Abschnitt beim Rücksprung in den Showablauf gilt. Nur setAnsicht()
+// schreibt ihn — er ist eine Erinnerung, kein zweiter Zustand.
+let letzteShowAnsicht = 'show';
 
 const ausBlend = new Set();   // ausgeblendete Bühnen (nur im Showablauf)
 // Der gezeigte Showtag. Eine Running Order ist tagesbezogen: beide Showtage
@@ -207,6 +211,19 @@ function mount() {
     onView: () => {
       if (syncZoomSeg) syncZoomSeg();
       $('date-jump').value = gantt.centerDayIso();
+      rail.markBauTag(gantt.centerDayIso());
+    },
+  });
+  rail = createRail($('rail-nav'), {
+    store,
+    on: {
+      // Der Klick auf einen Modus setzt die ANSICHT — die Schiene selbst
+      // schreibt nichts. «Showablauf» kehrt in den zuletzt gewählten
+      // Abschnitt zurück.
+      modus: (m) => setAnsicht(m === 'bau' ? 'bau' : letzteShowAnsicht),
+      showTag: (iso) => { showTag = iso; setAnsicht(ansicht); },
+      bauTag: (iso) => { $('date-jump').value = iso; gantt.goToDay(iso); rail.markBauTag(iso); },
+      einrichten: openEinrichten,
     },
   });
   table = createTable($('tb'), {
@@ -244,7 +261,7 @@ function mount() {
     refreshLive();
     scheduleSave();
     if (view === 'tabelle') renderTable();
-    if (view === 'personal' || view === 'maschine') bedarf.render();
+    if (view === 'bedarf') bedarf.render();
     inspector.render();       // Panel zeigt sonst veraltete Werte
     syncPanel();
   });
@@ -255,23 +272,17 @@ function mount() {
   // Preset-Markierung zu setzen gehört zusammen: beides nach jeder Navigation.
   const dateInput = $('date-jump');
   const syncDate = () => { dateInput.value = gantt.centerDayIso(); };
-  const shiftDay = (iso, days) => {
-    const d = new Date((iso || gantt.centerDayIso()) + 'T00:00');
-    d.setDate(d.getDate() + days);
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  };
-
-  const segs = [...document.querySelectorAll('[data-z]')];
-  const syncSeg = () => segs.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.z === gantt.zoomName)));
+  // Die Zoomstufe ist ein Klappmenü, keine Segmentgruppe: sie wird selten
+  // gewechselt und kostete als vier Knöpfe ein Viertel der Leistenbreite.
+  const zsel = $('zoom-stufe');
+  const syncSeg = () => { zsel.value = gantt.zoomName; };
   syncZoomSeg = syncSeg;
-  const afterNav = () => { syncSeg(); syncDate(); };
-  segs.forEach((b) => { b.onclick = () => { gantt.setZoomPreset(b.dataset.z); afterNav(); }; });
+  const afterNav = () => { syncSeg(); syncDate(); rail.markBauTag(gantt.centerDayIso()); };
+  zsel.onchange = () => { gantt.setZoomPreset(zsel.value); afterNav(); };
   $('zin').onclick = () => { gantt.zoomIn(); afterNav(); };
   $('zout').onclick = () => { gantt.zoomOut(); afterNav(); };
-  $('now').onclick = () => { gantt.goToNow(); syncDate(); };
-  dateInput.onchange = () => { if (dateInput.value) gantt.goToDay(dateInput.value); };
-  $('date-prev').onclick = () => { dateInput.value = shiftDay(dateInput.value, -1); gantt.goToDay(dateInput.value); };
-  $('date-next').onclick = () => { dateInput.value = shiftDay(dateInput.value, 1); gantt.goToDay(dateInput.value); };
+  $('now').onclick = () => { gantt.goToNow(); afterNav(); };
+  dateInput.onchange = () => { if (dateInput.value) { gantt.goToDay(dateInput.value); rail.markBauTag(dateInput.value); } };
   $('bz').addEventListener('wheel', () => requestAnimationFrame(afterNav), { passive: true });
   $('bz').addEventListener('keyup', afterNav);
   syncSeg();
@@ -299,11 +310,17 @@ function mount() {
   });
   setAnsicht(startAnsicht());
 
-  // ── Reiter: Ansicht ↔ Einrichten ──
-  document.querySelectorAll('button[data-reiter]').forEach((b) => {
-    b.onclick = () => setReiter(b.dataset.reiter);
+  // ── Bedarf: Personal oder Maschinen ──
+  document.querySelectorAll('button[data-bedarf]').forEach((b) => {
+    b.onclick = () => {
+      bedarfKind = b.dataset.bedarf;
+      document.querySelectorAll('button[data-bedarf]')
+        .forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.bedarf === bedarfKind)));
+      bedarf.setKind(bedarfKind);
+      bedarf.render();
+    };
   });
-  setReiter('ansicht');
+  document.querySelector('button[data-bedarf="personal"]').setAttribute('aria-pressed', 'true');
 
   // ── Projekt ──
   $('proj-menu').onclick = () => showProjectDialog({});
@@ -351,42 +368,55 @@ function setView(v) {
   document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
   $('bz').hidden = v !== 'gantt';
   $('tb').hidden = v !== 'tabelle';
-  $('bd').hidden = v !== 'personal' && v !== 'maschine';
+  $('bd').hidden = v !== 'bedarf';
   syncPanel();
-  document.querySelector('.hd-zoom').hidden = v !== 'gantt';
+  // Die Zeitwerkzeuge gehören zum Plan UND zum Bauzeitenplan: der Showablauf
+  // ist tagesbezogen, dort sagen Zoomstufen, Datumsfeld und «Alle zuklappen»
+  // nichts. Genau solche Knöpfe waren gemeint, als die Leiste zu voll wurde.
+  document.querySelector('.hd-zoom').hidden = v !== 'gantt' || ebene !== 'bau';
+  $('seg-bedarf').hidden = v !== 'bedarf';
   syncBuehnen();
   if (v === 'tabelle') { renderTable(); return; }
-  if (v === 'personal' || v === 'maschine') { bedarf.setKind(v); bedarf.render(); return; }
+  if (v === 'bedarf') { bedarf.setKind(bedarfKind); bedarf.render(); return; }
   gantt.relayout();
   // Kein Nachziehen per Zeitschätzung: der Gantt passt sich beim
   // Wiederauftauchen selbst ein (ResizeObserver) und meldet das über onView.
 }
 
-// ── Reiter: Ansicht ↔ Einrichten ─────────────────────────────────────────────
-// Der EINZIGE Ort, der über den Bereich entscheidet — dasselbe Prinzip wie
-// setAnsicht() für die Ebene. «Einrichten» ersetzt die Arbeitsleiste UND den
-// Arbeitsbereich durch eine eigene Seite; beim Zurückwechseln stellt setView()
-// die normale Sichtbarkeit von Gantt/Tabelle/Bedarf/Panel wieder her — sie
-// selbst zu erraten wäre eine zweite Kopie derselben Entscheidung.
-function setReiter(name) {
-  reiter = name === 'einrichten' ? 'einrichten' : 'ansicht';
-  document.querySelectorAll('button[data-reiter]')
-    .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.reiter === reiter)));
-  const ein = reiter === 'einrichten';
-  document.querySelector('.hd-bar').hidden = ein;
-  $('legend').hidden = ein;
-  $('einrichten').hidden = !ein;
-  if (ein) {
-    $('bz').hidden = true;
-    $('tb').hidden = true;
-    $('bd').hidden = true;
-    $('ins').hidden = true;
-    $('showhead').hidden = true;
-  } else {
-    setView(view);
-    refreshLive();   // stellt u. a. die Show-Kopfzeile wieder her, wenn nötig
-  }
+// ── Einrichten: ein Fenster über dem Plan ────────────────────────────────────
+// Vorher eine eigene Seite, die den Arbeitsbereich ersetzte — jeder Blick in
+// die Verwaltung kostete den Ausschnitt, auf den man gerade schaute. Als
+// Fenster bleibt der Plan dahinter stehen und das Schließen gibt ihn
+// unverändert zurück; `setView()` muss nichts wiederherstellen.
+//
+// Auf MODULEBENE, nicht in mount(): Import, Neu und Projekte müssen beim
+// allerersten Start funktionieren, wenn noch gar kein Projekt offen ist. Genau
+// daran war der Import schon einmal tot — der Dialog bot ihn an, der Knopf tat
+// nichts.
+function setEinTab(name) {
+  document.querySelectorAll('button[data-ein]')
+    .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ein === name)));
+  document.querySelectorAll('[data-ein-tab]')
+    .forEach((s) => { s.hidden = s.dataset.einTab !== name; });
 }
+
+function openEinrichten() {
+  $('ein-dlg').hidden = false;
+  setEinTab('projekt');
+  $('ein-zu').focus();
+}
+
+const closeEinrichten = () => { $('ein-dlg').hidden = true; };
+
+document.querySelectorAll('button[data-ein]').forEach((b) => {
+  b.onclick = () => setEinTab(b.dataset.ein);
+});
+$('ein-zu').onclick = closeEinrichten;
+// Klick auf die Fläche daneben schließt — wie bei den anderen Dialogen.
+$('ein-dlg').addEventListener('mousedown', (e) => { if (e.target === $('ein-dlg')) closeEinrichten(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('ein-dlg').hidden) closeEinrichten();
+});
 
 // «+ Neu…» aus der Einrichten-Seite: derselbe schwebende Kasten wie beim
 // Anlegen mitten im Tippen, nur ohne anschließende Zuweisung an einen
@@ -406,6 +436,9 @@ function setAnsicht(name) {
   ansicht = ANSICHTEN.includes(name) ? name : 'bau';
   ebene = ebeneVon(ansicht);
   abschnitt = abschnittVon(ansicht);
+  // Der Klick auf «Showablauf» in der Schiene soll dorthin zurückkehren, wo man
+  // war — wer zuletzt im Setup stand, will nicht in der Running Order landen.
+  if (ansicht !== 'bau') letzteShowAnsicht = ansicht;
   localStorage.setItem('bzp_ansicht', ansicht);
   document.querySelectorAll('button[data-ansicht]')
     .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ansicht === ansicht)));
@@ -425,14 +458,18 @@ function setAnsicht(name) {
   gantt.setEbene(ebene, ausBlend, showTag, abschnitt);
   table.setEbene(ebene, ausBlend, showTag, abschnitt);
   bedarf.setEbene(ebene, ausBlend, showTag, abschnitt);
+  rail.setEbene(ebene, showTag, ebene === 'bau' ? gantt.centerDayIso() : null);
   // Die Auswahl gehört der anderen Ebene und zeigt ins Leere.
   gantt.select(null);
   syncPanel();
   syncBuehnen();
+  // Nur der Showablauf hat Abschnitte, nur der Bauzeitenplan Zeitwerkzeuge.
+  // Was im aktiven Modus nichts bedeutet, steht nicht da.
+  $('seg-abschnitt').hidden = ebene !== 'show';
+  document.querySelector('.hd-zoom').hidden = view !== 'gantt' || ebene !== 'bau';
   $('add-gewerk').textContent = ebene === 'show' ? '+ Bühne' : '+ Gewerk';
-  $('fold').hidden = ebene === 'show';   // wenige Zeilen brauchen kein Zuklappen
   if (view === 'tabelle') renderTable();
-  if (view === 'personal' || view === 'maschine') bedarf.render();
+  if (view === 'bedarf') bedarf.render();
   refreshChrome();
   refreshLive();
   // Die Zoom-Markierung gehört zum Bild: setEbene stellt die Stufe neu, ohne
@@ -454,21 +491,9 @@ function syncBuehnen() {
   const buehnen = sichtGewerke(store.state, 'show');
   box.replaceChildren();
 
-  // Showtag zuerst: er entscheidet, WELCHER Ablauf gezeigt wird. Die Bühnen
-  // darunter entscheiden, WESSEN.
-  const tage = programmTage(sichtTasks(store.state, 'show'));
-  if (tage.length > 1) {
-    const seg = el('div', 'seg seg-tag');
-    for (const t of tage) {
-      const btn = el('button', null, new Date(t + 'T12:00')
-        .toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }));
-      btn.setAttribute('aria-pressed', String(t === showTag));
-      btn.onclick = () => { showTag = t; setAnsicht(ansicht); };
-      seg.append(btn);
-    }
-    box.append(seg);
-  }
-
+  // Der Showtag steht NICHT mehr hier, sondern in der Schiene: er entscheidet,
+  // WELCHER Ablauf gezeigt wird, und ist damit Navigation, keine Filterung.
+  // Übrig bleiben die Bühnen-Häkchen — sie entscheiden, WESSEN.
   for (const g of buehnen) {
     const lab = el('label', 'buehne-i');
     const cb = el('input');
@@ -480,7 +505,7 @@ function syncBuehnen() {
       table.setEbene(ebene, ausBlend, showTag, abschnitt);
       bedarf.setEbene(ebene, ausBlend, showTag, abschnitt);
       if (view === 'tabelle') renderTable();
-      if (view === 'personal' || view === 'maschine') bedarf.render();
+      if (view === 'bedarf') bedarf.render();
       refreshChrome();
     };
     const dot = el('span', 'bz-dot');

@@ -572,6 +572,49 @@ Liste mit einem Kürzel je Zeile (👤/⚙) war der günstigere Kompromiss:
 Umbenennen und Löschen funktionieren unverändert, nur das Sortieren gilt über
 beide Arten hinweg.
 
+**Warum die Schiene links und keine Startseite mit zwei Karten (v0.12.0):**
+Nach dem Ressourcen-Ausbau standen in der Werkzeugzeile 22 Bedienelemente
+gleichzeitig — drei Ansichten, vier Darstellungen, Bühnen-Häkchen, vier
+Zoomstufen, ±, Heute, Datumsfeld, ◀▶, Zuklappen, ↺↻, Prüfen, Live, Versatz.
+Die meisten gehören nur zu einer der beiden Welten: «Alle zuklappen» und
+«Monate» sagen im Showablauf nichts, die Bühnen-Häkchen im Bauzeitenplan nichts.
+Vorgeschlagen waren drei Wege — eine Startseite mit zwei Türen, eine Schiene
+links, oder zwei Zeilen plus ein «⋯»-Menü. Gewählt ist die Schiene, weil sie
+zwei Dinge auf einmal löst: sie zeigt PERMANENT, in welcher Welt man steht (die
+Startseite zeigt es nur beim Betreten), und sie hat Platz für die Zeiteinheiten
+des Modus. Die Startseite hätte bei jedem Öffnen einen Klick für eine
+Entscheidung gekostet, die meist längst feststeht.
+
+**Die Schiene ist der Modus UND die Zeitnavigation** (`js/rail.js`). Unter dem
+aktiven Modus stehen seine Tage: im Showablauf die Showtage, im Bauzeitenplan
+die Bautage mit KW-Trennern. Damit konnten ◀▶ und die Showtag-Segmentgruppe aus
+`syncBuehnen()` ersatzlos verschwinden — die Navigation liegt an einem Ort statt
+an dreien. Nur die TAGESLISTE scrollt, nie die Schiene als Ganzes: beim ersten
+Versuch schoben vierzehn Bautage «Showablauf» und «Einrichten» unter den
+Fensterrand, und der andere Modus war nicht mehr einen Klick weit, sondern erst
+nach dem Suchen. Im Screenshot gesehen, von keiner Zusicherung bemerkt — jetzt
+gibt es eine.
+
+**Warum «Einrichten» ein Fenster wurde und keine Seite blieb:** Als eigene
+Seite ersetzte es den Arbeitsbereich, und jeder Blick in die Verwaltung kostete
+den Ausschnitt, auf den man gerade schaute. Genau daraus entstand in v0.11.0 der
+Breite-0-Fehler beim Projektwechsel (siehe oben). Als `.dlg` über dem Plan
+bleibt der Gantt stehen, `setView()` muss beim Schließen nichts
+wiederherstellen, und die Breite ist nie 0. Die Knöpfe sind DIESELBEN Elemente
+mit denselben ids — ihre Handler in `app.js` haben den Umzug nicht bemerkt.
+
+**Warum die Tabelle EIN Modul geblieben ist**, obwohl Bauzeitenplan und
+Showablauf sonst überall getrennt wurden: `table.js` hält Tippsperre,
+`commitOn`, `defaultStart` und die drei schwebenden Kästen (neue Art, neuer
+Abschnitt, Ressourcen) an einer Stelle. Zwei Module wären zwei Orte für dieselben
+Regeln — die Doppelung, die dieses Projekt bei den Versionsstempeln, bei
+`nachSort` und bei `#ins.hidden` schon dreimal teuer bezahlt hat. Getrennt sind
+die SPALTENSÄTZE (`SPALTEN.bau`/`SPALTEN.show`), und sichtbar getrennt ist die
+Tabelle durch ihre Kopfzeile und die Schiene daneben. Eine zusätzliche
+Überschrift «Zeiteinträge · Show · Sa 05.09.» war geplant und wurde beim Blick
+auf den Screenshot gestrichen: sie wiederholt, was die Schiene und der
+Spaltenkopf schon sagen — und mehr Chrome war genau das Gegenteil des Auftrags.
+
 ## Was bewusst noch fehlt
 
 Das Ziehen der **Balken und Dauern** im Gantt sowie Ansichten & Export

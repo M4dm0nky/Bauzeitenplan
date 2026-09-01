@@ -36,6 +36,25 @@ const errors = [];
 p.on('pageerror', (e) => errors.push('JS: ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
+// ── Modus und Abschnitt wechseln ─────────────────────────────────────────────
+// Seit v0.12.0 ist «Bauzeitenplan» ein MODUS in der Schiene links, «Setup» und
+// «Show» sind Abschnitte in der Werkzeugzeile — und die Abschnitts-Gruppe steht
+// nur da, wenn der Showablauf offen ist. Ein Test, der blind
+// `[data-ansicht="bau"]` klickt, klickt seit dem Umbau ins Leere.
+const railM = (i) => p.locator('.rail-m:not(.rail-ein)').nth(i);
+async function gehe(a) {
+  if (a === 'bau') {
+    await railM(0).click();
+  } else {
+    if (!(await p.locator('#seg-abschnitt').isVisible())) {
+      await railM(1).click();
+      await p.waitForTimeout(400);
+    }
+    await p.locator('#seg-abschnitt button[data-ansicht="' + a + '"]').click();
+  }
+  await p.waitForTimeout(200);
+}
+
 let bad = 0;
 const check = async (name, fn) => {
   let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
@@ -73,7 +92,7 @@ await check('der Bauzeitenplan bündelt weiter und trägt KEINE Uhrzeit in der S
   return n === 1 ? true : n + ' Zeilen für «Aufbau Bühne» — die Bündelung ist mit weggefallen';
 });
 
-await p.locator('[data-ansicht="show"]').click();
+await gehe('show');
 await p.waitForTimeout(700);
 
 await check('der Showablauf zeigt genau die Bühne', async () => {
@@ -94,7 +113,7 @@ await check('keine Zeile ohne Balken — die Acts des anderen Tages sind weg', a
   return leer === 0 ? true : leer + ' Zeilen ohne einen einzigen Balken';
 });
 await check('der Tages-Umschalter bringt den Sonntag', async () => {
-  const knoepfe = p.locator('#buehnen .seg-tag button');
+  const knoepfe = p.locator('.rail-t');
   if (await knoepfe.count() !== 2) return (await knoepfe.count()) + ' Tage statt 2';
   await knoepfe.nth(1).click();
   await p.waitForTimeout(600);
@@ -193,12 +212,12 @@ await check('die Balken sind GEFÜLLT, nicht nur umrandet', async () => {
 });
 
 await check('im Bauzeitenplan bleiben sie umrandet', async () => {
-  await p.locator('[data-ansicht="bau"]').click();
+  await gehe('bau');
   await p.waitForTimeout(700);
   const bg = await p.locator('.bz-bar.bz-st-geplant').first()
     .evaluate((n) => getComputedStyle(n).backgroundColor);
   const leer = /transparent|rgba\(0, 0, 0, 0\)/.test(bg);
-  await p.locator('[data-ansicht="show"]').click();
+  await gehe('show');
   await p.waitForTimeout(700);
   return leer ? true : 'auch dort gefüllt: ' + bg;
 });
@@ -296,12 +315,12 @@ await check('«wie Bühne» nimmt die eigene Farbe zurück', async () => {
 
 await check('im Bauzeitenplan gibt es keine Farbwahl', async () => {
   // Dort ist die Zuordnung gerechnet (docs/farbsuche.md) und bleibt es.
-  await p.locator('[data-ansicht="bau"]').click();
+  await gehe('bau');
   await p.waitForTimeout(600);
   await p.locator('.bz-bar').first().click();
   await p.waitForTimeout(500);
   const da = await p.locator('#ins .ins-farbe').count();
-  await p.locator('[data-ansicht="show"]').click();
+  await gehe('show');
   await p.waitForTimeout(700);
   return da === 0 ? true : 'die Farbwahl steht auch im Bauzeitenplan';
 });
@@ -393,7 +412,7 @@ await p.waitForTimeout(300);
 await p.screenshot({ path: join(here, 'shots', 'showablauf-tabelle.png') });
 
 await check('der Bauzeitenplan hat KEINE der neuen Spalten', async () => {
-  await p.locator('[data-ansicht="bau"]').click();
+  await gehe('bau');
   await p.waitForTimeout(500);
   const th = (await p.locator('.tb-t th').allTextContents()).map((x) => x.trim());
   const zuviel = ['Typ', 'Abschnitt', 'Kontakt', 'Anforderungen', 'Material'].filter((x) => th.includes(x));
@@ -405,7 +424,7 @@ await check('der Bauzeitenplan hat KEINE der neuen Spalten', async () => {
 
 // ── Live-Kopfzeile ──────────────────────────────────────────────────────────
 console.log('\nLIVE-KOPFZEILE (Uhr auf Sa 29.08.2026, 15:30)');
-await p.locator('[data-ansicht="show"]').click();
+await gehe('show');
 await p.locator('[data-view="gantt"]').click();
 await p.waitForTimeout(400);
 await p.locator('#live').click();
@@ -499,11 +518,11 @@ await p.screenshot({ path: join(here, 'shots', 'showablauf-versatz.png') });
 await setVzShow(0);
 
 await check('im Bauzeitenplan bleibt die Kopfzeile weg', async () => {
-  await p.locator('[data-ansicht="bau"]').click();
+  await gehe('bau');
   await p.waitForTimeout(400);
   return (await p.locator('#showhead').isHidden()) ? true : 'sie steht auch dort';
 });
-await p.locator('[data-ansicht="show"]').click();
+await gehe('show');
 await p.waitForTimeout(500);
 await p.screenshot({ path: join(here, 'shots', 'showablauf-live.png') });
 
@@ -635,9 +654,25 @@ await check('Start und Ende zeigen nur die Uhrzeit', async () => {
   return /^\d{2}:\d{2}$/.test(wert) ? true : 'Wert ist «' + wert + '»';
 });
 
-await check('die Tabelle passt jetzt ohne seitliches Scrollen ins Bild', async () => {
-  const [breit, sicht] = await p.locator('.tb').evaluate((n) => [n.scrollWidth, n.clientWidth]);
-  return breit <= sicht + 1 ? true : breit + ' px in einem ' + sicht + ' px breiten Fenster';
+// Bis v0.11.1 stand hier «passt ohne seitliches Scrollen ins Bild». Die
+// Schiene nimmt der Tabelle 108 px, und die dreizehn Spalten des Showablaufs
+// stehen bei 1700 px längst auf ihrem INHALTLICHEN Minimum von 1620 px — eine
+// einzelne Spalte zu kürzen verschiebt die Enge nur, die anderen wachsen um
+// denselben Betrag nach (nachgemessen: c-anf von 230 auf 210 gesenkt, Summe
+// unverändert 1620).
+//
+// Der Handel ist bewusst: gut hundert Pixel Breite gegen einen Modus, der
+// immer sichtbar ist. Geprüft wird deshalb, was wirklich zählt — die Tabelle
+// scrollt IN SICH und reißt die Seite nicht mit, und der Überhang bleibt klein
+// genug, dass keine Spalte ganz aus dem Bild fällt.
+await check('die Tabelle scrollt in sich, nicht die Seite — und nur knapp', async () => {
+  const [breit, sicht, ov] = await p.locator('.tb')
+    .evaluate((n) => [n.scrollWidth, n.clientWidth, getComputedStyle(n).overflowX]);
+  if (ov === 'visible') return 'die Tabelle hat keinen eigenen Scroll-Container';
+  const seite = await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
+  if (seite) return 'die SEITE läuft seitlich über';
+  const ueber = breit - sicht;
+  return ueber <= 60 ? true : ueber + ' px Überhang (' + breit + ' in ' + sicht + ')';
 });
 
 await check('eine Uhrzeit ändern verschiebt den Eintrag NICHT auf einen anderen Tag', async () => {
@@ -682,7 +717,7 @@ await check('ANLEGEN ERZEUGT EINEN BALKEN IM SETUP', async () => {
   // Am Vormittag, nicht kurz vor dem Auftritt: ein Soundcheck läuft im Setup.
   if (!sc.start.startsWith('2026-08-29T08:00')) return 'beginnt um ' + sc.start.slice(11) + ', erwartet 08:00';
 
-  await p.locator('[data-ansicht="setup"]').click();
+  await gehe('setup');
   await p.waitForTimeout(900);
   const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
   if (!namen.some((x) => x.trim() === 'Soundcheck SIDO')) return 'im Setup nicht zu sehen: ' + namen.join('|');
@@ -693,7 +728,7 @@ await check('ANLEGEN ERZEUGT EINEN BALKEN IM SETUP', async () => {
 await p.screenshot({ path: join(here, 'shots', 'showablauf-soundcheck.png') });
 
 await check('er hat eine Dauer, die sich ändern lässt', async () => {
-  await p.locator('[data-ansicht="show"]').click();
+  await gehe('show');
   await p.waitForTimeout(800);
   await p.locator('.bz-bar').filter({ hasText: 'SIDO' }).first().click();
   await p.waitForTimeout(600);
@@ -737,7 +772,7 @@ await check('den Act löschen nimmt den Soundcheck mit', async () => {
 // Block hinterlässt den Zustand, den der nächste erwartet — sonst prüft man
 // irgendwann die Reste des vorigen.
 await check('den Soundcheck wieder entfernen räumt den Setup leer', async () => {
-  await p.locator('[data-ansicht="show"]').click();
+  await gehe('show');
   await p.waitForTimeout(700);
   await p.locator('.bz-bar').filter({ hasText: 'SIDO' }).first().click();
   await p.waitForTimeout(600);
@@ -934,7 +969,7 @@ await check('in der Show trägt die Zeile «Load-in», nicht «Show»', async ()
   // Das Auswahlfeld zeigt den GESPEICHERTEN Wert. Zeigte es «Show», nur weil die
   // Ansicht ihn dorthin rechnet, wäre der eigene Abschnitt nach einem Blick auf
   // die Zeile wieder verloren.
-  await p.locator('[data-ansicht="show"]').click();
+  await gehe('show');
   await p.waitForTimeout(800);
   const werte = await p.locator('.tb-r .c-abs select').evaluateAll((s) => s.map((x) => x.value));
   if (!werte.includes('loadin')) return 'in der Show steht er als «' + [...new Set(werte)].join(',') + '»';
@@ -945,7 +980,7 @@ await check('in der Show trägt die Zeile «Load-in», nicht «Show»', async ()
   const zeile = p.locator('.tb-r').filter({ has: p.locator('.c-abs select option[value="loadin"]:checked') }).first();
   await zeile.locator('.c-abs select').selectOption('setup');
   await p.waitForTimeout(700);
-  await p.locator('[data-ansicht="setup"]').click();
+  await gehe('setup');
   await p.waitForTimeout(700);
   return (await p.locator('.tb-r').count()) === 1 ? true : 'der Eintrag kam nicht ins Setup zurück';
 });
@@ -1107,7 +1142,7 @@ await check('Escape bricht ab, ohne etwas anzulegen', async () => {
 await check('im Show-Abschnitt ist er WEG — dieselbe Bühne, anderer Ablauf', async () => {
   await p.locator('[data-view="gantt"]').click();
   await p.waitForTimeout(500);
-  await p.locator('[data-ansicht="show"]').click();
+  await gehe('show');
   await p.waitForTimeout(800);
   const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
   if (namen.some((x) => /Neuer Zeiteintrag/.test(x))) return 'der Setup-Eintrag steht in der Show';
@@ -1115,17 +1150,35 @@ await check('im Show-Abschnitt ist er WEG — dieselbe Bühne, anderer Ablauf', 
   // Und die Bühne heißt in beiden dasselbe — sie ist dieselbe.
   const band = await p.locator('.bz-lab-group .bz-lab-name').allTextContents();
   if (band.join('|') !== 'Hauptbühne') return 'Bänder in der Show: ' + band.join('|');
-  await p.locator('[data-ansicht="setup"]').click();
+  await gehe('setup');
   await p.waitForTimeout(800);
   return true;
 });
 
-await check('Zoomstufe und Datumsfeld zeigen, was die Achse zeigt', async () => {
-  const datum = await p.locator('#date-jump').inputValue();
-  if (datum !== '2026-08-29') return 'Datumsfeld steht auf ' + datum;
-  const an = await p.locator('[data-z][aria-pressed="true"]').allTextContents();
-  if (an.length > 1) return 'mehrere Zoomstufen markiert: ' + an.join(' ');
-  return !an.length || an[0].trim() === 'Stunden' ? true : 'markiert: ' + an[0].trim();
+// Früher stand hier: «Zoomstufe und Datumsfeld zeigen, was die Achse zeigt» —
+// eine Prüfung gegen den Fehler «Zoom-Umschalter auf Monate über einer
+// Stundenachse». Seit v0.12.0 gibt es die Zeitwerkzeuge im Showablauf gar
+// nicht mehr: er ist tagesbezogen, der Tag steht in der Schiene, und
+// «Monate»/«Wochen»/«Alle zuklappen» sagten hier ohnehin nichts. Statt der
+// Übereinstimmung wird jetzt die ABWESENHEIT geprüft — der Fehler ist damit
+// nicht mehr behoben, sondern unmöglich.
+await check('im Showablauf stehen keine Zeitwerkzeuge des Bauzeitenplans', async () => {
+  if (await p.locator('.hd-zoom').isVisible()) return 'die Zoomleiste steht im Showablauf';
+  for (const sel of ['#zoom-stufe', '#date-jump', '#fold']) {
+    if (await p.locator(sel).isVisible()) return sel + ' ist im Showablauf sichtbar';
+  }
+  // Und der Abschnitts-Umschalter, der hierher gehört, steht sehr wohl da.
+  return await p.locator('#seg-abschnitt').isVisible()
+    ? true : 'der Setup/Show-Umschalter fehlt im Showablauf';
+});
+
+await check('der Showtag steht in der Schiene und ist dort markiert', async () => {
+  const tage = p.locator('.rail-t');
+  const n = await tage.count();
+  if (!n) return 'die Schiene zeigt keinen Showtag';
+  const an = await p.locator('.rail-t[aria-pressed="true"]').allTextContents();
+  if (an.length !== 1) return an.length + ' markierte Tage in der Schiene';
+  return true;
 });
 
 await check('der Setup-View rechnet seine eigene Zeitachse', async () => {
@@ -1164,31 +1217,44 @@ if ((await p.locator('#live').getAttribute('aria-pressed')) === 'true') {
 }
 await p.screenshot({ path: join(here, 'shots', 'showablauf-setup.png') });
 
-await check('IMMER GENAU EINE Ansicht ist gedrückt', async () => {
-  // Der Fehler, der das ausgelöst hat: zwei Umschalter im selben Stil
-  // nebeneinander, mit je einem dunklen Knopf. Das las sich als eine Leiste, in
-  // der zwei Dinge gleichzeitig angewählt sind.
-  for (const a of ['bau', 'setup', 'show']) {
-    await p.locator(`[data-ansicht="${a}"]`).click();
+// Der Fehler, der diese Prüfungen ausgelöst hat: zwei Umschalter im selben Stil
+// nebeneinander, mit je einem dunklen Knopf — das las sich als EINE Leiste, in
+// der zwei Dinge gleichzeitig angewählt sind. Seit v0.12.0 stehen sie nicht mehr
+// nebeneinander: der Modus ist die Schiene links, der Abschnitt die
+// Werkzeugzeile. Geprüft wird deshalb beides einzeln — und zusätzlich, dass die
+// Abschnitts-Gruppe im Bauzeitenplan gar nicht erst dasteht.
+await check('IMMER GENAU EIN Modus ist in der Schiene gedrückt', async () => {
+  for (const [i, name] of [[0, 'Bauzeitenplan'], [1, 'Showablauf']]) {
+    await railM(i).click();
     await p.waitForTimeout(700);
-    const an = await p.locator('[data-ansicht][aria-pressed="true"]').allTextContents();
+    const an = await p.locator('.rail-m[aria-pressed="true"]').allTextContents();
+    if (an.length !== 1) return name + ': ' + an.length + ' Modi gedrückt';
+    if (!an[0].includes(name)) return name + ': gedrückt ist «' + an[0].trim() + '»';
+  }
+  return true;
+});
+
+await check('der Abschnitts-Umschalter steht NUR im Showablauf', async () => {
+  await gehe('bau');
+  await p.waitForTimeout(600);
+  if (await p.locator('#seg-abschnitt').isVisible()) return 'Setup/Show steht im Bauzeitenplan';
+  if (await p.locator('#buehnen').isVisible()) return 'die Bühnen-Häkchen stehen im Bauzeitenplan';
+  for (const a of ['setup', 'show']) {
+    await gehe(a);
+    await p.waitForTimeout(700);
+    const an = await p.locator('#seg-abschnitt button[aria-pressed="true"]').allTextContents();
     if (an.length !== 1) return a + ': ' + an.length + ' gedrückt (' + an.join(' ') + ')';
-    const soll = { bau: 'Bauzeitenplan', setup: 'Setup', show: 'Show' }[a];
+    const soll = { setup: 'Setup', show: 'Show' }[a];
     if (an[0].trim() !== soll) return a + ': gedrückt ist «' + an[0].trim() + '»';
   }
   return true;
 });
 
-await check('die Reihenfolge ist Bauzeitenplan, Setup, Show', async () => {
-  const namen = (await p.locator('[data-ansicht]').allTextContents()).map((x) => x.trim());
-  return namen.join(' · ') === 'Bauzeitenplan · Setup · Show' ? true : namen.join(' · ');
-});
-
 await check('der Wechsel greift wirklich, nicht nur die Markierung', async () => {
-  await p.locator('[data-ansicht="setup"]').click();
+  await gehe('setup');
   await p.waitForTimeout(800);
   const imSetup = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
-  await p.locator('[data-ansicht="show"]').click();
+  await gehe('show');
   await p.waitForTimeout(800);
   const inShow = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
   if (imSetup.length === inShow.length) return 'beide zeigen ' + inShow.length + ' Zeilen';
@@ -1262,7 +1328,7 @@ await check('auf dem Handy bricht die Dauer unter die Zeile, statt den Namen zu 
   return inhalt <= h + 1 ? true : 'Inhalt ' + inhalt + ' px in einer ' + Math.round(h) + ' px hohen Zeile';
 });
 await check('Tages- und Bühnenwahl bleiben auf dem Handy bedienbar', async () => {
-  const h = await p.locator('#buehnen .seg-tag button').first()
+  const h = await p.locator('.rail-t').first()
     .evaluate((n) => n.getBoundingClientRect().height);
   return h >= 28 ? true : 'nur ' + Math.round(h) + ' px hoch';
 });

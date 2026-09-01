@@ -72,7 +72,7 @@ await check('Besucher-Gastro, Sanitätsdienst und Crew sind in der Legende', asy
 });
 
 // Überblick über die zwei Wochen
-await p.locator('[data-z="wochen"]').click();
+await p.selectOption('#zoom-stufe', 'wochen');
 await p.waitForTimeout(400);
 await check('Balken sind im Bild', async () => {
   const vis = await p.locator('.bz-bar').evaluateAll((ns, w) =>
@@ -155,7 +155,7 @@ await p.screenshot({ path: join(here, 'shots', 'klassentreffen-zugeklappt.png') 
 await p.locator('#fold').click();
 await p.waitForTimeout(400);
 
-await p.locator('[data-z="monate"]').click();
+await p.selectOption('#zoom-stufe', 'monate');
 await p.waitForTimeout(400);
 await p.screenshot({ path: join(here, 'shots', 'klassentreffen-monate.png'), fullPage: false });
 
