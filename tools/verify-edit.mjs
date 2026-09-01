@@ -233,8 +233,11 @@ await check(`das ${HUES + 1}. Gewerk (Platz ${HUES}) bekommt Schraffur`, async (
   await page.locator('[data-reiter="einrichten"]').click();
   await page.waitForTimeout(200);
   for (let slot = start; slot <= HUES; slot++) {
-    await page.evaluate((name) => { window.prompt = () => name; }, 'Extra-Gewerk ' + slot);
+    // Eigener Kasten statt window.prompt — Name tippen, «Anlegen» klicken.
     await page.locator('#add-gewerk').click();
+    await page.waitForTimeout(150);
+    await page.locator('.tb-neuart-n').fill('Extra-Gewerk ' + slot);
+    await page.locator('.tb-neuart-a .btn-p').click();
     await page.waitForTimeout(250);
   }
   await page.locator('[data-reiter="ansicht"]').click();

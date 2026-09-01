@@ -20,7 +20,7 @@ const DEP_TYPES = [
 // Vorher schrieben vier Stellen an #ins.hidden — zwei hier, zwei in app.js —
 // und render() kannte die Ansicht nicht. Jede Änderung holte das Panel in der
 // Tabellen-Ansicht zurück. Ein Zustand, ein Besitzer: app.js.
-export function createInspector(root, { store, onError, onClose } = {}) {
+export function createInspector(root, { store, onError, onClose, onConfirm, openNeuFragen } = {}) {
   root.classList.add('ins');
   let sel = null;
 
@@ -95,11 +95,15 @@ export function createInspector(root, { store, onError, onClose } = {}) {
     root.append(add);
 
     const del = el('button', 'btn btn-danger', 'Gewerk löschen');
-    del.onclick = () => {
+    del.onclick = async () => {
       const msg = tasks.length
         ? `«${g.name}» löschen? ${tasks.length} ${tasks.length === 1 ? 'Vorgang geht' : 'Vorgänge gehen'} mit, samt Verknüpfungen. ⌘Z holt alles zurück.`
         : `«${g.name}» löschen?`;
-      if (!confirm(msg)) return;
+      const ok = await onConfirm({
+        title: 'Gewerk löschen?', message: [msg],
+        buttons: [{ label: 'Abbrechen', value: false }, { label: 'Löschen', value: true, danger: true }],
+      });
+      if (!ok) return;
       send({ type: 'removeGewerk', id: g.id });
       sel = null; render(); if (onClose) onClose();
     };
@@ -586,15 +590,18 @@ export function createInspector(root, { store, onError, onClose } = {}) {
       const b = el('button', 'btn ins-res-add', label);
       b.onclick = () => {
         const vorhanden = ressourcen(store.state, kind);
-        let rid = vorhanden[0] && vorhanden[0].id;
-        if (!rid) {
-          const name = prompt('Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + '):');
-          if (!name) return;
-          const r = send({ type: 'addRessource', label: name, kind });
-          if (!r || r.ok === false) return;
-          rid = r.id;
+        if (!vorhanden.length) {
+          // Eigener App-Kasten statt window.prompt — der schwebt über der
+          // Tabelle, table.js besitzt ihn, hier nur über openNeuFragen geliehen.
+          openNeuFragen({
+            titel: 'Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + ')',
+            cmd: { type: 'addRessource', kind },
+          }, b, (rid) => {
+            send({ type: 'setTaskRes', id: t.id, index: null, value: { rid, n: 1, von: null, bis: null } });
+          });
+          return;
         }
-        send({ type: 'setTaskRes', id: t.id, index: null, value: { rid, n: 1, von: null, bis: null } });
+        send({ type: 'setTaskRes', id: t.id, index: null, value: { rid: vorhanden[0].id, n: 1, von: null, bis: null } });
       };
       return b;
     };
@@ -647,12 +654,13 @@ export function createInspector(root, { store, onError, onClose } = {}) {
     rsel.append(neu);
     rsel.onchange = () => {
       if (rsel.value === NEUE_RES) {
-        const name = prompt('Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + '):');
-        rsel.value = z.rid;
-        if (!name) return;
-        const r = send({ type: 'addRessource', label: name, kind });
-        if (!r || r.ok === false) return;
-        send({ type: 'setTaskRes', id: t.id, index: idx, value: { rid: r.id, n: z.n, von: z.von, bis: z.bis } });
+        rsel.value = z.rid;   // Auswahl sofort zurückstellen, falls abgebrochen wird
+        openNeuFragen({
+          titel: 'Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + ')',
+          cmd: { type: 'addRessource', kind },
+        }, rsel, (id) => {
+          send({ type: 'setTaskRes', id: t.id, index: idx, value: { rid: id, n: z.n, von: z.von, bis: z.bis } });
+        });
         return;
       }
       send({ type: 'setTaskRes', id: t.id, index: idx, value: { rid: rsel.value, n: z.n, von: z.von, bis: z.bis } });

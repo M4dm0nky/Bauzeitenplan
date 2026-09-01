@@ -219,6 +219,10 @@ function mount() {
     store,
     onError: (msg) => toast(msg, 'bad'),
     onClose: () => { gantt.select(null); syncPanel(); },
+    // Eigene App-Dialoge statt window.confirm/prompt — dieselben Bausteine
+    // wie überall sonst (askDialog hier, der schwebende Kasten aus table.js).
+    onConfirm: (opts) => askDialog(opts),
+    openNeuFragen: (opt, ankerEl, fertig) => table.openNeuFragen(opt, ankerEl, fertig),
   });
   if (gantt.minimapNode) $('mini').append(gantt.minimapNode);
 
@@ -690,10 +694,15 @@ function showContext(sel, x, y) {
       { label: 'Nach unten', hint: '↓', disabled: i === list.length - 1, run: () => apply({ type: 'reorderGewerk', id: g.id, dir: 1 }) },
       null,
       { label: 'Bearbeiten …', run: () => gantt.select(sel) },
-      { label: count ? `Löschen (${count} ${count === 1 ? 'Vorgang' : 'Vorgänge'})` : 'Löschen', danger: true, run: () => {
-        if (!confirm(count
-          ? `«${g.name}» löschen? ${count} ${count === 1 ? 'Vorgang geht' : 'Vorgänge gehen'} mit. ⌘Z holt alles zurück.`
-          : `«${g.name}» löschen?`)) return;
+      { label: count ? `Löschen (${count} ${count === 1 ? 'Vorgang' : 'Vorgänge'})` : 'Löschen', danger: true, run: async () => {
+        const ok = await askDialog({
+          title: 'Gewerk löschen?',
+          message: [count
+            ? `«${g.name}» löschen? ${count} ${count === 1 ? 'Vorgang geht' : 'Vorgänge gehen'} mit. ⌘Z holt alles zurück.`
+            : `«${g.name}» löschen?`],
+          buttons: [{ label: 'Abbrechen', value: false }, { label: 'Löschen', value: true, danger: true }],
+        });
+        if (!ok) return;
         apply({ type: 'removeGewerk', id: g.id });
       } },
     ]);
@@ -826,11 +835,13 @@ function addGewerk() {
   if (slotsExhausted(da + 1)) {
     toast(`Mehr als ${MAX_SLOTS} ${wort}e: ab hier trägt die Farbe die Zuordnung nicht mehr, nur noch der Name.`, 'warn', 7000);
   }
-  const name = prompt(buehne ? 'Name der Bühne (z. B. Hauptbühne, Zelt, Halle 3):' : 'Name des Gewerks:');
-  if (!name) return;
-  const r = store.apply({ type: 'addGewerk', gewerk: { name, art: buehne ? 'buehne' : 'gewerk' } });
-  if (r.ok === false) return toast(r.error, 'bad');
-  syncBuehnen();
+  // Eigener App-Kasten statt window.prompt — derselbe schwebende Kasten wie
+  // beim Anlegen einer Eintragsart, nur mit einer anderen Befehlsform: der
+  // Name gehört hier in gewerk.name, nicht obenauf als label.
+  table.openNeuFragen({
+    titel: buehne ? 'Name der Bühne (z. B. Hauptbühne, Zelt, Halle 3)' : 'Name des Gewerks',
+    buildCmd: (name) => ({ type: 'addGewerk', gewerk: { name, art: buehne ? 'buehne' : 'gewerk' } }),
+  }, $('add-gewerk'), () => syncBuehnen());
 }
 
 // ── Export / Import ─────────────────────────────────────────────────────────
@@ -904,8 +915,13 @@ function showProjectDialog({ firstRun = false }) {
       b.onclick = () => { const pl = repo.load(p.id); if (pl) { open(pl); close(); } };
       const del = el('button', 'dlg-del', '×');
       del.title = 'Projekt löschen';
-      del.onclick = () => {
-        if (!confirm(`«${p.name}» endgültig löschen? Das lässt sich nicht rückgängig machen — exportiere vorher, wenn du unsicher bist.`)) return;
+      del.onclick = async () => {
+        const ok = await askDialog({
+          title: 'Projekt löschen?',
+          message: [`«${p.name}» endgültig löschen? Das lässt sich nicht rückgängig machen — exportiere vorher, wenn du unsicher bist.`],
+          buttons: [{ label: 'Abbrechen', value: false }, { label: 'Löschen', value: true, danger: true }],
+        });
+        if (!ok) return;
         repo.remove(p.id);
         showProjectDialog({ firstRun: repo.list().length === 0 });
       };

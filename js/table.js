@@ -597,7 +597,9 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
    * Store ihn angenommen hat.
    *
    * @param {HTMLElement} anker   Auswahlfeld, an dem der Kasten ausgerichtet wird
-   * @param {object} opt          { titel, kompaktFeld, cmd }
+   * @param {object} opt          { titel, kompaktFeld, cmd } — oder statt `cmd`
+   *   ein `buildCmd(wert, kompakt)`, wenn der Name nicht als `label` obenauf
+   *   gehört (z. B. `addGewerk`, das ihn in `gewerk.name` erwartet).
    * @param {(id:string)=>void} fertig
    *
    * Hängt an `document.body`, nicht in die Tabelle: ein `render()` würde es
@@ -649,7 +651,10 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
     };
     const aussen = (e) => { if (!box.contains(e.target)) zu(); };
     function anlegen() {
-      const r = send({ ...opt.cmd, label: feld.value, kompakt: hk ? hk.checked : undefined });
+      const cmd = opt.buildCmd
+        ? opt.buildCmd(feld.value, hk ? hk.checked : undefined)
+        : { ...opt.cmd, label: feld.value, kompakt: hk ? hk.checked : undefined };
+      const r = send(cmd);
       // Abgelehnt (leer oder doppelt): stehen lassen, der Fehler steht schon
       // oben. Sonst verschwände die Eingabe kommentarlos.
       if (!r || r.ok === false) { feld.focus(); feld.select(); return; }
@@ -851,13 +856,18 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
         rsel.append(neu);
         rsel.onchange = () => {
           if (rsel.value === NEUE_RES) {
-            const name = prompt('Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + '):');
-            if (!name) { zeichne(); return; }
-            const r = send({ type: 'addRessource', label: name, kind });
-            if (r && r.ok !== false) {
-              send({ type: 'setTaskRes', id: task.id, index: idx, value: { rid: r.id, n: z.n, von: z.von, bis: z.bis } });
-            }
-            zeichne();
+            // neuFragen() ersetzt diesen Kasten (nur EIN schwebender Kasten
+            // gleichzeitig, wie überall sonst) — das Rechteck deshalb VORHER
+            // sichern, `rsel` selbst ist gleich abgehängt (dieselbe Regel wie
+            // bei platziere()).
+            const rect = rsel.getBoundingClientRect();
+            neuFragen({ getBoundingClientRect: () => rect }, {
+              titel: 'Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + ')',
+              cmd: { type: 'addRessource', kind },
+            }, (id) => {
+              send({ type: 'setTaskRes', id: task.id, index: idx, value: { rid: id, n: z.n, von: z.von, bis: z.bis } });
+              resKasten(anker, task);   // frisch öffnen, mit der neuen Bezeichnung
+            });
             return;
           }
           send({ type: 'setTaskRes', id: task.id, index: idx, value: { rid: rsel.value, n: z.n, von: z.von, bis: z.bis } });
@@ -876,15 +886,19 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
         const b = el('button', 'btn', label);
         b.onclick = () => {
           const vorhanden = ressourcen(store.state, kind);
-          let rid = vorhanden[0] && vorhanden[0].id;
-          if (!rid) {
-            const name = prompt('Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + '):');
-            if (!name) return;
-            const r = send({ type: 'addRessource', label: name, kind });
-            if (!r || r.ok === false) return;
-            rid = r.id;
+          if (!vorhanden.length) {
+            // `anker` bleibt angehängt (er hat resKasten geöffnet, liegt also
+            // außerhalb dieses Kastens) — kein Rechteck-Vorabfang nötig.
+            neuFragen(anker, {
+              titel: 'Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + ')',
+              cmd: { type: 'addRessource', kind },
+            }, (rid) => {
+              send({ type: 'setTaskRes', id: task.id, index: null, value: { rid, n: 1, von: null, bis: null } });
+              resKasten(anker, task);
+            });
+            return;
           }
-          send({ type: 'setTaskRes', id: task.id, index: null, value: { rid, n: 1, von: null, bis: null } });
+          send({ type: 'setTaskRes', id: task.id, index: null, value: { rid: vorhanden[0].id, n: 1, von: null, bis: null } });
           zeichne();
         };
         return b;

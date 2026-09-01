@@ -763,6 +763,19 @@ Ein Kürzel je Zeile (`tb-verw-kind`, 👤/⚙) sagt wenigstens, was man vor sic
 hat. Anlegen geht trotzdem getrennt — zwei Knöpfe „+ Personal"/„+ Maschine"
 in Einrichten, weil `addRessource` das `kind` beim Anlegen braucht.
 
+**Niemals `window.prompt`/`confirm`/`alert` — immer die eigenen App-Dialoge.**
+Native Popups fallen optisch aus dem Rahmen, sind je Browser anders und lassen
+sich nicht themen. Für jeden Fall gibt es einen Baustein: eine Bestätigung
+läuft über `askDialog({title, message, buttons})` (app.js, liefert den `value`
+des gewählten Knopfs, `null` bei Abbruch); eine Namenseingabe mitten im Tippen
+läuft über den schwebenden Kasten `tb-neuart` (`neuFragen` in table.js,
+exportiert als `table.openNeuFragen(opt, ankerEl, fertig)` für Aufrufer
+außerhalb der Tabelle — Panel, Einrichten-Seite). `neuFragen` akzeptiert neben
+`cmd` (Name landet als `label` obenauf) auch `buildCmd(wert, kompakt)`, wenn
+der Name woanders im Befehl gehört (`addGewerk` z. B. in `gewerk.name`).
+`grep -rn "window\.prompt\|[^.]prompt(\|confirm(\|alert(" js/*.js` muss leer
+bleiben (Kommentare ausgenommen).
+
 ## Aus Crewplaner gelernt — aufgehoben für den Tag, an dem ein Backend kommt
 
 - `project_id` & Co. als **Text**, niemals als Relation. Coolify-Reimport kippt
