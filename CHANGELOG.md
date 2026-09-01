@@ -3,6 +3,22 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.11.1 — 2026-09-01
+
+**Keine nativen Browser-Dialoge mehr.** `window.prompt()`/`window.confirm()`
+sind vollständig durch die eigenen App-Dialoge ersetzt — sie fielen optisch
+aus dem Rahmen und ließen sich nicht themen. Betroffen: eine neue
+Personal-/Maschinen-Bezeichnung anlegen (Panel und Tabelle), ein Gewerk
+anlegen, ein Gewerk löschen (Panel und Kontextmenü), ein Projekt löschen.
+
+Der schwebende Kasten aus der Tabelle (`tb-neuart`, bisher nur für
+Eintragsarten und Abschnitte) lässt sich jetzt auch von außen öffnen
+(`table.openNeuFragen`/`openVerwalten`) und trägt einen zweiten Befehlsweg
+(`buildCmd`) für Fälle, in denen der eingetippte Name nicht als `label`
+obenauf gehört — bei `addGewerk` etwa in `gewerk.name`.
+
+Acht Prüfläufe grün.
+
 ## 0.11.0 — 2026-08-31
 
 **Ansicht und Einrichten.** Ganz oben im Kopf steht jetzt ein Umschalter mit
