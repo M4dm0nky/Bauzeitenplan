@@ -107,11 +107,6 @@ body {
 }
 .btn:hover { border-color: var(--ink); color: var(--ink); }
 
-.date-jump {
-  border: 1px solid var(--rule-2); background: var(--panel2); color: var(--ink-2);
-  padding: 3px 6px; font-family: var(--mono); font-size: calc(9px * var(--fs));
-}
-.date-jump:hover, .date-jump:focus { border-color: var(--ink); color: var(--ink); outline: none; }
 
 .legend { gap: 3px 12px; margin-left: auto; font-family: var(--mono); font-size: calc(9px * var(--fs)); color: var(--ink-2); }
 
@@ -457,11 +452,6 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .rail-m[aria-pressed="true"] { background: var(--accent-b); color: var(--on-accent); font-weight: 600; }
 .rail-z { font-size: calc(16px * var(--fs)); }
 .rail-w { font-family: var(--mono); font-size: calc(8.5px * var(--fs)); letter-spacing: .07em; text-transform: uppercase; }
-.rail-t { color: var(--ink-2); font-family: var(--mono); font-size: calc(9.5px * var(--fs)); }
-.rail-t:hover { background: var(--bg); color: var(--ink); }
-.rail-t[aria-pressed="true"] { background: var(--bg); color: var(--ink); font-weight: 700; box-shadow: inset 3px 0 0 var(--accent-b); }
-.rail-kw { font-family: var(--mono); font-size: calc(7.5px * var(--fs)); color: var(--muted); }
-.rail-leer { font-family: var(--mono); font-size: calc(8px * var(--fs)); color: var(--muted); }
 .rail-ein { margin-top: auto; border-top: 1px solid var(--rule); border-bottom: 0; }
 .ei-h { font-family: var(--mono); font-size: calc(9px * var(--fs)); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .ei-hint { font-size: calc(9.5px * var(--fs)); color: var(--muted); line-height: 1.5; }

@@ -17,6 +17,7 @@ import { openMenu } from './menu.js';
 import { liveStats, runningAt, nextUp, delaysAt, verschoben, versatzText } from './live.js';
 import { sichtGewerke, sichtTasks, typHinweis, programmTage } from './ebene.js';
 import { toMin, toDate } from './schedule.js';
+import { isoWeek } from './timeaxis.js';
 import { $, el, escapeHtml } from './dom.js';
 import { VERSION } from './version.js';
 
@@ -210,19 +211,15 @@ function mount() {
     // Der Gantt hat sich von selbst neu eingepasst — die Kopfzeile muss nach.
     onView: () => {
       if (syncZoomSeg) syncZoomSeg();
-      $('date-jump').value = gantt.centerDayIso();
-      rail.markBauTag(gantt.centerDayIso());
+      syncTagKnopf();
     },
   });
   rail = createRail($('rail-nav'), {
-    store,
     on: {
       // Der Klick auf einen Modus setzt die ANSICHT — die Schiene selbst
       // schreibt nichts. «Showablauf» kehrt in den zuletzt gewählten
       // Abschnitt zurück.
       modus: (m) => setAnsicht(m === 'bau' ? 'bau' : letzteShowAnsicht),
-      showTag: (iso) => { showTag = iso; setAnsicht(ansicht); },
-      bauTag: (iso) => { $('date-jump').value = iso; gantt.goToDay(iso); rail.markBauTag(iso); },
       einrichten: openEinrichten,
     },
   });
@@ -266,30 +263,25 @@ function mount() {
     syncPanel();
   });
 
-  // ── Zoom ──
-  // ── Datum-Navigation ──
-  // Das Datumsfeld zeigt den Tag in der Bildmitte. Es aktuell zu halten und die
-  // Preset-Markierung zu setzen gehört zusammen: beides nach jeder Navigation.
-  const dateInput = $('date-jump');
-  const syncDate = () => { dateInput.value = gantt.centerDayIso(); };
+  // ── Zoom und Tag ──
+  // Der Kalender-Knopf zeigt den Tag in der Bildmitte. Ihn aktuell zu halten
+  // und die Zoom-Markierung zu setzen gehört zusammen: beides nach jeder
+  // Navigation.
   // Die Zoomstufe ist ein Klappmenü, keine Segmentgruppe: sie wird selten
   // gewechselt und kostete als vier Knöpfe ein Viertel der Leistenbreite.
   const zsel = $('zoom-stufe');
   const syncSeg = () => { zsel.value = gantt.zoomName; };
   syncZoomSeg = syncSeg;
-  const afterNav = () => { syncSeg(); syncDate(); rail.markBauTag(gantt.centerDayIso()); };
+  const afterNav = () => { syncSeg(); syncTagKnopf(); };
   zsel.onchange = () => { gantt.setZoomPreset(zsel.value); afterNav(); };
   $('zin').onclick = () => { gantt.zoomIn(); afterNav(); };
   $('zout').onclick = () => { gantt.zoomOut(); afterNav(); };
   $('now').onclick = () => { gantt.goToNow(); afterNav(); };
-  dateInput.onchange = () => { if (dateInput.value) { gantt.goToDay(dateInput.value); rail.markBauTag(dateInput.value); } };
+  $('tag-wahl').onclick = (e) => tagWahl(e.currentTarget);
   $('bz').addEventListener('wheel', () => requestAnimationFrame(afterNav), { passive: true });
   $('bz').addEventListener('keyup', afterNav);
   syncSeg();
-  // Feldgrenzen = Projektzeitraum; Startwert nach dem ersten Layout (rAF).
-  dateInput.min = (store.state.project.start || '').slice(0, 10);
-  dateInput.max = (store.state.project.end || '').slice(0, 10);
-  requestAnimationFrame(syncDate);
+  requestAnimationFrame(syncTagKnopf);
 
   // ── Zuklappen ──
   let folded = false;
@@ -375,6 +367,7 @@ function setView(v) {
   // nichts. Genau solche Knöpfe waren gemeint, als die Leiste zu voll wurde.
   document.querySelector('.hd-zoom').hidden = v !== 'gantt' || ebene !== 'bau';
   $('seg-bedarf').hidden = v !== 'bedarf';
+  syncTagKnopf();
   syncBuehnen();
   if (v === 'tabelle') { renderTable(); return; }
   if (v === 'bedarf') { bedarf.setKind(bedarfKind); bedarf.render(); return; }
@@ -418,6 +411,66 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !$('ein-dlg').hidden) closeEinrichten();
 });
 
+// ── Der Tag ─────────────────────────────────────────────────────────────────
+// EIN Kalender-Knopf für beide Modi — «welcher Tag» ist dieselbe Frage, ob im
+// Bauzeitenplan oder im Showablauf; nur die Antwort wirkt verschieden (dort
+// springt die Achse, hier wechselt der Showtag).
+//
+// Angeboten wird ausschließlich, was im Plan auch steht: `programmTage` zählt
+// die Kalendertage, die von einem Vorgang berührt werden (über Mitternacht
+// laufende zählen auf beiden Tagen). Ein freies `<input type="date">` stand
+// vorher hier und ließ einen auf einen Tag springen, an dem kein einziger
+// Vorgang liegt — man landete vor einem leeren Blatt, ohne zu wissen warum.
+
+/** Die Tage, die der aktive Modus überhaupt kennt. */
+const planTage = () => programmTage(sichtTasks(store.state, ebene));
+
+// «Mi 02.09.», nicht «Mi., 02.09.» — das gebündelte Format setzt hinter die
+// abgekürzte Wochentagsform noch einen Punkt UND ein Komma, und in Versalien
+// («MI., 02.09.») liest sich das wie ein Tippfehler.
+const tagText = (iso) => {
+  const d = new Date(iso + 'T12:00');
+  const wt = d.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '');
+  return wt + ' ' + String(d.getDate()).padStart(2, '0') + '.'
+    + String(d.getMonth() + 1).padStart(2, '0') + '.';
+};
+
+/** Der Tag, auf den der Knopf gerade zeigt. */
+const aktiverTag = () => (ebene === 'show' ? showTag : gantt.centerDayIso());
+
+function syncTagKnopf() {
+  const knopf = $('tag-wahl');
+  // Im Bauzeitenplan ist ein Tagessprung nur in der Plan-Darstellung eine
+  // Aussage — die Tabelle zeigt dort alle Tage zugleich. Im Showablauf filtert
+  // der Tag auch die Tabelle und den Bedarf, dort steht der Knopf immer.
+  knopf.hidden = ebene === 'bau' && view !== 'gantt';
+  const t = aktiverTag();
+  knopf.textContent = t ? '🗓 ' + tagText(t) : '🗓 Tag';
+}
+
+/** Die Auswahl. Nutzt das vorhandene Kontextmenü — es kann Anker, Klick
+ *  daneben, Escape und Fokus schon, ein zweiter schwebender Kasten wäre
+ *  dieselbe Logik ein zweites Mal. */
+function tagWahl(anker) {
+  const tage = planTage();
+  const jetzt = aktiverTag();
+  const r = anker.getBoundingClientRect();
+  if (!tage.length) {
+    openMenu(r.left, r.bottom + 4, [{ label: 'Noch kein Tag im Plan', disabled: true }]);
+    return;
+  }
+  const items = tage.map((iso) => ({
+    label: tagText(iso),
+    hint: 'KW ' + isoWeek(new Date(iso + 'T12:00')) + (iso === jetzt ? ' ●' : ''),
+    run: () => {
+      if (ebene === 'show') { showTag = iso; setAnsicht(ansicht); return; }
+      gantt.goToDay(iso);
+      syncTagKnopf();
+    },
+  }));
+  openMenu(r.left, r.bottom + 4, items);
+}
+
 // «+ Neu…» aus der Einrichten-Seite: derselbe schwebende Kasten wie beim
 // Anlegen mitten im Tippen, nur ohne anschließende Zuweisung an einen
 // Vorgang — hier wird nur die Bezeichnung angelegt.
@@ -458,7 +511,7 @@ function setAnsicht(name) {
   gantt.setEbene(ebene, ausBlend, showTag, abschnitt);
   table.setEbene(ebene, ausBlend, showTag, abschnitt);
   bedarf.setEbene(ebene, ausBlend, showTag, abschnitt);
-  rail.setEbene(ebene, showTag, ebene === 'bau' ? gantt.centerDayIso() : null);
+  rail.setEbene(ebene);
   // Die Auswahl gehört der anderen Ebene und zeigt ins Leere.
   gantt.select(null);
   syncPanel();
@@ -467,6 +520,7 @@ function setAnsicht(name) {
   // Was im aktiven Modus nichts bedeutet, steht nicht da.
   $('seg-abschnitt').hidden = ebene !== 'show';
   document.querySelector('.hd-zoom').hidden = view !== 'gantt' || ebene !== 'bau';
+  syncTagKnopf();
   $('add-gewerk').textContent = ebene === 'show' ? '+ Bühne' : '+ Gewerk';
   if (view === 'tabelle') renderTable();
   if (view === 'bedarf') bedarf.render();
@@ -816,9 +870,7 @@ function refreshChrome() {
   document.title = S.project.name + ' — Bauzeitenplan';
 
   // Datumsfeld an das (evtl. neue) Projekt anpassen.
-  $('date-jump').min = (S.project.start || '').slice(0, 10);
-  $('date-jump').max = (S.project.end || '').slice(0, 10);
-  $('date-jump').value = gantt.centerDayIso();
+  syncTagKnopf();
 
   const st = gantt.stats();
   $('kpis').innerHTML = [

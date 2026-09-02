@@ -135,7 +135,7 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // Die Schiene (v0.12.0): sie ist die einzige Stelle, an der der Modus
     // gewechselt wird. Ohne eigene Fläche und ohne Markierung des aktiven
     // Eintrags wäre nicht zu sehen, in welcher der beiden Welten man steht.
-    'rail', 'rail-m', 'rail-t'];
+    'rail', 'rail-m'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

@@ -585,17 +585,39 @@ Startseite zeigt es nur beim Betreten), und sie hat Platz für die Zeiteinheiten
 des Modus. Die Startseite hätte bei jedem Öffnen einen Klick für eine
 Entscheidung gekostet, die meist längst feststeht.
 
-**Die Schiene ist der Modus UND die Zeitnavigation** (`js/rail.js`). Unter dem
-aktiven Modus stehen seine Tage: im Showablauf die Showtage, im Bauzeitenplan
-die Bautage mit KW-Trennern. Damit konnten ◀▶ und die Showtag-Segmentgruppe aus
-`syncBuehnen()` ersatzlos verschwinden — die Navigation liegt an einem Ort statt
-an dreien. Nur die TAGESLISTE scrollt, nie die Schiene als Ganzes: beim ersten
-Versuch schoben vierzehn Bautage «Showablauf» und «Einrichten» unter den
-Fensterrand, und der andere Modus war nicht mehr einen Klick weit, sondern erst
-nach dem Suchen. Im Screenshot gesehen, von keiner Zusicherung bemerkt — jetzt
-gibt es eine.
+**Warum die Tage wieder aus der Schiene geflogen sind (v0.12.1):** Der erste
+Wurf legte unter den aktiven Modus dessen Tage — im Showablauf die Showtage, im
+Bauzeitenplan die Bautage. Der Gedanke war, dass die Schiene damit auch die
+Zeitnavigation trägt und `◀▶` entfallen können. Für zwei Showtage ging das auf.
+Für einen Bauzeitenplan nicht: der Klassentreffen-Plan läuft vierzehn Tage, das
+Prüfprojekt achtundfünfzig, und beide ergaben eine Datumsliste, die die
+108 px schmale Spalte füllte und «Showablauf» und «Einrichten» unter den
+Fensterrand schob. Ich habe das mit einem Scroll-Container in der Liste
+repariert — und damit den eigentlichen Fehler nur unsichtbar gemacht. Marcos
+Befund war deutlicher als meine Reparatur: *«das mit den Tagen an der Seite is
+doch Quatsch.»*
 
-**Warum «Einrichten» ein Fenster wurde und keine Seite blieb:** Als eigene
+Die Lehre steht jetzt als Regel in CLAUDE.md: **eine Liste, deren Länge von der
+Plangröße abhängt, gehört nicht in eine feste schmale Spalte.** Die Schiene hat
+drei Einträge und wird nie mehr haben.
+
+**Der Kalender-Knopf bietet nur Tage an, die es im Plan gibt** (`planTage` in
+app.js). Vorher stand in der Leiste ein `<input type="date">` mit
+`min`/`max` = Projektzeitraum. Das erlaubte den Sprung auf den 14.08., an dem
+kein einziger Vorgang liegt — man landete vor einem leeren Blatt und hatte
+keinen Anhaltspunkt, ob der Plan leer ist oder man falsch geklickt hat. Die
+Liste kommt aus `programmTage()`, derselben Funktion, die schon die Showtage
+zählt; über Mitternacht laufende Vorgänge stehen auf beiden Tagen.
+
+Gewählt wird über `openMenu` aus [menu.js](js/menu.js) statt über einen neuen
+schwebenden Kasten — Ankern, Umklappen am Bildrand, Klick daneben, Escape und
+Fokus kann das Kontextmenü seit v0.7 schon. Dafür brauchte `.mn` einen
+Höhendeckel mit Scroll: achtundfünfzig Einträge ragten unten aus dem Bild, und
+der Playwright-Klick auf den letzten lief in einen Timeout. Ein Fehler, der
+ohne die neue Verwendung nie aufgefallen wäre — das Kontextmenü der Gewerke hat
+sieben Einträge.
+
+**Warum «Einrichten» ein Fenster wurde**Warum «Einrichten» ein Fenster wurde und keine Seite blieb:** Als eigene
 Seite ersetzte es den Arbeitsbereich, und jeder Blick in die Verwaltung kostete
 den Ausschnitt, auf den man gerade schaute. Genau daraus entstand in v0.11.0 der
 Breite-0-Fehler beim Projektwechsel (siehe oben). Als `.dlg` über dem Plan

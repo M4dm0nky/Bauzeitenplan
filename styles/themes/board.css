@@ -243,11 +243,6 @@ kbd { font: inherit; font-size: 10px; border: 1.5px solid var(--ink-3); backgrou
 .rail-m[aria-pressed="true"] { background: var(--bg); color: var(--ink); font-weight: 700; }
 .rail-z { font-size: 19px; }
 .rail-w { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
-.rail-t { color: rgba(255,255,255,.78); font-size: 11px; }
-.rail-t:hover { background: rgba(255,255,255,.2); color: #fff; }
-.rail-t[aria-pressed="true"] { background: rgba(255,255,255,.16); color: #fff; font-weight: 700; box-shadow: inset 3px 0 0 var(--bg); }
-.rail-kw { font-size: 9px; color: rgba(255,255,255,.55); }
-.rail-leer { font-size: 10px; color: rgba(255,255,255,.55); }
 .rail-ein { margin-top: auto; border-top: 1px solid rgba(255,255,255,.22); border-bottom: 0; }
 .ei-h { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .ei-hint { font-size: 11px; color: var(--ink-3); line-height: 1.5; }

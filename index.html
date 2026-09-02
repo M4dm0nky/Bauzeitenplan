@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CallBoard — Bauzeitenplan</title>
-<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.12.0">
+<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.12.1">
 
 <script>
   // Hell/Dunkel VOR dem CSS festlegen, damit beim Laden nichts aufblitzt.
@@ -40,18 +40,18 @@
      Der Theme-Link wählt die Gestaltungsebene: styles/themes/ enthält fünf
      fertige Ebenen (callboard = aktiv). Hell/Dunkel schaltet der Betrachter
      über data-theme (Knopf im Kopf). Siehe docs/themes.md. -->
-<link rel="stylesheet" href="styles/base.css?v=0.12.0">
-<link rel="stylesheet" href="styles/themes/callboard.css?v=0.12.0" id="theme-css" data-theme-name="callboard">
+<link rel="stylesheet" href="styles/base.css?v=0.12.1">
+<link rel="stylesheet" href="styles/themes/callboard.css?v=0.12.1" id="theme-css" data-theme-name="callboard">
 </head>
 <body>
 
 <div class="app">
-  <!-- Die Schiene ist der MODUS und zugleich die ZEITNAVIGATION dieses Modus.
-       Genau ein Modus ist aktiv, und unter ihm stehen seine Tage: im Showablauf
-       die Showtage, im Bauzeitenplan die Bautage. Damit verschwinden ◀▶ aus der
-       Werkzeugzeile — und mit ihnen der halbe Grund, warum dort 22 Elemente
-       nebeneinander standen. Gefüllt wird sie von js/rail.js; hier steht nur
-       das Markenzeichen, das aus der Kopfzeile hierher gezogen ist. -->
+  <!-- Die Schiene trägt den MODUS — drei Einträge, mehr nie. Sie trug in einem
+       Zwischenstand auch die Tage des aktiven Modus; bei einem Plan über zwei
+       Monate waren das achtundfünfzig Datumszeilen in einer 108 px schmalen
+       Spalte. Eine Liste, deren Länge vom Plan abhängt, gehört nicht hierhin.
+       Gefüllt wird sie von js/rail.js; hier steht nur das Markenzeichen, das
+       aus der Kopfzeile hierher gezogen ist. -->
   <nav class="rail" aria-label="Modus">
     <div class="rail-kopf">
       <svg class="hd-mark" viewBox="0 0 56 56" fill="none" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" role="img" aria-label="CallBoard">
@@ -87,6 +87,14 @@
            «bau» hat folgerichtig keinen Knopf mehr, es ist ein Modus in der
            Schiene. setAnsicht() markiert weiter über `button[data-ansicht]`;
            bei ansicht='bau' ist schlicht keiner davon gedrückt. -->
+      <!-- Der Tag. Ein Kalender-Knopf, der nur Tage anbietet, an denen im Plan
+           auch etwas steht — ein freies Datumsfeld ließ einen auf den 14.08.
+           springen, an dem kein einziger Vorgang liegt, und man stand vor einem
+           leeren Blatt ohne zu wissen warum.
+           Im Bauzeitenplan springt er die Achse an, im Showablauf wechselt er
+           den Showtag; beides ist dieselbe Frage «welcher Tag». -->
+      <button class="btn tag-wahl" id="tag-wahl" title="Tag wählen — angeboten wird, was im Plan steht"></button>
+
       <div class="seg seg-ansicht" id="seg-abschnitt" role="group" aria-label="Abschnitt">
         <button data-ansicht="setup">Setup</button>
         <button data-ansicht="show">Show</button>
@@ -117,7 +125,8 @@
            «Wochen» und «Alle zuklappen» nichts.
            Die vier Zoomstufen sind ein Klappmenü statt vier Knöpfen — sie
            werden selten gewechselt und kosteten als Segmentgruppe ein Viertel
-           der Leistenbreite. ◀▶ sind ersatzlos weg: das macht die Schiene. -->
+           der Leistenbreite. ◀▶ sind ersatzlos weg: den Tag wählt der
+           Kalender-Knopf. -->
       <div class="hd-zoom">
         <label class="zoom-sel">
           <span class="vh">Zoomstufe</span>
@@ -133,7 +142,6 @@
           <button id="zin" aria-label="Hineinzoomen">+</button>
         </div>
         <button class="btn" id="now">Heute</button>
-        <input type="date" class="date-jump" id="date-jump" title="Zu einem Datum springen" aria-label="Zu einem Datum springen">
         <button class="btn" id="fold">Alle zuklappen</button>
       </div>
 
@@ -266,6 +274,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="import-file" accept="application/json,.json" hidden>
 
-<script type="module" src="js/app.js?v=0.12.0"></script>
+<script type="module" src="js/app.js?v=0.12.1"></script>
 </body>
 </html>

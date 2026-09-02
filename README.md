@@ -17,7 +17,7 @@ mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
 **Dazugekommen (bis v0.12.0):** **Die Schiene links** — Bauzeitenplan und
 Showablauf sind zwei getrennte Modi mit je eigener Leiste, eigener Tabelle und
-eigener Zeitnavigation, «Einrichten» als Fenster über dem Plan · **Personal & Maschinen** je
+eigenem Tageswähler, «Einrichten» als Fenster über dem Plan · **Personal & Maschinen** je
 Vorgang — eigene Bezeichnungen, Anzahl und Zeitfenster, dazu
 **Bereitstellungen** (ein Pool ohne Vorgangs-Funktion) und die Reiter
 **Personalbedarf**/**Maschinenbedarf** · Gewerke per Drag & Drop umsortieren · Gantt und
@@ -217,9 +217,10 @@ Showablauf. Genau einer ist aktiv, und du siehst nur, was in ihm etwas bedeutet
 — im Bauzeitenplan keine Bühnen-Häkchen, im Showablauf keine Zoomstufen und
 kein „Alle zuklappen". Der andere Modus ist immer einen Klick weit.
 
-Unter dem aktiven Modus stehen **seine Tage**: im Showablauf die Showtage, im
-Bauzeitenplan die Bautage mit Kalenderwochen dazwischen. Ein Klick springt hin
-— ein Datumsfeld brauchst du nur für den weiten Sprung.
+Den **Tag** wählst du über den Kalender-Knopf ganz links in der Leiste. Er
+bietet nur Tage an, an denen im Plan auch etwas steht — mit der Kalenderwoche
+daneben und einem Punkt am Tag, auf dem du gerade bist. Im Bauzeitenplan
+springt die Achse dorthin, im Showablauf wechselt der Showtag.
 
 Ganz unten das Zahnrad: **Einrichten** öffnet als Fenster über dem Plan, mit
 vier Reitern — Projekt (anlegen/wechseln, Export/Import, Drucken, Hell/Dunkel),
@@ -229,10 +230,10 @@ du warst. Die schnellen Wege bleiben daneben bestehen — eine Bezeichnung legst
 du weiter mit „+ Neu…" im Auswahlfeld an, mitten im Tippen; Einrichten ist der
 Weg zum Aufräumen danach.
 
-Darüber die Arbeitsleiste, jetzt kurz: im Showablauf Setup/Show ·
+Daneben die Arbeitsleiste, jetzt kurz: im Showablauf Tag · Setup/Show ·
 Plan/Tabelle/Bedarf · Bühnen · Undo · Prüfen · Live mit Versatz, im
-Bauzeitenplan dieselbe Reihe plus die Zeitwerkzeuge (Zoomstufe, Heute, Datum,
-Zuklappen).
+Bauzeitenplan Tag · Plan/Tabelle/Bedarf plus die Zeitwerkzeuge (Zoomstufe,
+Heute, Zuklappen).
 
 ### Bedienung
 

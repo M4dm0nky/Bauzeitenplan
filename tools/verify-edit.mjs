@@ -872,8 +872,15 @@ await check('Gantt zeigt den Elternvorgang als Sammelbalken mit eingerückter Un
 });
 // Zum Tag des Elternvorgangs springen, damit der Sammelbalken im Bild ist —
 // Screenshots ansehen, nicht nur Häkchen zählen (CLAUDE.md).
-await page.fill('#date-jump', subDay);
-await page.locator('#date-jump').dispatchEvent('change');
+await page.locator('#tag-wahl').click();
+await page.waitForTimeout(250);
+{
+  // Der Kalender bietet nur Tage an, an denen etwas steht — der Tag des
+  // Elternvorgangs ist einer davon.
+  const ziel = page.locator('.mn .mn-i').filter({ hasText: subDay.slice(8, 10) + '.' + subDay.slice(5, 7) + '.' });
+  if (await ziel.count()) await ziel.first().click();
+  else await page.keyboard.press('Escape');
+}
 await page.waitForTimeout(400);
 await page.screenshot({ path: join(here, 'shots', 'edit-9-sub-gantt.png') });
 
@@ -915,12 +922,13 @@ await check('im Bauzeitenplan steht nichts vom Showablauf', async () => {
   return await page.locator('#zoom-stufe').isVisible() ? true : 'die Zoomstufe fehlt im Bauzeitenplan';
 });
 
-await check('beide Modi und das Zahnrad bleiben sichtbar, auch bei vielen Tagen', async () => {
-  // Die Bautage füllten die Schiene und schoben «Showablauf» und «Einrichten»
-  // unter den Rand — im Screenshot gesehen, von keiner Zusicherung bemerkt.
-  // Scrollen darf nur die Tagesliste, nie die Schiene als Ganzes.
-  const n = await page.locator('.rail-t').count();
-  if (n < 5) return 'nur ' + n + ' Bautage — die Prüfung sagt so nichts aus';
+await check('die Schiene hat genau drei Einträge — zwei Modi und das Zahnrad', async () => {
+  // Sie trug in einem Zwischenstand auch die Tage. Bei einem Plan über zwei
+  // Wochen waren das vierzehn Datumszeilen, die «Showablauf» und «Einrichten»
+  // unter den Fensterrand schoben — im Screenshot gesehen, von keiner
+  // Zusicherung bemerkt. Der Tag steht jetzt im Kalender-Knopf.
+  const n = await page.locator('.rail-m').count();
+  if (n !== 3) return n + ' Einträge in der Schiene statt 3';
   for (const sel of ['.rail-m:not(.rail-ein)', '#rail-ein']) {
     const drin = await page.locator(sel).last().evaluate((el) => {
       const r = el.getBoundingClientRect();
@@ -931,18 +939,39 @@ await check('beide Modi und das Zahnrad bleiben sichtbar, auch bei vielen Tagen'
   return true;
 });
 
-await check('ein Klick auf einen Bautag bewegt die Achse wirklich', async () => {
-  const tage = page.locator('.rail-t');
+await check('der Kalender bietet NUR Tage an, an denen etwas im Plan steht', async () => {
+  const S = await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem(
+      Object.keys(localStorage).find((k) => k.startsWith('bzp_p_'))) || '{}');
+    const tage = new Set();
+    for (const t of raw.tasks || []) {
+      const a = new Date(t.start), b = new Date(t.end || t.start);
+      for (const d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
+        tage.add(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+          + '-' + String(d.getDate()).padStart(2, '0'));
+      }
+    }
+    return { tage: [...tage].sort(), start: (raw.project || {}).start };
+  });
+  await page.locator('#tag-wahl').click();
+  await page.waitForTimeout(300);
+  const angeboten = await page.locator('.mn .mn-i').allTextContents();
+  if (!angeboten.length) { await page.keyboard.press('Escape'); return 'gar kein Tag angeboten'; }
+  if (angeboten.length !== S.tage.length) {
+    await page.keyboard.press('Escape');
+    return angeboten.length + ' angeboten, aber ' + S.tage.length + ' Tage haben Vorgänge';
+  }
+  // Und ein Klick bewegt die Achse wirklich, nicht nur die Beschriftung.
   const vorher = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
-  await tage.first().click();
-  await page.waitForTimeout(500);
-  const erst = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
-  await tage.last().click();
-  await page.waitForTimeout(500);
+  await page.locator('.mn .mn-i').last().click();
+  await page.waitForTimeout(600);
   const letzt = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
+  await page.locator('#tag-wahl').click();
+  await page.waitForTimeout(300);
+  await page.locator('.mn .mn-i').first().click();
+  await page.waitForTimeout(600);
+  const erst = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
   if (erst === letzt) return 'erster und letzter Tag führen zur selben Position (' + erst + ')';
-  const an = await page.locator('.rail-t[aria-pressed="true"]').count();
-  if (an !== 1) return an + ' Tage markiert';
   return vorher !== undefined ? true : 'kein Ausgangswert';
 });
 await page.screenshot({ path: join(here, 'shots', 'edit-11-schiene.png') });

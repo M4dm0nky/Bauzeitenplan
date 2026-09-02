@@ -3,6 +3,30 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.12.1 — 2026-09-02
+
+**Die Tage sind wieder aus der Schiene raus.** In 0.12.0 standen unter dem
+aktiven Modus dessen Tage. Für zwei Showtage ging das auf — für einen
+Bauzeitenplan nicht: vierzehn Datumszeilen im Klassentreffen-Plan,
+achtundfünfzig im Prüfprojekt, alle in einer 108 px schmalen Spalte. Das war
+genau die Überladung, gegen die 0.12.0 angetreten war. Die Schiene hat jetzt
+drei Einträge: Bauzeitenplan, Showablauf, Einrichten.
+
+**Stattdessen ein Kalender-Knopf — und der bietet nur Tage an, an denen im
+Plan auch etwas steht.** Vorher stand dort ein freies Datumsfeld: damit sprang
+man auf einen Tag ohne einen einzigen Vorgang und stand vor einem leeren
+Blatt, ohne zu wissen warum. Die Liste kommt aus `programmTage()`, mit der
+Kalenderwoche daneben und einem Punkt am aktuellen Tag. Ein Knopf für beide
+Modi — im Bauzeitenplan springt die Achse, im Showablauf wechselt der Showtag.
+
+Nebenbei: das Kontextmenü (`.mn`) hat einen Höhendeckel bekommen und scrollt.
+Achtundfünfzig Tage ragten sonst unten aus dem Bild — ein Fehler, der ohne die
+neue Verwendung nie aufgefallen wäre, denn das Gewerk-Menü hat sieben
+Einträge.
+
+Die Regel dahinter steht jetzt in CLAUDE.md: **eine Liste, deren Länge von der
+Plangröße abhängt, gehört nicht in eine feste schmale Spalte.**
+
 ## 0.12.0 — 2026-09-01
 
 **Neues Bedienkonzept: die Schiene links.** Bauzeitenplan und Showablauf sind

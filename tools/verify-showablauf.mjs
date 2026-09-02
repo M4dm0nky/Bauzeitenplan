@@ -42,6 +42,14 @@ p.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.t
 // nur da, wenn der Showablauf offen ist. Ein Test, der blind
 // `[data-ansicht="bau"]` klickt, klickt seit dem Umbau ins Leere.
 const railM = (i) => p.locator('.rail-m:not(.rail-ein)').nth(i);
+// Der Tag wird über den Kalender-Knopf gewählt; angeboten wird, was im Plan
+// steht (Menü aus js/menu.js). `i` ist der wievielte angebotene Tag.
+async function waehleTag(i) {
+  await p.locator('#tag-wahl').click();
+  await p.waitForTimeout(250);
+  await p.locator('.mn .mn-i').nth(i).click();
+  await p.waitForTimeout(600);
+}
 async function gehe(a) {
   if (a === 'bau') {
     await railM(0).click();
@@ -112,17 +120,19 @@ await check('keine Zeile ohne Balken — die Acts des anderen Tages sind weg', a
     ts.filter((t) => t.querySelectorAll('.bz-bar, .bz-ms').length === 0).length);
   return leer === 0 ? true : leer + ' Zeilen ohne einen einzigen Balken';
 });
-await check('der Tages-Umschalter bringt den Sonntag', async () => {
-  const knoepfe = p.locator('.rail-t');
-  if (await knoepfe.count() !== 2) return (await knoepfe.count()) + ' Tage statt 2';
-  await knoepfe.nth(1).click();
+await check('der Kalender-Knopf bringt den Sonntag', async () => {
+  await p.locator('#tag-wahl').click();
+  await p.waitForTimeout(250);
+  const n = await p.locator('.mn .mn-i').count();
+  if (n !== 2) return n + ' angebotene Tage statt 2';
+  await p.locator('.mn .mn-i').nth(1).click();
   await p.waitForTimeout(600);
   const pr = (await kpi('Zeiteinträge')).trim();
   const namen = await p.locator('.bz-lab-task .bz-lab-name').allTextContents();
   if (pr !== '15') return pr + ' Zeiteinträge am Sonntag statt 15';
   if (!namen.some((x) => x.trim() === 'MAX HERRE & JOY DENALANE')) return 'MAX HERRE fehlt';
   if (namen.length !== 15) return namen.length + ' Zeilen am Sonntag statt 15';
-  await knoepfe.nth(0).click();          // zurück auf Samstag für die Folgeprüfungen
+  await waehleTag(0);                   // zurück auf Samstag für die Folgeprüfungen
   await p.waitForTimeout(600);
   return true;
 });
@@ -1164,7 +1174,7 @@ await check('im Show-Abschnitt ist er WEG — dieselbe Bühne, anderer Ablauf', 
 // nicht mehr behoben, sondern unmöglich.
 await check('im Showablauf stehen keine Zeitwerkzeuge des Bauzeitenplans', async () => {
   if (await p.locator('.hd-zoom').isVisible()) return 'die Zoomleiste steht im Showablauf';
-  for (const sel of ['#zoom-stufe', '#date-jump', '#fold']) {
+  for (const sel of ['#zoom-stufe', '#fold']) {
     if (await p.locator(sel).isVisible()) return sel + ' ist im Showablauf sichtbar';
   }
   // Und der Abschnitts-Umschalter, der hierher gehört, steht sehr wohl da.
@@ -1172,13 +1182,23 @@ await check('im Showablauf stehen keine Zeitwerkzeuge des Bauzeitenplans', async
     ? true : 'der Setup/Show-Umschalter fehlt im Showablauf';
 });
 
-await check('der Showtag steht in der Schiene und ist dort markiert', async () => {
-  const tage = p.locator('.rail-t');
-  const n = await tage.count();
-  if (!n) return 'die Schiene zeigt keinen Showtag';
-  const an = await p.locator('.rail-t[aria-pressed="true"]').allTextContents();
-  if (an.length !== 1) return an.length + ' markierte Tage in der Schiene';
-  return true;
+// Der Kalender-Knopf darf NUR Tage anbieten, an denen im Plan auch etwas
+// steht — ein freies Datumsfeld ließ einen auf einen leeren Tag springen und
+// vor einem leeren Blatt stehen, ohne Erklärung.
+await check('der Kalender-Knopf bietet nur Tage an, die es im Plan gibt', async () => {
+  const knopf = p.locator('#tag-wahl');
+  if (!(await knopf.isVisible())) return 'der Kalender-Knopf steht nicht da';
+  const text = (await knopf.textContent()).trim();
+  if (!/\d{2}\.\d{2}\./.test(text)) return 'der Knopf nennt keinen Tag: «' + text + '»';
+  await knopf.click();
+  await p.waitForTimeout(250);
+  const angeboten = await p.locator('.mn .mn-i').allTextContents();
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(200);
+  // Der Klassentreffen-Plan hat GENAU zwei Showtage — kein dritter, leerer.
+  if (angeboten.length !== 2) return angeboten.length + ' Tage angeboten statt 2';
+  return angeboten.some((x) => x.includes('29.08.')) && angeboten.some((x) => x.includes('30.08.'))
+    ? true : 'angeboten: ' + angeboten.join(' · ');
 });
 
 await check('der Setup-View rechnet seine eigene Zeitachse', async () => {
@@ -1328,9 +1348,9 @@ await check('auf dem Handy bricht die Dauer unter die Zeile, statt den Namen zu 
   return inhalt <= h + 1 ? true : 'Inhalt ' + inhalt + ' px in einer ' + Math.round(h) + ' px hohen Zeile';
 });
 await check('Tages- und Bühnenwahl bleiben auf dem Handy bedienbar', async () => {
-  const h = await p.locator('.rail-t').first()
+  const h = await p.locator('#tag-wahl')
     .evaluate((n) => n.getBoundingClientRect().height);
-  return h >= 28 ? true : 'nur ' + Math.round(h) + ' px hoch';
+  return h >= 28 ? true : 'der Kalender-Knopf ist nur ' + Math.round(h) + ' px hoch';
 });
 // Fürs BILD ein höheres Fenster bei gleicher Breite: bei 390×844 füllt die
 // Werkzeugzeile samt Live-Kopfzeile den Viewport, und der Ablauf — worum es hier

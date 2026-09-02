@@ -286,11 +286,6 @@ kbd {
 .rail-m[aria-pressed="true"] { background: var(--ink); color: var(--card); }
 .rail-z { font-size: 19px; }
 .rail-w { font-size: 10px; letter-spacing: .04em; }
-.rail-t { color: var(--ink-2); font-size: 11px; border-radius: 6px; margin: 1px 8px; }
-.rail-t:hover { background: var(--card-2); color: var(--ink); }
-.rail-t[aria-pressed="true"] { background: var(--card-2); color: var(--ink); font-weight: 700; box-shadow: inset 3px 0 0 var(--brand); }
-.rail-kw { font-size: 9px; color: var(--ink-3); }
-.rail-leer { font-size: 10px; color: var(--ink-3); }
 .rail-ein { margin-top: auto; margin-bottom: 10px; }
 .ei-h { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
 .ei-hint { font-size: 11px; color: var(--ink-3); line-height: 1.5; }

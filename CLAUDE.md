@@ -720,24 +720,46 @@ Bauzeitenplan (vierzehn Tage in Stunden wären unlesbar), Stunden im Showablauf
 (ein Tag ist dort ohnehin tagesbezogen). `js/bedarf.js` rendert nur — gerechnet
 wird ausschließlich in `bedarfsRaster()` (resources.js).
 
-**Die Schiene links ist der MODUS und die ZEITNAVIGATION des Modus**
-(`js/rail.js`). Genau ein Modus ist aktiv — Bauzeitenplan ODER Showablauf —,
-und unter dem aktiven stehen SEINE Tage: im Showablauf die Showtage, im
-Bauzeitenplan die Bautage mit KW-Trennern. Deshalb gibt es kein `◀▶` und keine
-Showtag-Segmentgruppe mehr; die Navigation liegt an EINEM Ort. Drei Regeln:
+**Die Schiene links trägt den MODUS — und sonst nichts** (`js/rail.js`).
+Drei Einträge: Bauzeitenplan, Showablauf, Einrichten. Genau einer der beiden
+Modi ist aktiv.
 
-- **Nur die Tagesliste scrollt, nie die Schiene** (`.rail { overflow: hidden }`,
-  `.rail-tage { flex: 0 1 auto; overflow-y: auto }`). Beim ersten Versuch schoben
-  vierzehn Bautage «Showablauf» und «Einrichten» unter den Fensterrand — der
-  andere Modus war dann nicht mehr einen Klick weit. Im Screenshot gesehen,
-  von keiner Zusicherung bemerkt; jetzt hält eine in `verify-edit.mjs` es fest.
-- **Die Schiene rendert nur.** Sie schreibt nie an `ansicht`, `showTag` oder am
-  Gantt, sondern meldet über Rückrufe (`on.modus`/`on.showTag`/`on.bauTag`/
-  `on.einrichten`) nach app.js — `setAnsicht()` bleibt der einzige Schreiber.
-  Dieselbe Arbeitsteilung wie bei `js/bedarf.js`.
-- **Der markierte Tag wird ins Bild gescrollt** (`scrollIntoView({block:'nearest'})`
-  in `render()` UND in `markBauTag`). Eine Markierung in einer scrollenden Liste,
-  die niemand sieht, ist keine Auskunft.
+Sie trug in einem Zwischenstand von v0.12.0 auch die TAGE des aktiven Modus.
+Das war ein schlechter Tausch: zwei Showtage passten, aber ein Bauzeitenplan
+über zwei Wochen ergab vierzehn Datumszeilen in einer 108 px schmalen Spalte,
+und ein Plan über zwei Monate achtundfünfzig — also genau die Überladung,
+gegen die der Umbau angetreten war. **Eine Liste, die mit der Plangröße
+wächst, gehört nicht in eine feste schmale Spalte.**
+
+Zwei Regeln bleiben:
+
+- **Die Schiene rendert nur.** Sie schreibt nie an `ansicht` oder am Gantt,
+  sondern meldet über Rückrufe (`on.modus`/`on.einrichten`) nach app.js —
+  `setAnsicht()` bleibt der einzige Schreiber. Dieselbe Arbeitsteilung wie bei
+  `js/bedarf.js`.
+- **Nichts Wachsendes hinein.** Wer der Schiene einen vierten Eintrag geben
+  will, prüft zuerst, ob deren Zahl vom Plan abhängt. Wenn ja: nicht hierhin.
+
+**Der Tag wird über den Kalender-Knopf gewählt, und angeboten wird NUR, was im
+Plan steht** (`tagWahl`/`planTage` in app.js). Vorher stand hier ein freies
+`<input type="date">` — damit sprang man auf einen Tag, an dem kein einziger
+Vorgang liegt, und stand vor einem leeren Blatt ohne zu wissen warum. Die Liste
+kommt aus `programmTage(sichtTasks(state, ebene))`: die Kalendertage, die von
+einem Vorgang berührt werden, über Mitternacht laufende auf beiden Tagen.
+
+- **EIN Knopf für beide Modi.** «Welcher Tag» ist dieselbe Frage; nur die
+  Antwort wirkt verschieden (im Bauzeitenplan springt die Achse, im Showablauf
+  wechselt der Showtag). Zwei Bedienelemente für eine Frage wären zwei Orte,
+  an denen dieselbe Auswahl auseinanderlaufen kann.
+- **Gewählt wird über `openMenu` (js/menu.js)**, nicht über einen neuen
+  schwebenden Kasten: Ankern, Umklappen am Rand, Klick daneben, Escape und
+  Fokus kann das Kontextmenü längst. Dafür ist `.mn` seit v0.12.1 gedeckelt
+  und scrollt (`max-height: 62vh`) — achtundfünfzig Tage ragten sonst unten
+  aus dem Bild.
+- **`syncTagKnopf()` ist der einzige Schreiber** von Beschriftung UND
+  Sichtbarkeit des Knopfs. Er steht im Bauzeitenplan nur in der
+  Plan-Darstellung (die Tabelle zeigt dort alle Tage zugleich), im Showablauf
+  immer — dort filtert der Tag auch Tabelle und Bedarf.
 
 **Was im aktiven Modus nichts bedeutet, steht nicht da.** `setAnsicht()` blendet
 `#seg-abschnitt` außerhalb des Showablaufs aus und `.hd-zoom` außerhalb von
@@ -843,7 +865,7 @@ bleiben (Kommentare ausgenommen).
 | `js/inspector.js` | Seitenpanel |
 | `js/menu.js` | Kontextmenü (Muster: Crewplaner dropdown.js) |
 | `js/bedarf.js` | Bedarfs-Reiter: Personalbedarf · Maschinenbedarf |
-| `js/rail.js` | Die Schiene: Modus + Zeitnavigation des Modus — rendert nur |
+| `js/rail.js` | Die Schiene: der Modus, drei Einträge — rendert nur |
 | `tools/build-prototypes.mjs` | **Nur** für die Design-Artifacts (CSP verlangt alles inline). Die App braucht keinen Build. |
 
 Warum was so ist: `docs/entscheidungen.md`. Besonders der kritische Pfad hat eine

@@ -72,16 +72,18 @@
 
 body { margin: 0; }
 
-/* Zwei Spalten: die Schiene links, alles andere rechts. Die Schiene ist der
-   MODUS und zugleich seine Zeitnavigation — deshalb steht sie neben dem Kopf
-   und nicht darin. NUR Geometrie; Fläche und Markierung bringt das Theme. */
+/* Zwei Spalten: die Schiene links, alles andere rechts. Die Schiene trägt den
+   MODUS — deshalb steht sie neben dem Kopf und nicht darin, sie gilt für alles,
+   was rechts davon passiert. NUR Geometrie; Fläche und Markierung bringt das
+   Theme. */
 .app { display: flex; flex-direction: row; height: 100vh; min-height: 0; }
 .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
-/* overflow:hidden, NICHT auto: scrollte die Schiene als Ganzes, schöben vierzehn
-   Bautage «Showablauf» und «Einrichten» unter den Rand — der andere Modus wäre
-   dann nicht mehr einen Klick weit, sondern erst nach dem Suchen. Scrollen darf
-   nur die Tagesliste (.rail-tage). */
+/* Drei Einträge — zwei Modi und das Zahnrad. Sie trug in einem Zwischenstand
+   auch die Tage des aktiven Modus; bei einem Bauzeitenplan über zwei Wochen
+   waren das vierzehn Datumszeilen in einer 108 px schmalen Spalte, also genau
+   die Überladung, gegen die der Umbau angetreten war. Der Tag wird jetzt über
+   den Kalender-Knopf in der Werkzeugzeile gewählt. */
 .rail { flex: none; width: 108px; display: flex; flex-direction: column; overflow: hidden; }
 .rail-kopf { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; }
 .rail-wort { line-height: 1; }
@@ -94,16 +96,6 @@ body { margin: 0; }
 }
 .rail-z { display: block; line-height: 1; }
 .rail-w { display: block; }
-/* Schrumpfbar, aber nicht wachsend: zwei Showtage bleiben kompakt am
-   Modus-Knopf, vierzehn Bautage nehmen den Rest und scrollen in sich. */
-.rail-tage { flex: 0 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
-.rail-t {
-  flex: none; border: 0; background: none; font: inherit; cursor: pointer;
-  padding: 6px 4px; text-align: center; white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.rail-kw { padding: 6px 4px 2px; text-align: center; letter-spacing: .08em; text-transform: uppercase; }
-.rail-leer { padding: 6px 8px; text-align: center; }
 /* Schiebt das Zahnrad ans untere Ende — Verwaltung ist kein Arbeitsschritt. */
 .rail-sp { flex: 1; min-height: 12px; }
 
@@ -357,6 +349,7 @@ body { margin: 0; }
 
 .hd-zoom { display: flex; align-items: center; gap: 8px; }
 /* Die Zoomstufe als Klappmenü: vier Knöpfe kosteten ein Viertel der Leiste. */
+.tag-wahl { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .zoom-sel { display: flex; align-items: center; }
 .zoom-sel select { font: inherit; }
 /* Nur für Screenreader — das Klappmenü braucht eine Beschriftung, das Auge
@@ -609,7 +602,11 @@ body { margin: 0; }
 .ins-res-add-row .btn { flex: 1; }
 
 /* ── Kontextmenü ──────────────────────────────────────────────────────────── */
-.mn { position: fixed; z-index: 70; min-width: 190px; }
+/* Die Höhe wird gedeckelt und scrollt: seit die Tageswahl über dieses Menü
+   läuft, kann es lang werden — ein Bauzeitenplan über zwei Monate hat achtund-
+   fünfzig Tage, und die ragten unten aus dem Bild. openMenu misst die Höhe
+   NACH dem Anhängen, die Umklapp-Rechnung stimmt mit dem Deckel also weiter. */
+.mn { position: fixed; z-index: 70; min-width: 190px; max-height: 62vh; overflow-y: auto; }
 .mn-i {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
   width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer;
@@ -711,10 +708,6 @@ body { margin: 0; }
   .rail-wort { display: none; }
   .rail-nav { flex-direction: row; align-items: center; gap: 4px; }
   .rail-m { flex-direction: row; gap: 6px; padding: 8px 10px; white-space: nowrap; }
-  /* Waagerecht scrollt die Schiene als Ganzes — die Liste darf dann nicht
-     zusätzlich einen eigenen (senkrechten) Scroller aufmachen. */
-  .rail-tage { flex: none; overflow: visible; flex-direction: row; align-items: center; }
-  .rail-kw { display: none; }   /* waagerecht trennt die Woche nichts mehr */
   .rail-sp { display: none; }
 
   /* Kopf kompakter: beide Reihen dürfen umbrechen, Logo kleiner, Unterzeile und
