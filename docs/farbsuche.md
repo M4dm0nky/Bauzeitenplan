@@ -34,3 +34,24 @@ Für Pläne mit mehr als acht Gewerken kamen später zwei Töne **außerhalb** d
 Suche dazu (handgesetzt, auf Ansage): Ocker `--gw-8` (`#8a5a2b`/`#a06a33`) und Türkis
 `--gw-9` (`#0e9aa7`/`#1fb0bd`). Palette heute: 10 Töne × 2 Schraffuren = 20 Plätze.
 Sauber wäre, die Suche für zehn Töne neu zu rechnen, falls der Bedarf bleibt.
+
+## Was die Suche NICHT abdeckt
+
+Drei Lücken, damit niemand mehr Sicherheit annimmt, als die Zahlen hergeben:
+
+- **Das aktive Theme ist nicht unter den geprüften Oberflächen.** `SURFACES` in
+  `tools/farbsuche.mjs` kennt blueprint, studio, console und board — `callboard`
+  kam später dazu und fehlt. Sein Paper (`#F1EFE9`) ist dabei nicht etwa von den
+  vier eingerahmt, sondern eine Spur **dunkler als die dunkelste** geprüfte
+  Fläche (console, `#f6f3ec`). Der Unterschied ist klein, aber die Aussage «in
+  allen Themes validiert» stimmt für callboard streng genommen nicht.
+- **Nur die ersten acht Töne.** Ocker und Türkis sind handgesetzt, siehe oben.
+- **Nur der Balken gegen den Grund**, nicht die Schrift AUF dem Balken. Die
+  `--gw-t-*` sind separat gerechnet und stehen in `docs/themes.md`; die
+  statische Prüfung «Schrift auf Gewerkfarbe hält 3:1» in `tests/run.mjs`
+  bewacht sie.
+
+Die erste Lücke zu schließen heißt, die Suche neu laufen zu lassen — und das
+kann eine **andere Zuordnung** ergeben. Das ist eine Entscheidung, keine
+Wartung: die Reihenfolge steckt in jedem gespeicherten Plan (`slot` je Gewerk),
+und ein Neulauf färbt bestehende Pläne um.

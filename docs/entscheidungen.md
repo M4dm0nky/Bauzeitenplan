@@ -541,6 +541,12 @@ kein Fehler.
 
 ## Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand
 
+> **Stand v0.12.0 überholt.** `setReiter()` und die Reiterleiste gibt es nicht
+> mehr — «Einrichten» ist ein Fenster, das über die Schiene links geöffnet wird
+> (siehe weiter unten). Der Abschnitt bleibt stehen, weil der Breite-0-Fehler
+> darin bis heute im Code abgesichert ist (`projektEinpassenAusstehend`) und
+> seine Lehre für jeden versteckten Container gilt.
+
 Die administrativen Knöpfe (Projekt, Gewerke, Ressourcen, Arten, Abschnitte,
 Darstellung) standen zwischen Zoomleiste und Live-Anzeige — sieben Knöpfe, die
 niemand während der eigentlichen Arbeit braucht, aber jederzeit im Bild

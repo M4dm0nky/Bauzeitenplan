@@ -15,7 +15,7 @@ der Load-In läuft stundengenau.
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
 mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
 
-**Dazugekommen (bis v0.12.0):** **Die Schiene links** — Bauzeitenplan und
+**Dazugekommen (bis v0.12.1):** **Die Schiene links** — Bauzeitenplan und
 Showablauf sind zwei getrennte Modi mit je eigener Leiste, eigener Tabelle und
 eigenem Tageswähler, «Einrichten» als Fenster über dem Plan · **Personal & Maschinen** je
 Vorgang — eigene Bezeichnungen, Anzahl und Zeitfenster, dazu
@@ -351,15 +351,16 @@ js/
   schedule.js           Terminrechnung: CPM, Topo-Sort, kritischer Pfad — DOM-frei
   conflicts.js          Konflikte, Dauer-Kurzform, Uhrzeit-Eingabe — DOM-frei
   timeaxis.js           Zeit ↔ Pixel, Zoomstufen, Ticks, Kalenderwochen — DOM-frei
-  templates.js          Vier Vorlagen (Festival, Tour, Corporate, Messe)
+  templates.js          Vier Vorlagen (Festival, Tour, Corporate, Messe) + leerer Plan
   persistence.js        localStorage, Export/Import, Migration — DOM-frei
   palette.js            Gewerk-Farben: 10 Töne × 2 Schraffuren = 20 Plätze
   ebene.js              Ansichten: Bänder, Abschnitt, Showtage, Zeitfenster — DOM-frei
   resources.js          Personal & Maschinen: Bezeichnungen, Deckung, Bedarfsraster — DOM-frei
   live.js               Verzug + laufende Vorgänge — DOM-frei
   inspector.js          Seitenpanel (mit Verknüpfungs-Suche)
-  menu.js               Kontextmenü
-  bedarf.js             Bedarfs-Reiter: Personalbedarf · Maschinenbedarf
+  menu.js               Kontextmenü — trägt auch die Tageswahl
+  rail.js               Die Schiene links: der Modus, drei Einträge
+  bedarf.js             Bedarfsansicht: Personal- oder Maschinenbedarf
   print.js              Tagesblätter (A3 quer) — eigene Seite, print.html
 styles/
   base.css              Nur Geometrie + Verhalten. Dazu die Gewerk-Farben.
@@ -416,7 +417,8 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | Eigene Abschnitte (Load-in, Soundcheck, Aftershow …) |
 | ✅ | Arten und Abschnitte verwalten: umbenennen, sortieren, löschen |
 | ✅ | Personal & Maschinen je Vorgang, Bereitstellungen, Bedarfsraster nach Tag/Stunde |
-| ✅ | «Ansicht» und «Einrichten»: administrative Knöpfe auf einer eigenen Seite |
+| ✅ | Zwei getrennte Modi: die Schiene links, je Modus nur seine eigenen Knöpfe |
+| ✅ | «Einrichten» als Fenster über dem Plan · Tageswahl nur über Tage, die es gibt |
 | → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen |
 | | Ansichten & Export: öffentlicher Link, PDF/ICS |
 | ❄️ | PocketBase, Login, Rollen — auf Eis, Stand im Branch `pocketbase-vorbereitung` |

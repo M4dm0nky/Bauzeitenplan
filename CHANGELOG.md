@@ -27,13 +27,18 @@ Einträge.
 Die Regel dahinter steht jetzt in CLAUDE.md: **eine Liste, deren Länge von der
 Plangröße abhängt, gehört nicht in eine feste schmale Spalte.**
 
+Gezählt: die Werkzeugzeile trägt jetzt **12 Bedienelemente im Bauzeitenplan und
+10 im Showablauf** (vorher 22 in beiden). Der Showablauf hat gegenüber 0.12.0
+eines dazubekommen — den Kalender-Knopf, der die Tagesliste in der Schiene
+ersetzt.
+
 ## 0.12.0 — 2026-09-01
 
 **Neues Bedienkonzept: die Schiene links.** Bauzeitenplan und Showablauf sind
 jetzt zwei getrennte Modi. Am linken Rand steht eine schmale Schiene, genau ein
 Modus ist aktiv, der andere ist einen Klick weit — und man sieht nur, was im
 aktiven Modus etwas bedeutet. Aus **22 gleichzeitig sichtbaren Bedienelementen**
-in der Werkzeugzeile sind **13 im Bauzeitenplan und 9 im Showablauf** geworden.
+in der Werkzeugzeile sind **12 im Bauzeitenplan und 9 im Showablauf** geworden.
 
 **Die Schiene ist zugleich die Zeitnavigation.** Unter dem aktiven Modus stehen
 seine Tage: im Showablauf die Showtage, im Bauzeitenplan die Bautage mit

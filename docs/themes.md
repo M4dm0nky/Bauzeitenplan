@@ -125,6 +125,40 @@ bräuchte ihn keines. Vor fünf neuen Theme-Zeilen lohnt sich immer die Frage:
 kommt die Optik nicht schon mit `currentColor`, einem geerbten `border`-Wert
 oder einer vorhandenen Klasse?
 
+## Die Schiene (v0.12.0)
+
+Der Umbau des Bedienkonzepts hat **genau zwei** Namen in die `needed`-Liste
+gebracht: **`rail`** (die Fläche links, die sich vom Kopf absetzen muss) und
+**`rail-m`** (ein Moduseintrag samt Markierung des aktiven). Ohne beides wäre
+nicht zu sehen, in welcher der zwei Welten man steht — und das ist die einzige
+Aussage, die die Schiene macht.
+
+Alles andere daran erbt oder braucht keine Farbe:
+
+- `rail-kopf`, `rail-wort`, `rail-z`, `rail-w` und `rail-ein` stehen zwar in
+  allen fünf Themes, aber **nicht** in der `needed`-Liste: sie setzen nur
+  Textgrößen und Trennlinien, und ein Theme, das sie ausließe, sähe etwas
+  gröber aus — nicht kaputt. `rail-sp` (der Abstandhalter vor dem Zahnrad)
+  ist reine Geometrie und steht nur in `base.css`.
+- Das **Einrichten-Fenster** trägt `dlg`/`dlg-box`, seine Reiterleiste `seg`,
+  die Bedarfs-Unterwahl ebenfalls `seg`. Kein Theme musste dafür eine Zeile
+  dazulernen — dasselbe Vorgehen wie beim Versatz-Stepper.
+- Der **Kalender-Knopf** ist ein `btn`, seine Auswahl das vorhandene
+  Kontextmenü `mn`. Auch hier: kein neuer Name.
+
+Eine Sache ist dabei aufgefallen, die vorher niemand sehen konnte: `.mn`
+brauchte einen **Höhendeckel mit Scroll** (`max-height: 62vh`). Das Menü trug
+bis dahin höchstens sieben Einträge (Rechtsklick auf ein Gewerk); mit der
+Tageswahl sind es bei einem Plan über zwei Monate achtundfünfzig, und die ragten
+unten aus dem Bild. **Wer einen vorhandenen Baustein neu verwendet, erbt seine
+Annahmen mit** — hier die, dass ein Menü kurz ist.
+
+Ein Zwischenstand von v0.12.0 hatte zusätzlich `rail-t`, `rail-kw`, `rail-tage`
+und `rail-leer` für die Tagesliste in der Schiene. Die Liste ist in v0.12.1
+wieder entfallen (siehe `docs/entscheidungen.md`), und mit ihr die vier Namen —
+aus allen fünf Themes und aus der `needed`-Liste. Wer sie in einem eigenen Theme
+noch stehen hat: tote Regeln, können weg.
+
 ## Farbpalette der Gewerke
 
 Die ersten **acht Farben sind gerechnet, nicht ausgesucht** (`docs/entscheidungen.md`).

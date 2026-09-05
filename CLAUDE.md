@@ -18,8 +18,9 @@ node tools/verify-print.mjs     # Tagesblätter A3: Zuschnitt, Filter, Maßstab
 node tools/verify-showablauf.mjs # Showablauf: Ebene, Bühnen, Live-Kopfzeile, Blatt
 ```
 
-Beides muss grün sein, bevor etwas als fertig gilt. `verify-browser.mjs` braucht
-einmalig `npx playwright install firefox`.
+**Alle acht müssen grün sein**, bevor etwas als fertig gilt — sie laufen
+unabhängig voneinander und lassen sich parallel starten. `verify-browser.mjs`
+braucht einmalig `npx playwright install firefox`.
 
 **Screenshots ansehen, nicht nur die Häkchen zählen.** Ein Dutzend echter Fehler
 hat in diesem Projekt die automatischen Prüfungen passiert und wurde erst im Bild
@@ -29,9 +30,12 @@ Zeilen ohne Balken im Showablauf, «Changeover: Changeover», ein Platzhaltertex
 siebzehn Tabellenzeilen, der wie eingetragener Inhalt aussah, ein Showtag, der nur
 zwei Drittel des Bildes füllte, eine links angeschnittene Datumszeile, ein
 «12:00 Uhr», bei dem das «Uhr» in eine zweite Zeile rutschte, ein Zoom-Umschalter
-auf «Monate» über einer Stundenachse, und ein Soundcheck, den die Vorgabe auf
-19:40 setzte — eine Stunde vor den Act statt an den Nachmittag. Für jeden gibt es
-jetzt eine Prüfung — der nächste Fehler dieser Art hat aber noch keine.
+auf «Monate» über einer Stundenachse, ein Soundcheck, den die Vorgabe auf
+19:40 setzte — eine Stunde vor den Act statt an den Nachmittag —, vierzehn
+Bautage in der Schiene, die «Showablauf» und «Einrichten» unter den Fensterrand
+schoben, und ein leerer grauer Kasten rechts neben den Reitern im
+Einrichten-Fenster. Für jeden gibt es jetzt eine Prüfung — der nächste Fehler
+dieser Art hat aber noch keine.
 
 **Neue Bausteine gehören in die `needed`-Liste in `tests/run.mjs`.** Sonst kennt
 sie nur das Theme, in dem sie entstanden sind, und in den vier anderen fehlen sie
@@ -764,9 +768,14 @@ einem Vorgang berührt werden, über Mitternacht laufende auf beiden Tagen.
 **Was im aktiven Modus nichts bedeutet, steht nicht da.** `setAnsicht()` blendet
 `#seg-abschnitt` außerhalb des Showablaufs aus und `.hd-zoom` außerhalb von
 Bauzeitenplan+Plan-Darstellung; `syncBuehnen()` zeigt die Bühnen-Häkchen nur im
-Showablauf. So sind aus 22 gleichzeitig sichtbaren Bedienelementen 13 im
-Bauzeitenplan und 9 im Showablauf geworden. Wer einen Knopf hinzufügt, sagt
-zuerst, in welchem Modus er etwas bedeutet — und blendet ihn im anderen aus.
+Showablauf. So sind aus 22 gleichzeitig sichtbaren Bedienelementen 12 im
+Bauzeitenplan und 10 im Showablauf geworden. **Nachgezählt, nicht geschätzt** —
+gezählt werden die sichtbaren `button`, `input` und `select` in `.hd-bar` beim
+Klassentreffen-Plan mit einer Bühne, ohne Live und ohne offenen Konflikt. Wer
+die Zahl anzweifelt, zählt mit demselben Maß nach.
+
+Wer einen Knopf hinzufügt, sagt zuerst, in welchem Modus er etwas bedeutet —
+und blendet ihn im anderen aus.
 
 **Einrichten ist ein FENSTER über dem Plan, keine Seite** (`#ein-dlg`, vier
 Reiter über eine `.seg`). Als Seite ersetzte es den Arbeitsbereich, und der
@@ -784,20 +793,13 @@ in table.js); sichtbar trennt die Schiene daneben. Im Showablauf sind
 `c-start`/`c-end` schmaler (112 statt 175 px) — dort steht kein Datum im Feld,
 und 175 px ist die Breite eines `datetime-local`.
 
-**Zwei Bereiche, EINE Leiste: «Ansicht» und «Einrichten».**
-*(Historisch, bis v0.11.1 — seit v0.12.0 ersetzt durch Schiene + Fenster, siehe
-oben. Der Absatz bleibt stehen, weil die Begründung für `setReiter()` als
-einziger Schreiber unverändert für `setAnsicht()` gilt.)* `setReiter()` in
-app.js ist der einzige Schreiber, dasselbe Prinzip wie `setAnsicht()`.
-**Ansicht** ist die Arbeitsleiste von vorher (Bauzeitenplan/Setup/Show,
-Darstellung, Bühnen, Zoom, Undo, Prüfen, Live+Versatz) — unverändert.
-**Einrichten** ersetzt Arbeitsleiste UND Arbeitsbereich durch eine eigene
-Seite mit den administrativen Knöpfen: Projekt (Neu, Projekte, Export,
-Import, Drucken), Gewerke & Bühnen (`+ Gewerk`), Personal & Maschinen
-(anlegen, verwalten), Eintragsarten & Abschnitte (verwalten), Darstellung
-(Hell/Dunkel). Eigene Klasse `seg-reiter`, nicht `seg-ansicht` — zwei gleich
-aussehende Segmentgruppen nebeneinander sind sonst optisch eine, wie beim
-Ebenen/Abschnitt-Fehler aus v0.9.0.
+**Zwei gleich aussehende Segmentgruppen nebeneinander sind EINE Gruppe, egal
+was der Code meint.** Das kostete in v0.9.0 die Bedienbarkeit — Ebene und
+Abschnitt standen im selben Stil nebeneinander, mit je einem dunklen Knopf, und
+niemand fand den Weg von Setup zu Show. Wer eine weitere `.seg` neben eine
+bestehende stellt, muss sie sichtbar absetzen oder sie gehört zusammengelegt.
+Die Reiter im Einrichten-Fenster (`.ein-reiter`) stehen deshalb allein in ihrer
+Zeile, nicht neben der Bedarfs-Unterwahl.
 
 **Die Knöpfe sind dieselben Elemente, nur umgezogen — keine zweite
 Verdrahtung.** `#export`, `#import`, `#new-proj`, `#proj-menu`, `#add-gewerk`,
@@ -857,14 +859,14 @@ bleiben (Kommentare ausgenommen).
 | `js/conflicts.js` | Konflikte + Dauer-Kurzform — **DOM-frei** |
 | `js/persistence.js` | localStorage, Export/Import — **DOM-frei** |
 | `js/table.js` | Tabellen-Editor |
-| `js/templates.js` | Vier Vorlagen |
+| `js/templates.js` | Vier Vorlagen + leerer Plan (`TEMPLATES` hat fünf Einträge) |
 | `js/palette.js` | 10 Farbtöne × 2 Schraffuren = 20 Gewerke (HUES=10, MAX_SLOTS=20) |
 | `js/ebene.js` | Bauzeitenplan ↔ Showablauf: Bänder, Showtage, Typ-Hinweis — **DOM-frei** |
 | `js/resources.js` | Personal & Maschinen: Bezeichnungen, Deckung, Bedarfsraster — **DOM-frei** |
 | `js/live.js` | Verzug, laufende Vorgänge, Versatz (`verschoben`, `versatzText`) — **DOM-frei** |
 | `js/inspector.js` | Seitenpanel |
-| `js/menu.js` | Kontextmenü (Muster: Crewplaner dropdown.js) |
-| `js/bedarf.js` | Bedarfs-Reiter: Personalbedarf · Maschinenbedarf |
+| `js/menu.js` | Kontextmenü (Muster: Crewplaner dropdown.js) — trägt auch die Tageswahl |
+| `js/bedarf.js` | Bedarfsansicht: Personal- oder Maschinenbedarf (Unterwahl in der Leiste) |
 | `js/rail.js` | Die Schiene: der Modus, drei Einträge — rendert nur |
 | `tools/build-prototypes.mjs` | **Nur** für die Design-Artifacts (CSP verlangt alles inline). Die App braucht keinen Build. |
 
@@ -880,7 +882,9 @@ dort begründet und ist durch Regressionstests abgesichert.
 ✅ Prüf-Liste (kritisch & Konflikte sehen, zeigen, abhaken/lösen) ·
 ✅ Tagesblätter A3 · ✅ Showablauf-Ebene (Bühnen, Anforderungen/Material, Live-Kopfzeile,
 Running-Order-Blatt) · ✅ Verknüpfen per Ziehen + anklickbare Pfeile ·
-✅ Live-Versatz (die Ansage vom Pult)
+✅ Live-Versatz (die Ansage vom Pult) · ✅ Eigene Arten und Abschnitte samt Verwaltung ·
+✅ Personal & Maschinen (Zuweisung, Bereitstellung, Bedarfsraster) ·
+✅ Bedienkonzept: Schiene links, je Modus nur seine Knöpfe, Einrichten als Fenster
 → Als Nächstes: Balken und Dauern im Gantt ziehen — die Verknüpfungen sind schon
 gezogen, der Griff und die Zielprüfung stehen als Muster in gantt.js · danach
 Ansichten & Export (öffentlicher Link, PDF/ICS)
