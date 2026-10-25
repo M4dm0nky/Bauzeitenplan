@@ -897,3 +897,6 @@ deployt und nicht gemergt. Wenn Online + Rollen kommen, wird dort weitergemacht.
 
 **Vorlagen:** «festival» ist abgenommener Praxisstand. Tour, Corporate und Messe
 sind entworfene Gerüste — beim ersten echten Einsatz korrigieren.
+
+## Gestartete Prozesse IMMER wieder beenden
+Alles, was ich oder Subagenten starten (Hintergrundbefehle, Server, Mitschnitte, Watcher, Builds), beende ich, sobald es seine Aufgabe erfüllt hat. Nach Abbruch oder Timeout und am Sitzungsende prüfe ich auf verwaiste Prozesse und beende sie gezielt. Details: `C:\Dropbox\Incomming\github\CLAUDE.md`, Abschnitt „Gestartete Prozesse IMMER wieder beenden“.
