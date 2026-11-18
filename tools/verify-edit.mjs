@@ -1006,6 +1006,86 @@ await check('Gesperrter Speicher: keine Ausnahme, Ansicht-Umschalter wechselt', 
   } finally { await c2.close(); }
 });
 
+console.log('\nVOLLER SPEICHER BEIM PROJEKTWECHSEL');
+await check('Voller Speicher beim Projektwechsel fragt (Abbrechen / Trotzdem wechseln / Exportieren)', async () => {
+  const c3 = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  try {
+    const p3 = await c3.newPage();
+    const fehler = [];
+    p3.on('pageerror', (e) => fehler.push(e.message));
+    await p3.goto(BASE + '/index.html?plan=leer');
+    await p3.waitForTimeout(700);
+    const anlegen = async (name) => {
+      await p3.fill('.dlg-f:first-child input', name);
+      await p3.locator('.dlg-t[data-k="festival"]').click();
+      await p3.locator('.dlg-act .btn-p').click();
+      await p3.waitForTimeout(700);
+    };
+    await anlegen('Alpha');
+    await p3.locator('#rail-ein').click();
+    await p3.locator('#new-proj').click();
+    await p3.waitForTimeout(300);
+    await anlegen('Beta');
+    await p3.waitForTimeout(1200);
+    // Ein ausstehender Eintrag im offenen Projekt, Speicher voll NUR für dessen Plan-Schlüssel.
+    const aendern = async (neu) => {
+      await p3.locator('#ein-zu').click({ timeout: 2000 }).catch(() => {});
+      await p3.locator('.bz-lab-group .bz-lab-name').first().dblclick();
+      await p3.locator('.bz-lab-edit').fill(neu);
+      await p3.keyboard.press('Enter');
+      await p3.evaluate(() => {
+        const key = 'bzp_p_' + localStorage.getItem('bzp_active');
+        const orig = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (k, v) {
+          if (k === key) throw new DOMException('voll', 'QuotaExceededError');
+          return orig.call(this, k, v);
+        };
+      });
+    };
+    const projektOeffnen = async (name) => {
+      await p3.locator('#rail-ein').click();
+      await p3.locator('#proj-menu').click();
+      await p3.waitForTimeout(300);
+      await p3.locator('.dlg-open', { hasText: name }).click();
+      await p3.waitForTimeout(500);
+    };
+    const labelName = () => p3.locator('.bz-lab-group .bz-lab-name').first().textContent();
+    await aendern('Geändert-1');
+    await projektOeffnen('Alpha');
+    const dlg = p3.locator('.dlg-h', { hasText: 'Nicht gespeichert' });
+    if ((await dlg.count()) !== 1) return 'kein Dialog «Nicht gespeichert»';
+    const knoepfe = await p3.locator('body > .dlg').last().locator('.btn').allTextContents();
+    for (const t of ['Exportieren', 'Trotzdem wechseln', 'Abbrechen']) if (!knoepfe.includes(t)) return 'Knopf fehlt: ' + t + ' (' + knoepfe + ')';
+    if (!(await p3.locator('.dlg-sub', { hasText: 'Der Browser-Speicher ist voll' }).count())) return 'Nachricht ohne «Der Browser-Speicher ist voll»';
+    // (a) Abbrechen
+    await p3.locator('body > .dlg').last().locator('.btn', { hasText: 'Abbrechen' }).click();
+    await p3.waitForTimeout(300);
+    if ((await p3.locator('#proj-name').textContent()) !== 'Beta') return '(a) Projekt gewechselt';
+    if ((await labelName()) !== 'Geändert-1') return '(a) Eingabe weg: ' + (await labelName());
+    // (b) Trotzdem wechseln — der Projektdialog steht noch, Alpha erneut wählen.
+    await p3.locator('.dlg-open', { hasText: 'Alpha' }).click();
+    await p3.waitForTimeout(400);
+    await p3.locator('body > .dlg').last().locator('.btn', { hasText: 'Trotzdem wechseln' }).click();
+    await p3.waitForTimeout(700);
+    if ((await p3.locator('#proj-name').textContent()) !== 'Alpha') return '(b) nicht gewechselt';
+    // (c) Exportieren: Speicher jetzt für Alpha voll, offene Eingabe in Alpha.
+    await p3.evaluate(() => { location.reload(); });
+    await p3.waitForTimeout(1200);
+    await aendern('Geändert-2');
+    await projektOeffnen('Beta');
+    await p3.locator('.dlg-h', { hasText: 'Nicht gespeichert' }).waitFor({ timeout: 3000 });
+    const [dl] = await Promise.all([
+      p3.waitForEvent('download', { timeout: 5000 }),
+      p3.locator('body > .dlg').last().locator('.btn', { hasText: 'Exportieren' }).click(),
+    ]);
+    if (!/\.json$/.test(dl.suggestedFilename())) return 'Download: ' + dl.suggestedFilename();
+    await p3.waitForTimeout(700);
+    if ((await p3.locator('#proj-name').textContent()) !== 'Beta') return '(c) nicht gewechselt';
+    if (fehler.length) return 'pageerror: ' + fehler[0];
+    return true;
+  } finally { await c3.close(); }
+});
+
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 

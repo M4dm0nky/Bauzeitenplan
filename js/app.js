@@ -144,12 +144,12 @@ async function openBundled(key) {
   }
 
   if (datei && neuer(datei, lokal)) {
-    open(datei);
+    await open(datei);
     if (lokal) toast('Neuer Stand geladen: ' + b.name);
     return true;
   }
-  if (lokal) { open(lokal); return true; }
-  if (datei) { open(datei); return true; }
+  if (lokal) { await open(lokal); return true; }
+  if (datei) { await open(datei); return true; }
   return false;
 }
 
@@ -179,17 +179,21 @@ async function bootLokal() {
 
   const activeId = repo.getActive();
   const plan = activeId && repo.load(activeId);
-  if (plan) return open(plan);
+  if (plan) { await open(plan); return; }
 
   const list = repo.list();
   if (list.length) {
     const first = repo.load(list[0].id);
-    if (first) return open(first);
+    if (first) { await open(first); return; }
   }
   showProjectDialog({ firstRun: true });
 }
 
-function open(plan) {
+// Liefert true, wenn das Projekt offen ist, false nach «Abbrechen» im
+// Sicherungsdialog (dann bleibt alles wie es war). Asynchron wird es nur beim
+// Wechsel auf ein ANDERES Projekt mit gescheitertem Sichern; ein Sync-Update
+// desselben Projekts läuft ohne Warten durch und fragt nie.
+async function open(plan) {
   // Unverändert wieder geöffnet (kein Import, kein Abgleich-Ergebnis) bleibt
   // abgeglichen — sonst würde jedes Öffnen einen Upload auslösen.
   const id = plan.project.id;
@@ -202,12 +206,14 @@ function open(plan) {
   if (store) {
     // Eine noch ausstehende Eingabe gehört dem bisherigen Projekt und wäre nach
     // dem Ersetzen weg (der Timer schriebe den NEUEN Plan). Deshalb sofort sichern.
-    if (andereId && saveTimer) {
+    if (andereId && (saveTimer || store.dirty)) {
       clearTimeout(saveTimer);
       saveTimer = null;
-      const r = repo.save(store.state);
-      if (r && r.ok === false) { setSaveState('error'); toast(r.error, 'bad', 8000); }
-      else store.markSaved();
+      const r = await sichern({ still: true });
+      if (!r.ok && !(await wechselnOhneSicherung(r))) {
+        scheduleSave();          // die Eingabe bleibt im Store und wird weiter versucht
+        return false;
+      }
     }
     store.replace(plan);
     // Ein Versatz gilt dem Abend, den man gerade fährt — nicht dem nächsten
@@ -224,6 +230,27 @@ function open(plan) {
   if (unveraendert) repo.markSynced(id, info.remoteSha);
   // Projektwechsel: sofort abgleichen (Änderungen am bisherigen Projekt hochladen).
   if (wechsel && !abgleichLaeuft) abgleichen();
+  return true;
+}
+
+// Das Sichern des bisherigen Projekts ist gescheitert (Speicher voll): nicht
+// still wechseln, sonst ist die Eingabe weg. true = wechseln, false = bleiben.
+async function wechselnOhneSicherung(r) {
+  const wahl = await askDialog({
+    title: 'Nicht gespeichert',
+    message: [
+      `Die letzten Änderungen an «${store.state.project.name}» konnten nicht gesichert werden.`,
+      r.error,
+      'Exportiere den Plan als JSON, wechsle ohne Sicherung oder bleib im Projekt.',
+    ],
+    buttons: [
+      { label: 'Abbrechen', value: null },
+      { label: 'Trotzdem wechseln', value: 'wechseln', danger: true },
+      { label: 'Exportieren', value: 'export', primary: true },
+    ],
+  });
+  if (wahl === 'export') doExport();
+  return wahl === 'export' || wahl === 'wechseln';
 }
 
 // ── Aufbau ──────────────────────────────────────────────────────────────────
@@ -574,7 +601,7 @@ const offenId = () => (store ? store.state.project.id : null);
 // selbst (dirty) — deshalb danach noch einmal als abgeglichen markieren.
 function uebernehmen(plan, sha) {
   repo.save(plan, { remoteSha: sha });
-  if (plan.project.id === offenId()) open(plan);
+  if (plan.project.id === offenId()) open(plan);   // gleiche id: wartet und fragt nie
   repo.markSynced(plan.project.id, sha);
 }
 
@@ -616,7 +643,7 @@ async function fuehreAus(sync, a) {
     if (warOffen) {
       const rest = repo.list();
       const plan = rest.length && repo.load(rest[0].id);
-      if (plan) open(plan); else showProjectDialog({ firstRun: true });
+      if (plan) await open(plan); else showProjectDialog({ firstRun: true });
     }
     return { ok: true };
   }
@@ -1135,8 +1162,10 @@ function scheduleSave() {
   setSaveState('dirty');
   saveTimer = setTimeout(() => { saveTimer = null; save(); }, 800);
 }
-async function save(loud = false) {
-  if (!store) return;
+// EIN Weg, den Stand zu sichern und den Zustand anzuzeigen — für save() und
+// den Projektwechsel in open(). `still`: kein Toast (der Aufrufer fragt selbst).
+async function sichern({ loud = false, still = false } = {}) {
+  if (!store) return { ok: true };
   // await ist für localStorage folgenlos (synchrones Objekt) und lässt den
   // PocketBase-Durchschrieb (Promise) sein Ergebnis melden.
   const r = await repo.save(store.state);
@@ -1147,9 +1176,11 @@ async function save(loud = false) {
     if (repo.syncInfo(store.state.project.id).dirty) planeUpload();
   } else {
     setSaveState('error');
-    toast(r.error, 'bad', 8000);
+    if (!still) toast(r.error, 'bad', 8000);
   }
+  return r;
 }
+async function save(loud = false) { await sichern({ loud }); }
 function setSaveState(s) {
   const n = $('save-state');
   n.dataset.state = s;
@@ -1239,8 +1270,9 @@ async function doImport(e) {
   // Schon Projekte mit gleichem Namen da? Fragen, ob ersetzen (alte weg, nur
   // diese Datei) oder zusätzlich importieren — sonst sammeln sich Duplikate.
   const dupes = repo.list().filter((p) => p.name === name);
+  let choice = null;
   if (dupes.length) {
-    const choice = await askDialog({
+    choice = await askDialog({
       title: `«${name}» ist bereits vorhanden`,
       message: [
         dupes.length === 1
@@ -1255,11 +1287,13 @@ async function doImport(e) {
       ],
     });
     if (choice === null) return;                 // Abbruch: gar nicht importieren
-    if (choice === 'replace') for (const p of dupes) repo.remove(p.id);
-    else r.plan.project.id = 'p' + Date.now().toString(36);
+    if (choice !== 'replace') r.plan.project.id = 'p' + Date.now().toString(36);
   }
 
-  open(r.plan);
+  // Erst öffnen, dann die Alten entfernen: bricht der Nutzer den Wechsel ab,
+  // darf nichts gelöscht sein. Dieselbe id überschreibt open() ohnehin.
+  if (!(await open(r.plan))) return;
+  for (const p of dupes) if (choice === 'replace' && p.id !== r.plan.project.id) repo.remove(p.id);
   $('dlg').hidden = true;      // sonst bleibt der Anlege-Dialog über allem liegen
   toast('«' + name + '» importiert');
 }
@@ -1283,7 +1317,7 @@ function showProjectDialog({ firstRun = false }) {
       const b = el('button', 'dlg-open');
       b.append(el('span', 'dlg-open-n', p.name));
       b.append(el('span', 'dlg-open-m', (p.venue ? p.venue + ' · ' : '') + 'geändert ' + new Date(p.modified).toLocaleString('de-DE')));
-      b.onclick = () => { const pl = repo.load(p.id); if (pl) { open(pl); close(); } };
+      b.onclick = async () => { const pl = repo.load(p.id); if (pl && await open(pl)) close(); };
       const del = el('button', 'dlg-del', '×');
       del.title = 'Projekt löschen';
       del.onclick = async () => {
@@ -1353,11 +1387,10 @@ function showProjectDialog({ firstRun = false }) {
 
   const actions = el('div', 'dlg-act');
   const create = el('button', 'btn btn-p', 'Projekt anlegen');
-  create.onclick = () => {
+  create.onclick = async () => {
     if (!nameIn.value.trim()) { nameIn.focus(); return; }
     if (!dateIn.value) { dateIn.focus(); return; }
-    open(planFromTemplate(chosen, { name: nameIn.value.trim(), venue: venueIn.value.trim(), loadIn: dateIn.value }));
-    close();
+    if (await open(planFromTemplate(chosen, { name: nameIn.value.trim(), venue: venueIn.value.trim(), loadIn: dateIn.value }))) close();
   };
   const imp = el('button', 'btn', 'JSON importieren');
   imp.onclick = () => $('import-file').click();
