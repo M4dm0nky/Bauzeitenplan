@@ -1,5 +1,6 @@
 import { createStore, STATUS_IDS } from '../js/store.js';
-import { toMin } from '../js/schedule.js';
+import { toMin, toDate } from '../js/schedule.js';
+import { local } from '../js/conflicts.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -1263,14 +1264,18 @@ test('Start ändern beschneidet von des Fensters', () => {
 });
 test('Verschieben über den Sommerzeit-Wechsel 25.10.2026 behält die Differenz in echten Minuten', () => {
   // Vorgang 25.10. 01:00–05:00 (5 echte Stunden, der Wechsel 03:00→02:00 liegt mittendrin),
-  // Fenster 02:30–04:00 überspannt den Wechsel; verschoben auf den 26.10. 01:00–06:00
-  // (ebenfalls 5 echte Stunden). Läuft in jeder Zeitzone, spannt den Wechsel aber nur in Europe/Berlin.
+  // Fenster 02:30–04:00 überspannt den Wechsel (nur in Europe/Berlin); verschoben um 24 echte
+  // Stunden bei gleicher echter Dauer. Das Ziel wird aus echten Minuten gerechnet und gilt so in jeder Zone.
   const { s } = mitFenster('2026-07-13T09:00', '2026-07-13T10:00');
   s.apply({ type: 'moveTask', id: 'a', start: '2026-10-25T01:00', end: '2026-10-25T05:00' });
   const rid = taskById(s, 'a').res[0].rid;
   s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: { rid, n: 2, von: '2026-10-25T02:30', bis: '2026-10-25T04:00' } });
   const t0 = { ...taskById(s, 'a') }, w0 = { ...taskById(s, 'a').res[0] };
-  assert.equal(s.apply({ type: 'moveTask', id: 'a', start: '2026-10-26T01:00', end: '2026-10-26T06:00' }).ok, true);
+  // Ziel aus echten Minuten: ein Tag später, gleiche echte Dauer — in jeder Zone.
+  const dauer = toMin(t0.end) - toMin(t0.start);
+  const neuStart = local(toDate(toMin(t0.start) + 1440));
+  const neuEnde = local(toDate(toMin(neuStart) + dauer));
+  assert.equal(s.apply({ type: 'moveTask', id: 'a', start: neuStart, end: neuEnde }).ok, true);
   const t = taskById(s, 'a'), w = t.res[0];
   const delta = toMin(t.start) - toMin(t0.start);
   assert.equal(toMin(w.von) - toMin(w0.von), delta);
