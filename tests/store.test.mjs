@@ -1277,7 +1277,7 @@ test('Start ändern beschneidet von des Fensters', () => {
   assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 2, von: '2026-07-13T10:00', bis: '2026-07-13T11:00' }]);
 });
 test('Verschieben über den Sommerzeit-Wechsel 25.10.2026 behält die Differenz in echten Minuten', () => {
-  // Vorgang 25.10. 01:00–05:00 (5 echte Stunden, der Wechsel 03:00→02:00 liegt mittendrin),
+  // Vorgang 25.10. 01:00–05:00 (5 echte Stunden nur in Europe/Berlin, der Wechsel 03:00→02:00 liegt mittendrin),
   // Fenster 02:30–04:00 überspannt den Wechsel (nur in Europe/Berlin); verschoben um 24 echte
   // Stunden bei gleicher echter Dauer. Das Ziel wird aus echten Minuten gerechnet und gilt so in jeder Zone.
   const { s } = mitFenster('2026-07-13T09:00', '2026-07-13T10:00');
