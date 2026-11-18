@@ -66,7 +66,8 @@ keine alte Version einsperren, solange Netz da ist. Der Cache heißt je Version 
 `activate` löscht alle anderen; die Dateiliste `HUELLE` in `sw.js` prüft `tests/run.mjs`
 in beide Richtungen. Kill-Switch steht in `sw.js`.
 
-`~/.local/bin/gh` ist installiert (nicht im PATH — mit vollem Pfad aufrufen).
+`gh` liegt unter `C:\Program Files\GitHub CLI\gh.exe` und ist im PATH der
+PowerShell (in Git Bash ggf. mit vollem Pfad).
 Angemeldet als **M4dm0nky**. Das Repo liegt bewusst dort und nicht unter `Aniflu`:
 Aniflu ist ein fremdes persönliches Konto, dort kann M4dm0nky weder Repos anlegen
 noch Pages einschalten (nur `push`, kein `admin`).
@@ -842,6 +843,46 @@ der Name woanders im Befehl gehört (`addGewerk` z. B. in `gewerk.name`).
 `grep -rn "window\.prompt\|[^.]prompt(\|confirm(\|alert(" js/*.js` muss leer
 bleiben (Kommentare ausgenommen).
 
+## Sync und Offline
+
+**Local-first.** Der Plan lebt weiter in `localStorage`; das private Daten-Repo
+`M4dm0nky/Bauzeitenplan-Daten` (`main`, `projekte/<project.id>.json`, Inhalt =
+`serialize(plan)`) ist der Abgleich zwischen Geräten, nicht die Wahrheit. **Ohne
+eingetragenen Schlüssel verhält sich die App exakt wie vorher** — alle anderen
+`verify-*` laufen ohne Schlüssel und dürfen davon nichts merken.
+
+- **Der Schlüssel liegt nur in `localStorage` unter `bzp_sync`** (`{token, repo}`),
+  nie im Plan, im Export oder im Repo. `tests/run.mjs` sperrt `bzp_sync` in
+  `persistence.js` — die Plan-Schicht kennt ihn nicht.
+- **Sync-Metadaten (`remoteSha`, `dirty`) stehen im Projekt-Index**
+  (`bzp_projects`), nie im Plan. Sonst änderte jeder Abgleich den Plan, und der
+  Plan änderte die sha — ein Kreis.
+- **`js/sync.js` ist DOM-frei**, `fetch` wird hereingereicht (`createSync`).
+  Die Entscheidung je Projekt trifft die reine Funktion `abgleich()`; die
+  Verdrahtung in app.js führt nur aus.
+- **Jeder GitHub-Abruf mit `cache:'no-store'`.** GETs sind 60 s cachebar; ohne
+  den Schalter meldet die Liste kurz nach dem eigenen Upload die alte sha, und es
+  entsteht ein Scheinkonflikt.
+- **Base64 über `TextEncoder`**, nie `btoa` auf dem String — «Bühne» und «👤»
+  werfen sonst.
+- **Ein Konflikt wird nie still aufgelöst**: `askDialog` mit drei Knöpfen
+  — einer davon «Beide behalten (Kopie)», die Kopie heißt «… (anderes Gerät)».
+  Kommt das offene Projekt neuer von außen und ist lokal nicht `dirty`, wird es
+  ersetzt — mit Toast, ohne Dialog. Auf einem Gerät gelöscht, auf dem anderen
+  `dirty`: behalten und neu hochladen. Arbeit geht nie verloren.
+- **Hochgeladen wird gebündelt**: frühestens 10 s nach dem letzten Speichern,
+  sofort bei `visibilitychange → hidden` und beim Projektwechsel. Ein
+  übersprungener Durchlauf löst höchstens EINEN sofortigen zweiten aus.
+- **Kein Netz oder falscher Schlüssel bricht den Start nie.** Das Statussymbol
+  (`#sync-state`) wird gelb bzw. rot, die App läuft mit lokalen Daten weiter.
+- **Der Service Worker ist network-first** (siehe Deploy). Was ausgeliefert wird,
+  steht in `HUELLE`; `tests/run.mjs` prüft das gegen das Dateisystem in BEIDE
+  Richtungen. Wer eine Datei anlegt oder löscht, pflegt `HUELLE` mit.
+- **Prüfen:** `tools/verify-sync.mjs` fälscht die GitHub-API per Route.
+  `--echt` läuft gegen das echte Repo (`BZP_TOKEN` in der Umgebung, nur
+  «Zwei Geräte» + Aufräumen). Der Token ist fine-grained, nur dieses Repo,
+  *Contents: Read and write*.
+
 ## Aus Crewplaner gelernt — aufgehoben für den Tag, an dem ein Backend kommt
 
 - `project_id` & Co. als **Text**, niemals als Relation. Coolify-Reimport kippt
@@ -872,6 +913,7 @@ bleiben (Kommentare ausgenommen).
 | `js/menu.js` | Kontextmenü (Muster: Crewplaner dropdown.js) — trägt auch die Tageswahl |
 | `js/bedarf.js` | Bedarfsansicht: Personal- oder Maschinenbedarf (Unterwahl in der Leiste) |
 | `js/rail.js` | Die Schiene: der Modus, drei Einträge — rendert nur |
+| `js/sync.js` | GitHub-Contents-Client + `abgleich()` — **DOM-frei** |
 | `tools/build-prototypes.mjs` | **Nur** für die Design-Artifacts (CSP verlangt alles inline). Die App braucht keinen Build. |
 
 Warum was so ist: `docs/entscheidungen.md`. Besonders der kritische Pfad hat eine
@@ -888,7 +930,8 @@ dort begründet und ist durch Regressionstests abgesichert.
 Running-Order-Blatt) · ✅ Verknüpfen per Ziehen + anklickbare Pfeile ·
 ✅ Live-Versatz (die Ansage vom Pult) · ✅ Eigene Arten und Abschnitte samt Verwaltung ·
 ✅ Personal & Maschinen (Zuweisung, Bereitstellung, Bedarfsraster) ·
-✅ Bedienkonzept: Schiene links, je Modus nur seine Knöpfe, Einrichten als Fenster
+✅ Bedienkonzept: Schiene links, je Modus nur seine Knöpfe, Einrichten als Fenster ·
+✅ GitHub-Sync (privates Daten-Repo) + Offline per Service Worker
 → Als Nächstes: Balken und Dauern im Gantt ziehen — die Verknüpfungen sind schon
 gezogen, der Griff und die Zielprüfung stehen als Muster in gantt.js · danach
 Ansichten & Export (öffentlicher Link, PDF/ICS)
