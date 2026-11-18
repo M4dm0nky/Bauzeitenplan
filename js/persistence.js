@@ -24,6 +24,16 @@ const speicherFehler = (e) => {
     : 'Speichern fehlgeschlagen: ' + ((e && e.message) || e);
 };
 
+// Ein gesperrter Speicher (Privatmodus, Richtlinie) wirft schon beim LESEN.
+// Alle Zugriffe laufen deshalb durch diese drei Helfer: Lesen liefert null,
+// Löschen verschluckt, Schreiben wirft weiter (der Aufrufer meldet es).
+const lies = (storage, key) => {
+  try { return storage.getItem(key); } catch { return null; }
+};
+const loesche = (storage, key) => {
+  try { storage.removeItem(key); } catch { /* nichts zu löschen, wenn nichts da ist */ }
+};
+
 const readJSON = (storage, key, fallback) => {
   try {
     const raw = storage.getItem(key);
@@ -212,7 +222,7 @@ export function createRepo(storage) {
       // Gleicher Inhalt wie schon gespeichert und ohne neue remoteSha: nichts ist
       // passiert — kein dirty, sonst laden zwei Geräte einander endlos hoch
       // (open() speichert jedes Projekt, auch ein eben heruntergeladenes).
-      if (typeof remoteSha !== 'string' && storage.getItem(K_PLAN(id)) === neu
+      if (typeof remoteSha !== 'string' && lies(storage, K_PLAN(id)) === neu
           && readIndex().some((x) => x.id === id)) return { ok: true };
       try {
         storage.setItem(K_PLAN(id), neu);
@@ -238,9 +248,9 @@ export function createRepo(storage) {
     },
 
     remove(id) {
-      storage.removeItem(K_PLAN(id));
-      writeIndex(readIndex().filter((x) => x.id !== id));
-      if (this.getActive() === id) storage.removeItem(K_ACTIVE);
+      loesche(storage, K_PLAN(id));
+      try { writeIndex(readIndex().filter((x) => x.id !== id)); } catch { /* gesperrt */ }
+      if (this.getActive() === id) loesche(storage, K_ACTIVE);
     },
 
     syncInfo(id) {
@@ -261,8 +271,9 @@ export function createRepo(storage) {
       return readIndex().map((e) => ({ id: e.id, remoteSha: e.remoteSha ?? null, dirty: e.dirty ?? true }));
     },
 
-    getActive() { return storage.getItem(K_ACTIVE); },
-    setActive(id) { storage.setItem(K_ACTIVE, id); },
+    getActive() { return lies(storage, K_ACTIVE); },
+    // Nur eine Merkhilfe für den nächsten Start: scheitert sie, läuft die Sitzung weiter.
+    setActive(id) { try { storage.setItem(K_ACTIVE, id); } catch { /* Privatmodus */ } },
   };
 }
 

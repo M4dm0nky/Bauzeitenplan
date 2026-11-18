@@ -980,12 +980,10 @@ await check('Gesperrter Speicher: keine Ausnahme, Ansicht-Umschalter wechselt', 
   const c2 = await browser.newContext({ viewport: { width: 1600, height: 950 } });
   const fehler = [];
   try {
-    // Schreibzugriffe werfen (Quota/Privatmodus), vom ersten Aufruf an. Lesen
-    // bleibt offen: createRepo/getActive in persistence.js lesen ungeschützt, die
-    // App käme sonst gar nicht hoch — das ist Kernmodul, nicht Gegenstand hier.
+    // Jeder Zugriff wirft (Privatmodus/gesperrt), vom ersten Aufruf an — auch Lesen.
     await c2.addInitScript(() => {
       const wirf = () => { throw new DOMException('gesperrt', 'SecurityError'); };
-      Storage.prototype.setItem = wirf; Storage.prototype.removeItem = wirf;
+      Storage.prototype.getItem = wirf; Storage.prototype.setItem = wirf; Storage.prototype.removeItem = wirf;
     });
     const p2 = await c2.newPage();
     p2.on('pageerror', (e) => fehler.push(e.message + ' @' + String(e.stack).split('\n').slice(0, 3).join(' < ')));

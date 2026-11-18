@@ -218,8 +218,7 @@ function open(plan) {
     store = createStore(plan);
     mount();
   }
-  // Gesperrter Speicher: der Plan ist offen, nur das Merken fürs nächste Mal entfällt.
-  try { repo.setActive(plan.project.id); } catch (e) { /* Privatmodus: nur diese Sitzung */ }
+  repo.setActive(plan.project.id);   // wirft nie (persistence.js)
   refreshChrome();
   save();
   if (unveraendert) repo.markSynced(id, info.remoteSha);

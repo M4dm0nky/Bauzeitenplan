@@ -544,5 +544,16 @@ test('spanFehler: gemeinsame Fallliste', () => {
   for (const [[a, b, o], erwartet] of F) assert.equal(spanFehler(a, b, o), erwartet, `${a} ${b} ${JSON.stringify(o)}`);
 });
 
+test('createRepo übersteht einen Speicher, der bei jedem Zugriff wirft', () => {
+  const wirf = () => { throw new DOMException('gesperrt', 'SecurityError'); };
+  const r = createRepo({ getItem: wirf, setItem: wirf, removeItem: wirf });
+  assert.deepEqual(r.list(), []);
+  assert.equal(r.getActive(), null);
+  assert.equal(r.load('x'), null);
+  assert.equal(r.save({ project: { id: 'x', name: 'X' }, tasks: [], deps: [], gewerke: [] }).ok, false);
+  assert.doesNotThrow(() => r.remove('x'));
+  assert.doesNotThrow(() => r.setActive('x'));
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);
