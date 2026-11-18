@@ -17,7 +17,9 @@ let failed = 0;
 // ── 1. Unit-Tests ───────────────────────────────────────────────────────────
 for (const f of readdirSync(here).filter((x) => x.endsWith('.test.mjs')).sort()) {
   try {
-    const out = execFileSync('node', [join(here, f)], { encoding: 'utf8' });
+    // Feste Zone: die Testdaten liegen an der deutschen Zeitumstellung (25.10.2026),
+    // sie sind für Europe/Berlin geschrieben. Die Grenze selbst folgt in Task 6.
+    const out = execFileSync('node', [join(here, f)], { encoding: 'utf8', env: { ...process.env, TZ: 'Europe/Berlin' } });
     process.stdout.write(out);
   } catch (e) {
     process.stdout.write(e.stdout || '');
