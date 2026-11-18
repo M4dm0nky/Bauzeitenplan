@@ -118,7 +118,7 @@ const BUNDLED = {
  * lokale Kopie; sonst wird die lokale geöffnet (die kann Änderungen des
  * Betrachters tragen). Ist die Datei nicht erreichbar — offline, `file://` —
  * bleibt es bei der lokalen Kopie.
- * @returns {Promise<boolean>} ob ein Plan offen ist
+ * @returns {Promise<boolean>} ob der Plan offen ist (false: nicht gefunden oder Wechsel abgebrochen)
  */
 async function openBundled(key) {
   const b = BUNDLED[key];
@@ -144,12 +144,12 @@ async function openBundled(key) {
   }
 
   if (datei && neuer(datei, lokal)) {
-    await open(datei);
-    if (lokal) toast('Neuer Stand geladen: ' + b.name);
-    return true;
+    const offen = await open(datei);
+    if (offen && lokal) toast('Neuer Stand geladen: ' + b.name);
+    return offen;
   }
-  if (lokal) { await open(lokal); return true; }
-  if (datei) { await open(datei); return true; }
+  if (lokal) return await open(lokal);
+  if (datei) return await open(datei);
   return false;
 }
 
