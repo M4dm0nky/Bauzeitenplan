@@ -16,9 +16,10 @@ node tools/verify-amk.mjs       # AMK-Plan importieren
 node tools/verify-klassentreffen.mjs   # V07-Plan + Autostart über die Adresse
 node tools/verify-print.mjs     # Tagesblätter A3: Zuschnitt, Filter, Maßstab
 node tools/verify-showablauf.mjs # Showablauf: Ebene, Bühnen, Live-Kopfzeile, Blatt
+node tools/verify-sync.mjs        # Sync: zwei Geräte, Konflikt, Löschen, Offline-Start
 ```
 
-**Alle acht müssen grün sein**, bevor etwas als fertig gilt — sie laufen
+**Alle neun müssen grün sein**, bevor etwas als fertig gilt — sie laufen
 unabhängig voneinander und lassen sich parallel starten. `verify-browser.mjs`
 braucht einmalig `npx playwright install firefox`.
 
