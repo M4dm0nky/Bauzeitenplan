@@ -290,6 +290,7 @@ function inhaltFehler(plan) {
     const name = `Vorgang «${t.title ?? t.id}»`;
     if (ids.has(t.id)) return `${name}: Die id ${t.id} kommt mehrfach vor.`;
     ids.add(t.id);
+    if (!t.start || !t.end) return `${name}: Start und Ende müssen gesetzt sein.`;   // new Date(null) wäre 1970
     const a = toMin(t.start), b = toMin(t.end);
     if (!Number.isFinite(a) || !Number.isFinite(b)) return `${name}: Start oder Ende ist kein gültiges Datum.`;
     if (t.milestone ? b !== a : b <= a) {

@@ -498,6 +498,14 @@ test('deserialize entfernt Verknüpfungen auf unbekannte Vorgänge', () => {
   assert.equal(r.ok, true);
   assert.deepEqual(r.plan.deps.map((d) => d.id), ['d1']);
 });
+test('deserialize lehnt fehlende Zeit ab', () => {
+  const a = deserialize(textMit((p) => { Object.assign(p.tasks[1], { milestone: true, start: null, end: null, title: 'OhneStart' }); }));
+  assert.equal(a.ok, false);
+  assert.match(a.error, /OhneStart/);
+  const b = deserialize(textMit((p) => { p.tasks[1].end = ''; p.tasks[1].title = 'OhneEnde'; }));
+  assert.equal(b.ok, false);
+  assert.match(b.error, /OhneEnde/);
+});
 test('mitgelieferte Pläne bestehen die Prüfung', () => {
   for (const f of ['klassentreffen-festival.json', 'amk-singleshow.json']) {
     const r = deserialize(readFileSync(new URL('../' + f, import.meta.url), 'utf8'));
