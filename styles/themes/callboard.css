@@ -313,8 +313,8 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .dlg-del { background: var(--panel2); border: 1px solid var(--rule); color: var(--muted); }
 .dlg-del:hover { background: var(--crit); color: #fff; border-color: var(--crit); }
 .dlg-f > span { font-family: var(--mono); font-size: calc(8.5px * var(--fs)); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.dlg-f input { background: var(--panel2); border: 1px solid var(--rule-2); color: var(--ink); font-size: calc(11px * var(--fs)); }
-.dlg-f input:focus { outline: none; border-color: var(--ink); }
+.dlg-f input, .ei-feld input { background: var(--panel2); border: 1px solid var(--rule-2); color: var(--ink); font-size: calc(11px * var(--fs)); }
+.dlg-f input:focus, .ei-feld input:focus { outline: none; border-color: var(--ink); }
 .dlg-t { background: var(--panel2); border: 1px solid var(--rule); }
 .dlg-t:hover { border-color: var(--ink); }
 .dlg-t[aria-pressed="true"] { border-color: var(--ink); background: color-mix(in srgb, var(--accent-b) 8%, var(--panel2)); }
@@ -455,3 +455,11 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .rail-ein { margin-top: auto; border-top: 1px solid var(--rule); border-bottom: 0; }
 .ei-h { font-family: var(--mono); font-size: calc(9px * var(--fs)); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .ei-hint { font-size: calc(9.5px * var(--fs)); color: var(--muted); line-height: 1.5; }
+
+/* Sync-Symbol (Speicherort). Grün = abgeglichen, gelb = wartet (offline / offene
+   Uploads), rot = Fehler. Gelb mischt sich aus Bernstein und der Tinte des
+   Themes und bleibt so in Hell UND Dunkel lesbar — kein Dunkel-Scope nötig. */
+.sync-state { font-size: 13px; padding: 2px 7px; border: 1px solid var(--rule-2); }
+.sync-state[data-state="ok"] { color: var(--live-run, #1a7a46); border-color: var(--live-run, #1a7a46); }
+.sync-state[data-state="wartet"] { color: color-mix(in srgb, #e0a100 65%, var(--ink)); border-color: color-mix(in srgb, #e0a100 65%, var(--ink)); }
+.sync-state[data-state="fehler"] { color: #fff; background: var(--crit); border-color: var(--crit); }

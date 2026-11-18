@@ -5,6 +5,7 @@
 
 import { createStore } from './store.js';
 import { createRepo, serialize, deserialize } from './persistence.js';
+import { createSync, abgleich, gleicherPlan, SYNC_REPO } from './sync.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
@@ -158,6 +159,12 @@ function neuer(datei, lokal) {
 
 // ── Erststart ───────────────────────────────────────────────────────────────
 async function boot() {
+  await bootLokal();
+  // Danach, nicht davor und nicht blockierend: lokal starten, dann abgleichen.
+  abgleichen();
+}
+
+async function bootLokal() {
   const wunsch = new URLSearchParams(location.search).get('plan');
   // Im PocketBase-Modus KEIN Autostart: open() schriebe den mitgelieferten Plan
   // über repo.save() in die Instanz — jeder Anmeldung ein Beispielprojekt.
@@ -177,6 +184,12 @@ async function boot() {
 }
 
 function open(plan) {
+  // Unverändert wieder geöffnet (kein Import, kein Abgleich-Ergebnis) bleibt
+  // abgeglichen — sonst würde jedes Öffnen einen Upload auslösen.
+  const id = plan.project.id;
+  const alt = repo.load(id), info = repo.syncInfo(id);
+  const unveraendert = !!(alt && info.remoteSha && !info.dirty && gleicherPlan(alt, plan));
+  const wechsel = !!store;
   if (store) {
     store.replace(plan);
     // Ein Versatz gilt dem Abend, den man gerade fährt — nicht dem nächsten
@@ -190,6 +203,9 @@ function open(plan) {
   repo.setActive(plan.project.id);
   refreshChrome();
   save();
+  if (unveraendert) repo.markSynced(id, info.remoteSha);
+  // Projektwechsel: sofort abgleichen (Änderungen am bisherigen Projekt hochladen).
+  if (wechsel && !abgleichLaeuft) abgleichen();
 }
 
 // ── Aufbau ──────────────────────────────────────────────────────────────────
@@ -391,6 +407,7 @@ function setEinTab(name) {
     .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ein === name)));
   document.querySelectorAll('[data-ein-tab]')
     .forEach((s) => { s.hidden = s.dataset.einTab !== name; });
+  if (name === 'sync') paintSyncInfo();
 }
 
 function openEinrichten() {
@@ -410,6 +427,214 @@ $('ein-dlg').addEventListener('mousedown', (e) => { if (e.target === $('ein-dlg'
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !$('ein-dlg').hidden) closeEinrichten();
 });
+
+// ── Speicherort (GitHub-Sync) ────────────────────────────────────────────────
+// Optional: ohne Schlüssel in localStorage (`bzp_sync`) tut dieser Block nichts
+// und die App verhält sich wie ohne Sync. Der Schlüssel lebt NUR dort — nie im
+// Plan, nie im Export, nie in persistence.js. Auf MODULEBENE, damit Verbinden
+// auch ohne offenes Projekt geht.
+const SYNC_KEY = 'bzp_sync';
+const UPLOAD_NACH_MS = 10000;      // gebündelt: frühestens 10 s nach der letzten Speicherung
+let uploadTimer = null, abgleichLaeuft = false, abgleichNochmal = false, letzterAbgleich = null;
+
+function syncKonfig() {
+  try {
+    const k = JSON.parse(window.localStorage.getItem(SYNC_KEY) || 'null');
+    return k && typeof k.token === 'string' && k.token && typeof k.repo === 'string' ? { token: k.token, repo: k.repo } : null;
+  } catch { return null; }
+}
+
+const syncClient = (k) => createSync({ fetch: (...a) => window.fetch(...a), token: k.token, repo: k.repo });
+
+// EINZIGER Schreiber von #sync-state. null = nicht verbunden → ausgeblendet.
+function setSyncState(state, titel) {
+  const n = $('sync-state');
+  if (!state) { n.hidden = true; return; }
+  n.hidden = false;
+  n.dataset.state = state;
+  n.title = titel || '';
+  n.setAttribute('aria-label', titel || '');
+}
+
+function paintSyncInfo() {
+  const k = syncKonfig();
+  const info = $('sync-info');
+  $('sync-trennen').disabled = !k;
+  if (!k) { info.textContent = 'Nicht verbunden — die Pläne bleiben in diesem Browser.'; return; }
+  const offen = repo ? repo.syncListe().filter((e) => e.dirty).length : 0;
+  const zeit = letzterAbgleich ? letzterAbgleich.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : 'noch keiner';
+  info.textContent = `Verbunden mit ${k.repo}. Letzter Abgleich: ${zeit}. Offene Uploads: ${offen}.`;
+}
+
+function planeUpload() {
+  if (!syncKonfig()) return;
+  clearTimeout(uploadTimer);
+  setSyncState('wartet', 'Änderungen warten auf den Upload');
+  uploadTimer = setTimeout(abgleichen, UPLOAD_NACH_MS);
+}
+
+const GRUND_TEXT = {
+  offline: 'Keine Verbindung zu GitHub — es wird später abgeglichen.',
+  schluessel: 'Schlüssel ungültig oder ohne Zugriff.',
+  repo: 'Das Daten-Repo ist für diesen Schlüssel nicht sichtbar (oder es existiert nicht).',
+  konflikt: 'Das Projekt wurde zwischenzeitlich anderswo geändert.',
+  fehler: 'GitHub meldet einen Fehler.',
+};
+
+async function abgleichen() {
+  const k = syncKonfig();
+  if (!k) { setSyncState(null); return; }
+  if (abgleichLaeuft) { abgleichNochmal = true; return; }
+  abgleichLaeuft = true;
+  clearTimeout(uploadTimer);
+  try {
+    do { abgleichNochmal = false; await abgleichenEinmal(k); } while (abgleichNochmal);
+  } catch (e) {
+    setSyncState('fehler', 'Abgleich fehlgeschlagen: ' + (e && e.message || e));
+  } finally {
+    abgleichLaeuft = false;
+    paintSyncInfo();
+  }
+}
+
+// Ein Durchlauf. Bricht bei offline/Schlüssel ab (alles Weitere scheiterte genauso),
+// macht bei anderen Fehlern mit dem nächsten Projekt weiter.
+async function abgleichenEinmal(k) {
+  const sync = syncClient(k);
+  // Offene Tipp-Änderungen (800-ms-Verzögerung) erst in die Ablage bringen,
+  // sonst wüsste der Abgleich nicht, dass das offene Projekt dirty ist.
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; await save(); }
+  setSyncState('wartet', 'Gleiche ab …');
+  const l = await sync.list();
+  if (!l.ok) return syncScheitert(l.grund);
+  let problem = null, abbruch = false;
+  for (const a of abgleich(repo.syncListe(), l.dateien)) {
+    const r = await fuehreAus(sync, a);
+    if (r && r.ok === false) {
+      problem = problem || r;
+      if (r.grund === 'offline' || r.grund === 'schluessel') { abbruch = true; break; }
+    }
+  }
+  if (abbruch) return syncScheitert(problem.grund);
+  if (problem) {
+    return setSyncState(problem.grund === 'abgebrochen' ? 'fehler' : 'wartet',
+      problem.grund === 'abgebrochen' ? 'Konflikt nicht gelöst — Pläne weichen voneinander ab' : (GRUND_TEXT[problem.grund] || GRUND_TEXT.fehler));
+  }
+  letzterAbgleich = new Date();
+  clearTimeout(uploadTimer);       // open()/save() im Durchlauf haben ihn evtl. neu gestellt
+  setSyncState('ok', 'Abgeglichen mit ' + k.repo);
+}
+
+function syncScheitert(grund) {
+  setSyncState(grund === 'offline' ? 'wartet' : 'fehler', GRUND_TEXT[grund] || GRUND_TEXT.fehler);
+}
+
+const offenId = () => (store ? store.state.project.id : null);
+
+// Lokal ablegen; ist es das offene Projekt, auch anzeigen. open() speichert
+// selbst (dirty) — deshalb danach noch einmal als abgeglichen markieren.
+function uebernehmen(plan, sha) {
+  repo.save(plan, { remoteSha: sha });
+  if (plan.project.id === offenId()) open(plan);
+  repo.markSynced(plan.project.id, sha);
+}
+
+async function hochladen(sync, id, sha) {
+  const plan = repo.load(id);
+  if (!plan) return { ok: true };
+  const vorher = (repo.list().find((x) => x.id === id) || {}).modified;
+  const r = await sync.push(id, serialize(plan), sha);
+  if (!r.ok) return r;
+  repo.markSynced(id, r.sha);
+  // Zwischenzeitlich weitergetippt? Dann gilt der Plan wieder als geändert.
+  const jetzt = (repo.list().find((x) => x.id === id) || {}).modified;
+  if (jetzt !== vorher) repo.save(repo.load(id));
+  return r;
+}
+
+async function fuehreAus(sync, a) {
+  if (a.art === 'hochladen') return hochladen(sync, a.id, a.sha);
+
+  if (a.art === 'lokal-loeschen') {
+    const name = (repo.list().find((x) => x.id === a.id) || {}).name || a.id;
+    const warOffen = a.id === offenId();
+    repo.remove(a.id);
+    toast('«' + name + '» wurde auf einem anderen Gerät gelöscht', undefined, 6000);
+    if (warOffen) {
+      const rest = repo.list();
+      const plan = rest.length && repo.load(rest[0].id);
+      if (plan) open(plan); else showProjectDialog({ firstRun: true });
+    }
+    return { ok: true };
+  }
+
+  const p = await sync.pull(a.id);
+  if (!p.ok) return p;
+  const d = deserialize(p.text);
+  if (d.ok === false) return { ok: false, grund: 'fehler' };
+
+  if (a.art === 'herunterladen') {
+    const offen = a.id === offenId();
+    uebernehmen(d.plan, p.sha);
+    if (offen) toast('Neuere Fassung vom anderen Gerät geladen');
+    return { ok: true };
+  }
+
+  // Konflikt. Gleicher Inhalt (z. B. der mitgelieferte Plan auf einem neuen
+  // Gerät) ist keiner: still als abgeglichen vermerken.
+  const lokal = repo.load(a.id);
+  if (lokal && gleicherPlan(lokal, d.plan)) { repo.markSynced(a.id, p.sha); return { ok: true }; }
+  const wahl = await askDialog({
+    title: 'Zwei verschiedene Fassungen',
+    message: [`«${(lokal && lokal.project.name) || a.id}» wurde auf einem anderen Gerät geändert, und hier auch.`,
+      'Welche Fassung soll gelten? Nichts wird ohne deine Wahl überschrieben.'],
+    buttons: [
+      { label: 'Meine behalten', value: 'mein', primary: true },
+      { label: 'Die vom anderen Gerät nehmen', value: 'fremd', danger: true },
+      { label: 'Beide behalten (Kopie)', value: 'beide' },
+    ],
+  });
+  if (wahl === null) return { ok: false, grund: 'abgebrochen' };
+  if (wahl === 'fremd') { uebernehmen(d.plan, p.sha); return { ok: true }; }
+  if (wahl === 'beide') {
+    const kopie = deserialize(p.text, { newId: true }).plan;
+    kopie.project.name += ' (anderes Gerät)';
+    repo.save(kopie);           // ohne remoteSha → wird im nächsten Durchlauf hochgeladen
+    abgleichNochmal = true;
+  }
+  return hochladen(sync, a.id, p.sha);
+}
+
+$('sync-verbinden').onclick = async () => {
+  const token = $('sync-token').value.trim();
+  if (!token) return toast('Bitte den Schlüssel eintragen.', 'bad');
+  const r = await syncClient({ token, repo: SYNC_REPO }).pruefe();
+  if (!r.ok) return toast(GRUND_TEXT[r.grund] || GRUND_TEXT.fehler, 'bad', 8000);
+  try { window.localStorage.setItem(SYNC_KEY, JSON.stringify({ token, repo: SYNC_REPO })); }
+  catch { return toast('Der Schlüssel konnte in diesem Browser nicht gespeichert werden.', 'bad', 8000); }
+  $('sync-token').value = '';
+  toast('Verbunden mit ' + SYNC_REPO);
+  paintSyncInfo();
+  abgleichen();
+};
+$('sync-trennen').onclick = () => {
+  try { window.localStorage.removeItem(SYNC_KEY); } catch { /* Privatmodus */ }
+  clearTimeout(uploadTimer);
+  setSyncState(null);
+  paintSyncInfo();
+  toast('Getrennt — die lokalen Pläne bleiben.');
+};
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') abgleichen(); });
+window.addEventListener('online', () => abgleichen());
+
+async function loescheImDatenRepo(id, sha) {
+  const k = syncKonfig();
+  if (!k) return;
+  const r = await syncClient(k).remove(id, sha);
+  if (r.ok) return;
+  if (r.grund === 'offline') toast('Offline gelöscht — im Daten-Repo liegt es noch und kommt beim nächsten Abgleich zurück. Lösche es online erneut.', 'bad', 9000);
+  else toast('Im Daten-Repo konnte das Projekt nicht entfernt werden: ' + (GRUND_TEXT[r.grund] || GRUND_TEXT.fehler), 'bad', 8000);
+}
 
 // ── Der Tag ─────────────────────────────────────────────────────────────────
 // EIN Kalender-Knopf für beide Modi — «welcher Tag» ist dieselbe Frage, ob im
@@ -840,7 +1065,7 @@ let saveTimer = null;
 function scheduleSave() {
   clearTimeout(saveTimer);
   setSaveState('dirty');
-  saveTimer = setTimeout(save, 800);
+  saveTimer = setTimeout(() => { saveTimer = null; save(); }, 800);
 }
 async function save(loud = false) {
   if (!store) return;
@@ -851,6 +1076,7 @@ async function save(loud = false) {
     store.markSaved();
     setSaveState('saved');
     if (loud) toast('Gesichert');
+    if (repo.syncInfo(store.state.project.id).dirty) planeUpload();
   } else {
     setSaveState('error');
     toast(r.error, 'bad', 8000);
@@ -993,13 +1219,17 @@ function showProjectDialog({ firstRun = false }) {
       const del = el('button', 'dlg-del', '×');
       del.title = 'Projekt löschen';
       del.onclick = async () => {
+        const sha = repo.syncInfo(p.id).remoteSha;
+        const zurSync = !!(syncKonfig() && sha);
         const ok = await askDialog({
           title: 'Projekt löschen?',
-          message: [`«${p.name}» endgültig löschen? Das lässt sich nicht rückgängig machen — exportiere vorher, wenn du unsicher bist.`],
+          message: [`«${p.name}» endgültig löschen? Das lässt sich nicht rückgängig machen — exportiere vorher, wenn du unsicher bist.`,
+            ...(zurSync ? ['Wird auch auf allen anderen Geräten gelöscht.'] : [])],
           buttons: [{ label: 'Abbrechen', value: false }, { label: 'Löschen', value: true, danger: true }],
         });
         if (!ok) return;
         repo.remove(p.id);
+        if (zurSync) loescheImDatenRepo(p.id, sha);
         showProjectDialog({ firstRun: repo.list().length === 0 });
       };
       row.append(b, del);
@@ -1288,6 +1518,7 @@ paintModeToggle();
 // auszuwählen und nichts anzumelden.
 function main() {
   repo = createRepo(window.localStorage);
+  paintSyncInfo();
   boot();
 }
 main();

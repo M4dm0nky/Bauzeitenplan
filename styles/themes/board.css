@@ -246,3 +246,11 @@ kbd { font: inherit; font-size: 10px; border: 1.5px solid var(--ink-3); backgrou
 .rail-ein { margin-top: auto; border-top: 1px solid rgba(255,255,255,.22); border-bottom: 0; }
 .ei-h { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .ei-hint { font-size: 11px; color: var(--ink-3); line-height: 1.5; }
+
+/* Sync-Symbol (Speicherort). Grün = abgeglichen, gelb = wartet (offline / offene
+   Uploads), rot = Fehler. Gelb mischt sich aus Bernstein und der Tinte des
+   Themes und bleibt so in Hell UND Dunkel lesbar — kein Dunkel-Scope nötig. */
+.sync-state { font-size: 13px; padding: 2px 7px; border: 1px solid var(--line); }
+.sync-state[data-state="ok"] { color: var(--live-run, #1a7a46); border-color: var(--live-run, #1a7a46); }
+.sync-state[data-state="wartet"] { color: color-mix(in srgb, #e0a100 65%, var(--ink)); border-color: color-mix(in srgb, #e0a100 65%, var(--ink)); }
+.sync-state[data-state="fehler"] { color: #fff; background: var(--crit); border-color: var(--crit); }

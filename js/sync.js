@@ -53,6 +53,13 @@ export function createSync({ fetch, token, repo, branch = 'main' }) {
   };
 
   return {
+    // Probe für „Verbinden“: sieht der Schlüssel das Repo überhaupt?
+    async pruefe() {
+      const r = await rufe(`${API}/repos/${repo}`, 'GET');
+      if (r.status === 404) return { ok: false, grund: 'repo', status: 404 };
+      if (r.fehler) return r.fehler;
+      return { ok: true };
+    },
     async list() {
       const r = await rufe(url(DIR), 'GET');
       if (r.status === 404) return { ok: true, dateien: [] };
@@ -63,19 +70,23 @@ export function createSync({ fetch, token, repo, branch = 'main' }) {
       return { ok: true, dateien };
     },
     async pull(id) {
-      const r = await rufe(url(`${DIR}/${id}.json`), 'GET');
+      const r = await rufe(url(`${DIR}/${encodeURIComponent(id)}.json`), 'GET');
       if (r.fehler) return r.fehler;
-      return { ok: true, text: dekodiere(r.json.content), sha: r.json.sha };
+      if (!r.json || typeof r.json.content !== 'string' || !r.json.sha) return { ok: false, grund: 'fehler', status: r.status };
+      try { return { ok: true, text: dekodiere(r.json.content), sha: r.json.sha }; }
+      catch { return { ok: false, grund: 'fehler', status: r.status }; }
     },
     async push(id, text, sha) {
       const body = { message: 'Plan ' + id, content: kodiere(text), branch };
       if (sha) body.sha = sha;
-      const r = await rufe(urlOhneRef(`${DIR}/${id}.json`), 'PUT', body);
+      const r = await rufe(urlOhneRef(`${DIR}/${encodeURIComponent(id)}.json`), 'PUT', body);
       if (r.fehler) return r.fehler;
-      return { ok: true, sha: r.json.content.sha };
+      const neu = r.json && r.json.content && r.json.content.sha;
+      if (!neu) return { ok: false, grund: 'fehler', status: r.status };
+      return { ok: true, sha: neu };
     },
     async remove(id, sha) {
-      const r = await rufe(urlOhneRef(`${DIR}/${id}.json`), 'DELETE', { message: 'Plan ' + id + ' gelöscht', sha, branch });
+      const r = await rufe(urlOhneRef(`${DIR}/${encodeURIComponent(id)}.json`), 'DELETE', { message: 'Plan ' + id + ' gelöscht', sha, branch });
       if (r.fehler) return r.fehler;
       return { ok: true };
     },
@@ -103,4 +114,21 @@ export function abgleich(lokal, remote) {
   const lok = new Set(lokal.map((l) => l.id));
   for (const r of remote) if (!lok.has(r.id)) aus.push({ art: 'herunterladen', id: r.id, sha: r.sha });
   return aus;
+}
+
+// Inhaltlicher Vergleich zweier Pläne (Schlüsselreihenfolge egal); `quelle` und
+// `exported` zählen nicht — sie sind Stempel, keine Planinhalte.
+const kanon = (v) => {
+  if (Array.isArray(v)) return v.map(kanon);
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(Object.keys(v).sort().map((k) => [k, kanon(v[k])]));
+  }
+  return v;
+};
+export function gleicherPlan(a, b) {
+  const teil = (p) => {
+    const { quelle, ...project } = (p && p.project) || {};
+    return kanon({ project, gewerke: p && p.gewerke, tasks: p && p.tasks, deps: p && p.deps });
+  };
+  return JSON.stringify(teil(a)) === JSON.stringify(teil(b));
 }

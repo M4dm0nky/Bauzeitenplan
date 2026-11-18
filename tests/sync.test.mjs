@@ -1,4 +1,4 @@
-import { createSync, kodiere, dekodiere, abgleich, SYNC_REPO } from '../js/sync.js';
+import { createSync, kodiere, dekodiere, abgleich, gleicherPlan, SYNC_REPO } from '../js/sync.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -200,6 +200,43 @@ test('abgleich: Reihenfolge lokal zuerst, dann nur-remote, je in Eingabereihenfo
          [{ id: 'z', sha: 'sz' }, { id: 'y', sha: 'sy' }]),
     [{ art: 'hochladen', id: 'b', sha: null }, { art: 'hochladen', id: 'a', sha: null },
      { art: 'herunterladen', id: 'z', sha: 'sz' }, { art: 'herunterladen', id: 'y', sha: 'sy' }]);
+});
+
+test('gleicherPlan: gleich trotz anderer Schlüsselreihenfolge und anderem quelle-Stempel → true', () => {
+  const a = { project: { id: 'p1', name: 'X', quelle: { exported: '2026-01-01' } }, gewerke: [{ id: 'g', name: 'G' }], tasks: [{ id: 't', title: 'T', start: 's' }], deps: [] };
+  const b = { deps: [], tasks: [{ start: 's', title: 'T', id: 't' }], gewerke: [{ name: 'G', id: 'g' }], project: { name: 'X', quelle: { exported: '2027-02-02' }, id: 'p1' }, exported: 'jetzt' };
+  assert.equal(gleicherPlan(a, b), true);
+});
+test('gleicherPlan: ein Vorgangstitel anders → false', () => {
+  const a = { project: { id: 'p1' }, gewerke: [], tasks: [{ id: 't', title: 'T' }], deps: [] };
+  const b = { project: { id: 'p1' }, gewerke: [], tasks: [{ id: 't', title: 'U' }], deps: [] };
+  assert.equal(gleicherPlan(a, b), false);
+});
+
+test('pruefe: 200 → ok; 404 → repo; 401/403 → schluessel; Netzfehler → offline', async () => {
+  const mit = (status) => mk(async () => ({ ok: status < 300, status, json: async () => ({}) }));
+  assert.deepEqual(await mit(200).pruefe(), { ok: true });
+  assert.equal((await mit(404).pruefe()).grund, 'repo');
+  assert.equal((await mit(401).pruefe()).grund, 'schluessel');
+  assert.equal((await mit(403).pruefe()).grund, 'schluessel');
+  assert.equal((await mk(async () => { throw new TypeError('x'); }).pruefe()).grund, 'offline');
+});
+
+test('pull: 2xx mit leerem Body → fehler; content null → fehler; kaputtes Base64 → fehler', async () => {
+  const s1 = mk(async () => ({ ok: true, status: 200, json: async () => { throw new Error('leer'); } }));
+  assert.equal((await s1.pull('p1')).grund, 'fehler');
+  const s2 = mk(async () => ({ ok: true, status: 200, json: async () => ({ content: null, sha: 'x' }) }));
+  assert.equal((await s2.pull('p1')).grund, 'fehler');
+  const s3 = mk(async () => ({ ok: true, status: 200, json: async () => ({ content: '%%%', sha: 'x' }) }));
+  assert.equal((await s3.pull('p1')).grund, 'fehler');
+});
+test('push: 2xx ohne content.sha → fehler; id wird URL-kodiert', async () => {
+  const s = mk(async () => ({ ok: true, status: 200, json: async () => ({}) }));
+  assert.equal((await s.push('p1', 'x', null)).grund, 'fehler');
+  const urls = [];
+  const s2 = mk(async (u) => { urls.push(u); return { ok: true, status: 200, json: async () => ({ content: { sha: 'a' }, name: 'a', content2: 1 }) }; });
+  await s2.pull('a/b c');
+  assert.ok(urls[0].includes('a%2Fb%20c.json'), urls[0]);
 });
 
 for (const [name, fn] of tests) {

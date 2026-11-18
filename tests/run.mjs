@@ -115,6 +115,11 @@ check('Schrift auf Gewerkfarbe hält 3:1 — in hell UND dunkel', () => {
   return schlecht.length ? schlecht.join(' | ') : true;
 });
 
+check('der Sync-Schlüssel (bzp_sync) kommt nie in die Plan-Schicht', () => {
+  const s = readFileSync(join(root, 'js/persistence.js'), 'utf8');
+  return s.includes('bzp_sync') ? 'js/persistence.js kennt den Schlüssel' : true;
+});
+
 check('jedes Theme gestaltet alle Bausteine der Engine', () => {
   // Fängt den Fall, dass ein neuer Baustein in gantt.js entsteht und ein Theme
   // ihn nicht kennt — dann fehlt er dort unsichtbar.
@@ -135,7 +140,10 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // Die Schiene (v0.12.0): sie ist die einzige Stelle, an der der Modus
     // gewechselt wird. Ohne eigene Fläche und ohne Markierung des aktiven
     // Eintrags wäre nicht zu sehen, in welcher der beiden Welten man steht.
-    'rail', 'rail-m'];
+    'rail', 'rail-m',
+    // Sync-Symbol (Speicherort): grün/gelb/rot je Zustand. Ohne eigene Regeln
+    // stünde es in den anderen Themes ungestaltet im Kopf.
+    'sync-state'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');
