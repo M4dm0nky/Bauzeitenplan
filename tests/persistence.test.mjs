@@ -390,6 +390,27 @@ test('save ohne Option: dirty true, remoteSha bleibt erhalten', () => {
   r.save(plan('Neu'));
   assert.deepEqual(r.syncInfo('p1'), { remoteSha: 'abc', dirty: true });
 });
+test('save gleicher Inhalt nach markSynced → dirty bleibt false', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan());
+  r.markSynced('p1', 's1');
+  const vorher = r.list()[0];
+  r.save(plan());
+  assert.deepEqual(r.syncInfo('p1'), { remoteSha: 's1', dirty: false });
+  assert.equal(r.list()[0].modified, vorher.modified);
+});
+test('save geänderter Inhalt → dirty true', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan());
+  r.markSynced('p1', 's1');
+  r.save(plan('Anders'));
+  assert.deepEqual(r.syncInfo('p1'), { remoteSha: 's1', dirty: true });
+});
+test('neues Projekt (nicht im Speicher) → dirty true', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan());
+  assert.equal(r.syncInfo('p1').dirty, true);
+});
 test('save mit remoteSha: dirty false', () => {
   const r = createRepo(fakeStorage());
   r.save(plan());

@@ -200,8 +200,14 @@ export function createRepo(storage) {
 
     save(plan, { remoteSha } = {}) {
       const id = plan.project.id;
+      const neu = JSON.stringify(plan);
+      // Gleicher Inhalt wie schon gespeichert und ohne neue remoteSha: nichts ist
+      // passiert — kein dirty, sonst laden zwei Geräte einander endlos hoch
+      // (open() speichert jedes Projekt, auch ein eben heruntergeladenes).
+      if (typeof remoteSha !== 'string' && storage.getItem(K_PLAN(id)) === neu
+          && readIndex().some((x) => x.id === id)) return { ok: true };
       try {
-        storage.setItem(K_PLAN(id), JSON.stringify(plan));
+        storage.setItem(K_PLAN(id), neu);
       } catch (e) {
         // Verschluckt man das, glaubt man gesichert zu haben — und verliert alles.
         const voll = e && (e.name === 'QuotaExceededError' || /quota/i.test(e.message || ''));
