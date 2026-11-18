@@ -115,6 +115,11 @@ check('Schrift auf Gewerkfarbe hält 3:1 — in hell UND dunkel', () => {
   return schlecht.length ? schlecht.join(' | ') : true;
 });
 
+check('der Sync-Schlüssel (bzp_sync) kommt nie in die Plan-Schicht', () => {
+  const s = readFileSync(join(root, 'js/persistence.js'), 'utf8');
+  return s.includes('bzp_sync') ? 'js/persistence.js kennt den Schlüssel' : true;
+});
+
 check('jedes Theme gestaltet alle Bausteine der Engine', () => {
   // Fängt den Fall, dass ein neuer Baustein in gantt.js entsteht und ein Theme
   // ihn nicht kennt — dann fehlt er dort unsichtbar.
@@ -135,7 +140,10 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // Die Schiene (v0.12.0): sie ist die einzige Stelle, an der der Modus
     // gewechselt wird. Ohne eigene Fläche und ohne Markierung des aktiven
     // Eintrags wäre nicht zu sehen, in welcher der beiden Welten man steht.
-    'rail', 'rail-m'];
+    'rail', 'rail-m',
+    // Sync-Symbol (Speicherort): grün/gelb/rot je Zustand. Ohne eigene Regeln
+    // stünde es in den anderen Themes ungestaltet im Kopf.
+    'sync-state'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');
@@ -231,6 +239,39 @@ check('CHANGELOG hat einen Abschnitt für die aktuelle Version', () => {
   try { cl = readFileSync(join(root, 'CHANGELOG.md'), 'utf8'); }
   catch { return 'CHANGELOG.md fehlt'; }
   return cl.includes('## ' + v) ? true : `kein Abschnitt «## ${v}»`;
+});
+
+check('jede ausgelieferte Datei steht in HUELLE (sw.js) — und keine tote', () => {
+  // Offline geht nur, was der Worker beim Installieren einsammelt. Eine neue
+  // Datei ohne Eintrag fehlt offline unsichtbar; ein Eintrag ohne Datei lässt
+  // addAll() scheitern und damit die ganze Installation.
+  const sw = readFileSync(join(root, 'sw.js'), 'utf8');
+  const m = sw.match(/const HUELLE = \[([\s\S]*?)\];/);
+  if (!m) return 'sw.js hat kein «const HUELLE = [...]»';
+  const drin = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).filter((x) => x !== './');
+  const rekursiv = (dir) => readdirSync(join(root, dir), { withFileTypes: true }).flatMap((d) =>
+    d.isDirectory() ? rekursiv(dir + '/' + d.name) : [dir + '/' + d.name]);
+  const soll = [
+    ...readdirSync(root).filter((f) => f.endsWith('.html')),
+    'klassentreffen-festival.json', 'amk-singleshow.json',
+    ...rekursiv('js').filter((f) => f.endsWith('.js')),
+    ...rekursiv('styles').filter((f) => f.endsWith('.css')),
+    ...rekursiv('assets'),
+  ];
+  const fehlt = soll.filter((f) => !drin.includes(f));
+  const tot = drin.filter((f) => !soll.includes(f));
+  const dopp = drin.filter((f, i) => drin.indexOf(f) !== i);
+  const r = [];
+  if (fehlt.length) r.push('fehlt in HUELLE: ' + fehlt.join(', '));
+  if (tot.length) r.push('tot (Datei gibt es nicht / nicht ausgeliefert): ' + tot.join(', '));
+  if (dopp.length) r.push('doppelt: ' + dopp.join(', '));
+  return r.length ? r.join(' | ') : true;
+});
+
+check('sw.js legt die HUELLE am HTTP-Cache vorbei an (cache: reload)', () => {
+  const sw = readFileSync(join(root, 'sw.js'), 'utf8');
+  const inst = sw.match(/addEventListener\('install'[\s\S]*?\n\}\);/);
+  return inst && /cache:\s*'reload'/.test(inst[0]) ? true : "install ohne { cache: 'reload' }";
 });
 
 check('alle in index.html verdrahteten IDs kommen in app.js vor', () => {

@@ -3,6 +3,24 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.13.0 — 2026-11-18
+
+**Pläne gleichen sich zwischen Geräten ab, und die App läuft offline.**
+Wer im Reiter Einrichten → Speicherort einen GitHub-Schlüssel einträgt, bekommt
+seine Projekte über ein privates Daten-Repo auf jedes andere Gerät mit demselben
+Schlüssel. Hochgeladen wird gebündelt — zehn Sekunden nach dem letzten
+Speichern, sofort beim Wegwechseln oder Projektwechsel. Haben zwei Geräte
+dasselbe Projekt verschieden geändert, fragt ein Dialog, welche Fassung gilt
+(oder behält beide); still überschrieben wird nie. Ein Wolkensymbol in der
+Kopfzeile zeigt den Stand: grün abgeglichen, gelb wartend oder offline, rot bei
+falschem Schlüssel. Ohne Schlüssel bleibt alles wie bisher.
+
+Nach dem ersten Besuch startet die App auch ohne Netz: der Service Worker hält
+alle Dateien vor, holt online aber immer die frische Fassung.
+
+Unter der Haube: die Prüfwerkzeuge laufen jetzt auch unter Windows (Browser-
+suche in `tools/browsers.mjs`, der Testserver stolperte über `\` statt `/`).
+
 ## 0.12.1 — 2026-09-02
 
 **Die Tage sind wieder aus der Schiene raus.** In 0.12.0 standen unter dem

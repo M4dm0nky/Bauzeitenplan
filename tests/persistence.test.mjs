@@ -383,5 +383,74 @@ test('ein Altplan bekommt eine leere Artenliste, keine fehlende', () => {
   assert.deepEqual(migrate(roh).project.punktTypen, []);
 });
 
+// ── Sync-Metadaten im Index ────────────────────────────────────────────────
+test('save ohne Option: dirty true, remoteSha bleibt erhalten', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan(), { remoteSha: 'abc' });
+  r.save(plan('Neu'));
+  assert.deepEqual(r.syncInfo('p1'), { remoteSha: 'abc', dirty: true });
+});
+test('save gleicher Inhalt nach markSynced → dirty bleibt false', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan());
+  r.markSynced('p1', 's1');
+  const vorher = r.list()[0];
+  r.save(plan());
+  assert.deepEqual(r.syncInfo('p1'), { remoteSha: 's1', dirty: false });
+  assert.equal(r.list()[0].modified, vorher.modified);
+});
+test('save geänderter Inhalt → dirty true', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan());
+  r.markSynced('p1', 's1');
+  r.save(plan('Anders'));
+  assert.deepEqual(r.syncInfo('p1'), { remoteSha: 's1', dirty: true });
+});
+test('neues Projekt (nicht im Speicher) → dirty true', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan());
+  assert.equal(r.syncInfo('p1').dirty, true);
+});
+test('save mit remoteSha: dirty false', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan());
+  r.save(plan(), { remoteSha: 'x1' });
+  assert.deepEqual(r.syncInfo('p1'), { remoteSha: 'x1', dirty: false });
+});
+test('markSynced: dirty false, sha gesetzt, name/modified unveraendert', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan('Eins'));
+  const vorher = r.list()[0];
+  r.markSynced('p1', 's2');
+  const nachher = r.list()[0];
+  assert.equal(nachher.name, vorher.name);
+  assert.equal(nachher.modified, vorher.modified);
+  assert.deepEqual(r.syncInfo('p1'), { remoteSha: 's2', dirty: false });
+});
+test('markSynced auf unbekannte id: kein Eintrag', () => {
+  const r = createRepo(fakeStorage());
+  r.markSynced('nix', 's');
+  assert.deepEqual(r.list(), []);
+});
+test('Altindex ohne Felder: syncInfo {null, dirty true}', () => {
+  const s = fakeStorage();
+  s.setItem('bzp_projects', JSON.stringify([{ id: 'p1', name: 'A', venue: '', modified: '2026-01-01T00:00:00.000Z' }]));
+  const r = createRepo(s);
+  assert.deepEqual(r.syncInfo('p1'), { remoteSha: null, dirty: true });
+  assert.deepEqual(r.syncListe(), [{ id: 'p1', remoteSha: null, dirty: true }]);
+});
+test('syncInfo unbekannte id: {null, dirty true}', () => {
+  assert.deepEqual(createRepo(fakeStorage()).syncInfo('x'), { remoteSha: null, dirty: true });
+});
+test('Metadaten nie im Plan: weder gespeichert noch serialisiert', () => {
+  const s = fakeStorage();
+  const r = createRepo(s);
+  r.save(plan(), { remoteSha: 'abc' });
+  r.markSynced('p1', 'def');
+  const roh = s.getItem('bzp_p_p1');
+  assert.ok(!/remoteSha|dirty/.test(roh));
+  assert.ok(!/remoteSha|dirty/.test(serialize(r.load('p1'))));
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

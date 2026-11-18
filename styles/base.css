@@ -377,6 +377,8 @@ body { margin: 0; }
 .sh-z { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hd-right { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .save-state { white-space: nowrap; }
+/* Sync-Symbol im Kopf: Zustand ok / wartet / fehler. Farben je Theme. */
+.sync-state { white-space: nowrap; cursor: default; line-height: 1; }
 
 /* ── Tabellen-Editor ────────────────────────────────────────────────────────── */
 .tb { flex: 1; min-height: 0; overflow: auto; }
@@ -520,14 +522,21 @@ body { margin: 0; }
 .einrichten { display: flex; flex-direction: column; gap: 18px; }
 .ei-sec { display: flex; flex-direction: column; gap: 8px; }
 .ei-h { font: inherit; margin: 0; }
-.ein-box { width: min(680px, 100%); }
+.ein-box { width: min(780px, 100%); }
 .ein-kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 /* `width: max-content`, sonst spannt die Segmentgruppe als Blockkind des
    Fensters die volle Breite und ihre Trennfarbe steht rechts als leerer Kasten
    hinter dem letzten Reiter — im Screenshot gesehen. */
 .ein-reiter { flex-wrap: wrap; width: max-content; max-width: 100%; margin: 14px 0 16px; }
+/* Bei fünf Reitern bricht die Reihe auf schmalen Fenstern um. Ohne Wachstum
+   stünde dann der Rest der Trennfarbe als leerer Kasten neben dem letzten
+   Reiter: Reiter füllen ihre Zeile, die Gruppe die volle Breite. */
+.ein-reiter { width: auto; }
+.ein-reiter button { flex: 1 1 auto; }
 .ei-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .ei-hint { margin: 0; }
+.ei-feld { display: flex; flex-direction: column; }
+.ei-feld input { font: inherit; padding: 6px 8px; }
 .ins { flex: none; width: 320px; overflow-y: auto; display: flex; flex-direction: column; }
 
 .ins-head { display: flex; align-items: center; justify-content: space-between; }

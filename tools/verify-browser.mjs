@@ -14,6 +14,7 @@ import { firefox } from 'playwright-core';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { createServer } from 'node:http';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -22,9 +23,7 @@ const shots = join(here, 'shots');
 mkdirSync(shots, { recursive: true });
 
 // Browser aus dem Playwright-Cache statt Neuinstallation
-const cache = join(process.env.HOME, 'Library/Caches/ms-playwright');
-const ffDir = readdirSync(cache).find((d) => d.startsWith('firefox-'));
-const exe = ffDir && join(cache, ffDir, 'firefox/Nightly.app/Contents/MacOS/firefox');
+const exe = mustFirefox();
 if (!exe || !existsSync(exe)) {
   console.error('Firefox nicht gefunden. Einmalig: npx playwright install firefox');
   process.exit(1);
@@ -57,7 +56,7 @@ if (argBase) {
   server = createServer((req, res) => {
     // normalize + Präfixprüfung: kein Ausbrechen aus dem Projektordner
     const rel = normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
-    const file = join(root, rel === '/' ? 'index.html' : rel);
+    const file = join(root, /^[\\/]$/.test(rel) ? 'index.html' : rel);
     if (!file.startsWith(root) || !existsSync(file)) { res.writeHead(404); return res.end('not found'); }
     res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream' });
     res.end(readFileSync(file));

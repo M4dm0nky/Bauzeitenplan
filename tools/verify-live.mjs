@@ -6,17 +6,17 @@ import { firefox } from 'playwright-core';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { createServer } from 'node:http';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 mkdirSync(join(here, 'shots'), { recursive: true });
-const cache = join(process.env.HOME, 'Library/Caches/ms-playwright');
-const exe = join(cache, readdirSync(cache).find((d) => d.startsWith('firefox-')), 'firefox/Nightly.app/Contents/MacOS/firefox');
+const exe = mustFirefox();
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 const server = createServer((q, s) => {
   const rel = normalize(decodeURIComponent(q.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
-  const f = join(root, rel === '/' ? 'index.html' : rel);
+  const f = join(root, /^[\\/]$/.test(rel) ? 'index.html' : rel);
   if (!f.startsWith(root) || !existsSync(f)) { s.writeHead(404); return s.end('x'); }
   s.writeHead(200, { 'Content-Type': MIME[extname(f)] || 'application/octet-stream' });
   s.end(readFileSync(f));
