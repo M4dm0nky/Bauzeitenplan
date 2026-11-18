@@ -435,7 +435,7 @@ document.addEventListener('keydown', (e) => {
 // auch ohne offenes Projekt geht.
 const SYNC_KEY = 'bzp_sync';
 const UPLOAD_NACH_MS = 10000;      // gebündelt: frühestens 10 s nach der letzten Speicherung
-let uploadTimer = null, abgleichLaeuft = false, abgleichNochmal = false, letzterAbgleich = null;
+let uploadTimer = null, abgleichLaeuft = false, abgleichNochmal = false, uebersprungen = false, letzterAbgleich = null;
 
 function syncKonfig() {
   try {
@@ -488,7 +488,24 @@ async function abgleichen() {
   abgleichLaeuft = true;
   clearTimeout(uploadTimer);
   try {
-    do { abgleichNochmal = false; await abgleichenEinmal(k); } while (abgleichNochmal);
+    // Ein Überspringen (es wurde weitergetippt) löst höchstens EINEN sofortigen
+    // zweiten Durchlauf aus. Scheitert das Speichern dauerhaft (Speicher voll),
+    // bliebe es sonst eine Endlosschleife mit je list()+pull().
+    let nachSkip = false;
+    for (;;) {
+      abgleichNochmal = false; uebersprungen = false;
+      await abgleichenEinmal(k);
+      if (uebersprungen) {
+        if (nachSkip) {
+          setSyncState('wartet', 'Ungesicherte Änderung – Abgleich folgt nach dem Speichern');
+          abgleichNochmal = false;      // die nächste erfolgreiche save() → planeUpload startet neu
+          break;
+        }
+        nachSkip = true;
+        continue;
+      }
+      if (!abgleichNochmal) break;
+    }
   } catch (e) {
     setSyncState('fehler', 'Abgleich fehlgeschlagen: ' + (e && e.message || e));
   } finally {
@@ -565,7 +582,7 @@ async function fuehreAus(sync, a) {
   if (a.art === 'hochladen') return hochladen(sync, a.id, a.sha);
 
   if (a.art === 'lokal-loeschen') {
-    if (!ueberschreibenSicher(a.id)) { abgleichNochmal = true; return { ok: true }; }
+    if (!ueberschreibenSicher(a.id)) { uebersprungen = true; return { ok: true }; }
     const name = (repo.list().find((x) => x.id === a.id) || {}).name || a.id;
     const warOffen = a.id === offenId();
     repo.remove(a.id);
@@ -586,7 +603,7 @@ async function fuehreAus(sync, a) {
   if (a.art === 'herunterladen') {
     // Nach dem Netz-await neu prüfen; übersprungen holt der nächste Durchlauf
     // es als normalen Konflikt (dirty + andere sha) nach.
-    if (!ueberschreibenSicher(a.id)) { abgleichNochmal = true; return { ok: true }; }
+    if (!ueberschreibenSicher(a.id)) { uebersprungen = true; return { ok: true }; }
     const offen = a.id === offenId();
     uebernehmen(d.plan, p.sha);
     if (offen) toast('Neuere Fassung vom anderen Gerät geladen');
@@ -612,7 +629,7 @@ async function fuehreAus(sync, a) {
     // Auch im Dialog kann weitergetippt worden sein.
     const jetzt = repo.load(a.id);
     const offenUngesichert = a.id === offenId() && (saveTimer || store.dirty);
-    if (offenUngesichert || (lokal && jetzt && !gleicherPlan(lokal, jetzt))) { abgleichNochmal = true; return { ok: true }; }
+    if (offenUngesichert || (lokal && jetzt && !gleicherPlan(lokal, jetzt))) { uebersprungen = true; return { ok: true }; }
     uebernehmen(d.plan, p.sha);
     return { ok: true };
   }
