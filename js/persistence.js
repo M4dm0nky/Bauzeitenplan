@@ -198,7 +198,7 @@ export function createRepo(storage) {
       return migrate(raw);
     },
 
-    save(plan) {
+    save(plan, { remoteSha } = {}) {
       const id = plan.project.id;
       try {
         storage.setItem(K_PLAN(id), JSON.stringify(plan));
@@ -209,8 +209,17 @@ export function createRepo(storage) {
           ? 'Der Browser-Speicher ist voll. Exportiere den Plan als JSON und lösche alte Projekte.'
           : 'Speichern fehlgeschlagen: ' + (e.message || e) };
       }
+      const alt = readIndex().find((x) => x.id === id) || {};
       const idx = readIndex().filter((x) => x.id !== id);
-      idx.push({ id, name: plan.project.name, venue: plan.project.venue || '', modified: new Date().toISOString() });
+      // Sync-Metadaten leben NUR hier im Index, nie im Plan. Ohne Option bleibt
+      // die bekannte remoteSha stehen, der Plan gilt aber als geändert.
+      const mitSha = typeof remoteSha === 'string';
+      idx.push({
+        ...alt, id, name: plan.project.name, venue: plan.project.venue || '',
+        modified: new Date().toISOString(),
+        remoteSha: mitSha ? remoteSha : (alt.remoteSha ?? null),
+        dirty: !mitSha,
+      });
       try { writeIndex(idx); } catch { /* Index ist nachrangig, der Plan liegt */ }
       return { ok: true };
     },
@@ -219,6 +228,24 @@ export function createRepo(storage) {
       storage.removeItem(K_PLAN(id));
       writeIndex(readIndex().filter((x) => x.id !== id));
       if (this.getActive() === id) storage.removeItem(K_ACTIVE);
+    },
+
+    syncInfo(id) {
+      const e = readIndex().find((x) => x.id === id);
+      return { remoteSha: e?.remoteSha ?? null, dirty: e?.dirty ?? true };
+    },
+
+    markSynced(id, sha) {
+      const idx = readIndex();
+      const e = idx.find((x) => x.id === id);
+      if (!e) return;
+      e.remoteSha = sha;
+      e.dirty = false;
+      try { writeIndex(idx); } catch { /* Index ist nachrangig */ }
+    },
+
+    syncListe() {
+      return readIndex().map((e) => ({ id: e.id, remoteSha: e.remoteSha ?? null, dirty: e.dirty ?? true }));
     },
 
     getActive() { return storage.getItem(K_ACTIVE); },
