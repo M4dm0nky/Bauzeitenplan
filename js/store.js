@@ -329,8 +329,15 @@ const HANDLERS = {
     // Kaskade: Untervorgänge UND zugeordnete Einträge (der Soundcheck eines Acts)
     // gehen mit. Sonst bliebe eine Waise mit totem `fuer` zurück, die niemand
     // mehr findet — dieselbe Begründung wie bei den Untervorgängen.
-    const gone = new Set([cmd.id,
-      ...state.tasks.filter((t) => t.parent === cmd.id || t.fuer === cmd.id).map((t) => t.id)]);
+    // Bis zum Fixpunkt: ein Soundcheck (fuer) hängt am Kind-Act (parent) eines
+    // Sammelvorgangs — eine Stufe allein ließe ihn als Waise stehen.
+    const gone = new Set([cmd.id]);
+    for (let wuchs = true; wuchs;) {
+      wuchs = false;
+      for (const t of state.tasks) {
+        if (!gone.has(t.id) && (gone.has(t.parent) || gone.has(t.fuer))) { gone.add(t.id); wuchs = true; }
+      }
+    }
     state.tasks = state.tasks.filter((t) => !gone.has(t.id));
     // Verwaiste Abhängigkeiten mitnehmen: sonst zeigen Pfeile ins Leere und
     // die Terminrechnung stolpert über undefined.

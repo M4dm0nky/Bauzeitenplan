@@ -88,6 +88,23 @@ test('removeTask nimmt die Abhängigkeiten des Vorgangs mit', () => {
   s.apply({ type: 'removeTask', id: 'b' });
   assert.equal(s.state.deps.length, 0);
 });
+test('removeTask: Sammelvorgang nimmt Soundcheck seines Kind-Acts mit', () => {
+  // Zwei Stufen: P -(parent)-> A -(fuer)-> S. Die einstufige Kaskade ließ S als
+  // Waise mit totem `fuer` zurück.
+  const z = seed();
+  const mk = (id, extra) => ({ id, gewerk: 'buehne', title: id, start: '2026-07-13T08:00', end: '2026-07-13T09:00',
+    milestone: false, progress: 0, status: 'geplant', ...extra });
+  z.tasks.push(mk('P', {}), mk('A', { parent: 'P' }), mk('S', { fuer: 'A' }));
+  z.deps.push({ id: 'd2', from: 'a', to: 'S', type: 'FS', lag: 0 });
+  const s = createStore(z);
+  assert.equal(s.apply({ type: 'removeTask', id: 'P' }).ok, true);
+  for (const id of ['P', 'A', 'S']) assert.equal(taskById(s, id), undefined, id + ' müsste weg sein');
+  assert.equal(s.state.deps.some((d) => d.id === 'd2'), false, 'Dep auf S müsste weg sein');
+  assert.ok(taskById(s, 'a') && taskById(s, 'b'), 'Unbeteiligte bleiben');
+  s.undo();
+  for (const id of ['P', 'A', 'S']) assert.ok(taskById(s, id), id + ' müsste zurück sein');
+  assert.ok(s.state.deps.some((d) => d.id === 'd2'), 'Dep müsste zurück sein');
+});
 test('setTaskField ändert genau ein Feld', () => {
   const s = createStore(seed());
   s.apply({ type: 'setTaskField', id: 'a', field: 'notes', value: 'neu' });
