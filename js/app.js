@@ -552,10 +552,20 @@ async function hochladen(sync, id, sha) {
   return r;
 }
 
+// Darf der Abgleich Projekt `id` JETZT überschreiben/entfernen? Die Entscheidung
+// stammt aus einem Snapshot vor dem Netzwerk-await; wer inzwischen weitergetippt
+// hat (dirty, offener 800-ms-Timer, ungesicherter Store), wird nie überschrieben.
+function ueberschreibenSicher(id) {
+  if (repo.syncInfo(id).dirty) return false;
+  if (id === offenId() && (saveTimer || store.dirty)) return false;
+  return true;
+}
+
 async function fuehreAus(sync, a) {
   if (a.art === 'hochladen') return hochladen(sync, a.id, a.sha);
 
   if (a.art === 'lokal-loeschen') {
+    if (!ueberschreibenSicher(a.id)) { abgleichNochmal = true; return { ok: true }; }
     const name = (repo.list().find((x) => x.id === a.id) || {}).name || a.id;
     const warOffen = a.id === offenId();
     repo.remove(a.id);
@@ -574,6 +584,9 @@ async function fuehreAus(sync, a) {
   if (d.ok === false) return { ok: false, grund: 'fehler' };
 
   if (a.art === 'herunterladen') {
+    // Nach dem Netz-await neu prüfen; übersprungen holt der nächste Durchlauf
+    // es als normalen Konflikt (dirty + andere sha) nach.
+    if (!ueberschreibenSicher(a.id)) { abgleichNochmal = true; return { ok: true }; }
     const offen = a.id === offenId();
     uebernehmen(d.plan, p.sha);
     if (offen) toast('Neuere Fassung vom anderen Gerät geladen');
@@ -595,7 +608,14 @@ async function fuehreAus(sync, a) {
     ],
   });
   if (wahl === null) return { ok: false, grund: 'abgebrochen' };
-  if (wahl === 'fremd') { uebernehmen(d.plan, p.sha); return { ok: true }; }
+  if (wahl === 'fremd') {
+    // Auch im Dialog kann weitergetippt worden sein.
+    const jetzt = repo.load(a.id);
+    const offenUngesichert = a.id === offenId() && (saveTimer || store.dirty);
+    if (offenUngesichert || (lokal && jetzt && !gleicherPlan(lokal, jetzt))) { abgleichNochmal = true; return { ok: true }; }
+    uebernehmen(d.plan, p.sha);
+    return { ok: true };
+  }
   if (wahl === 'beide') {
     const kopie = deserialize(p.text, { newId: true }).plan;
     kopie.project.name += ' (anderes Gerät)';
