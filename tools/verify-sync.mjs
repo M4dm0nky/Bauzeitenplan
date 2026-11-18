@@ -460,6 +460,64 @@ try {
       finally { await schliesse(A, B); }
     }
 
+    // ─── 4b. Versatz und Projektwechsel ─────────────────────────────────────
+    console.log('\nVERSATZ UND PROJEKTWECHSEL');
+    {
+      const fake = neuerFake();
+      const mk = () => geraet(fake, BASE);
+      const A = await mk(), B = await mk();
+      try {
+        await start(A); await legeAn(A, 'Versatz-Probe');
+        await verbinden(A); await warteZustand(A, 'ok'); await einZu(A);
+        await start(B); await verbindenStill(B);
+        await start(B); await warteZustand(B, 'ok');
+        // Versatz setzen (der Knopf ist ausserhalb von Live ausgeblendet, daher per Skript klicken).
+        await A.page.evaluate(() => { for (let i = 0; i < 5; i++) document.getElementById('vz-plus').click(); });
+        const vzA = () => A.page.evaluate(() => document.getElementById('vz-n').value);
+        await check('Ausgangslage: A hat Versatz 5', async () => (await vzA()) === '5' ? true : 'Versatz ' + await vzA());
+        await ersteZeileTitel(B, 'Titel von B');
+        await ausloesen(B);
+        await check('B: Änderung liegt im Repo', async () => (await bis(async () => /Titel von B/.test([...fake.dateien.values()][0].text), 6000)) ? true : 'nicht hochgeladen');
+        await ausloesen(A);
+        await check('Sync-Update behält den Versatz', async () => {
+          await A.page.locator('[data-view="tabelle"]').click();
+          const ok = await bis(async () => (await A.page.locator('.tb-r .c-title input').first().inputValue()) === 'Titel von B', 6000);
+          if (!ok) return 'A zeigt den neuen Inhalt nicht';
+          return (await vzA()) === '5' ? true : 'Versatz ' + await vzA() + ' statt 5';
+        });
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      finally { await schliesse(A, B); }
+    }
+    {
+      const fake = neuerFake();
+      const A = await geraet(fake, BASE);
+      try {
+        await start(A); await legeAn(A, 'Wechsel-Eins'); await legeAn(A, 'Wechsel-Zwei');
+        await A.page.locator('[data-view="tabelle"]').click();
+        const t = A.page.locator('.tb-r .c-title input').first();
+        await t.fill('Frisch getippt');
+        // Kein Warten: blur löst change aus, und sofort danach das andere Projekt öffnen.
+        await A.page.evaluate(() => document.activeElement && document.activeElement.blur());
+        const oeffne = async (name) => {
+          await A.page.locator('#rail-ein').click();
+          await A.page.locator('[data-ein="projekt"]').click();
+          await A.page.locator('#proj-menu').click();
+          await A.page.locator('#dlg').waitFor({ state: 'visible' });
+          await A.page.locator('#dlg .dlg-open', { hasText: name }).click();
+          await A.page.waitForTimeout(500);
+          await einZu(A);
+        };
+        await oeffne('Wechsel-Eins');
+        await oeffne('Wechsel-Zwei');
+        await check('Projektwechsel verliert keine Eingabe', async () => {
+          await A.page.locator('[data-view="tabelle"]').click();
+          const v = await A.page.locator('.tb-r .c-title input').first().inputValue();
+          return v === 'Frisch getippt' ? true : 'Titel: ' + v;
+        });
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      finally { await schliesse(A); }
+    }
+
     // ─── 5. Kein Ping-Pong ──────────────────────────────────────────────────
     console.log('\nKEIN PING-PONG (R7, ~45 s Wartezeit)');
     {

@@ -70,6 +70,12 @@ const ausBlend = new Set();   // ausgeblendete Bühnen (nur im Showablauf)
 // diesem Projekt schon dreimal erst auf dem Screenshot aufgefallen ist.
 let showTag = null;
 
+// Gesperrter Speicher (Privatmodus, Richtlinie): jeder Zugriff darf werfen, die
+// App läuft dann nur für diese Sitzung. Lesen liefert die Vorgabe, Schreiben
+// verpufft — ein Wurf beim Start oder Umschalten legte sonst die ganze Seite lahm.
+const lsLies = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSchreibe = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* Privatmodus: nur diese Sitzung */ } };
+
 const startAnsicht = () => {
   const q = new URLSearchParams(location.search);
   const neu = q.get('ansicht');
@@ -79,11 +85,11 @@ const startAnsicht = () => {
   const e = q.get('ebene'), a = q.get('abschnitt');
   if (e === 'bau') return 'bau';
   if (e === 'show') return a === 'setup' ? 'setup' : 'show';
-  const gemerkt = localStorage.getItem('bzp_ansicht');
+  const gemerkt = lsLies('bzp_ansicht');
   if (ANSICHTEN.includes(gemerkt)) return gemerkt;
   // Und den gemerkten Stand einer laufenden Sitzung nicht wegwerfen.
-  if (localStorage.getItem('bzp_ebene') === 'show') {
-    return localStorage.getItem('bzp_abschnitt') === 'setup' ? 'setup' : 'show';
+  if (lsLies('bzp_ebene') === 'show') {
+    return lsLies('bzp_abschnitt') === 'setup' ? 'setup' : 'show';
   }
   return 'bau';
 };
@@ -190,17 +196,30 @@ function open(plan) {
   const alt = repo.load(id), info = repo.syncInfo(id);
   const unveraendert = !!(alt && info.remoteSha && !info.dirty && gleicherPlan(alt, plan));
   const wechsel = !!store;
+  // Projektwechsel heißt andere id. Ein Sync-Update desselben Projekts ersetzt
+  // nur den Inhalt: der Versatz gehört dem Abend, nicht dem Stand des Plans.
+  const andereId = wechsel && store.state.project.id !== id;
   if (store) {
+    // Eine noch ausstehende Eingabe gehört dem bisherigen Projekt und wäre nach
+    // dem Ersetzen weg (der Timer schriebe den NEUEN Plan). Deshalb sofort sichern.
+    if (andereId && saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      const r = repo.save(store.state);
+      if (r && r.ok === false) { setSaveState('error'); toast(r.error, 'bad', 8000); }
+      else store.markSaved();
+    }
     store.replace(plan);
     // Ein Versatz gilt dem Abend, den man gerade fährt — nicht dem nächsten
     // Projekt. Beim Wechsel zurück auf null, sonst stünde der neue Plan
     // kommentarlos verschoben da.
-    setVersatz(0);
+    if (andereId) setVersatz(0);
   } else {
     store = createStore(plan);
     mount();
   }
-  repo.setActive(plan.project.id);
+  // Gesperrter Speicher: der Plan ist offen, nur das Merken fürs nächste Mal entfällt.
+  try { repo.setActive(plan.project.id); } catch (e) { /* Privatmodus: nur diese Sitzung */ }
   refreshChrome();
   save();
   if (unveraendert) repo.markSynced(id, info.remoteSha);
@@ -258,7 +277,7 @@ function mount() {
 
   // Live-Modus überlebt das Neuladen — der Monitor beim Aufbau soll nach einem
   // Stromausfall wieder live sein, ohne dass jemand hinläuft.
-  const wantLive = localStorage.getItem('bzp_live') === '1';
+  const wantLive = lsLies('bzp_live') === '1';
   $('live').onclick = () => setLive(!gantt.isLive);
   $('vz-minus').onclick = () => setVersatz(gantt.versatz - 1);
   $('vz-plus').onclick = () => setVersatz(gantt.versatz + 1);
@@ -767,7 +786,7 @@ function setAnsicht(name) {
   // Der Klick auf «Showablauf» in der Schiene soll dorthin zurückkehren, wo man
   // war — wer zuletzt im Setup stand, will nicht in der Running Order landen.
   if (ansicht !== 'bau') letzteShowAnsicht = ansicht;
-  localStorage.setItem('bzp_ansicht', ansicht);
+  lsSchreibe('bzp_ansicht', ansicht);
   document.querySelectorAll('button[data-ansicht]')
     .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ansicht === ansicht)));
   // Eine Bühne, die es nicht mehr gibt, darf nicht ewig ausgeblendet bleiben.
@@ -880,7 +899,7 @@ const versatzTag = () => local(toDate(gantt.liveInfo().now)).slice(0, 10);
  */
 function gespeicherterVersatz() {
   try {
-    const raw = JSON.parse(localStorage.getItem(VZ_KEY) || '{}');
+    const raw = JSON.parse(lsLies(VZ_KEY) || '{}');
     return raw && raw.tag === versatzTag() ? Number(raw.min) || 0 : 0;
   } catch (_) {
     return 0;                              // unlesbar heißt: kein Versatz
@@ -895,14 +914,14 @@ function setVersatz(min, speichern = true) {
   n.textContent = t.text;
   n.classList.toggle('is-late', t.klasse === 'is-late');
   n.classList.toggle('is-early', t.klasse === 'is-early');
-  if (speichern) localStorage.setItem(VZ_KEY, JSON.stringify({ min: v, tag: versatzTag() }));
+  if (speichern) lsSchreibe(VZ_KEY, JSON.stringify({ min: v, tag: versatzTag() }));
   refreshLive();
 }
 
 // ── Live ────────────────────────────────────────────────────────────────────
 function setLive(on) {
   gantt.setLive(on);
-  localStorage.setItem('bzp_live', on ? '1' : '0');
+  lsSchreibe('bzp_live', on ? '1' : '0');
   $('live').setAttribute('aria-pressed', String(on));
   $('live').textContent = on ? '● Live' : 'Live';
   if (on) {

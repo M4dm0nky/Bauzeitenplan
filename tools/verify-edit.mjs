@@ -975,6 +975,39 @@ await check('der Kalender bietet NUR Tage an, an denen etwas im Plan steht', asy
 });
 await page.screenshot({ path: join(here, 'shots', 'edit-11-schiene.png') });
 
+console.log('\nGESPERRTER SPEICHER');
+await check('Gesperrter Speicher: keine Ausnahme, Ansicht-Umschalter wechselt', async () => {
+  const c2 = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const fehler = [];
+  try {
+    // Schreibzugriffe werfen (Quota/Privatmodus), vom ersten Aufruf an. Lesen
+    // bleibt offen: createRepo/getActive in persistence.js lesen ungeschützt, die
+    // App käme sonst gar nicht hoch — das ist Kernmodul, nicht Gegenstand hier.
+    await c2.addInitScript(() => {
+      const wirf = () => { throw new DOMException('gesperrt', 'SecurityError'); };
+      Storage.prototype.setItem = wirf; Storage.prototype.removeItem = wirf;
+    });
+    const p2 = await c2.newPage();
+    p2.on('pageerror', (e) => fehler.push(e.message + ' @' + String(e.stack).split('\n').slice(0, 3).join(' < ')));
+    await p2.goto(BASE + '/index.html?plan=leer');
+    await p2.waitForTimeout(900);
+    if (fehler.length) return 'pageerror beim Start: ' + fehler.slice(0, 3).join(' | ');
+    await p2.fill('.dlg-f:first-child input', 'Ohne Speicher');
+    await p2.locator('.dlg-t[data-k="festival"]').click();
+    await p2.locator('.dlg-act .btn-p').click();
+    await p2.waitForTimeout(900);
+    if (fehler.length) return 'pageerror beim Anlegen: ' + fehler.slice(0, 3).join(' | ');
+    await p2.locator('.rail-m', { hasText: 'Showablauf' }).click({ timeout: 5000 });
+    await p2.waitForTimeout(400);
+    const gedrueckt = await p2.locator('button[data-ansicht="show"]').getAttribute('aria-pressed');
+    await p2.locator('.rail-m', { hasText: 'Bauzeitenplan' }).click({ timeout: 5000 });
+    await p2.waitForTimeout(300);
+    const zurueck = await p2.locator('button[data-ansicht="show"]').getAttribute('aria-pressed');
+    if (fehler.length) return 'pageerror: ' + fehler.slice(0, 3).join(' | ');
+    return gedrueckt === 'true' && zurueck === 'false' ? true : `Show danach ${gedrueckt}, nach Rückkehr ${zurueck}`;
+  } finally { await c2.close(); }
+});
+
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 
