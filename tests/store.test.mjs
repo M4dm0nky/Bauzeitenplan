@@ -1,4 +1,5 @@
 import { createStore, STATUS_IDS } from '../js/store.js';
+import { toMin } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -1219,6 +1220,53 @@ test('STATUS_IDS deckt sich mit STATUS aus dom.js', () => {
   assert.ok(roh, 'STATUS in dom.js nicht gefunden');
   const ids = [...roh[1].matchAll(/\['([^']+)',/g)].map((m) => m[1]);
   assert.deepEqual(STATUS_IDS, ids);
+});
+
+console.log('\nZuweisungs-Fenster folgen dem Vorgang');
+// Vorgang 'a' (13.07. 08–12) bekommt eine Zuweisung mit Fenster.
+const mitFenster = (von, bis) => {
+  const s = createStore(seed());
+  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  const rid = s.state.project.ressourcen[0].id;
+  const r = s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 2, von, bis } });
+  assert.equal(r.ok, true, r.error);
+  return { s, rid };
+};
+test('moveTask verschiebt Zuweisungs-Fenster um dieselbe Differenz', () => {
+  const { s, rid } = mitFenster('2026-07-13T09:00', '2026-07-13T10:00');
+  assert.equal(s.apply({ type: 'moveTask', id: 'a', start: '2026-07-13T14:00', end: '2026-07-13T18:00' }).ok, true);
+  assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 2, von: '2026-07-13T15:00', bis: '2026-07-13T16:00' }]);
+  // ein Undo holt Vorgang UND Fenster zurück
+  s.undo();
+  assert.equal(taskById(s, 'a').start, '2026-07-13T08:00');
+  assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 2, von: '2026-07-13T09:00', bis: '2026-07-13T10:00' }]);
+});
+test('Dauer ändern beschneidet Fenster auf den Vorgang', () => {
+  const { s, rid } = mitFenster('2026-07-13T10:00', '2026-07-13T12:00');
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'end', value: '2026-07-13T11:00' }).ok, true);
+  assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 2, von: '2026-07-13T10:00', bis: '2026-07-13T11:00' }]);
+});
+test('Fenster ganz außerhalb wird zum ganzen Vorgang', () => {
+  const { s, rid } = mitFenster('2026-07-13T11:00', '2026-07-13T12:00');
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'end', value: '2026-07-13T10:00' }).ok, true);
+  assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 2, von: null, bis: null }]);
+});
+test('Fenster null bleibt null beim Verschieben', () => {
+  const { s, rid } = mitFenster(null, null);
+  s.apply({ type: 'moveTask', id: 'a', start: '2026-07-14T08:00', end: '2026-07-14T12:00' });
+  assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 2, von: null, bis: null }]);
+});
+test('Verschieben über den Sommerzeit-Wechsel 25.10.2026 behält die Differenz in echten Minuten', () => {
+  const { s } = mitFenster('2026-07-13T09:00', '2026-07-13T10:00');
+  const a0 = toMin('2026-07-13T08:00');
+  s.apply({ type: 'moveTask', id: 'a', start: '2026-10-24T08:00', end: '2026-10-24T12:00' });
+  const z1 = taskById(s, 'a').res[0];
+  assert.equal(toMin(z1.von) - toMin(taskById(s, 'a').start), 60);
+  s.apply({ type: 'moveTask', id: 'a', start: '2026-10-25T08:00', end: '2026-10-25T12:00' });
+  const t = taskById(s, 'a'), z2 = t.res[0];
+  assert.equal(toMin(z2.von) - toMin(t.start), 60);
+  assert.equal(toMin(z2.bis) - toMin(z2.von), 60);
+  assert.ok(a0 > 0);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

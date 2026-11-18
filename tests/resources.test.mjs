@@ -1,5 +1,6 @@
 import { ressourcen, resLabel, resKind, deckung, bedarfsRaster } from '../js/resources.js';
 import { toMin } from '../js/schedule.js';
+import { createStore } from '../js/store.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -100,6 +101,24 @@ test('bedarfsRaster ohne kind-Filter nimmt die übergebene Liste wie sie ist', (
   const s = state();
   const raster = bedarfsRaster([], ressourcen(s), { von: 0, bis: 60, schritt: 60 });
   assert.equal(raster.length, 3);
+});
+
+test('bedarfsRaster folgt einem verschobenen Vorgang', () => {
+  const st = createStore({
+    project: { id: 'p', name: 'T', venue: '', start: '2026-08-30T00:00', end: '2026-08-31T00:00', timezone: 'Europe/Berlin' },
+    gewerke: [{ id: 'g', name: 'G', sort: 0 }],
+    tasks: [{ id: 'x', gewerk: 'g', title: 'X', start: '2026-08-30T08:00', end: '2026-08-30T12:00', milestone: false, progress: 0, status: 'geplant' }],
+    deps: [],
+  });
+  st.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  const rid = st.state.project.ressourcen[0].id;
+  st.apply({ type: 'setTaskRes', id: 'x', index: null, value: { rid, n: 3, von: '2026-08-30T09:00', bis: '2026-08-30T10:00' } });
+  st.apply({ type: 'moveTask', id: 'x', start: '2026-08-30T14:00', end: '2026-08-30T18:00' });
+  const v = toMin('2026-08-30T08:00');
+  const raster = bedarfsRaster(st.state.tasks, ressourcen(st.state, 'personal'), { kind: 'personal', von: v, bis: v + 600, schritt: 60 });
+  const slots = raster.find((r) => r.rid === rid).slots;
+  assert.equal(slots[1].bedarf, 0);   // altes Fenster 09–10: leer
+  assert.equal(slots[7].bedarf, 3);   // neues Fenster 15–16
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

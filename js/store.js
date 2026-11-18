@@ -9,7 +9,7 @@
 // falsch sein. Nebenbei fällt das Zurückrollen gescheiterter Sammelbefehle
 // geschenkt ab.
 
-import { topoSort, toMin } from './schedule.js';
+import { topoSort, toMin, toDate } from './schedule.js';
 import { MAX_SLOTS } from './palette.js';
 
 // Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
@@ -190,6 +190,30 @@ function neuerEintrag(state, { feld, eingebaut, praefix, fehlt, doppelt, label: 
 // Zustand hinterlassen, nicht auf den Undo-Stapel und nichts als ungesichert
 // markieren.
 
+// Zuweisungs-Fenster (`t.res[].von/bis`) folgen ihrem Vorgang. Gerufen NACH
+// erfolgreicher Prüfung, innerhalb desselben Befehls — ein ⌘Z holt Vorgang und
+// Fenster gemeinsam zurück. Gleiche (echte) Dauer = Verschiebung: Fenster
+// wandern um dieselben Minuten. Sonst wird beschnitten; ein Fenster, das danach
+// leer wäre, wird zu `null` (= ganzer Vorgang). Meilensteine bleiben unberührt.
+const lokalISO = (min) => {
+  const d = toDate(min), p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+};
+function resNachziehen(t, altStart, altEnd) {
+  if (t.milestone || !Array.isArray(t.res) || !t.res.length) return;
+  const s = toMin(t.start), e = toMin(t.end);
+  const delta = s - toMin(altStart);
+  const gleich = e - s === toMin(altEnd) - toMin(altStart);
+  t.res = t.res.map((z) => {
+    if (z.von == null || z.bis == null) return { ...z };
+    let von = toMin(z.von), bis = toMin(z.bis);
+    if (gleich) { von += delta; bis += delta; }
+    else { von = Math.max(von, s); bis = Math.min(bis, e); }
+    if (bis <= von) return { ...z, von: null, bis: null };
+    return { ...z, von: lokalISO(von), bis: lokalISO(bis) };
+  });
+}
+
 function checkSpan(start, end, milestone) {
   if (!start || !end) return 'Start und Ende müssen gesetzt sein.';
   const a = new Date(start).getTime(), b = new Date(end).getTime();
@@ -341,7 +365,9 @@ const HANDLERS = {
     const fehler = feldFehler(state, t, cmd.field, cmd.value);
     if (fehler) return fehler;
     // Der Titel wird getrimmt, wie beim Anlegen.
+    const altStart = t.start, altEnd = t.end;
     t[cmd.field] = cmd.field === 'title' ? String(cmd.value).trim() : cmd.value;
+    if (cmd.field === 'start' || cmd.field === 'end') resNachziehen(t, altStart, altEnd);
     // Wechselt ein Elternvorgang das Gewerk, ziehen seine Untervorgänge mit —
     // sonst blieben sie im alten Gewerk zurück.
     if (cmd.field === 'gewerk') for (const k of state.tasks) if (k.parent === t.id) k.gewerk = cmd.value;
@@ -355,8 +381,10 @@ const HANDLERS = {
     if (hasChildren(state, cmd.id)) return 'Die Zeiten ergeben sich aus den Untervorgängen.';
     const bad = checkSpan(cmd.start, cmd.end, t.milestone);
     if (bad) return bad;
+    const altStart = t.start, altEnd = t.end;
     t.start = cmd.start;
     t.end = cmd.end;
+    resNachziehen(t, altStart, altEnd);
     return ok();
   },
 
