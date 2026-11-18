@@ -75,6 +75,71 @@ const abschnittBekannt = (state, v) =>
 const resBekannt = (state, id) =>
   ((state.project && state.project.ressourcen) || []).some((r) => r.id === id);
 
+// Die Status-Werte, aus demselben Grund wie die Arten doppelt geführt (dom.js
+// ist DOM-Schicht, der Kern zeigt nicht dorthin). Ein Test in
+// `tests/store.test.mjs` hält sie gegen `STATUS` aus dom.js.
+export const STATUS_IDS = ['geplant', 'laeuft', 'fertig'];
+
+// Die Felder, die `setTaskField` schreiben darf: alles, was `migrate`
+// (persistence.js) an Vorgängen normalisiert, plus Titel, Gewerk und Zeiten.
+// NICHT dabei: `id` (Zuordnung von Verknüpfungen), `parent` (Ring-/Ebenen-
+// Prüfung, nur über addTask) und `res` (Fenster- und Anzahlprüfung in
+// setTaskRes). Ohne feste Liste schriebe ein Vertipper im Feldnamen still ein
+// neues Feld in den Plan und in den Export.
+const SCHREIBBAR = new Set([
+  'title', 'gewerk', 'start', 'end', 'milestone', 'progress', 'status', 'notes',
+  'bereitstellung', 'ackCrit', 'ackConflictMin', 'estimated',
+  'punktTyp', 'anforderungen', 'material', 'kontakt', 'fuer', 'slot', 'abschnitt',
+]);
+
+/** Kennt der Plan diese Eintragsart — eingebaut oder selbst angelegt? */
+const typBekannt = (state, v) =>
+  TYPEN_EINGEBAUT.some(([k]) => k === v)
+  || ((state.project && state.project.punktTypen) || []).some((a) => a.id === v);
+
+/**
+ * Prüft EINEN Feldwert — für setTaskField und addTask gemeinsam, damit beide
+ * Wege dieselben Regeln haben. Geprüft wird nur das geschriebene Feld: ein
+ * Vorgang mit veralteter Art bleibt in allen anderen Feldern bearbeitbar.
+ * @param {object|null} t der bestehende Vorgang (null beim Anlegen)
+ * @returns {string|null} Ablehnungsgrund oder null
+ */
+function feldFehler(state, t, field, value) {
+  switch (field) {
+    case 'title':
+      return String(value || '').trim() ? null : 'Der Vorgang braucht einen Namen.';
+    case 'gewerk':
+      return state.gewerke.some((g) => g.id === value) ? null : 'Unbekanntes Gewerk.';
+    case 'abschnitt':
+      return abschnittBekannt(state, value) ? null : 'Diesen Abschnitt gibt es nicht: ' + value;
+    case 'fuer':
+      if (value === null) return null;
+      if (t && value === t.id) return 'Ein Eintrag gehört nicht zu sich selbst.';
+      return state.tasks.some((x) => x.id === value) ? null : 'Zugeordneter Eintrag nicht gefunden.';
+    case 'status':
+      return STATUS_IDS.includes(value) ? null : 'Diesen Status gibt es nicht: ' + value;
+    case 'punktTyp':
+      return typBekannt(state, value) ? null : 'Diese Eintragsart gibt es nicht: ' + value;
+    case 'bereitstellung':
+      // Eine Bereitstellung nimmt keine Verknüpfung an — sie ist ein Pool, kein
+      // Ablaufschritt. Erst die Verknüpfungen entfernen, dann umschalten.
+      return t && value && state.deps.some((d) => d.from === t.id || d.to === t.id)
+        ? 'Erst die Verknüpfungen entfernen — eine Bereitstellung nimmt keine an.' : null;
+    case 'slot': {
+      // Farbplatz: null (erbt von der Bühne) oder ein Platz AUS der Palette.
+      // Ohne die Prüfung landete ein Vertipper still im Export und der Balken
+      // zeigte auf `var(--gw-NaN)` — also auf gar keine Farbe. Intern 0-basiert,
+      // in der Oberfläche 1-basiert; die Meldung nennt deshalb nur die Zahl der
+      // Plätze (gewählt wird über Knöpfe, hier tippt niemand).
+      if (value === null) return null;
+      return Number.isInteger(value) && value >= 0 && value < MAX_SLOTS ? null
+        : 'Diesen Farbplatz gibt es nicht — die Palette hat ' + MAX_SLOTS + ' Plätze (oder leer für «wie Bühne»).';
+    }
+    default:
+      return null;
+  }
+}
+
 const UNDO_MAX = 100;
 
 const ok = (extra = {}) => ({ ok: true, ...extra });
@@ -194,6 +259,14 @@ const HANDLERS = {
     if (bad) return bad;
     const id = t.id || newId('t');
     if (state.tasks.some((x) => x.id === id)) return 'Diese id gibt es schon: ' + id;
+    // Dieselben Regeln wie setTaskField, nur für Felder, die mitgegeben wurden
+    // (fehlt eins, greift der Standard unten). `fuer` bleibt draußen: beim
+    // Import/Duplizieren darf der Act hinter seinem Soundcheck stehen.
+    for (const f of ['slot', 'punktTyp', 'status']) {
+      if (t[f] === undefined) continue;
+      const fehler = feldFehler(state, null, f, t[f]);
+      if (fehler) return fehler;
+    }
     // Zuweisungen nur übernehmen, wenn sie auf bekannte Ressourcen zeigen —
     // sonst käme ein importierter/getippter Vertipper still in den Export und
     // hinge im Bedarfsraster nirgends ein.
@@ -217,6 +290,11 @@ const HANDLERS = {
       // nehmen. MUSS hier durch, sonst fällt eine mitgegebene Zuweisung beim
       // Anlegen (z. B. Duplizieren, Import) still weg.
       res, bereitstellung: !!t.bereitstellung,
+      // Showablauf-Felder und Merker, Standards wie in `migrate`. MUSS hier
+      // durch — vorher fielen sie beim Anlegen still weg (Duplizieren, Import).
+      slot: t.slot ?? null, punktTyp: t.punktTyp ?? 'act', estimated: !!t.estimated,
+      anforderungen: t.anforderungen ?? '', material: t.material ?? '', kontakt: t.kontakt ?? '',
+      ackCrit: !!t.ackCrit, ackConflictMin: t.ackConflictMin ?? null,
     });
     return ok({ id });
   },
@@ -245,6 +323,10 @@ const HANDLERS = {
     // Die Zuordnung zum Elternvorgang läuft nicht über setTaskField (Ring-/Ebenen-
     // Prüfung fehlte hier) — heute nur über addTask beim Anlegen des Untervorgangs.
     if (cmd.field === 'parent') return 'Die Zuordnung zum Elternvorgang wird nicht so geändert.';
+    // Zuweisungen ändert man über setTaskRes — dort steckt die Prüfung von
+    // Zeitfenster und Anzahl. Über setTaskField käme das ungeprüft rein.
+    if (cmd.field === 'res') return 'Zuweisungen ändert man über setTaskRes.';
+    if (!SCHREIBBAR.has(cmd.field)) return 'Dieses Feld lässt sich nicht ändern: ' + cmd.field;
     // Sammelvorgang: Zeiten sind die Hülle der Untervorgänge, nicht editierbar.
     if (['start', 'end', 'milestone'].includes(cmd.field) && hasChildren(state, cmd.id))
       return 'Die Zeiten ergeben sich aus den Untervorgängen.';
@@ -256,38 +338,10 @@ const HANDLERS = {
       const bad = checkSpan(next.start, next.end, next.milestone);
       if (bad) return bad;
     }
-    if (cmd.field === 'title' && !String(cmd.value || '').trim()) return 'Der Vorgang braucht einen Namen.';
-    if (cmd.field === 'gewerk' && !state.gewerke.some((g) => g.id === cmd.value)) return 'Unbekanntes Gewerk.';
-    // Farbplatz: null (erbt von der Bühne) oder ein Platz AUS der Palette.
-    // Ohne die Prüfung landete ein Vertipper still im Export und der Balken
-    // zeigte auf `var(--gw-NaN)` — also auf gar keine Farbe.
-    // Der Abschnitt muss BEKANNT sein: eingebaut oder im Plan angelegt. Ein
-    // freier Text wäre eine Waise — er zählte zur Show, hätte aber keinen Namen
-    // im Auswahlfeld und niemand fände ihn wieder.
-    if (cmd.field === 'abschnitt' && !abschnittBekannt(state, cmd.value))
-      return 'Diesen Abschnitt gibt es nicht: ' + cmd.value;
-    if (cmd.field === 'fuer' && cmd.value !== null) {
-      if (cmd.value === cmd.id) return 'Ein Eintrag gehört nicht zu sich selbst.';
-      if (!state.tasks.some((x) => x.id === cmd.value)) return 'Zugeordneter Eintrag nicht gefunden.';
-    }
-    // Zuweisungen ändert man über setTaskRes — dort steckt die Prüfung von
-    // Zeitfenster und Anzahl. Über setTaskField käme das ungeprüft rein.
-    if (cmd.field === 'res') return 'Zuweisungen ändert man über setTaskRes.';
-    // Eine Bereitstellung nimmt keine Verknüpfung an — sie ist ein Pool, kein
-    // Ablaufschritt. Erst die Verknüpfungen entfernen, dann umschalten.
-    if (cmd.field === 'bereitstellung' && cmd.value
-      && state.deps.some((d) => d.from === cmd.id || d.to === cmd.id))
-      return 'Erst die Verknüpfungen entfernen — eine Bereitstellung nimmt keine an.';
-    // Der Farbplatz ist intern 0-basiert (0…MAX_SLOTS-1), in der Oberfläche
-    // 1-basiert («Platz 3 von 20», inspector.js). Die Meldung nennt deshalb
-    // keinen Zahlenbereich: gewählt wird über Knöpfe, hier tippt niemand einen
-    // Wert ein, und «zwischen 1 und 20» widerspräche dem, was gültig ist.
-    if (cmd.field === 'slot' && cmd.value !== null) {
-      const n = cmd.value;
-      if (!Number.isInteger(n) || n < 0 || n >= MAX_SLOTS)
-        return 'Diesen Farbplatz gibt es nicht — die Palette hat ' + MAX_SLOTS + ' Plätze (oder leer für «wie Bühne»).';
-    }
-    t[cmd.field] = cmd.value;
+    const fehler = feldFehler(state, t, cmd.field, cmd.value);
+    if (fehler) return fehler;
+    // Der Titel wird getrimmt, wie beim Anlegen.
+    t[cmd.field] = cmd.field === 'title' ? String(cmd.value).trim() : cmd.value;
     // Wechselt ein Elternvorgang das Gewerk, ziehen seine Untervorgänge mit —
     // sonst blieben sie im alten Gewerk zurück.
     if (cmd.field === 'gewerk') for (const k of state.tasks) if (k.parent === t.id) k.gewerk = cmd.value;

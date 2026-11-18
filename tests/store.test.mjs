@@ -1,4 +1,4 @@
-import { createStore } from '../js/store.js';
+import { createStore, STATUS_IDS } from '../js/store.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -88,8 +88,8 @@ test('removeTask nimmt die Abhängigkeiten des Vorgangs mit', () => {
 });
 test('setTaskField ändert genau ein Feld', () => {
   const s = createStore(seed());
-  s.apply({ type: 'setTaskField', id: 'a', field: 'crew', value: 9 });
-  assert.equal(taskById(s, 'a').crew, 9);
+  s.apply({ type: 'setTaskField', id: 'a', field: 'notes', value: 'neu' });
+  assert.equal(taskById(s, 'a').notes, 'neu');
   assert.equal(taskById(s, 'a').title, 'Podest', 'andere Felder unberührt');
 });
 test('moveTask verschiebt Start und Ende gemeinsam', () => {
@@ -298,8 +298,8 @@ test('Sammelbefehl benachrichtigt nur einmal', () => {
   let calls = 0;
   s.subscribe(() => calls++);
   s.apply({ type: 'batch', label: 'x', cmds: [
-    { type: 'setTaskField', id: 'a', field: 'crew', value: 1 },
-    { type: 'setTaskField', id: 'b', field: 'crew', value: 2 },
+    { type: 'setTaskField', id: 'a', field: 'notes', value: '1' },
+    { type: 'setTaskField', id: 'b', field: 'notes', value: '2' },
   ] });
   assert.equal(calls, 1, 'sonst zeichnet der Gantt bei jedem Teilschritt neu');
 });
@@ -666,12 +666,12 @@ test('⌘Z nimmt eine Anforderung zurück', () => {
   assert.equal(taskById(s, 'a').anforderungen, undefined);
 });
 
-test('Programmpunkt-Typ und Soundcheck sind normale Felder', () => {
+test('Programmpunkt-Typ und Kontakt sind normale Felder', () => {
   const s = createStore(seed());
   s.apply({ type: 'setTaskField', id: 'a', field: 'punktTyp', value: 'changeover' });
-  s.apply({ type: 'setTaskField', id: 'a', field: 'soundcheck', value: '2026-07-13T09:30' });
+  s.apply({ type: 'setTaskField', id: 'a', field: 'kontakt', value: 'Max' });
   assert.equal(taskById(s, 'a').punktTyp, 'changeover');
-  assert.equal(taskById(s, 'a').soundcheck, '2026-07-13T09:30');
+  assert.equal(taskById(s, 'a').kontakt, 'Max');
 });
 
 console.log('\nZuordnung: der Soundcheck gehört zu seinem Act');
@@ -1134,6 +1134,91 @@ test('ein abgelehnter setTaskRes-Befehl hinterlässt nichts', () => {
   s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'nix', n: 1, von: null, bis: null } });
   assert.equal(s.canUndo, vorher);
   assert.deepEqual(taskById(s, 'a').res, []);
+});
+
+console.log('\nFeldprüfung');
+
+// Top-Level-await statt async-Tests: `test` wartet nicht auf Promises, ein
+// async-Test würde also nie als ✗ zählen.
+const { serialize, deserialize } = await import('../js/persistence.js');
+const { readFileSync } = await import('node:fs');
+
+test('setTaskField lehnt unbekannte Felder und id ab', () => {
+  const s = createStore(seed());
+  for (const field of ['id', 'quatsch', 'res']) {
+    const r = s.apply({ type: 'setTaskField', id: 'a', field, value: 'x' });
+    assert.equal(r.ok, false, field);
+  }
+  assert.equal(taskById(s, 'a').id, 'a');
+  assert.equal(taskById(s, 'a').quatsch, undefined);
+  assert.equal(s.canUndo, false);
+});
+test('setTaskField prüft status und punktTyp', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addPunktTyp', label: 'Line-Check' });
+  const eigene = s.state.project.punktTypen[0].id;
+  const set = (field, value) => s.apply({ type: 'setTaskField', id: 'a', field, value });
+  assert.equal(set('status', 'kaputt').ok, false);
+  assert.equal(set('status', 'fertig').ok, true);
+  assert.equal(set('punktTyp', 'gibtsnicht').ok, false);
+  assert.equal(set('punktTyp', 'changeover').ok, true);
+  assert.equal(set('punktTyp', eigene).ok, true);
+  assert.equal(taskById(s, 'a').punktTyp, eigene);
+});
+test('setTaskField trimmt den Titel', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: '  Neu  ' });
+  assert.equal(taskById(s, 'a').title, 'Neu');
+});
+test('setTaskField: Vorgang mit veraltetem punktTyp bleibt in anderen Feldern bearbeitbar', () => {
+  const st = seed();
+  st.tasks[0].punktTyp = 'geloescht';
+  const s = createStore(st);
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'notes', value: 'x' }).ok, true);
+  assert.equal(taskById(s, 'a').notes, 'x');
+});
+test('addTask übernimmt slot, punktTyp, estimated, anforderungen, material, kontakt', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addTask', task: {
+    gewerk: 'buehne', title: 'Act', start: '2026-07-14T20:00', end: '2026-07-14T21:00',
+    slot: 3, punktTyp: 'doors', estimated: true,
+    anforderungen: 'Strom', material: 'Riser', kontakt: 'Max',
+  } });
+  const gewuenscht = { slot: 3, punktTyp: 'doors', estimated: true, anforderungen: 'Strom', material: 'Riser', kontakt: 'Max' };
+  const hat = (t) => { for (const [k, v] of Object.entries(gewuenscht)) assert.equal(t[k], v, k); };
+  hat(taskById(s, r.id));
+  const zurueck = deserialize(serialize(s.state)).plan;
+  hat(zurueck.tasks.find((t) => t.id === r.id));
+});
+test('addTask setzt die Defaults von migrate', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addTask', task: { gewerk: 'buehne', title: 'X', start: '2026-07-14T08:00', end: '2026-07-14T09:00' } });
+  const t = taskById(s, r.id);
+  assert.equal(t.punktTyp, 'act');
+  assert.equal(t.slot, null);
+  assert.equal(t.estimated, false);
+  assert.equal(t.ackCrit, false);
+  assert.equal(t.ackConflictMin, null);
+  for (const k of ['anforderungen', 'material', 'kontakt']) assert.equal(t[k], '', k);
+});
+test('addTask prüft slot, punktTyp und status wie setTaskField', () => {
+  const s = createStore(seed());
+  const basis = { gewerk: 'buehne', title: 'X', start: '2026-07-14T08:00', end: '2026-07-14T09:00' };
+  for (const extra of [{ slot: 99 }, { punktTyp: 'x' }, { status: 'kaputt' }]) {
+    const r = s.apply({ type: 'addTask', task: { ...basis, ...extra } });
+    assert.equal(r.ok, false, JSON.stringify(extra));
+  }
+  assert.equal(s.state.tasks.length, 2);
+  assert.equal(s.canUndo, false);
+});
+test('STATUS_IDS deckt sich mit STATUS aus dom.js', () => {
+  // dom.js greift auf Modulebene nicht aufs DOM zu, importiert wird trotzdem
+  // nicht: der Text genügt und bleibt unabhängig von document.
+  const src = readFileSync(new URL('../js/dom.js', import.meta.url), 'utf8');
+  const roh = /export const STATUS = \[(.*)\];/.exec(src);
+  assert.ok(roh, 'STATUS in dom.js nicht gefunden');
+  const ids = [...roh[1].matchAll(/\['([^']+)',/g)].map((m) => m[1]);
+  assert.deepEqual(STATUS_IDS, ids);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
