@@ -21,7 +21,7 @@
 //     .then(()=>self.clients.matchAll()).then(cs=>cs.forEach(c=>c.navigate(c.url)))));
 // Danach deployen → der SW deinstalliert sich beim nächsten Aufruf selbst.
 
-const SW_VERSION = 'v0.13.0';
+const SW_VERSION = 'v0.14.0';
 
 const CACHE = 'bzp-' + SW_VERSION;
 
