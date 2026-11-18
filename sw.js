@@ -74,7 +74,8 @@ const HUELLE = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(HUELLE)).then(() => self.skipWaiting()));
+  // 'reload': am HTTP-Cache vorbei (Pages: max-age=600), sonst landen alte Kopien unter neuem Namen.
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(HUELLE.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {

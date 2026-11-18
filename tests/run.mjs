@@ -268,6 +268,12 @@ check('jede ausgelieferte Datei steht in HUELLE (sw.js) — und keine tote', () 
   return r.length ? r.join(' | ') : true;
 });
 
+check('sw.js legt die HUELLE am HTTP-Cache vorbei an (cache: reload)', () => {
+  const sw = readFileSync(join(root, 'sw.js'), 'utf8');
+  const inst = sw.match(/addEventListener\('install'[\s\S]*?\n\}\);/);
+  return inst && /cache:\s*'reload'/.test(inst[0]) ? true : "install ohne { cache: 'reload' }";
+});
+
 check('alle in index.html verdrahteten IDs kommen in app.js vor', () => {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   const app = js('app.js');
