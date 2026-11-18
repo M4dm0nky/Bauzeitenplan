@@ -78,12 +78,23 @@ const PAGES = [
 ];
 // Stellt das Stylesheet um und wartet, bis das neue geladen ist.
 const themeAn = (page, t) => page.evaluate((t) => new Promise((res, rej) => {
+  // Zeitlimit: lädt dieselbe Adresse nochmal, kommt kein load — dann nicht hängen.
+  setTimeout(() => rej(new Error('Theme-CSS: kein load-Ereignis für ' + t)), 8000);
   const l = document.getElementById('theme-css');
   l.addEventListener('load', () => res(true), { once: true });
   l.addEventListener('error', () => rej(new Error('Theme-CSS nicht geladen: ' + t)), { once: true });
   l.dataset.themeName = t;
-  l.href = `styles/themes/${t}.css?v=1`;
+  // Version aus dem vorhandenen Link übernehmen, nicht von Hand raten.
+  const v = (l.getAttribute('href').match(/\?v=([^&]+)/) || [])[1] || '';
+  l.href = `styles/themes/${t}.css` + (v ? '?v=' + v : '');
 }), t);
+// Fingerabdruck eines Themes: Hintergrund + Schrift des body. Alle fünf
+// unterscheiden sich darin (Callboard, Console, Blueprint, Studio, Board).
+const fingerprint = (page) => page.evaluate(() => {
+  const c = getComputedStyle(document.body);
+  return c.backgroundColor + ' | ' + c.fontFamily;
+});
+const prints = new Map(); // Fingerabdruck → Seitenname
 const setZoom = (page, z) => page.selectOption('#zoom-stufe', z);
 
 const browser = await firefox.launch({ executablePath: exe });
@@ -105,6 +116,7 @@ for (const pg of PAGES) {
   // Die App startet ohne Projekt mit dem Anlege-Dialog. Für die Darstellungs-
   // prüfungen brauchen wir Inhalt: Festival-Vorlage anlegen.
   if (pg.theme) { await themeAn(page, pg.theme); await page.waitForTimeout(300); }
+  const fp = await fingerprint(page);
   if (pg.app && await page.locator('#dlg').isVisible()) {
     await page.fill('.dlg-f:first-child input', 'Prüfprojekt');
     await page.locator('.dlg-t[data-k="festival"]').click();
@@ -121,6 +133,13 @@ for (const pg of PAGES) {
 
   console.log('\n' + pg.name.toUpperCase());
 
+  await check(pg.theme ? `Theme ${pg.theme} ist wirklich aktiv` : 'Theme callboard ist aktiv', async () => {
+    // Das load-Ereignis beweist nur, dass IRGENDEIN Stylesheet kam. Aktiv ist das
+    // Theme, wenn sein Fingerabdruck sich von jedem schon gesehenen unterscheidet.
+    const prev = prints.get(fp);
+    prints.set(fp, pg.name);
+    return prev ? `sieht aus wie «${prev}» (${fp})` : true;
+  });
   await check('alle angeforderten Dateien wurden ausgeliefert', () =>
     missing.length === 0 ? true : missing.slice(0, 3).join(' · '));
 
