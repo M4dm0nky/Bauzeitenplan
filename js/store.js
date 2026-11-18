@@ -231,9 +231,12 @@ function reflowParents(state) {
       if (e == null || toMin(k.end) > toMin(e)) e = k.end;
     }
     if (s == null) continue;          // keine Kinder → kein Sammelvorgang
+    const altStart = p.start, altEnd = p.end;
     p.start = s;
     p.end = e;
     p.milestone = false;              // ein Sammelvorgang hat Dauer, ist keine Raute
+    // Wandert die Hülle, wandern die Zuweisungsfenster mit — wie bei moveTask.
+    if (altStart !== s || altEnd !== e) resNachziehen(p, altStart, altEnd);
   }
 }
 

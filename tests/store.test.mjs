@@ -1256,6 +1256,18 @@ test('moveTask verschiebt Zuweisungs-Fenster um dieselbe Differenz', () => {
   assert.equal(taskById(s, 'a').start, '2026-07-13T08:00');
   assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 2, von: '2026-07-13T09:00', bis: '2026-07-13T10:00' }]);
 });
+test('Sammelvorgang: Hüllen-Wechsel zieht das Zuweisungs-Fenster des Elternvorgangs nach', () => {
+  // Elternvorgang a (08–12) mit Fenster 10–12; ein Kind 14–18 setzt die Hülle auf
+  // 14–18 (gleich lang = Verschiebung um 6 h). Ohne Nachziehen läge das Fenster
+  // außerhalb seines Vorgangs, und setTaskRes hätte es nie zugelassen.
+  const { s, rid } = mitFenster('2026-07-13T10:00', '2026-07-13T12:00');
+  const r = s.apply({ type: 'addTask', task: { gewerk: 'buehne', parent: 'a', title: 'Kind', start: '2026-07-13T14:00', end: '2026-07-13T18:00' } });
+  assert.notEqual(r.ok, false, r.error);
+  assert.equal(taskById(s, 'a').start, '2026-07-13T14:00');
+  assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 2, von: '2026-07-13T16:00', bis: '2026-07-13T18:00' }]);
+  s.undo();
+  assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 2, von: '2026-07-13T10:00', bis: '2026-07-13T12:00' }]);
+});
 test('Dauer ändern beschneidet Fenster auf den Vorgang', () => {
   const { s, rid } = mitFenster('2026-07-13T10:00', '2026-07-13T12:00');
   assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'end', value: '2026-07-13T11:00' }).ok, true);
