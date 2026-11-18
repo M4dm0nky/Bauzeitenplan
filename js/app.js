@@ -627,13 +627,18 @@ $('sync-trennen').onclick = () => {
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') abgleichen(); });
 window.addEventListener('online', () => abgleichen());
 
+// Mit aktivem Sync wird ein hochgeladenes Projekt NUR gelöscht, wenn das Entfernen
+// im Daten-Repo gelingt — sonst käme es beim nächsten Abgleich zurück.
+// Liefert true = lokal löschen erlaubt.
 async function loescheImDatenRepo(id, sha) {
   const k = syncKonfig();
-  if (!k) return;
+  if (!k) return true;
   const r = await syncClient(k).remove(id, sha);
-  if (r.ok) return;
-  if (r.grund === 'offline') toast('Offline gelöscht — im Daten-Repo liegt es noch und kommt beim nächsten Abgleich zurück. Lösche es online erneut.', 'bad', 9000);
-  else toast('Im Daten-Repo konnte das Projekt nicht entfernt werden: ' + (GRUND_TEXT[r.grund] || GRUND_TEXT.fehler), 'bad', 8000);
+  if (r.ok) return true;
+  toast(r.grund === 'konflikt'
+    ? 'Das Projekt wurde auf einem anderen Gerät geändert – erst abgleichen, dann löschen.'
+    : 'Löschen braucht Verbindung zu GitHub – das Projekt bleibt erhalten.', 'bad', 8000);
+  return false;
 }
 
 // ── Der Tag ─────────────────────────────────────────────────────────────────
@@ -1228,8 +1233,8 @@ function showProjectDialog({ firstRun = false }) {
           buttons: [{ label: 'Abbrechen', value: false }, { label: 'Löschen', value: true, danger: true }],
         });
         if (!ok) return;
+        if (zurSync && !(await loescheImDatenRepo(p.id, sha))) return;
         repo.remove(p.id);
-        if (zurSync) loescheImDatenRepo(p.id, sha);
         showProjectDialog({ firstRun: repo.list().length === 0 });
       };
       row.append(b, del);
