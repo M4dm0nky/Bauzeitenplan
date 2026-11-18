@@ -5,6 +5,7 @@ import { firefox } from 'playwright-core';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { createServer } from 'node:http';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -14,14 +15,12 @@ mkdirSync(join(here, 'shots'), { recursive: true });
 // zweite Kanal und beginnt bei Platz HUES (0-basiert). HUES wuchs 8→9→10 — ein
 // hart verdrahtetes «9. Gewerk» rostet bei jeder Palette-Erweiterung fest.
 const HUES = Number((/export const HUES\s*=\s*(\d+)/.exec(readFileSync(join(root, 'js/palette.js'), 'utf8')) || [])[1]);
-const cache = join(process.env.HOME, 'Library/Caches/ms-playwright');
-const ff = readdirSync(cache).find((d) => d.startsWith('firefox-'));
-const exe = join(cache, ff, 'firefox/Nightly.app/Contents/MacOS/firefox');
+const exe = mustFirefox();
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 const server = createServer((req, res) => {
   const rel = normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
-  const file = join(root, rel === '/' ? 'index.html' : rel);
+  const file = join(root, /^[\\/]$/.test(rel) ? 'index.html' : rel);
   if (!file.startsWith(root) || !existsSync(file)) { res.writeHead(404); return res.end('x'); }
   res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream' });
   res.end(readFileSync(file));

@@ -11,17 +11,17 @@ import { firefox, chromium } from 'playwright-core';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { createServer } from 'node:http';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 mkdirSync(join(here, 'shots'), { recursive: true });
-const cache = join(process.env.HOME, 'Library/Caches/ms-playwright');
-const exe = join(cache, readdirSync(cache).find((d) => d.startsWith('firefox-')), 'firefox/Nightly.app/Contents/MacOS/firefox');
+const exe = mustFirefox();
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 const server = createServer((q, s) => {
   const rel = normalize(decodeURIComponent(q.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
-  const f = join(root, rel === '/' ? 'index.html' : rel);
+  const f = join(root, /^[\\/]$/.test(rel) ? 'index.html' : rel);
   if (!f.startsWith(root) || !existsSync(f)) { s.writeHead(404); return s.end('x'); }
   s.writeHead(200, { 'Content-Type': MIME[extname(f)] || 'application/octet-stream' });
   s.end(readFileSync(f));
@@ -1365,14 +1365,10 @@ await p.setViewportSize({ width: 1700, height: 1000 });
 console.log('\nPDF (A3 quer)');
 let chromeExe = null;
 try {
-  // Nicht raten: der Ordner heißt je nach Architektur `chrome-mac` oder
-  // `chrome-mac-arm64`, das Programm darin mal `Chromium.app`, mal «Google
-  // Chrome for Testing.app». Hart verdrahtet wurde das PDF auf Apple Silicon
-  // stillschweigend übersprungen, obwohl Chromium installiert war.
-  const d = readdirSync(cache).find((x) => x.startsWith('chromium-'));
-  const arch = d && readdirSync(join(cache, d)).find((x) => x.startsWith('chrome-mac'));
-  const app = arch && readdirSync(join(cache, d, arch)).find((x) => x.endsWith('.app'));
-  if (app) chromeExe = join(cache, d, arch, app, 'Contents/MacOS', app.replace(/\.app$/, ''));
+  // Nicht raten — hart verdrahtet wurde das PDF auf Apple Silicon still
+  // übersprungen, auf Windows gar nicht erst gefunden. chromiumExe() in
+  // browsers.mjs prüft das Programm selbst.
+  chromeExe = chromiumExe();
 } catch { /* nicht da */ }
 if (chromeExe && existsSync(chromeExe)) {
   const cb = await chromium.launch({ executablePath: chromeExe });

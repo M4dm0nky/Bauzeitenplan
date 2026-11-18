@@ -5,15 +5,15 @@ import { firefox, chromium } from 'playwright-core';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { createServer } from 'node:http';
 const here = dirname(fileURLToPath(import.meta.url)); const root = join(here, '..');
 mkdirSync(join(here, 'shots'), { recursive: true });
-const cache = join(process.env.HOME, 'Library/Caches/ms-playwright');
-const exe = join(cache, readdirSync(cache).find((d) => d.startsWith('firefox-')), 'firefox/Nightly.app/Contents/MacOS/firefox');
+const exe = mustFirefox();
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 const server = createServer((q, s) => {
   const rel = normalize(decodeURIComponent(q.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
-  const f = join(root, rel === '/' ? 'index.html' : rel);
+  const f = join(root, /^[\\/]$/.test(rel) ? 'index.html' : rel);
   if (!f.startsWith(root) || !existsSync(f)) { s.writeHead(404); return s.end('x'); }
   s.writeHead(200, { 'Content-Type': MIME[extname(f)] || 'application/octet-stream' });
   s.end(readFileSync(f));
@@ -164,22 +164,9 @@ await p.screenshot({ path: join(here, 'shots', 'druck-gefiltert.png'), fullPage:
 // ausschließlich Chromium. Ohne ihn prüfen wir das Layout (oben, im Druckmodus),
 // aber nicht die Seitenaufteilung. Einmalig holen: npx playwright install chromium
 console.log('\nPDF (A3 quer)');
-const chromDir = readdirSync(cache).find((d) => d.startsWith('chromium-'));
-// Den Pfad NICHT raten: der Ordner heißt je nach Architektur `chrome-mac` oder
-// `chrome-mac-arm64`, und das Programm darin mal `Chromium.app`, mal
-// «Google Chrome for Testing.app». Hart verdrahtet stürzte der Lauf ab, statt
-// sauber zu überspringen — und ein abgebrochener Download hinterlässt einen
-// leeren Ordner, der wie eine Installation aussieht.
-const chromExe = (() => {
-  if (!chromDir) return null;
-  const bin = join(cache, chromDir);
-  const arch = readdirSync(bin).find((d) => d.startsWith('chrome-mac'));
-  if (!arch) return null;
-  const app = readdirSync(join(bin, arch)).find((d) => d.endsWith('.app'));
-  if (!app) return null;
-  const p = join(bin, arch, app, 'Contents', 'MacOS', app.replace(/\.app$/, ''));
-  return existsSync(p) ? p : null;
-})();
+// Den Pfad NICHT raten (Architektur, App-Name, halbe Downloads): chromiumExe()
+// in browsers.mjs prüft das Programm selbst, auf Mac, Windows und Linux.
+const chromExe = chromiumExe();
 if (!chromExe) {
   console.log('  – übersprungen: Chromium nicht installiert.');
   console.log('    Für echte PDFs einmalig:  npx playwright install chromium');

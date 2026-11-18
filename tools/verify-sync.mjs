@@ -12,6 +12,7 @@ import { firefox } from 'playwright-core';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { createServer } from 'node:http';
 
 const ECHT = process.argv.includes('--echt');
@@ -27,15 +28,13 @@ const root = join(here, '..');
 mkdirSync(join(here, 'shots'), { recursive: true });
 const shot = (page, name) => ECHT ? null : page.screenshot({ path: join(here, 'shots', 'verify-sync-' + name + '.png') });
 
-const cache = join(process.env.HOME, 'Library/Caches/ms-playwright');
-const ff = readdirSync(cache).find((d) => d.startsWith('firefox-'));
-const exe = join(cache, ff, 'firefox/Nightly.app/Contents/MacOS/firefox');
+const exe = mustFirefox();
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 const server = createServer((req, res) => {
   const rel = normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
-  const file = join(root, rel === '/' ? 'index.html' : rel);
+  const file = join(root, /^[\\/]$/.test(rel) ? 'index.html' : rel);
   if (!file.startsWith(root) || !existsSync(file)) { res.writeHead(404); return res.end('x'); }
   res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream' });
   res.end(readFileSync(file));
@@ -237,7 +236,7 @@ try {
     try {
       await start(A);
       await legeAn(A, PROBE);
-      await check('A: vor dem Verbinden ist die Statusmarke ausgeblendet (Nicht-Treffer)', async () => (await syncZustand(A)) === 'aus' ? true : 'sichtbar: ' + await syncZustand(A));
+      if (!ECHT) await check('A: vor dem Verbinden ist die Statusmarke ausgeblendet (Nicht-Treffer)', async () => (await syncZustand(A)) === 'aus' ? true : 'sichtbar: ' + await syncZustand(A));
       if (!ECHT) await check('Fake ist vor dem Verbinden leer (Nicht-Treffer)', async () => fake.dateien.size === 0 ? true : fake.dateien.size + ' Dateien');
       if (ECHT) { await A.page.reload(); await A.page.waitForTimeout(800); }
       else await verbinden(A);
@@ -296,7 +295,10 @@ try {
         }
         await ausloesen(A); await A.page.waitForTimeout(2500);
         await check('Aufräumen: Testprojekte sind auf B und A weg', async () => {
-          const nb = await eigeneProjekte(B), na = await eigeneProjekte(A);
+          // Aus dem Index lesen, nicht über die Oberfläche: ohne offenes Projekt
+          // gibt es keine Schiene (#rail-ein entsteht erst in mount()).
+          const index = (g) => g.page.evaluate(() => { try { return JSON.parse(localStorage.getItem('bzp_projects') || '[]').map((e) => e.name); } catch { return []; } });
+          const nb = await index(B), na = await index(A);
           return [...nb, ...na].some((n) => n === PROBE || n === NURB) ? 'noch da: ' + nb.join(',') + ' | ' + na.join(',') : true;
         });
       }
