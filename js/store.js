@@ -11,6 +11,7 @@
 
 import { topoSort, toMin, toDate } from './schedule.js';
 import { MAX_SLOTS } from './palette.js';
+import { local } from './conflicts.js';
 
 // Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
 // Ablage die äußere Schicht — diese Abhängigkeit liefe verkehrt herum. Für eine
@@ -195,10 +196,6 @@ function neuerEintrag(state, { feld, eingebaut, praefix, fehlt, doppelt, label: 
 // Fenster gemeinsam zurück. Gleiche (echte) Dauer = Verschiebung: Fenster
 // wandern um dieselben Minuten. Sonst wird beschnitten; ein Fenster, das danach
 // leer wäre, wird zu `null` (= ganzer Vorgang). Meilensteine bleiben unberührt.
-const lokalISO = (min) => {
-  const d = toDate(min), p = (n) => String(n).padStart(2, '0');
-  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
-};
 function resNachziehen(t, altStart, altEnd) {
   if (t.milestone || !Array.isArray(t.res) || !t.res.length) return;
   const s = toMin(t.start), e = toMin(t.end);
@@ -210,7 +207,7 @@ function resNachziehen(t, altStart, altEnd) {
     if (gleich) { von += delta; bis += delta; }
     else { von = Math.max(von, s); bis = Math.min(bis, e); }
     if (bis <= von) return { ...z, von: null, bis: null };
-    return { ...z, von: lokalISO(von), bis: lokalISO(bis) };
+    return { ...z, von: local(toDate(von)), bis: local(toDate(bis)) };
   });
 }
 

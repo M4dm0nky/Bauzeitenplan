@@ -1256,17 +1256,26 @@ test('Fenster null bleibt null beim Verschieben', () => {
   s.apply({ type: 'moveTask', id: 'a', start: '2026-07-14T08:00', end: '2026-07-14T12:00' });
   assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 2, von: null, bis: null }]);
 });
+test('Start ändern beschneidet von des Fensters', () => {
+  const { s, rid } = mitFenster('2026-07-13T09:00', '2026-07-13T11:00');
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'start', value: '2026-07-13T10:00' }).ok, true);
+  assert.deepEqual(taskById(s, 'a').res, [{ rid, n: 2, von: '2026-07-13T10:00', bis: '2026-07-13T11:00' }]);
+});
 test('Verschieben über den Sommerzeit-Wechsel 25.10.2026 behält die Differenz in echten Minuten', () => {
+  // Vorgang 25.10. 01:00–05:00 (5 echte Stunden, der Wechsel 03:00→02:00 liegt mittendrin),
+  // Fenster 02:30–04:00 überspannt den Wechsel; verschoben auf den 26.10. 01:00–06:00
+  // (ebenfalls 5 echte Stunden). Läuft in jeder Zeitzone, spannt den Wechsel aber nur in Europe/Berlin.
   const { s } = mitFenster('2026-07-13T09:00', '2026-07-13T10:00');
-  const a0 = toMin('2026-07-13T08:00');
-  s.apply({ type: 'moveTask', id: 'a', start: '2026-10-24T08:00', end: '2026-10-24T12:00' });
-  const z1 = taskById(s, 'a').res[0];
-  assert.equal(toMin(z1.von) - toMin(taskById(s, 'a').start), 60);
-  s.apply({ type: 'moveTask', id: 'a', start: '2026-10-25T08:00', end: '2026-10-25T12:00' });
-  const t = taskById(s, 'a'), z2 = t.res[0];
-  assert.equal(toMin(z2.von) - toMin(t.start), 60);
-  assert.equal(toMin(z2.bis) - toMin(z2.von), 60);
-  assert.ok(a0 > 0);
+  s.apply({ type: 'moveTask', id: 'a', start: '2026-10-25T01:00', end: '2026-10-25T05:00' });
+  const rid = taskById(s, 'a').res[0].rid;
+  s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: { rid, n: 2, von: '2026-10-25T02:30', bis: '2026-10-25T04:00' } });
+  const t0 = { ...taskById(s, 'a') }, w0 = { ...taskById(s, 'a').res[0] };
+  assert.equal(s.apply({ type: 'moveTask', id: 'a', start: '2026-10-26T01:00', end: '2026-10-26T06:00' }).ok, true);
+  const t = taskById(s, 'a'), w = t.res[0];
+  const delta = toMin(t.start) - toMin(t0.start);
+  assert.equal(toMin(w.von) - toMin(w0.von), delta);
+  assert.equal(toMin(w.bis) - toMin(w0.bis), delta);
+  assert.equal(toMin(w.bis) - toMin(w.von), toMin(w0.bis) - toMin(w0.von));
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
