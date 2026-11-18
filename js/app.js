@@ -573,6 +573,10 @@ async function hochladen(sync, id, sha) {
 // stammt aus einem Snapshot vor dem Netzwerk-await; wer inzwischen weitergetippt
 // hat (dirty, offener 800-ms-Timer, ungesicherter Store), wird nie überschrieben.
 function ueberschreibenSicher(id) {
+  // Lokal gar nicht vorhanden (neues Projekt vom anderen Gerät): nichts, was
+  // verloren gehen könnte. syncInfo() meldet für unbekannte ids dirty:true —
+  // ohne diese Zeile wurde jedes fremde Projekt übersprungen und nie geholt.
+  if (!repo.list().some((x) => x.id === id)) return true;
   if (repo.syncInfo(id).dirty) return false;
   if (id === offenId() && (saveTimer || store.dirty)) return false;
   return true;
