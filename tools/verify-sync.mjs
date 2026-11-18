@@ -495,8 +495,16 @@ try {
         await start(A); await legeAn(A, 'Wechsel-Eins'); await legeAn(A, 'Wechsel-Zwei');
         await A.page.locator('[data-view="tabelle"]').click();
         const t = A.page.locator('.tb-r .c-title input').first();
+        // Zeit festnageln: der 800-ms-Speichertimer feuert sonst während der
+        // Klicks von selbst, und die Prüfung bliebe auch ohne Sicherung im
+        // Projektwechsel grün. Mit dem festgesetzten Timer kann NUR open() den
+        // Titel retten.
+        await A.page.evaluate(() => {
+          const echt = window.setTimeout.bind(window);
+          window.setTimeout = (fn, ms, ...a) => echt(fn, ms === 800 ? 600000 : ms, ...a);
+        });
         await t.fill('Frisch getippt');
-        // Kein Warten: blur löst change aus, und sofort danach das andere Projekt öffnen.
+        // blur löst change aus (Timer läuft jetzt praktisch nie ab), dann das andere Projekt öffnen.
         await A.page.evaluate(() => document.activeElement && document.activeElement.blur());
         const oeffne = async (name) => {
           await A.page.locator('#rail-ein').click();
