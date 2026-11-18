@@ -59,8 +59,11 @@ Von Hand hochzählen ist nicht mehr nötig und wird vom Testlauf bestraft.
 zweiten Aufruf — deshalb beides.
 Warum er nötig ist: `app.js` importiert `./gantt.js` ohne Version, und Pages sendet
 `max-age=600` — ohne ihn kämen Änderungen an Untermodulen zehn Minuten lang nicht an.
-Der Worker cacht selbst nichts und kann deshalb nie eine alte Version einsperren;
-Kill-Switch steht in `sw.js`.
+Der Worker ist network-first: online immer frisch (`cache:'no-cache'`), der Cache dient
+nur bei Netzfehler — so läuft die App nach dem ersten Besuch auch offline, und er kann
+keine alte Version einsperren, solange Netz da ist. Der Cache heißt je Version `bzp-<SW_VERSION>`,
+`activate` löscht alle anderen; die Dateiliste `HUELLE` in `sw.js` prüft `tests/run.mjs`
+in beide Richtungen. Kill-Switch steht in `sw.js`.
 
 `~/.local/bin/gh` ist installiert (nicht im PATH — mit vollem Pfad aufrufen).
 Angemeldet als **M4dm0nky**. Das Repo liegt bewusst dort und nicht unter `Aniflu`:

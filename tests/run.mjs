@@ -241,6 +241,33 @@ check('CHANGELOG hat einen Abschnitt für die aktuelle Version', () => {
   return cl.includes('## ' + v) ? true : `kein Abschnitt «## ${v}»`;
 });
 
+check('jede ausgelieferte Datei steht in HUELLE (sw.js) — und keine tote', () => {
+  // Offline geht nur, was der Worker beim Installieren einsammelt. Eine neue
+  // Datei ohne Eintrag fehlt offline unsichtbar; ein Eintrag ohne Datei lässt
+  // addAll() scheitern und damit die ganze Installation.
+  const sw = readFileSync(join(root, 'sw.js'), 'utf8');
+  const m = sw.match(/const HUELLE = \[([\s\S]*?)\];/);
+  if (!m) return 'sw.js hat kein «const HUELLE = [...]»';
+  const drin = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).filter((x) => x !== './');
+  const rekursiv = (dir) => readdirSync(join(root, dir), { withFileTypes: true }).flatMap((d) =>
+    d.isDirectory() ? rekursiv(dir + '/' + d.name) : [dir + '/' + d.name]);
+  const soll = [
+    ...readdirSync(root).filter((f) => f.endsWith('.html')),
+    'klassentreffen-festival.json', 'amk-singleshow.json',
+    ...rekursiv('js').filter((f) => f.endsWith('.js')),
+    ...rekursiv('styles').filter((f) => f.endsWith('.css')),
+    ...rekursiv('assets'),
+  ];
+  const fehlt = soll.filter((f) => !drin.includes(f));
+  const tot = drin.filter((f) => !soll.includes(f));
+  const dopp = drin.filter((f, i) => drin.indexOf(f) !== i);
+  const r = [];
+  if (fehlt.length) r.push('fehlt in HUELLE: ' + fehlt.join(', '));
+  if (tot.length) r.push('tot (Datei gibt es nicht / nicht ausgeliefert): ' + tot.join(', '));
+  if (dopp.length) r.push('doppelt: ' + dopp.join(', '));
+  return r.length ? r.join(' | ') : true;
+});
+
 check('alle in index.html verdrahteten IDs kommen in app.js vor', () => {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   const app = js('app.js');
