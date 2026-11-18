@@ -9,7 +9,7 @@
 // falsch sein. Nebenbei fällt das Zurückrollen gescheiterter Sammelbefehle
 // geschenkt ab.
 
-import { topoSort, toMin, toDate } from './schedule.js';
+import { topoSort, toMin, toDate, spanFehler } from './schedule.js';
 import { MAX_SLOTS } from './palette.js';
 import { local } from './conflicts.js';
 
@@ -211,14 +211,7 @@ function resNachziehen(t, altStart, altEnd) {
   });
 }
 
-function checkSpan(start, end, milestone) {
-  if (!start || !end) return 'Start und Ende müssen gesetzt sein.';
-  const a = new Date(start).getTime(), b = new Date(end).getTime();
-  if (Number.isNaN(a) || Number.isNaN(b)) return 'Ungültiges Datum.';
-  if (milestone) return b === a ? null : 'Ein Meilenstein hat keine Dauer — Start und Ende müssen gleich sein.';
-  if (b <= a) return 'Das Ende muss nach dem Start liegen.';
-  return null;
-}
+const checkSpan = (start, end, milestone) => spanFehler(start, end, { milestone });
 
 // Hat der Vorgang Untervorgänge? Dann ist er ein Sammelvorgang: seine Zeiten sind
 // die HÜLLE der Kinder und nicht von Hand editierbar.

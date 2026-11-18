@@ -10,6 +10,21 @@
 export const toMin = (iso) => Math.round(new Date(iso).getTime() / 60000);
 export const toDate = (min) => new Date(min * 60000);
 
+// Die EINE Spannenregel (Store-Befehle UND Import/Sync rufen sie): null = gültig,
+// sonst der Ablehnungsgrund. In echten Zeitstempeln gerechnet, nie in Ziffern.
+// `sammel`: ein Elternvorgang trägt die abgeleitete Hülle seiner Kinder
+// (reflowParents) — sind alle Kinder Meilensteine, ist sie null lang. Dort
+// genügt Ende >= Start; die Lage ist abgeleitet, nicht eingegeben.
+export function spanFehler(start, end, { milestone = false, sammel = false } = {}) {
+  if (!start || !end) return 'Start und Ende müssen gesetzt sein.';
+  const a = new Date(start).getTime(), b = new Date(end).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return 'Ungültiges Datum.';
+  if (sammel) return b >= a ? null : 'Das Ende muss nach dem Start liegen.';
+  if (milestone) return b === a ? null : 'Ein Meilenstein hat keine Dauer — Start und Ende müssen gleich sein.';
+  if (b <= a) return 'Das Ende muss nach dem Start liegen.';
+  return null;
+}
+
 // Kanonische Reihenfolge der Vorgänge INNERHALB eines Gewerks: nach Startzeit,
 // bei Gleichstand nach Ende, zuletzt nach Titel (stabil). Der EINE Vergleicher
 // für Tabelle und Gantt — sonst zeigt derselbe Plan zwei Reihenfolgen und wirkt

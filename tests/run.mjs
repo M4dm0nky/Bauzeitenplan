@@ -18,7 +18,7 @@ let failed = 0;
 for (const f of readdirSync(here).filter((x) => x.endsWith('.test.mjs')).sort()) {
   try {
     // Feste Zone: die Testdaten liegen an der deutschen Zeitumstellung (25.10.2026),
-    // sie sind für Europe/Berlin geschrieben. Die Grenze selbst folgt in Task 6.
+    // sie sind für Europe/Berlin geschrieben. Die Grenze selbst steht in docs/entscheidungen.md («Bekannte Grenze: Zeitzone des Betrachters»).
     const out = execFileSync('node', [join(here, f)], { encoding: 'utf8', env: { ...process.env, TZ: 'Europe/Berlin' } });
     process.stdout.write(out);
   } catch (e) {

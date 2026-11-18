@@ -7,7 +7,7 @@
 // die Logik ohne Browser testbar bleibt.
 
 import { VERSION } from './version.js';
-import { toMin } from './schedule.js';
+import { spanFehler } from './schedule.js';
 
 export const SCHEMA_VERSION = 1;
 
@@ -280,22 +280,20 @@ export function serialize(plan) {
   }, null, 2);
 }
 
-// Gleiche Regel wie checkSpan im Store (Meilenstein: Start = Ende, sonst Ende >
-// Start), über toMin statt Ziffern. store.js darf persistence.js nicht kennen,
-// deshalb steht die Regel hier noch einmal. Verknüpfungen auf unbekannte
+// Die Spannenregel kommt aus schedule.js (spanFehler) — dieselbe wie im Store.
+// Verknüpfungen auf unbekannte
 // Vorgänge fallen weg (wie bei removeTask) — sie sind Ballast, kein Datenverlust.
 function inhaltFehler(plan) {
   const ids = new Set();
+  const eltern = new Set(plan.tasks.map((t) => t.parent).filter(Boolean));
   for (const t of plan.tasks) {
     const name = `Vorgang «${t.title ?? t.id}»`;
     if (ids.has(t.id)) return `${name}: Die id ${t.id} kommt mehrfach vor.`;
     ids.add(t.id);
-    if (!t.start || !t.end) return `${name}: Start und Ende müssen gesetzt sein.`;   // new Date(null) wäre 1970
-    const a = toMin(t.start), b = toMin(t.end);
-    if (!Number.isFinite(a) || !Number.isFinite(b)) return `${name}: Start oder Ende ist kein gültiges Datum.`;
-    if (t.milestone ? b !== a : b <= a) {
-      return `${name}: ${t.milestone ? 'Ein Meilenstein braucht gleichen Start und gleiches Ende' : 'Das Ende muss nach dem Start liegen'}.`;
-    }
+    // Dieselbe Regel wie im Store; Sammelvorgänge (jemand zeigt per parent auf sie)
+    // tragen eine abgeleitete Hülle und dürfen null lang sein.
+    const bad = spanFehler(t.start, t.end, { milestone: !!t.milestone, sammel: eltern.has(t.id) });
+    if (bad) return `${name}: ${bad}`;
   }
   plan.deps = plan.deps.filter((d) => ids.has(d.from) && ids.has(d.to));
   return null;

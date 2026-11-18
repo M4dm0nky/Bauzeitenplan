@@ -1,4 +1,6 @@
 import { createRepo, serialize, deserialize, migrate, SCHEMA_VERSION } from '../js/persistence.js';
+import { createStore } from '../js/store.js';
+import { spanFehler } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -511,6 +513,35 @@ test('mitgelieferte Pläne bestehen die Prüfung', () => {
     const r = deserialize(readFileSync(new URL('../' + f, import.meta.url), 'utf8'));
     assert.equal(r.ok, true, f + ': ' + r.error);
   }
+});
+
+// Rundlauf: was der Store zulässt, muss sich exportieren UND wieder importieren
+// lassen. Sonst scheitert der Sync auf dem zweiten Gerät an einem Plan, den das
+// erste Gerät problemlos gebaut hat.
+test('Rundlauf: Sammelvorgang mit Meilenstein-Kind lässt sich zurückimportieren', () => {
+  const st = createStore(plan());
+  const p = st.apply({ type: 'addTask', task: { gewerk: 'g1', title: 'Sammel', start: '2026-07-14T08:00', end: '2026-07-14T09:00' } });
+  const k = st.apply({ type: 'addTask', task: { gewerk: 'g1', title: 'Raute', start: '2026-07-14T10:00', end: '2026-07-14T10:00', milestone: true, parent: p.id } });
+  assert.ok(p.ok !== false && k.ok !== false, 'Store muss beides zulassen');
+  const r = deserialize(serialize(st.state));
+  assert.equal(r.ok, true, r.error);
+});
+
+// Eine Regel, zwei Aufrufer (store.checkSpan, persistence.inhaltFehler): die
+// gemeinsame Fallliste hängt an der einen Funktion.
+test('spanFehler: gemeinsame Fallliste', () => {
+  const F = [
+    [['2026-07-13T08:00', '2026-07-13T09:00', {}], null],
+    [['2026-07-13T09:00', '2026-07-13T08:00', {}], 'Das Ende muss nach dem Start liegen.'],
+    [['2026-07-13T08:00', '2026-07-13T08:00', {}], 'Das Ende muss nach dem Start liegen.'],
+    [['2026-07-13T08:00', '2026-07-13T08:00', { milestone: true }], null],
+    [['2026-07-13T08:00', '2026-07-13T09:00', { milestone: true }], 'Ein Meilenstein hat keine Dauer — Start und Ende müssen gleich sein.'],
+    [['2026-07-13T08:00', '2026-07-13T08:00', { sammel: true }], null],
+    [['2026-07-13T09:00', '2026-07-13T08:00', { sammel: true }], 'Das Ende muss nach dem Start liegen.'],
+    [[null, '2026-07-13T08:00', {}], 'Start und Ende müssen gesetzt sein.'],
+    [['x', '2026-07-13T08:00', {}], 'Ungültiges Datum.'],
+  ];
+  for (const [[a, b, o], erwartet] of F) assert.equal(spanFehler(a, b, o), erwartet, `${a} ${b} ${JSON.stringify(o)}`);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
