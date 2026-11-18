@@ -1,5 +1,5 @@
 // ── Verhaltensprüfung im echten Browser ───────────────────────────────────────
-// Fährt die App und jeden Design-Prototyp hoch, prüft Verhalten, schießt Fotos.
+// Fährt die App in jedem der fünf Themes hoch, prüft Verhalten, schießt Fotos.
 //
 //   node tools/verify-browser.mjs                 lokal (eigener Server)
 //   node tools/verify-browser.mjs --base <url>    gegen eine veröffentlichte Seite
@@ -9,7 +9,7 @@
 //
 // --base prüft die echte Live-Seite. Das ist die einzige Prüfung, die beantwortet,
 // ob die Module über die Unteradresse (/Bauzeitenplan/) wirklich laden. Die
-// Prototypen werden dabei übersprungen — sie liegen nicht im Deploy.
+// Themes liegen im Deploy und laufen dort mit.
 import { firefox } from 'playwright-core';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,24 +65,26 @@ if (argBase) {
   BASE = 'http://127.0.0.1:' + server.address().port;
 }
 
-// Die App selbst zuerst — sie ist das Produkt; die Prototypen sind Entwürfe.
-// Live sind nur die App und der Service Worker im Deploy, die Prototypen nicht.
+// Die App selbst zuerst — sie ist das Produkt. Die anderen Themes laufen in
+// DERSELBEN App: gleiche Adresse, nach dem Laden wird `#theme-css` umgestellt
+// (siehe themeAn). Ein Theme, das in der App bricht, ist ein Fehler.
+const THEMES = ['console', 'blueprint', 'studio', 'board'];
 const PAGES = [
   // ?plan=leer: ohne den Schalter lüde die App den mitgelieferten Klassentreffen-
   // Plan und die Darstellungsprüfungen liefen gegen andere Daten (der hat z.B.
   // keine Phasen). Geprüft wird hier weiter die Festival-Vorlage.
   { name: 'APP (index.html)', url: BASE + '/index.html?plan=leer', app: true },
-  ...(argBase ? [] : ['console', 'blueprint', 'studio', 'board'].map((v) =>
-    ({ name: 'Prototyp ' + v, url: BASE + '/tools/out/' + v + '.html', key: v }))),
+  ...THEMES.map((t) => ({ name: 'APP Theme ' + t, url: BASE + '/index.html?plan=leer', app: true, theme: t, key: t })),
 ];
-// Die Zoomstufe ist in der APP ein Klappmenü (seit v0.12.0), in den PROTOTYPEN
-// weiter eine Segmentgruppe: tools/prototype-shell.html ist eine 104-Zeilen-
-// Vorschau der Render-Engine je Theme, nicht die Oberfläche der App — sie
-// bekommt deren Werkzeugzeile bewusst nicht nachgebaut.
-const setZoom = async (page, z) => {
-  if (await page.locator('#zoom-stufe').count()) await page.selectOption('#zoom-stufe', z);
-  else await page.click(`[data-z="${z}"]`);
-};
+// Stellt das Stylesheet um und wartet, bis das neue geladen ist.
+const themeAn = (page, t) => page.evaluate((t) => new Promise((res, rej) => {
+  const l = document.getElementById('theme-css');
+  l.addEventListener('load', () => res(true), { once: true });
+  l.addEventListener('error', () => rej(new Error('Theme-CSS nicht geladen: ' + t)), { once: true });
+  l.dataset.themeName = t;
+  l.href = `styles/themes/${t}.css?v=1`;
+}), t);
+const setZoom = (page, z) => page.selectOption('#zoom-stufe', z);
 
 const browser = await firefox.launch({ executablePath: exe });
 let problems = 0;
@@ -101,8 +103,8 @@ for (const pg of PAGES) {
   await page.waitForTimeout(argBase ? 1600 : 700);
 
   // Die App startet ohne Projekt mit dem Anlege-Dialog. Für die Darstellungs-
-  // prüfungen brauchen wir Inhalt: Festival-Vorlage anlegen. Die Prototypen
-  // bringen ihre Daten selbst mit.
+  // prüfungen brauchen wir Inhalt: Festival-Vorlage anlegen.
+  if (pg.theme) { await themeAn(page, pg.theme); await page.waitForTimeout(300); }
   if (pg.app && await page.locator('#dlg').isVisible()) {
     await page.fill('.dlg-f:first-child input', 'Prüfprojekt');
     await page.locator('.dlg-t[data-k="festival"]').click();
@@ -311,6 +313,7 @@ for (const pg of PAGES) {
   const dark = await browser.newPage({ viewport: { width: 1600, height: 950 }, colorScheme: 'dark' });
   await dark.goto(pg.url);
   await dark.waitForTimeout(700);
+  if (pg.theme) { await themeAn(dark, pg.theme); await dark.waitForTimeout(300); }
   if (pg.app && await dark.locator('#dlg').isVisible()) {
     await dark.fill('.dlg-f:first-child input', 'Prüfprojekt');
     await dark.locator('.dlg-t[data-k="festival"]').click();

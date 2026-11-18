@@ -1,9 +1,5 @@
 // ── DOM-Kleinkram ─────────────────────────────────────────────────────────────
 // Lag vorher fünfmal identisch in app, gantt, inspector, menu und table.
-//
-// Nebenbei eine Falle entschärft: tools/build-prototypes.mjs prüft das Bündel
-// auf doppelte Deklarationen (seit der «local»-Kollision). Hätte jemand
-// inspector.js dazugenommen, wäre der Build an fünf `el` gescheitert.
 
 /** Element mit Klasse und Textinhalt. textContent, nie innerHTML. */
 export const el = (tag, cls, txt) => {

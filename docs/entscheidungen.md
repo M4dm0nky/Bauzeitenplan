@@ -10,7 +10,7 @@ Warum Dinge so sind, wie sie sind. Nur das, was sich aus dem Code nicht ablesen 
 | Backend | **Keines.** Reine statische Auslieferung, localStorage + JSON-Export | Eine vorbereitete PocketBase-Schicht wurde in v0.8.0 aus `main` entfernt (siehe unten). Kommt der Bedarf zurück, wird es eine **eigene** Instanz, keine Kopplung an Crewplaner: übernommen werden Muster und Erfahrungen, nicht die Daten. |
 | Gantt-Zeilen | Zwei Ebenen: Band (aufklappbar) → Vorgänge | Entspricht dem klassischen Bauzeitenplan. Das Band ist je nach Plan-Ebene ein Gewerk oder eine Bühne. |
 | Abhängigkeiten | Von Anfang an, alle vier Typen + kritischer Pfad | — |
-| Build-Step | Keiner. Native ES-Module. | Konsistent zu Crewplaner und Personalplan. `tools/build-prototypes.mjs` ist **nur** für die Design-Artifacts (CSP verlangt dort alles inline). |
+| Build-Step | Keiner. Native ES-Module. | Konsistent zu Crewplaner und Personalplan. |
 
 ## Zoomstufen sind nach Sichtbarkeit bemessen, nicht nach runden Zahlen
 

@@ -21,9 +21,8 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 // Ebenso bewusst nicht aus ebene.js importiert — dieselbe Richtung, dasselbe
 // Argument: der Kern zeigt nicht auf die Ansichtsschicht (ebene.js hängt an
 // conflicts.js, und dorthin liefe der Pfeil verkehrt herum). Altdaten ohne
-// `art` sind Gewerke. Eigener Name, weil der Prototypen-Build alle Module in
-// EINE Datei zieht und zwei gleichnamige Deklarationen dort ein SyntaxError
-// wären — dieselbe Prüfung, die schon den `el`-Vorfall gefangen hat.
+// `art` sind Gewerke. Eigener Name, damit er nicht mit den Hilfen
+// anderer Module verwechselt wird.
 const artVon = (g) => g.art || 'gewerk';
 
 // Die EINGEBAUTEN Eintragsarten, aus demselben Grund hier wiederholt statt aus

@@ -284,7 +284,7 @@ alle Vorgänge zu scrollen.
 
 ```bash
 node tests/run.mjs            # Unit-Tests + statische Prüfungen, ohne Browser
-node tools/verify-browser.mjs # Darstellung: App + 4 Theme-Prototypen im Browser
+node tools/verify-browser.mjs # Darstellung: App in allen fünf Themes im Browser
 node tools/verify-edit.mjs    # Bearbeiten: anlegen, tippen, Undo, Konflikte, Panel, Menü
 node tools/verify-live.mjs    # Live-Modus mit gestellter Uhr (page.clock)
 node tools/verify-amk.mjs     # AMK-Plan importieren und prüfen
@@ -368,7 +368,6 @@ styles/
   themes/*.css          Fünf Gestaltungsebenen; callboard ist aktiv
 tests/                  Unit-Tests + statische Prüfungen
 tools/
-  build-prototypes.mjs  Baut die vier Design-Entwürfe als eigenständige Dateien
   verify-browser.mjs    Verhaltensprüfung im echten Browser
 docs/                   Entscheidungen, Themes, Farbsuche
 ```

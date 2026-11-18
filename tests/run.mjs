@@ -177,7 +177,7 @@ check('kein Modul importiert etwas, das es nicht benutzt', () => {
 
 check('kein Export, den niemand importiert', () => {
   // Toter Code sammelt sich sonst still an: applyGewerk lag monatelang ungenutzt
-  // herum und wurde trotzdem in jeden Prototyp gebündelt.
+  // herum und wurde trotzdem ausgeliefert.
   const bad = [];
   const alle = [...JS_FILES.map((f) => js(f)),
     ...readdirSync(join(root, 'tests')).map((f) => readFileSync(join(root, 'tests', f), 'utf8')),

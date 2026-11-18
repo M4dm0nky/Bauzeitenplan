@@ -9,7 +9,7 @@ Projekte leben im Browser (localStorage) + JSON-Export. Kein Backend, keine Anme
 
 ```bash
 node tests/run.mjs              # Unit-Tests + statische Prüfungen
-node tools/verify-browser.mjs   # Darstellung: App + 4 Prototypen
+node tools/verify-browser.mjs   # Darstellung: App in allen 5 Themes
 node tools/verify-edit.mjs      # Bearbeiten: anlegen, tippen, Undo, Panel, Menü
 node tools/verify-live.mjs      # Live-Modus mit gestellter Uhr
 node tools/verify-amk.mjs       # AMK-Plan importieren
@@ -294,13 +294,6 @@ mit der Wirklichkeit nichts zu tun haben. `tests/amk.test.mjs` hält das fest.
 gehört `clone` — der Store dürfte dafür nicht auf persistence.js zeigen (Kern →
 äußere Schicht wäre der falsche Pfeil), und für eine Zeile ist die Wiederholung
 billiger als eine schlechte Abhängigkeit.
-
-**Wer `js/` um einen Import erweitert, muss `tools/build-prototypes.mjs`
-mitpflegen.** Die Modulliste dort steht an EINER Stelle (`FILES`) und ist zugleich
-die Bauanleitung: Abhängigkeit vor Verwender. Der Build prüft seit dem
-`el`-Vorfall auf **fehlende** und auf **doppelte** Namen — vorher nur auf doppelte,
-weshalb `live.js` monatelang ungebündelt blieb und die Prototypen nur deshalb
-liefen, weil `runningAt` ausschließlich im Live-Modus gerufen wird.
 
 **Ein Zustand, ein Besitzer.** `#ins.hidden` hatte vier Schreiber (zwei in
 app.js, zwei in inspector.js) — und inspector.js kannte die Ansicht nicht, also
@@ -914,7 +907,6 @@ eingetragenen Schlüssel verhält sich die App exakt wie vorher** — alle ander
 | `js/bedarf.js` | Bedarfsansicht: Personal- oder Maschinenbedarf (Unterwahl in der Leiste) |
 | `js/rail.js` | Die Schiene: der Modus, drei Einträge — rendert nur |
 | `js/sync.js` | GitHub-Contents-Client + `abgleich()` — **DOM-frei** |
-| `tools/build-prototypes.mjs` | **Nur** für die Design-Artifacts (CSP verlangt alles inline). Die App braucht keinen Build. |
 
 Warum was so ist: `docs/entscheidungen.md`. Besonders der kritische Pfad hat eine
 nicht offensichtliche Regel (verankerte Senken fallen aus dem minFloat) — die steht

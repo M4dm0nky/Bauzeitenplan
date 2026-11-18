@@ -68,9 +68,17 @@ Zwei Dinge dabei beachten:
 
 - **Zeilenmaße gehören zum Theme.** Board braucht Plakat-Maße, Console dichte
   Zeilen. Die Werte stehen aktuell in `js/app.js` (`rowH`/`groupH`/`barH`/`sideW`)
-  bzw. in `tools/build-prototypes.mjs`. Beim Umschalten müssen sie mitwandern —
+  (Referenzwerte unten). Beim Umschalten müssen sie mitwandern —
   am saubersten, indem `createGantt` sie neu gesetzt bekommt und `relayout()` läuft.
-  Die Werte je Theme stehen in `tools/build-prototypes.mjs` unter `VARIANTS`.
+
+  | Theme | rowH | groupH | barH | sideW |
+  |---|---|---|---|---|
+  | callboard | 24 | 28 | 12 | 228 |
+  | console | 24 | 28 | 12 | 228 |
+  | blueprint | 26 | 32 | 13 | 236 |
+  | studio | 34 | 44 | 20 | 254 |
+  | board | 40 | 50 | 28 | 268 |
+
 - **Kurzes Aufblitzen vermeiden.** Der `<link>`-Tausch lädt asynchron. Entweder
   alle vier Themes vorab laden und per `data-theme-name` am `<html>` umschalten,
   oder das Aufblitzen in Kauf nehmen (bei lokalem CSS kaum sichtbar).
@@ -82,7 +90,7 @@ Zwei Dinge dabei beachten:
    `:root[data-theme="dark"]`. Der Umschalter des Betrachters muss die
    OS-Einstellung in beide Richtungen schlagen.
 3. Die Gewerk-Farben **nicht** anfassen.
-4. In `tools/build-prototypes.mjs` unter `VARIANTS` eintragen.
+4. `verify-browser` prüft das neue Theme: Liste `THEMES` in `tools/verify-browser.mjs` ergänzen.
 5. `node tests/run.mjs` — die statischen Prüfungen fangen fehlende Bausteine.
 6. `node tools/verify-browser.mjs` — fährt das Theme im Browser hoch.
 
