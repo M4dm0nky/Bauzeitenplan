@@ -523,7 +523,7 @@ async function abgleichenEinmal(k) {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; await save(); }
   setSyncState('wartet', 'Gleiche ab …');
   const l = await sync.list();
-  if (!l.ok) return syncScheitert(l.grund);
+  if (!l.ok) return syncScheitert(l);
   let problem = null, abbruch = false;
   for (const a of abgleich(repo.syncListe(), l.dateien)) {
     const r = await fuehreAus(sync, a);
@@ -532,18 +532,22 @@ async function abgleichenEinmal(k) {
       if (r.grund === 'offline' || r.grund === 'schluessel') { abbruch = true; break; }
     }
   }
-  if (abbruch) return syncScheitert(problem.grund);
+  if (abbruch) return syncScheitert(problem);
   if (problem) {
     return setSyncState(problem.grund === 'abgebrochen' ? 'fehler' : 'wartet',
-      problem.grund === 'abgebrochen' ? 'Konflikt nicht gelöst — Pläne weichen voneinander ab' : (GRUND_TEXT[problem.grund] || GRUND_TEXT.fehler));
+      problem.grund === 'abgebrochen' ? 'Konflikt nicht gelöst — Pläne weichen voneinander ab' : grundText(problem));
   }
   letzterAbgleich = new Date();
   clearTimeout(uploadTimer);       // open()/save() im Durchlauf haben ihn evtl. neu gestellt
   setSyncState('ok', 'Abgeglichen mit ' + k.repo);
 }
 
-function syncScheitert(grund) {
-  setSyncState(grund === 'offline' ? 'wartet' : 'fehler', GRUND_TEXT[grund] || GRUND_TEXT.fehler);
+// Text zu einem Fehlschlag, mit HTTP-Code, wo GitHub einen geliefert hat — sonst
+// bleibt «GitHub meldet einen Fehler» ein Rätsel (z. B. Token ohne Schreibrecht).
+const grundText = (r) => (GRUND_TEXT[r.grund] || GRUND_TEXT.fehler) + (r.status ? ` (HTTP ${r.status})` : '');
+
+function syncScheitert(r) {
+  setSyncState(r.grund === 'offline' ? 'wartet' : 'fehler', grundText(r));
 }
 
 const offenId = () => (store ? store.state.project.id : null);
@@ -650,7 +654,7 @@ $('sync-verbinden').onclick = async () => {
   const token = $('sync-token').value.trim();
   if (!token) return toast('Bitte den Schlüssel eintragen.', 'bad');
   const r = await syncClient({ token, repo: SYNC_REPO }).pruefe();
-  if (!r.ok) return toast(GRUND_TEXT[r.grund] || GRUND_TEXT.fehler, 'bad', 8000);
+  if (!r.ok) return toast(grundText(r), 'bad', 8000);
   try { window.localStorage.setItem(SYNC_KEY, JSON.stringify({ token, repo: SYNC_REPO })); }
   catch { return toast('Der Schlüssel konnte in diesem Browser nicht gespeichert werden.', 'bad', 8000); }
   $('sync-token').value = '';
