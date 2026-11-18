@@ -3,12 +3,12 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
-## Unveröffentlicht
+## 0.15.0 — 2026-11-18
 
 **Die drei offenen Punkte aus v0.14.0 sind erledigt.**
 
-- Ist der Browser-Speicher voll, wechselt die App das Projekt nicht mehr stillschweigend und verwirft dabei die letzte Eingabe. Sie fragt jetzt: «Exportieren», «Trotzdem wechseln» oder «Abbrechen». Bei «Abbrechen» bleiben das Projekt und die Eingabe offen. Schließt #1.
-- Die App startet auch, wenn der Browser gar keinen Speicher erlaubt (strenger Privatmodus). Sie arbeitet dann nur für diese Sitzung. Schließt #2.
+- Ist der Browser-Speicher voll, wechselt die App das Projekt nicht mehr stillschweigend und verwirft dabei die letzte Eingabe. Sie fragt jetzt: «Exportieren», «Trotzdem wechseln» oder «Abbrechen». Bei «Abbrechen» (auch Escape) bleiben das Projekt und die Eingabe offen. Das gilt auch für einen frisch importierten oder neu angelegten Plan, dessen erstes Speichern gescheitert ist; ein Import meldet dann keinen Erfolg mehr. Schließt #1.
+- Die App startet auch, wenn der Browser gar keinen Speicher erlaubt (strenger Privatmodus). Sie arbeitet dann nur für diese Sitzung und sagt das in klaren Worten, statt «The operation is insecure». Schließt #2.
 - Die Design-Prototypen sind entfallen. Stattdessen prüft `verify-browser` die echte App in allen fünf Themes und weist nach, dass jedes Theme wirklich aktiv ist. Alle neun Prüfungen sind wieder grün. Schließt #3.
 
 ## 0.14.0 — 2026-11-18
