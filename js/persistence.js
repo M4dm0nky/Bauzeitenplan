@@ -7,6 +7,7 @@
 // die Logik ohne Browser testbar bleibt.
 
 import { VERSION } from './version.js';
+import { toMin } from './schedule.js';
 
 export const SCHEMA_VERSION = 1;
 
@@ -15,6 +16,13 @@ const K_ACTIVE = 'bzp_active';
 const K_PLAN = (id) => 'bzp_p_' + id;
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
+
+const speicherFehler = (e) => {
+  const voll = e && (e.name === 'QuotaExceededError' || /quota/i.test(e.message || ''));
+  return voll
+    ? 'Der Browser-Speicher ist voll. Exportiere den Plan als JSON und lösche alte Projekte.'
+    : 'Speichern fehlgeschlagen: ' + ((e && e.message) || e);
+};
 
 const readJSON = (storage, key, fallback) => {
   try {
@@ -210,10 +218,7 @@ export function createRepo(storage) {
         storage.setItem(K_PLAN(id), neu);
       } catch (e) {
         // Verschluckt man das, glaubt man gesichert zu haben — und verliert alles.
-        const voll = e && (e.name === 'QuotaExceededError' || /quota/i.test(e.message || ''));
-        return { ok: false, error: voll
-          ? 'Der Browser-Speicher ist voll. Exportiere den Plan als JSON und lösche alte Projekte.'
-          : 'Speichern fehlgeschlagen: ' + (e.message || e) };
+        return { ok: false, error: speicherFehler(e) };
       }
       const alt = readIndex().find((x) => x.id === id) || {};
       const idx = readIndex().filter((x) => x.id !== id);
@@ -226,7 +231,9 @@ export function createRepo(storage) {
         remoteSha: mitSha ? remoteSha : (alt.remoteSha ?? null),
         dirty: !mitSha,
       });
-      try { writeIndex(idx); } catch { /* Index ist nachrangig, der Plan liegt */ }
+      // Der Index trägt dirty/remoteSha. Scheitert er still, gilt der Plan als
+      // synchron, obwohl er es nicht ist — und der Sync überschriebe ihn.
+      try { writeIndex(idx); } catch (e) { return { ok: false, error: speicherFehler(e) }; }
       return { ok: true };
     },
 
@@ -273,6 +280,26 @@ export function serialize(plan) {
   }, null, 2);
 }
 
+// Gleiche Regel wie checkSpan im Store (Meilenstein: Start = Ende, sonst Ende >
+// Start), über toMin statt Ziffern. store.js darf persistence.js nicht kennen,
+// deshalb steht die Regel hier noch einmal. Verknüpfungen auf unbekannte
+// Vorgänge fallen weg (wie bei removeTask) — sie sind Ballast, kein Datenverlust.
+function inhaltFehler(plan) {
+  const ids = new Set();
+  for (const t of plan.tasks) {
+    const name = `Vorgang «${t.title ?? t.id}»`;
+    if (ids.has(t.id)) return `${name}: Die id ${t.id} kommt mehrfach vor.`;
+    ids.add(t.id);
+    const a = toMin(t.start), b = toMin(t.end);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return `${name}: Start oder Ende ist kein gültiges Datum.`;
+    if (t.milestone ? b !== a : b <= a) {
+      return `${name}: ${t.milestone ? 'Ein Meilenstein braucht gleichen Start und gleiches Ende' : 'Das Ende muss nach dem Start liegen'}.`;
+    }
+  }
+  plan.deps = plan.deps.filter((d) => ids.has(d.from) && ids.has(d.to));
+  return null;
+}
+
 export function deserialize(text, { newId = false } = {}) {
   let j;
   try {
@@ -287,6 +314,8 @@ export function deserialize(text, { newId = false } = {}) {
     return { ok: false, error: `Die Datei stammt aus einer neueren Version (Schema ${j.schema}, hier ${SCHEMA_VERSION}). Bitte die App aktualisieren.` };
   }
   const plan = migrate({ project: j.project, gewerke: j.gewerke, tasks: j.tasks, deps: j.deps });
+  const bad = inhaltFehler(plan);
+  if (bad) return { ok: false, error: bad };
   if (newId) plan.project.id = 'p' + Date.now().toString(36);
   return { ok: true, plan };
 }

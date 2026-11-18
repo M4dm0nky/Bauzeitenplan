@@ -1,5 +1,6 @@
 import { createRepo, serialize, deserialize, migrate, SCHEMA_VERSION } from '../js/persistence.js';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
 const test = (name, fn) => {
@@ -450,6 +451,58 @@ test('Metadaten nie im Plan: weder gespeichert noch serialisiert', () => {
   const roh = s.getItem('bzp_p_p1');
   assert.ok(!/remoteSha|dirty/.test(roh));
   assert.ok(!/remoteSha|dirty/.test(serialize(r.load('p1'))));
+});
+
+// ── Speichern und Import ehrlich (#3, #4) ───────────────────────────────────
+test('save meldet Fehler, wenn der Index nicht geschrieben werden kann', () => {
+  const s = fakeStorage();
+  const roh = s.setItem;
+  // Quota nur für den Index: der Plan liegt, aber dirty/sha wären veraltet.
+  s.setItem = (k, v) => {
+    if (k === 'bzp_projects') { const e = new Error('voll'); e.name = 'QuotaExceededError'; throw e; }
+    roh(k, v);
+  };
+  const r = createRepo(s).save(plan());
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Speicher/);
+});
+const textMit = (mut) => {
+  const p = plan();
+  p.tasks.push({ ...p.tasks[0], id: 't2', title: 'Zweiter' }, { ...p.tasks[0], id: 't3', title: 'Dritter' });
+  mut(p);
+  return JSON.stringify({ schema: 1, ...p });
+};
+test('deserialize lehnt kaputte Zeit ab und nennt den Vorgang', () => {
+  const r = deserialize(textMit((p) => { p.tasks[1].start = 'x'; p.tasks[1].title = 'Kaputt'; }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Kaputt/);
+});
+test('deserialize lehnt Ende vor Start ab (kein Meilenstein)', () => {
+  const r = deserialize(textMit((p) => { p.tasks[1].end = '2026-07-13T07:00'; p.tasks[1].title = 'Rueckwaerts'; }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Rueckwaerts/);
+});
+test('deserialize akzeptiert Meilenstein mit start === end', () => {
+  const r = deserialize(textMit((p) => { Object.assign(p.tasks[1], { milestone: true, end: p.tasks[1].start }); }));
+  assert.equal(r.ok, true);
+});
+test('deserialize lehnt doppelte Task-ids ab', () => {
+  const r = deserialize(textMit((p) => { p.tasks[2].id = 't2'; }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /t2/);
+});
+test('deserialize entfernt Verknüpfungen auf unbekannte Vorgänge', () => {
+  const r = deserialize(textMit((p) => {
+    p.deps = [{ id: 'd1', from: 't1', to: 't2', type: 'FS', lag: 0 }, { id: 'd2', from: 't1', to: 'weg', type: 'FS', lag: 0 }, { id: 'd3', from: 'weg', to: 't3', type: 'FS', lag: 0 }];
+  }));
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.plan.deps.map((d) => d.id), ['d1']);
+});
+test('mitgelieferte Pläne bestehen die Prüfung', () => {
+  for (const f of ['klassentreffen-festival.json', 'amk-singleshow.json']) {
+    const r = deserialize(readFileSync(new URL('../' + f, import.meta.url), 'utf8'));
+    assert.equal(r.ok, true, f + ': ' + r.error);
+  }
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
