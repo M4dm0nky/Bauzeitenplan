@@ -2,10 +2,12 @@ import { createStore, STATUS_IDS } from '../js/store.js';
 import { toMin, toDate } from '../js/schedule.js';
 import { local } from '../js/conflicts.js';
 import assert from 'node:assert/strict';
+import { ABSCHNITTE, PUNKT_TYPEN } from '../js/ebene.js';
+import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
 const test = (name, fn) => {
-  try { fn(); pass++; console.log('  ✓ ' + name); }
+  try { const r = fn(); if (r && typeof r.then === 'function') throw new Error('async-Test im synchronen Helfer — nicht erlaubt'); pass++; console.log('  ✓ ' + name); }
   catch (e) { fail++; console.log('  ✗ ' + name + '\n      ' + e.message); }
 };
 
@@ -1015,11 +1017,9 @@ test('⌘Z nimmt den Abschnitt wieder zurück', () => {
   assert.deepEqual(s.state.project.abschnitte || [], []);
 });
 
-test('DIE KOPIE DER EINGEBAUTEN ABSCHNITTE LÄUFT NICHT AUSEINANDER', async () => {
+test('DIE KOPIE DER EINGEBAUTEN ABSCHNITTE LÄUFT NICHT AUSEINANDER', () => {
   // Dieselbe Begründung wie bei den Arten: store.js darf nicht auf ebene.js
   // zeigen, also steht die Liste zweimal — und wird geprüft.
-  const { ABSCHNITTE } = await import('../js/ebene.js');
-  const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../js/store.js', import.meta.url), 'utf8');
   const roh = /const ABSCHNITTE_EINGEBAUT = \[([\s\S]*?)\];/.exec(src);
   assert.ok(roh, 'ABSCHNITTE_EINGEBAUT nicht gefunden — wurde es umbenannt?');
@@ -1028,13 +1028,11 @@ test('DIE KOPIE DER EINGEBAUTEN ABSCHNITTE LÄUFT NICHT AUSEINANDER', async () =
     'store.js und ebene.js führen verschiedene eingebaute Abschnitte');
 });
 
-test('DIE KOPIE DER EINGEBAUTEN ARTEN LÄUFT NICHT AUSEINANDER', async () => {
+test('DIE KOPIE DER EINGEBAUTEN ARTEN LÄUFT NICHT AUSEINANDER', () => {
   // store.js führt die eingebauten Arten bewusst doppelt: ein Import aus
   // ebene.js liefe verkehrt herum (Kern → Ansichtsschicht), dieselbe Begründung
   // wie bei `clone` und `artVon`. Doppelt geführt ist erlaubt, ungeprüft
   // doppelt nicht — genau wie bei den Versionsstellen.
-  const { PUNKT_TYPEN } = await import('../js/ebene.js');
-  const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../js/store.js', import.meta.url), 'utf8');
   const roh = /const TYPEN_EINGEBAUT = \[([\s\S]*?)\];/.exec(src);
   assert.ok(roh, 'TYPEN_EINGEBAUT nicht gefunden — wurde es umbenannt?');
@@ -1160,7 +1158,6 @@ console.log('\nFeldprüfung');
 // Top-Level-await statt async-Tests: `test` wartet nicht auf Promises, ein
 // async-Test würde also nie als ✗ zählen.
 const { serialize, deserialize } = await import('../js/persistence.js');
-const { readFileSync } = await import('node:fs');
 
 test('setTaskField lehnt unbekannte Felder und id ab', () => {
   const s = createStore(seed());

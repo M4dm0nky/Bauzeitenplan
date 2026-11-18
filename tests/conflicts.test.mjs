@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
 const test = (name, fn) => {
-  try { fn(); pass++; console.log('  ✓ ' + name); }
+  try { const r = fn(); if (r && typeof r.then === 'function') throw new Error('async-Test im synchronen Helfer — nicht erlaubt'); pass++; console.log('  ✓ ' + name); }
   catch (e) { fail++; console.log('  ✗ ' + name + '\n      ' + e.message); }
 };
 

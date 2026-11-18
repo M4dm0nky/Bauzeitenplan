@@ -15,7 +15,7 @@ const { plan } = await import('../tools/make-klassentreffen.mjs');
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
-const test = (name, fn) => { try { fn(); pass++; console.log('  ✓ ' + name); } catch (e) { fail++; console.log('  ✗ ' + name + '\n      ' + e.message); } };
+const test = (name, fn) => { try { const r = fn(); if (r && typeof r.then === 'function') throw new Error('async-Test im synchronen Helfer — nicht erlaubt'); pass++; console.log('  ✓ ' + name); } catch (e) { fail++; console.log('  ✗ ' + name + '\n      ' + e.message); } };
 
 console.log('\nTagesblätter — Notiz fürs Blatt');
 test('Dienstleister und Kopfzahl bleiben stehen', () => {
