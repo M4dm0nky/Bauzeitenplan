@@ -643,6 +643,22 @@ Tabelle durch ihre Kopfzeile und die Schiene daneben. Eine zusätzliche
 auf den Screenshot gestrichen: sie wiederholt, was die Schiene und der
 Spaltenkopf schon sagen — und mehr Chrome war genau das Gegenteil des Auftrags.
 
+## Bekannte Grenze: Zeitzone des Betrachters
+
+`toMin()` rechnet in der Zone des Browsers, nicht in der des Projekts. Folge:
+die Dauer einer Nacht über den Zeitwechsel (25 Stunden am 25.10.2026) weicht
+zwischen zwei Betrachtern in verschiedenen Zonen um eine Stunde ab. Die
+Projekt-Zone wird nur für die Jetzt-Linie benutzt (`nowInZone`).
+
+Beheben hieße, ALLE Zeitrechnung auf die Projekt-Zone umzustellen — jede Stelle,
+die `toMin()` oder `Date` anfasst. Der Nutzen zeigt sich nur bei Betrachtern in
+verschiedenen Zonen auf demselben Projekt, die Fläche ist groß. **Bewusst
+zurückgestellt (2026-11-18).**
+
+Folge für die Tests: `tests/run.mjs` startet jede Testdatei mit
+`TZ=Europe/Berlin`, weil die Testdaten auf dem deutschen Zeitwechsel liegen.
+Ohne feste Zone wäre derselbe Test auf einem Rechner in einer anderen Zone rot.
+
 ## Was bewusst noch fehlt
 
 Das Ziehen der **Balken und Dauern** im Gantt sowie Ansichten & Export

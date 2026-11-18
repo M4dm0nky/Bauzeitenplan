@@ -3,6 +3,22 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unveröffentlicht
+
+**Fehlerpaket aus dem Review: weniger stille Datenfehler.**
+
+- Ein Abgleich von einem anderen Gerät setzt den Live-Versatz nicht mehr auf 0, solange dasselbe Projekt offen bleibt.
+- Personal-Zeitfenster wandern mit, wenn ein Vorgang verschoben wird, und werden beschnitten, wenn sich seine Dauer ändert.
+- Speichern meldet jetzt auch, wenn der Projekt-Index nicht geschrieben werden konnte (Speicher voll), statt es zu verschweigen.
+- Import und Abgleich lehnen Pläne mit unlesbaren Zeiten, Ende vor Start oder doppelten Vorgangs-ids mit einer Meldung ab; Verknüpfungen auf nicht vorhandene Vorgänge werden entfernt.
+- Neu angelegte Vorgänge übernehmen jetzt alle Felder (Farbe, Eintragsart, geschätzt u. a.).
+- Felder von Vorgängen werden beim Ändern geprüft: unbekannte Felder, ungültiger Status und unbekannte Eintragsarten werden abgelehnt.
+- Neu: bekannte Grenze dokumentiert — Dauern über den Zeitwechsel rechnen in der Zone des Betrachters (`docs/entscheidungen.md`).
+- Löschen entfernt jetzt auch Enkel (z. B. Soundcheck eines Acts in einem Sammelvorgang); es bleiben keine Waisen zurück.
+- Ein Projektwechsel kurz nach einer Eingabe speichert diese zuerst, statt sie zu verwerfen.
+- Gesperrter Browser-Speicher legt die App nicht mehr lahm.
+- Unter der Haube: Testlauf in fester Zeitzone (Europe/Berlin), und die Tests prüfen, dass async-Tests wirklich abgewartet werden.
+
 ## 0.13.0 — 2026-11-18
 
 **Pläne gleichen sich zwischen Geräten ab, und die App läuft offline.**
