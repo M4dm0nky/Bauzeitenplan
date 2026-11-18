@@ -206,7 +206,7 @@ async function open(plan) {
   if (store) {
     // Eine noch ausstehende Eingabe gehört dem bisherigen Projekt und wäre nach
     // dem Ersetzen weg (der Timer schriebe den NEUEN Plan). Deshalb sofort sichern.
-    if (andereId && (saveTimer || store.dirty)) {
+    if (andereId && (saveTimer || store.dirty || ungesichert)) {
       clearTimeout(saveTimer);
       saveTimer = null;
       const r = await sichern({ still: true });
@@ -410,7 +410,7 @@ function mount() {
 
   // Ungesicherte Änderungen nicht stillschweigend verlieren.
   window.addEventListener('beforeunload', (e) => {
-    if (!store || !store.dirty) return;
+    if (!store || !(store.dirty || ungesichert)) return;
     e.preventDefault();
     e.returnValue = '';
   });
@@ -627,7 +627,7 @@ function ueberschreibenSicher(id) {
   // ohne diese Zeile wurde jedes fremde Projekt übersprungen und nie geholt.
   if (!repo.list().some((x) => x.id === id)) return true;
   if (repo.syncInfo(id).dirty) return false;
-  if (id === offenId() && (saveTimer || store.dirty)) return false;
+  if (id === offenId() && (saveTimer || store.dirty || ungesichert)) return false;
   return true;
 }
 
@@ -638,7 +638,7 @@ async function fuehreAus(sync, a) {
     if (!ueberschreibenSicher(a.id)) { uebersprungen = true; return { ok: true }; }
     const name = (repo.list().find((x) => x.id === a.id) || {}).name || a.id;
     const warOffen = a.id === offenId();
-    repo.remove(a.id);
+    entferne(a.id);
     toast('«' + name + '» wurde auf einem anderen Gerät gelöscht', undefined, 6000);
     if (warOffen) {
       const rest = repo.list();
@@ -681,7 +681,7 @@ async function fuehreAus(sync, a) {
   if (wahl === 'fremd') {
     // Auch im Dialog kann weitergetippt worden sein.
     const jetzt = repo.load(a.id);
-    const offenUngesichert = a.id === offenId() && (saveTimer || store.dirty);
+    const offenUngesichert = a.id === offenId() && (saveTimer || store.dirty || ungesichert);
     if (offenUngesichert || (lokal && jetzt && !gleicherPlan(lokal, jetzt))) { uebersprungen = true; return { ok: true }; }
     uebernehmen(d.plan, p.sha);
     return { ok: true };
@@ -1157,10 +1157,21 @@ function apply(cmd) {
 // localStorage hängt am Browser. Bis PocketBase steht, ist der Export die
 // einzige echte Sicherung — deshalb der sichtbare Zustand oben rechts.
 let saveTimer = null;
+// Ein gescheitertes Sichern lässt store.dirty NICHT stehen (store.replace setzt
+// es zurück, bevor save() läuft). Deshalb merkt sich das EINE Variable: gesetzt
+// bei Fehlschlag, gelöscht bei Erfolg — Wechsel und Neuladen fragen sie ab.
+let ungesichert = false;
 function scheduleSave() {
   clearTimeout(saveTimer);
   setSaveState('dirty');
   saveTimer = setTimeout(() => { saveTimer = null; save(); }, 800);
+}
+// Entfernt ein Projekt; ein Schreibfehler des Index wird gemeldet, ändert aber
+// den Ablauf nicht.
+function entferne(id) {
+  const r = repo.remove(id);
+  if (!r.ok) toast(r.error, 'bad', 8000);
+  return r;
 }
 // EIN Weg, den Stand zu sichern und den Zustand anzuzeigen — für save() und
 // den Projektwechsel in open(). `still`: kein Toast (der Aufrufer fragt selbst).
@@ -1169,6 +1180,7 @@ async function sichern({ loud = false, still = false } = {}) {
   // await ist für localStorage folgenlos (synchrones Objekt) und lässt den
   // PocketBase-Durchschrieb (Promise) sein Ergebnis melden.
   const r = await repo.save(store.state);
+  ungesichert = !r.ok;
   if (r.ok) {
     store.markSaved();
     setSaveState('saved');
@@ -1293,8 +1305,12 @@ async function doImport(e) {
   // Erst öffnen, dann die Alten entfernen: bricht der Nutzer den Wechsel ab,
   // darf nichts gelöscht sein. Dieselbe id überschreibt open() ohnehin.
   if (!(await open(r.plan))) return;
-  for (const p of dupes) if (choice === 'replace' && p.id !== r.plan.project.id) repo.remove(p.id);
+  const weg = choice === 'replace' ? dupes.filter((p) => p.id !== r.plan.project.id) : [];
+  for (const p of weg) entferne(p.id);
   $('dlg').hidden = true;      // sonst bleibt der Anlege-Dialog über allem liegen
+  // Die alten Fassungen waren der Platz: erst jetzt kann der neue Plan passen.
+  // Scheitert es weiter, steht der Speicherfehler da — kein «importiert».
+  if (weg.length && ungesichert && !(await sichern()).ok) return;
   toast('«' + name + '» importiert');
 }
 
@@ -1331,7 +1347,7 @@ function showProjectDialog({ firstRun = false }) {
         });
         if (!ok) return;
         if (zurSync && !(await loescheImDatenRepo(p.id, sha))) return;
-        repo.remove(p.id);
+        entferne(p.id);
         showProjectDialog({ firstRun: repo.list().length === 0 });
       };
       row.append(b, del);
@@ -1348,7 +1364,11 @@ function showProjectDialog({ firstRun = false }) {
     const btn = el('button', 'dlg-open');
     btn.append(el('span', 'dlg-open-n', b.name));
     btn.append(el('span', 'dlg-open-m', 'aus ' + b.file + ' · Direktlink: ?plan=' + key));
-    btn.onclick = async () => { if (await openBundled(key)) close(); };
+    btn.onclick = async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;       // Doppelklick: sonst öffnen zwei Ladevorgänge zwei Dialoge
+      try { if (await openBundled(key)) close(); } finally { btn.disabled = false; }
+    };
     row.append(btn);
     bl.append(row);
   }

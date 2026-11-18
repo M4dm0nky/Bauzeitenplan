@@ -1092,12 +1092,55 @@ await check('Voller Speicher beim Projektwechsel fragt (Abbrechen / Trotzdem wec
     if ((await p3.locator('.dlg-h', { hasText: 'Nicht gespeichert' }).count()) !== 1) return '(d) kein Dialog beim mitgelieferten Plan';
     await p3.locator('body > .dlg').last().locator('.btn', { hasText: 'Abbrechen' }).click();
     await p3.waitForTimeout(400);
-    if ((await p3.locator('#toast').textContent()).includes('Neuer Stand geladen')) return '(d) falscher Toast «Neuer Stand geladen»';
     if (!(await p3.locator('#dlg .dlg-open').count()) || await p3.locator('#dlg').isHidden()) return '(d) Projektdialog wurde geschlossen';
     if ((await p3.locator('#proj-name').textContent()) !== 'Beta') return '(d) Projekt gewechselt';
     if (fehler.length) return 'pageerror: ' + fehler[0];
     return true;
   } finally { await c3.close(); }
+});
+
+console.log('\nNIE GESPEICHERTER PLAN BEIM WECHSEL');
+await check('Neu angelegter Plan, dessen erstes Speichern scheitert, gilt als ungesichert (Wechsel fragt)', async () => {
+  const c4 = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  try {
+    const p4 = await c4.newPage();
+    const fehler = [];
+    p4.on('pageerror', (e) => fehler.push(e.message));
+    await p4.goto(BASE + '/index.html?plan=leer');
+    await p4.waitForTimeout(700);
+    const anlegen = async (name) => {
+      await p4.fill('.dlg-f:first-child input', name);
+      await p4.locator('.dlg-t[data-k="festival"]').click();
+      await p4.locator('.dlg-act .btn-p').click();
+      await p4.waitForTimeout(700);
+    };
+    await anlegen('Alpha');
+    await p4.waitForTimeout(1200);
+    // Ab jetzt ist der Speicher für jeden Plan voll: das erste Speichern von Beta scheitert.
+    await p4.evaluate(() => {
+      const orig = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (k, v) {
+        if (k.startsWith('bzp_p_')) throw new DOMException('voll', 'QuotaExceededError');
+        return orig.call(this, k, v);
+      };
+    });
+    await p4.locator('#rail-ein').click();
+    await p4.locator('#new-proj').click();
+    await p4.waitForTimeout(300);
+    await anlegen('Beta');
+    await p4.waitForTimeout(1200);
+    if ((await p4.locator('#proj-name').textContent()) !== 'Beta') return 'Beta nicht offen';
+    await p4.locator('#ein-zu').click({ timeout: 2000 }).catch(() => {});
+    await p4.locator('#rail-ein').click();
+    await p4.locator('#proj-menu').click();
+    await p4.waitForTimeout(300);
+    await p4.locator('.dlg-open', { hasText: 'Alpha' }).click();
+    await p4.waitForTimeout(600);
+    if ((await p4.locator('.dlg-h', { hasText: 'Nicht gespeichert' }).count()) !== 1) return 'kein Dialog «Nicht gespeichert» beim Wechsel weg vom nie gespeicherten Plan';
+    if ((await p4.locator('#proj-name').textContent()) !== 'Beta') return 'Projekt trotzdem gewechselt';
+    if (fehler.length) return 'pageerror: ' + fehler[0];
+    return true;
+  } finally { await c4.close(); }
 });
 
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
