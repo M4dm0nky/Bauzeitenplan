@@ -19,6 +19,9 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 
 const speicherFehler = (e) => {
   const voll = e && (e.name === 'QuotaExceededError' || /quota/i.test(e.message || ''));
+  if (e && e.name === 'SecurityError') {
+    return 'Speicher gesperrt (Privatmodus) – Änderungen gelten nur für diese Sitzung. Bitte exportieren.';
+  }
   return voll
     ? 'Der Browser-Speicher ist voll. Exportiere den Plan als JSON und lösche alte Projekte.'
     : 'Speichern fehlgeschlagen: ' + ((e && e.message) || e);
@@ -249,8 +252,10 @@ export function createRepo(storage) {
 
     remove(id) {
       loesche(storage, K_PLAN(id));
-      try { writeIndex(readIndex().filter((x) => x.id !== id)); } catch { /* gesperrt */ }
+      let r = { ok: true };
+      try { writeIndex(readIndex().filter((x) => x.id !== id)); } catch (e) { r = { ok: false, error: speicherFehler(e) }; }
       if (this.getActive() === id) loesche(storage, K_ACTIVE);
+      return r;
     },
 
     syncInfo(id) {

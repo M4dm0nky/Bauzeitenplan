@@ -555,5 +555,33 @@ test('createRepo übersteht einen Speicher, der bei jedem Zugriff wirft', () => 
   assert.doesNotThrow(() => r.setActive('x'));
 });
 
+test('gesperrter Speicher (SecurityError) wird verständlich gemeldet', () => {
+  const s = new Map();
+  const st = { getItem: (k) => s.get(k) ?? null, setItem: () => { throw new DOMException('The operation is insecure.', 'SecurityError'); }, removeItem: (k) => s.delete(k) };
+  const r = createRepo(st).save({ project: { id: 'x', name: 'X' }, tasks: [], deps: [], gewerke: [] });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Speicher gesperrt/);
+  assert.match(r.error, /exportieren/i);
+  assert.doesNotMatch(r.error, /insecure/);
+});
+
+test('remove() meldet ok bzw. den Schreibfehler des Index', () => {
+  const s = new Map();
+  let sperre = false;
+  const st = {
+    getItem: (k) => s.get(k) ?? null,
+    setItem: (k, v) => { if (sperre) { const e = new Error('voll'); e.name = 'QuotaExceededError'; throw e; } s.set(k, v); },
+    removeItem: (k) => s.delete(k),
+  };
+  const repo = createRepo(st);
+  repo.save({ project: { id: 'x', name: 'X' }, tasks: [], deps: [], gewerke: [] });
+  repo.save({ project: { id: 'y', name: 'Y' }, tasks: [], deps: [], gewerke: [] });
+  assert.deepEqual(repo.remove('x'), { ok: true });
+  sperre = true;
+  const r = repo.remove('y');
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Speicher/);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);
