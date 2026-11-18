@@ -1,4 +1,4 @@
-import { createSync, kodiere, dekodiere, SYNC_REPO } from '../js/sync.js';
+import { createSync, kodiere, dekodiere, abgleich, SYNC_REPO } from '../js/sync.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -163,6 +163,43 @@ test('jeder Aufruf sendet Bearer-Header und cache:"no-store"', async () => {
     assert.equal(init.headers.Accept, 'application/vnd.github+json');
     assert.equal(init.headers['X-GitHub-Api-Version'], '2022-11-28');
   }
+});
+
+const eins = (lokal, remote) => abgleich(lokal, remote);
+test('abgleich: lokal fehlt, remote da -> herunterladen', () => {
+  assert.deepStrictEqual(eins([], [{ id: 'a', sha: 's1' }]), [{ art: 'herunterladen', id: 'a', sha: 's1' }]);
+});
+test('abgleich: remoteSha null, remote fehlt -> hochladen (sha null)', () => {
+  assert.deepStrictEqual(eins([{ id: 'a', remoteSha: null, dirty: true }], []), [{ art: 'hochladen', id: 'a', sha: null }]);
+});
+test('abgleich: remoteSha gesetzt, nicht dirty, remote fehlt -> lokal-loeschen', () => {
+  assert.deepStrictEqual(eins([{ id: 'a', remoteSha: 's1', dirty: false }], []), [{ art: 'lokal-loeschen', id: 'a' }]);
+});
+test('abgleich: remoteSha gesetzt, dirty, remote fehlt -> hochladen (sha null)', () => {
+  assert.deepStrictEqual(eins([{ id: 'a', remoteSha: 's1', dirty: true }], []), [{ art: 'hochladen', id: 'a', sha: null }]);
+});
+test('abgleich: sha gleich, nicht dirty -> keine Aktion', () => {
+  assert.deepStrictEqual(eins([{ id: 'a', remoteSha: 's1', dirty: false }], [{ id: 'a', sha: 's1' }]), []);
+});
+test('abgleich: sha gleich, dirty -> hochladen (sha)', () => {
+  assert.deepStrictEqual(eins([{ id: 'a', remoteSha: 's1', dirty: true }], [{ id: 'a', sha: 's1' }]), [{ art: 'hochladen', id: 'a', sha: 's1' }]);
+});
+test('abgleich: sha verschieden, nicht dirty -> herunterladen', () => {
+  assert.deepStrictEqual(eins([{ id: 'a', remoteSha: 's1', dirty: false }], [{ id: 'a', sha: 's2' }]), [{ art: 'herunterladen', id: 'a', sha: 's2' }]);
+});
+test('abgleich: sha verschieden, dirty -> konflikt', () => {
+  assert.deepStrictEqual(eins([{ id: 'a', remoteSha: 's1', dirty: true }], [{ id: 'a', sha: 's2' }]), [{ art: 'konflikt', id: 'a', sha: 's2' }]);
+});
+test('abgleich: remoteSha null, remote da -> konflikt (dirty und nicht)', () => {
+  for (const dirty of [true, false])
+    assert.deepStrictEqual(eins([{ id: 'a', remoteSha: null, dirty }], [{ id: 'a', sha: 's2' }]), [{ art: 'konflikt', id: 'a', sha: 's2' }]);
+});
+test('abgleich: Reihenfolge lokal zuerst, dann nur-remote, je in Eingabereihenfolge', () => {
+  assert.deepStrictEqual(
+    eins([{ id: 'b', remoteSha: null, dirty: true }, { id: 'a', remoteSha: null, dirty: true }],
+         [{ id: 'z', sha: 'sz' }, { id: 'y', sha: 'sy' }]),
+    [{ art: 'hochladen', id: 'b', sha: null }, { art: 'hochladen', id: 'a', sha: null },
+     { art: 'herunterladen', id: 'z', sha: 'sz' }, { art: 'herunterladen', id: 'y', sha: 'sy' }]);
 });
 
 for (const [name, fn] of tests) {

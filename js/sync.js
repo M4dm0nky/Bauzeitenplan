@@ -81,3 +81,26 @@ export function createSync({ fetch, token, repo, branch = 'main' }) {
     },
   };
 }
+
+// Entscheidung je Projekt: was tun, damit lokal und Daten-Repo übereinstimmen?
+// Rein, ohne DOM und Netz. Lokale zuerst (Eingabereihenfolge), dann nur-remote.
+export function abgleich(lokal, remote) {
+  const rem = new Map(remote.map((r) => [r.id, r.sha]));
+  const aus = [];
+  for (const l of lokal) {
+    if (!rem.has(l.id)) {
+      if (l.remoteSha == null) aus.push({ art: 'hochladen', id: l.id, sha: null });
+      else if (!l.dirty) aus.push({ art: 'lokal-loeschen', id: l.id });
+      else aus.push({ art: 'hochladen', id: l.id, sha: null });
+      continue;
+    }
+    const sha = rem.get(l.id);
+    if (l.remoteSha == null) aus.push({ art: 'konflikt', id: l.id, sha });
+    else if (l.remoteSha === sha) {
+      if (l.dirty) aus.push({ art: 'hochladen', id: l.id, sha });
+    } else aus.push({ art: l.dirty ? 'konflikt' : 'herunterladen', id: l.id, sha });
+  }
+  const lok = new Set(lokal.map((l) => l.id));
+  for (const r of remote) if (!lok.has(r.id)) aus.push({ art: 'herunterladen', id: r.id, sha: r.sha });
+  return aus;
+}
