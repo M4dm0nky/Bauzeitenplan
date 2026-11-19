@@ -3,6 +3,20 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unveröffentlicht
+
+**Die Bedienschwächen aus dem Review sind behoben.**
+
+- Beim Öffnen und beim Springen auf einen Tag steht ein Tag mit Vorgängen im Bild, nicht mehr ein leeres Blatt. Die App scrollt zur ersten Gruppe, die an diesem Tag etwas hat, und lässt deren Gruppenzeile mit dem Gewerk-Namen stehen. Das gilt auch auf dem Handy.
+- Im Live-Modus steht das ⚠ nur noch an Vorgängen, die wirklich in Verzug sind: noch nicht begonnen, obwohl sie laufen sollten, oder auf «läuft» und überzogen. Längst vergangene, nie abgehakte Einträge bleiben still. Im Showablauf gilt das auch für Meilensteine wie «SHOW END». Kopfzeile, Live-Leiste und Zeilen zählen nach derselben Regel.
+- Der Tooltip verschwindet, sobald ein Balken ausgewählt wird, und steht nicht mehr neben dem Panel.
+- Leere Ansichten bieten genau einen passenden Knopf an: «+ Vorgang» oder «+ Zeiteintrag», «+ Gewerk» oder «+ Bühne». Das gilt im Gantt und in der Tabelle. Ein leerer Bedarf führt mit einem Knopf zu «Personal & Maschinen einrichten…».
+- Die Zoomstufe ist ein Knopf im Stil der App mit eigenem Menü, statt des grauen Browser-Klappmenüs. Sie ist per Tastatur bedienbar.
+- «🖨 Drucken» steht oben rechts in der Kopfzeile, in beiden Modi. Im Bauzeitenplan öffnet es die Tagesblätter, im Showablauf die Running Order des gezeigten Abschnitts.
+- Die Druckvorschau passt das A3-Blatt ins Fenster ein, mit Rand auf beiden Seiten. Der Druck selbst bleibt 1:1.
+- Auf dem Handy belegt der Kopf höchstens 300 statt rund 470 px, ohne dass ein Knopf wegfällt. Der Plan hat mindestens die halbe Bildschirmhöhe. Tastaturhinweise sind dort ausgeblendet.
+- Liegt «heute» hinter dem Planende, lässt sich die Seite nicht mehr seitlich verschieben.
+
 ## 0.15.0 — 2026-11-18
 
 **Die drei offenen Punkte aus v0.14.0 sind erledigt.**
