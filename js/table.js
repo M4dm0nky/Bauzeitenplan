@@ -76,7 +76,15 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     const tbody = el('tbody');
     const gewerke = sichtGewerke(S, ebene, ausBlend);
 
-    for (const g of gewerke) {
+    // Gibt es im gezeigten Ausschnitt gar nichts, bietet die ERSTE Leerzeile den
+    // Knopf an; leere Gruppen daneben haben ihren im Gruppenkopf.
+    const gezeigt = (g) => {
+      const a = S.tasks.filter((t) => t.gewerk === g.id);
+      return ebene === 'show' ? amTag(imAbschnitt(a, abschnitt), tag) : a;
+    };
+    const ganzLeer = gewerke.every((g) => !gezeigt(g).some((t) => t.parent == null));
+
+    for (const [gi, g] of gewerke.entries()) {
       // Denselben Tagesausschnitt wie der Gantt — sonst zeigt derselbe Plan in
       // zwei Ansichten zwei verschiedene Tage.
       // Denselben Ausschnitt wie der Gantt: Abschnitt, dann Tag.
@@ -122,11 +130,13 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
       if (!tops.length) {
         const er = el('tr', 'tb-empty');
         const ec = el('td'); ec.colSpan = breite;
-        ec.append('Noch nichts eingetragen. ');
-        // Derselbe Weg wie der Knopf in der Gruppenzeile (addRow), kein zweiter.
-        const ea = el('button', 'tb-add btn', ebene === 'show' ? '+ Zeiteintrag' : '+ Vorgang');
-        ea.onclick = () => addRow(g.id, null);
-        ec.append(ea);
+        ec.append('Noch nichts eingetragen.');
+        if (ganzLeer && gi === 0) {
+          // Derselbe Weg wie der Knopf in der Gruppenzeile (addRow), kein zweiter.
+          const ea = el('button', 'tb-add btn', ebene === 'show' ? '+ Zeiteintrag' : '+ Vorgang');
+          ea.onclick = () => addRow(g.id, null);
+          ec.append(' ', ea);
+        }
         er.append(ec); tbody.append(er);
       }
     }

@@ -1170,12 +1170,13 @@ await check('Leere Tabelle, Bedarf und Showablauf ohne Bühne bieten den passend
     // (a) Tabelle ohne Vorgänge: Knopf in der Leerzeile legt EINEN Vorgang an.
     await p5.locator('[data-view="tabelle"]').click();
     await p5.waitForTimeout(300);
-    const kn = p5.locator('.tb-empty .tb-add').first();
-    if (!(await kn.isVisible())) return '(a) kein Anlegen-Knopf in der leeren Tabelle';
+    const kn = p5.locator('.tb-empty .tb-add');
+    if ((await kn.count()) !== 1) return `(a) ${await kn.count()} Leerzeilen-Knöpfe statt genau 1`;
     await kn.click();
     await p5.waitForTimeout(300);
     const n = await p5.locator('.tb-r').count();
     if (n !== 1) return `(a) ${n} Zeilen statt 1`;
+    if ((await p5.locator('.tb-empty .tb-add').count()) !== 0) return '(a) nach dem Anlegen noch Leerzeilen-Knöpfe';
     await p5.screenshot({ path: join(here, 'shots', 'edit-leer-tabelle.png') });
     // (b) Bedarf ohne Bezeichnungen: Knopf öffnet Einrichten auf «Personal & Maschinen».
     await p5.locator('[data-view="bedarf"]').click();
