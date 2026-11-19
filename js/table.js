@@ -30,7 +30,7 @@ const SPALTEN = {
     ['Anforderungen', 'c-anf'], ['Material', 'c-mat'], ['Ressourcen', 'c-res'], ['Status', 'c-st'], ['', 'c-act']],
 };
 
-export function createTable(root, { store, onConflicts, onHinweis } = {}) {
+export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnlegen } = {}) {
   root.classList.add('tb');
   let conflicts = new Map();
   // Welche Ebene die Tabelle zeigt. Anzeige-Zustand wie `collapsed` — die App
@@ -122,7 +122,11 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
       if (!tops.length) {
         const er = el('tr', 'tb-empty');
         const ec = el('td'); ec.colSpan = breite;
-        ec.textContent = 'Noch nichts eingetragen.';
+        ec.append('Noch nichts eingetragen. ');
+        // Derselbe Weg wie der Knopf in der Gruppenzeile (addRow), kein zweiter.
+        const ea = el('button', 'tb-add btn', ebene === 'show' ? '+ Zeiteintrag' : '+ Vorgang');
+        ea.onclick = () => addRow(g.id, null);
+        ec.append(ea);
         er.append(ec); tbody.append(er);
       }
     }
@@ -133,9 +137,12 @@ export function createTable(root, { store, onConflicts, onHinweis } = {}) {
     if (!gewerke.length) {
       const er = el('tr', 'tb-empty');
       const ec = el('td'); ec.colSpan = breite;
-      ec.textContent = ebene === 'show'
-        ? 'Noch keine Bühne angelegt.'
-        : 'Noch kein Gewerk angelegt.';
+      ec.append(ebene === 'show' ? 'Noch keine Bühne angelegt. ' : 'Noch kein Gewerk angelegt. ');
+      if (onGewerkAnlegen) {
+        const ea = el('button', 'tb-add btn btn-p', ebene === 'show' ? '+ Bühne' : '+ Gewerk');
+        ea.onclick = () => onGewerkAnlegen(ea);
+        ec.append(ea);
+      }
       er.append(ec); tbody.append(er);
     }
 

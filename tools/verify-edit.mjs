@@ -1154,6 +1154,57 @@ await check('Neu angelegter Plan, dessen erstes Speichern scheitert, gilt als un
   } finally { await c4.close(); }
 });
 
+console.log('\nLEERE ZUSTÄNDE');
+await check('Leere Tabelle, Bedarf und Showablauf ohne Bühne bieten den passenden Knopf an', async () => {
+  const c5 = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  try {
+    const p5 = await c5.newPage();
+    const fehler = [];
+    p5.on('pageerror', (e) => fehler.push(e.message));
+    await p5.goto(BASE + '/index.html?plan=leer');
+    await p5.waitForTimeout(700);
+    await p5.fill('.dlg-f:first-child input', 'Leerplan');
+    await p5.locator('.dlg-t[data-k="leer"]').click();
+    await p5.locator('.dlg-act .btn-p').click();
+    await p5.waitForTimeout(700);
+    // (a) Tabelle ohne Vorgänge: Knopf in der Leerzeile legt EINEN Vorgang an.
+    await p5.locator('[data-view="tabelle"]').click();
+    await p5.waitForTimeout(300);
+    const kn = p5.locator('.tb-empty .tb-add').first();
+    if (!(await kn.isVisible())) return '(a) kein Anlegen-Knopf in der leeren Tabelle';
+    await kn.click();
+    await p5.waitForTimeout(300);
+    const n = await p5.locator('.tb-r').count();
+    if (n !== 1) return `(a) ${n} Zeilen statt 1`;
+    await p5.screenshot({ path: join(here, 'shots', 'edit-leer-tabelle.png') });
+    // (b) Bedarf ohne Bezeichnungen: Knopf öffnet Einrichten auf «Personal & Maschinen».
+    await p5.locator('[data-view="bedarf"]').click();
+    await p5.waitForTimeout(300);
+    // «Crew» entsteht mit dem Vorgang aus (a); Maschinen bleiben leer.
+    await p5.locator('[data-bedarf="maschine"]').click();
+    await p5.waitForTimeout(200);
+    const bk = p5.locator('.bd-empty button');
+    if (!(await bk.isVisible())) return '(b) kein Knopf im leeren Bedarf';
+    await bk.click();
+    await p5.waitForTimeout(300);
+    if (!(await p5.locator('#ein-dlg').isVisible())) return '(b) Einrichten nicht offen';
+    if ((await p5.locator('[data-ein="res"]').getAttribute('aria-pressed')) !== 'true') return '(b) Reiter «Personal & Maschinen» nicht gewählt';
+    await p5.locator('#ein-zu').click();
+    // (c) Showablauf ohne Bühne: «+ Bühne» öffnet den Namenskasten.
+    await p5.locator('[data-view="tabelle"]').click();
+    await p5.locator('.rail-m:not(.rail-ein)').nth(1).click();
+    await p5.waitForTimeout(400);
+    const bu = p5.locator('.tb-empty .tb-add');
+    if (!(await bu.count())) return '(c) kein Knopf ohne Bühne';
+    if (!/Bühne/.test(await bu.first().textContent())) return '(c) Beschriftung: ' + await bu.first().textContent();
+    await bu.first().click();
+    await p5.waitForTimeout(300);
+    if (!(await p5.locator('.tb-neuart').isVisible())) return '(c) Namenskasten fehlt';
+    if (fehler.length) return 'pageerror: ' + fehler[0];
+    return true;
+  } finally { await c5.close(); }
+});
+
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 

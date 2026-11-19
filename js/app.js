@@ -288,8 +288,9 @@ function mount() {
     store,
     onConflicts: ({ error }) => toast(error, 'bad'),
     onHinweis: (text) => toast(text),
+    onGewerkAnlegen: (anker) => addGewerk(anker),
   });
-  bedarf = createBedarf($('bd'), { store });
+  bedarf = createBedarf($('bd'), { store, onEinrichten: (tab) => openEinrichten(tab) });
   inspector = createInspector($('ins'), {
     store,
     onError: (msg) => toast(msg, 'bad'),
@@ -455,9 +456,9 @@ function setEinTab(name) {
   if (name === 'sync') paintSyncInfo();
 }
 
-function openEinrichten() {
+function openEinrichten(tab = 'projekt') {
   $('ein-dlg').hidden = false;
-  setEinTab('projekt');
+  setEinTab(typeof tab === 'string' ? tab : 'projekt');
   $('ein-zu').focus();
 }
 
@@ -1233,7 +1234,7 @@ function refreshChrome() {
 }
 
 // ── Gewerk anlegen ──────────────────────────────────────────────────────────
-function addGewerk() {
+function addGewerk(anker) {
   const buehne = ebene === 'show';
   const wort = buehne ? 'Bühne' : 'Gewerk';
   // Je Ebene gezählt: Gewerke und Bühnen teilen sich die Palette nicht, weil sie
@@ -1248,7 +1249,7 @@ function addGewerk() {
   table.openNeuFragen({
     titel: buehne ? 'Name der Bühne (z. B. Hauptbühne, Zelt, Halle 3)' : 'Name des Gewerks',
     buildCmd: (name) => ({ type: 'addGewerk', gewerk: { name, art: buehne ? 'buehne' : 'gewerk' } }),
-  }, $('add-gewerk'), () => syncBuehnen());
+  }, anker instanceof Element ? anker : $('add-gewerk'), () => syncBuehnen());
 }
 
 // ── Export / Import ─────────────────────────────────────────────────────────

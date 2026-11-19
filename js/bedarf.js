@@ -10,7 +10,7 @@ import { sichtTasks, amTag, programmFenster } from './ebene.js';
 import { ressourcen, bedarfsRaster } from './resources.js';
 import { el } from './dom.js';
 
-export function createBedarf(root, { store } = {}) {
+export function createBedarf(root, { store, onEinrichten } = {}) {
   root.classList.add('bd');
   let ebene = 'bau';
   let ausBlend = new Set();
@@ -23,9 +23,14 @@ export function createBedarf(root, { store } = {}) {
     const S = store.state;
     const resList = ressourcen(S, kind);
     if (!resList.length) {
-      root.append(el('div', 'bd-empty',
-        'Noch keine ' + (kind === 'personal' ? 'Personal-' : 'Maschinen-') + 'Bezeichnung angelegt — '
-        + 'im Panel eines Vorgangs unter «+ ' + (kind === 'personal' ? 'Personal' : 'Maschine') + '» → «+ Neu…».'));
+      const leer = el('div', 'bd-empty',
+        'Noch keine ' + (kind === 'personal' ? 'Personal-' : 'Maschinen-') + 'Bezeichnung angelegt. ');
+      if (onEinrichten) {
+        const b = el('button', 'btn btn-p', '+ ' + (kind === 'personal' ? 'Personal' : 'Maschine') + ' anlegen');
+        b.onclick = () => onEinrichten('res');
+        leer.append(b);
+      }
+      root.append(leer);
       return;
     }
 
