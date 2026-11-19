@@ -3,14 +3,15 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
-## Unveröffentlicht
+## 0.17.0 — 2026-11-19
 
 **Schnell finden: ein Suchfeld in der Kopfzeile.**
 
-- «🔍 Suchen…» oben rechts (auf dem Handy in der Knopfzeile): Tippen zeigt die Treffer nach Gewerk bzw. Bühne mit Datum und Uhrzeit. Gefunden wird in Titel, Gewerk/Bühne, Notiz und Kontakt. Enter oder Klick springt zum Tag, klappt die Gruppe auf, holt die Zeile ins Bild und wählt den Vorgang aus. Im Showablauf wechselt ein Treffer an einem anderen Showtag den Tag mit.
+- «🔍 Suchen…» oben rechts (auf dem Handy in der Knopfzeile): Tippen zeigt die Treffer nach Gewerk bzw. Bühne mit Datum und Uhrzeit — bei gesetztem Versatz die verschobene Uhrzeit. Gefunden wird in Titel, Gewerk/Bühne, Notiz und Kontakt, auch Zieltermine wie «Showende». Enter oder Klick springt zum Tag, klappt die Gruppe auf, holt die Zeile ins Bild und wählt den Vorgang aus. Im Showablauf wechselt ein Treffer an einem anderen Showtag den Tag mit.
+- Im Live-Modus bleibt die Ansicht nach einem Sprung (Suche, «Zeigen» in der Prüf-Liste) 60 Sekunden auf dem Ziel stehen und folgt danach wieder der Uhr.
 - `/` springt ins Suchfeld (nicht, solange man in einem Feld tippt), ↑/↓ wählt, Escape schließt. ⌘F bleibt die Browsersuche.
 - Auf dem Handy zeigt «Drucken» nur noch das 🖨-Symbol, damit der Kopf kompakt bleibt.
-- Unter der Haube: CLAUDE.md von 60 000 auf 21 000 Zeichen verdichtet (Begründungen in `docs/entscheidungen.md`), eine Prüfung hält die Größe. Eine weitere Prüfung verhindert Tests, die hinter dem Abschluss einer Testdatei stehen und deshalb nie laufen.
+- Unter der Haube: CLAUDE.md von 60 000 auf 8 300 Zeichen Kern verdichtet; Themenregeln stehen in `.claude/rules/` und laden nur, wenn die passenden Dateien bearbeitet werden; Begründungen in `docs/entscheidungen.md`. Prüfungen halten die Größe und dass jede Regeldatei auf echte Dateien zeigt. Eine weitere Prüfung verhindert Tests, die hinter dem Abschluss einer Testdatei stehen und deshalb nie laufen.
 
 ## 0.16.0 — 2026-11-19
 
