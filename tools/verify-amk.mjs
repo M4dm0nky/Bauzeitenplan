@@ -55,6 +55,16 @@ await check('37 Vorgänge', async () => {
   const t = await p.locator('.kpi', { hasText: 'Vorgänge' }).locator('.kpi-v').textContent();
   return t.trim() === '37' ? true : t;
 });
+await check('Suche findet einen Zieltermin («Showende», gewerk «projekt») und springt hin', async () => {
+  await p.fill('#suche', 'showende');
+  await p.waitForTimeout(250);
+  const n = await p.locator('#suche-liste .suche-i').count();
+  if (n < 1) return 'keine Treffer: ' + (await p.locator('#suche-liste').innerText());
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(500);
+  const panel = await p.locator('#ins').innerText().catch(() => '');
+  return /showende/i.test(panel) ? true : 'Panel ohne «Showende»: ' + panel.slice(0, 60);
+});
 await check('Plan startet OHNE Konflikte', async () =>
   (await p.locator('#resolve').isHidden()) ? true : 'Konfliktknopf sichtbar');
 await check('Balken sind sichtbar (Ansicht steht beim Aufbau)', async () => {

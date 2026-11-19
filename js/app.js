@@ -297,7 +297,17 @@ function mount() {
   // Häkchen aus sind: ein Treffer, den ein Filter verschluckt, wäre «gibt's
   // nicht». Der Sprung stellt dann das Häkchen wieder an (springeZu).
   suche = createSuche($('suche'), $('suche-liste'), {
-    daten: () => ({ tasks: sichtTasks(store.state, ebene), gewerke: sichtGewerke(store.state, ebene) }),
+    // Wie der Gantt (syncState): im Bauzeitenplan gehören die Zieltermine
+    // (`gewerk: 'projekt'`, ohne Band) dazu — sonst sind «Doors» und «Abnahme»
+    // nicht zu finden. Der Versatz geht mit, die Liste zeigt verschobene Zeiten.
+    daten: () => ({
+      tasks: ebene === 'bau'
+        ? [...sichtTasks(store.state, ebene), ...store.state.tasks.filter((t) => t.gewerk === 'projekt')]
+        : sichtTasks(store.state, ebene),
+      gewerke: sichtGewerke(store.state, ebene),
+      versatz: gantt.versatz,
+      ebene,
+    }),
     onWahl: springeZu,
     blockiert: () => !!document.querySelector('.dlg:not([hidden])'),
   });
