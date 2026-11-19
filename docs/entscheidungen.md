@@ -159,6 +159,32 @@ nach Plan lief. Das ist keine Verspätung, sondern eine fehlende Rückmeldung. D
 «Status wird nie automatisch gesetzt» bleibt unberührt: gefiltert wird die Anzeige,
 nicht die Rechnung.
 
+**Im BAUZEITENPLAN zeigt der Gantt eine Zeile je VORGANGSNAME, einen Balken je Termin**(`seriesRows` in schedule.js, DOM-frei und getestet). Ein Bauzeitenplan
+wird tageweise gedruckt, deshalb steht dieselbe Tätigkeit mehrfach in der Quelle —
+das sind keine verschiedenen Vorgänge. 353 Vorgänge ergeben **153 Zeilen**
+(Zeilenzahl ohne Bündelung: siehe oben).
+Überlappen sich zwei Termine einer Serie, bekommen sie **Spuren** (`--lane`,
+Zeilenhöhe `rowH × lanes`) — sonst lägen sie übereinander. Marken (Konflikt, KRIT)
+gelten für die Zeile als Ganzes, Umbenennen benennt die ganze Serie um. **Die
+Tabelle bleibt flach**: sie ist der Editor, dort gehört jeder Termin einzeln
+bearbeitbar. Beide Ansichten sortieren weiter über `byStart`.
+
+**Im SHOWABLAUF wird NICHT gebündelt**(`buendeln` in gantt.js). Dort ist die
+Reihenfolge der Zeilen der ABLAUF selbst — Einlass, Band, Umbau, Band, Umbau —,
+und den liest man von oben nach unten. mit sechs Balken, die zwischen den Acts hing, und die Zeilenfolge
+richtete sich nach dem frühesten Termin jeder Serie statt nach dem Abend. Jeder
+Programmpunkt trägt seine eigene Zeile, `lanes` ist immer 1: zwei gleichzeitige
+Dinge auf einer Bühne sind zwei Zeilen, keine Spuren. **Uhrzeit und Dauer stehen
+links vor dem Namen** (`bz-lab-zeit`/`bz-lab-dauer`, beide mit fester Breite und
+`tabular-nums`, damit die Namen auf einer Kante beginnen) — damit ist die
+Seitenspalte allein schon der Ablaufplan: `14:00 Uhr (30 min) CREUTZFELD & JAKOB`.
+
+**Die Dauer in MINUTEN**, nicht in «0,5 h»: bei einem Ablauf zählt man Minuten.
+Ein Meilenstein bekommt einen Strich, keine Null. Im Bauzeitenplan wäre beides
+falsch: dort stünde eine Uhrzeit stellvertretend für mehrere Termine.
+`seriesRows` bleibt unangetastet — die Funktion ist richtig, der Showablauf ruft
+sie nur nicht auf.
+
 ## Der Abschnitt: Setup und Show sind zwei Abläufe DERSELBEN Bühne
 
 Am Showtag laufen zwei Dinge mit ganz verschiedenen Uhrzeiten und verschiedenen
@@ -214,6 +240,8 @@ gerechnet.** Gefüllte Balken tragen ihre Beschriftung auf der Farbe. Weiß erre
 auf Gelb nur 2,17:1; gewählt ist je Ton die Tinte, die in hell UND dunkel über 3:1
 bleibt — dunkel auf sieben Tönen, weiß auf Violett, Grün und Ocker. Eine statische
 Prüfung rechnet das bei jedem Testlauf nach.
+
+**Neben jedem Farbton steht seine SCHRIFTFARBE (`--gw-t-*`), und die ist ebenfalls gerechnet** — dunkle Tinte erreicht auf Gelb 8,23:1 (Weiß nur 2,17:1); auf Violett, Grün und Ocker ist es umgekehrt. Es sind deshalb feste Werte ohne Dunkel-Scope, und die Prüfung «Schrift auf Gewerkfarbe hält 3:1» in `tests/run.mjs` schlägt an, sobald jemand an `--gw-*` dreht.
 
 ## Zeitfelder im Showablauf tragen kein Datum
 
@@ -351,6 +379,12 @@ Tick später.
 
 In Kauf genommen: Dauer und Ende aktualisieren sich erst beim Verlassen des
 Feldes. Beim Tippen ist das ohnehin das erwartete Verhalten.
+
+**In der Tabelle nur an `change` hängen, nie zusätzlich an `blur`.**Das erste
+`change` baut die Tabelle neu, der alte Knoten wird abgehängt und feuert danach
+trotzdem sein `blur` — mit dem veralteten Objekt aus der Closure. Jede Änderung
+lag dadurch doppelt auf dem Undo-Stapel und ⌘Z wirkte kaputt. Handler lesen den
+Stand immer frisch aus dem Store (`cur(id)`), nie aus der Closure.
 
 ## Verwalten: löschen nur, was niemand benutzt
 
@@ -539,6 +573,32 @@ man ohnehin hinschaut, wenn man Personal plant: am Balken und im Panel des
 betroffenen Vorgangs — ohne Alarmfarbe, denn eine Lücke ist eine Information,
 kein Fehler.
 
+**Personal & Maschinen: eine Zuweisung ist `{Bezeichnung, Anzahl, Zeitfenster}`, keine blanke Zahl.**`t.res = [{rid, n, von, bis}]` ersetzt das frühere `crew`
+(eine Person je Vorgang, ohne Bezeichnung, ohne eigenes Fenster). `von`/`bis`
+= `null` heißt „der ganze Vorgang" — der Normalfall, dabei tippt niemand ein
+Datum; gesetzt sind es Zeitstempel wie `start`/`end` und MÜSSEN innerhalb der
+Vorgangsdauer liegen (`setTaskRes` in store.js) — ein Helfer, der vor dem
+Vorgang anfängt, ist ein Tippfehler, kein Fall. Bezeichnungen (Stagehand,
+Gabelstapler …) stehen in `project.ressourcen` (`kind: 'personal'|'maschine'`)
+und reisen im Export mit, genau wie Eintragsarten und Abschnitte — und gehen
+denselben Verwaltungsweg: `addRessource` plus dieselben drei generischen
+Befehle `setAuswahlLabel`/`removeAuswahl`/`reorderAuswahl` mit
+`liste:'ressourcen'`. **Anders als bei Arten und Abschnitten gibt es keine
+eingebauten** — «Stagehand» heißt bei der nächsten Produktion «Helfer», eine
+Vorgabe wäre nur eine weitere Löschkandidatin. `res` MUSS durch `addTask` —
+was der Handler nicht aufzählt, fällt beim Anlegen still weg, dieselbe Falle
+wie bei `abschnitt`.
+
+**`crew` ist keine Ressource — es ist die MIGRIERTE Ressource «Crew».**Beim
+Laden wandelt `persistence.js` jede blanke `crew: N` einmalig in
+`res: [{rid:'crew', n:N, von:null, bis:null}]` und legt bei Bedarf die
+Bezeichnung «Crew» im Plan an; danach ist `crew` gelöscht. Erzeugend wie die
+Soundcheck-Migration (v0.9.3) — sie darf beim zweiten Durchlauf keine zweite
+Zuweisung anlegen, geprüft in `tests/persistence.test.mjs`. Die vier Vorlagen
+(`js/templates.js`) bauen ihre Pläne direkt und laufen NICHT durch `migrate()`
+— `planFromTemplate` übersetzt ihr `crew`-Extra deshalb selbst in `res` und
+trägt die Bezeichnung «Crew» ins neue Projekt.
+
 ## Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand
 
 > **Stand v0.12.0 überholt.** `setReiter()` und die Reiterleiste gibt es nicht
@@ -643,6 +703,35 @@ Tabelle durch ihre Kopfzeile und die Schiene daneben. Eine zusätzliche
 auf den Screenshot gestrichen: sie wiederholt, was die Schiene und der
 Spaltenkopf schon sagen — und mehr Chrome war genau das Gegenteil des Auftrags.
 
+**Was im aktiven Modus nichts bedeutet, steht nicht da.**`setAnsicht()` blendet
+`#seg-abschnitt` außerhalb des Showablaufs aus und `.hd-zoom` außerhalb von
+Bauzeitenplan+Plan-Darstellung; `syncBuehnen()` zeigt die Bühnen-Häkchen nur im
+Showablauf. Aus den 22 gleichzeitig sichtbaren Bedienelementen (siehe oben) wurden 12 im
+Bauzeitenplan und 10 im Showablauf; mit dem Drucken-Knopf rechts
+(`#drucken`, beide Modi, Ziel je Modus in `data-href`) sind es 13 und 11. Die
+Zoomstufe ist ein App-Knopf mit `openMenu`, kein `<select>`. **Nachgezählt, nicht geschätzt** —
+gezählt werden die sichtbaren `button`, `input` und `select` in `.hd-bar` beim
+Klassentreffen-Plan mit einer Bühne, ohne Live und ohne offenen Konflikt. Wer
+die Zahl anzweifelt, zählt mit demselben Maß nach.
+
+Wer einen Knopf hinzufügt, sagt zuerst, in welchem Modus er etwas bedeutet —
+und blendet ihn im anderen aus.
+
+**Die Knöpfe sind dieselben Elemente, nur umgezogen — keine zweite Verdrahtung.**`#export`, `#import`, `#new-proj`, `#proj-menu`, `#add-gewerk`,
+`#theme-toggle` behalten ihre ids und ihre Handler aus `mount()`/Modulebene;
+sie stehen seit v0.12.0 im Fenster `#ein-dlg`, je Reiter eine `.ei-sec` mit
+`data-ein-tab`. Wer eine dieser ids programmatisch anklickt (Prüfwerkzeuge!),
+muss vorher `#rail-ein` klicken UND den Reiter, in dem der Knopf liegt
+(`[data-ein="baender"]` für `#add-gewerk`) — sonst ist er unsichtbar und der
+Playwright-Klick schlägt fehl. `tools/verify-edit.mjs` macht das vor.
+
+**Verwalten-Kästen lassen sich von außen öffnen.**`table.openVerwalten(opt,
+ankerEl)` und `table.openNeuFragen(opt, ankerEl, fertig)` rufen dieselben
+privaten Funktionen wie das Auswahlfeld in der Tabelle — das Einrichten-Fenster
+bekommt damit „Arten verwalten…", „Abschnitte verwalten…" und „Personal &
+Maschinen verwalten…" GESCHENKT, ohne die Kasten-Logik (rename, sortieren,
+löschen, Fokus, Escape, Klick daneben) ein zweites Mal zu schreiben.
+
 ## Bekannte Grenze: Zeitzone des Betrachters
 
 `toMin()` rechnet in der Zone des Browsers, nicht in der des Projekts. Folge:
@@ -673,11 +762,52 @@ Vorlagen (`js/templates.js`) bzw. importierten JSON-Plänen — einen
 
 ## Begründungen zu den Regeln in CLAUDE.md
 
-Zu jeder Regel in `CLAUDE.md` steht hier die ausführliche Fassung mit Begründung und Vorgeschichte, im alten Wortlaut. Die Überschrift ist die fett gesetzte Einleitung der Regel, damit man sie findet. Stand: die CLAUDE.md vor dem Verdichten (v0.16.0). Die Regel gilt in der Fassung von `CLAUDE.md`; hier steht, warum.
+Die Regeln stehen in `CLAUDE.md`; hier steht, warum. Wo das Thema schon einen eigenen Abschnitt hat, steht die Begründung dort (Tabelle unten, sonst als fetter Einstieg am Ende des Abschnitts). Neues steht darunter, je Regel eine Überschrift mit demselben Wortlaut wie in `CLAUDE.md`.
+
+### Regeln, deren Begründung in einem eigenen Abschnitt steht
+
+| Regel in CLAUDE.md | Begründung steht in |
+|---|---|
+| Gewerk-Farben (`styles/base.css`, `--gw-*`) nicht per Hand ändern. | «Gewerk-Farben sind gerechnet» |
+| Neben jedem Farbton steht seine SCHRIFTFARBE (`--gw-t-*`), und die ist ebenfalls gerechnet. | «Farbe: gewählt AUS der Palette, nie neu definiert» |
+| Die Farbe eines PROGRAMMPUNKTS ist wählbar, die eines GEWERKS nicht. | «Farbe: gewählt AUS der Palette, nie neu definiert» |
+| Balkenbeschriftung nicht entfernen. | «Gewerk-Farben sind gerechnet» |
+| Zeiten immer aus echten Zeitstempeln rechnen | «Zeitzonen» |
+| `nowInZone` darf nie stumm zurückfallen | «Zeitzonen» |
+| Zoomstufen in sichtbarer Zeitspanne bemessen | «Zoomstufen sind nach Sichtbarkeit bemessen, nicht nach runden Zahlen» |
+| Ein `render()` der Tabelle wartet, solange in dem Feld getippt wird, das ihn ausgelöst hat. | «Die Tabelle wartet mit dem Neuaufbau, solange getippt wird» |
+| Der Versatz verschiebt den ABLAUF, nie die UHR | «Der Live-Versatz verschiebt den Ablauf, nicht die Uhr» |
+| Im Showablauf wird das Verzugsfeld nie «im Plan» sagen, solange etwas läuft | «Der Live-Versatz verschiebt den Ablauf, nicht die Uhr» |
+| Die Oberfläche kennt DREI Ansichten, das Datenmodell zwei Ebenen plus Abschnitt. | «Der Abschnitt: Setup und Show sind zwei Abläufe DERSELBEN Bühne» |
+| Zwei Ebenen, ein Plan — und `js/ebene.js` ist die einzige Stelle, die das weiß. | «Zwei Ebenen statt zweier Anwendungen» |
+| Farbplätze werden JE EBENE vergeben | «Zwei Ebenen statt zweier Anwendungen» |
+| Der ZEITEINTRAG trägt den Abschnitt, nicht die Bühne. | «Der Abschnitt: Setup und Show sind zwei Abläufe DERSELBEN Bühne» |
+| `sichtGewerke` filtert NICHT | «Der Abschnitt: Setup und Show sind zwei Abläufe DERSELBEN Bühne» |
+| Ein Soundcheck ist ein ZEITEINTRAG, kein Feld. | «Ein Soundcheck ist ein Zeiteintrag, kein Feld» |
+| `removeTask` kaskadiert auch über `fuer`. | «Ein Soundcheck ist ein Zeiteintrag, kein Feld» |
+| Zeitfelder im Showablauf tragen KEIN Datum | «Zeitfelder im Showablauf tragen kein Datum» |
+| Die Reihenfolge selbst angelegter Werte steht in `nachSort` (ebene.js) — an EINER Stelle. | «Verwalten: löschen nur, was niemand benutzt» |
+| Welches Feld am Vorgang auf welche Auswahlliste zeigt, weiß NUR der Store | «Verwalten: löschen nur, was niemand benutzt» |
+| Verwaltet werden beide Listen über DIESELBEN drei Befehle | «Verwalten: löschen nur, was niemand benutzt» |
+| Ein Kasten, der über der Tabelle schwebt, merkt sich seine Position BEIM ÖFFNEN. | «Verwalten: löschen nur, was niemand benutzt» |
+| Abschnitte gehen denselben Weg wie die Eintragsarten — aber sie FILTERN weiter nur nach Setup und Show. | «Eigene Abschnitte sind Etiketten, keine neuen Ansichten» |
+| Der Umschalter oben bleibt unverändert | «Eigene Abschnitte sind Etiketten, keine neuen Ansichten» |
+| `migrate` darf einen eigenen Abschnitt nicht plattmachen. | «Eigene Abschnitte sind Etiketten, keine neuen Ansichten» |
+| Eintragsarten stehen an EINER Stelle — und eigene gehören in den PLAN. | «Eigene Eintragsarten stehen im PLAN, nicht im Browser» |
+| `store.js` führt die eingebauten Arten bewusst DOPPELT. | «Eigene Eintragsarten stehen im PLAN, nicht im Browser» |
+| Verzug in der Live-Kopfzeile zählt nur, was noch aussteht oder läuft. | «Zwei Ebenen statt zweier Anwendungen» |
+| Eine Bereitstellung ist ein ganz normaler Vorgang, kein zweites Datenmodell. | «Personal & Maschinen: Anzahlen statt Namen, Bereitstellung als Vorgang» |
+| Die Deckungslücke wird NUR gemeldet, wenn der Vorgang überhaupt eine Zuweisung dieser Art hat. | «Personal & Maschinen: Anzahlen statt Namen, Bereitstellung als Vorgang» |
+| Die Schiene links trägt den MODUS — und sonst nichts | «Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand» |
+| Der Tag wird über den Kalender-Knopf gewählt, und angeboten wird NUR, was im Plan steht | «Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand» |
+| Einrichten ist ein FENSTER über dem Plan, keine Seite | «Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand» |
+| Die Tabelle bleibt EIN Modul | «Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand» |
+| Zwei gleich aussehende Segmentgruppen nebeneinander sind EINE Gruppe, egal was der Code meint. | «Der Abschnitt: Setup und Show sind zwei Abläufe DERSELBEN Bühne» |
+| Personal und Maschinen stehen in DERSELBEN Verwalten-Liste, nicht in zwei getrennten. | «Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand» |
 
 ### Screenshots ansehen, nicht nur die Häkchen zählen.
 
- Ein Dutzend echter Fehler
+Ein Dutzend echter Fehler
 hat in diesem Projekt die automatischen Prüfungen passiert und wurde erst im Bild
 sichtbar: Pfeile quer über die Gewerk-Spalte, unsichtbare Phasennamen,
 Beschriftungen ohne Balken, eine auf „J" zusammengeschnurrte JETZT-Fahne, zehn
@@ -694,7 +824,7 @@ dieser Art hat aber noch keine.
 
 ### Neue Bausteine gehören in die `needed`-Liste in `tests/run.mjs`.
 
- Sonst kennt
+Sonst kennt
 sie nur das Theme, in dem sie entstanden sind, und in den vier anderen fehlen sie
 unsichtbar. Genau das ist der Showablauf-Ebene passiert.
 
@@ -703,7 +833,7 @@ ES-Module per CORS.
 
 ### Vor dem Deploy: `node tools/version.mjs <neu>`.
 
- Das setzt auch alle `?v=`.
+Das setzt auch alle `?v=`.
 Von Hand hochzählen ist nicht mehr nötig und wird vom Testlauf bestraft.
 `sw.js` (Cache-Buster) fängt die Untermodule ab, greift aber erst ab dem
 zweiten Aufruf — deshalb beides.
@@ -723,7 +853,7 @@ noch Pages einschalten (nur `push`, kein `admin`).
 
 ### Den aktuellen Stand sagt `node tools/version.mjs`
 
- (ohne Argument), nicht diese
+(ohne Argument), nicht diese
 Datei. Hier stand einmal eine feste Nummer — sie war vier Versionen veraltet, weil
 `tools/version.mjs` alle sechs Stempelstellen kennt, aber CLAUDE.md nicht. Eine
 Zahl, die kein Werkzeug pflegt, ist eine Zahl, die lügt. `CHANGELOG.md` hält die
@@ -731,13 +861,8 @@ Historie.
 
 ### Die Version wird NIE von Hand geändert.
 
- Ein Befehl stempelt sie in alle
+Ein Befehl stempelt sie in alle
 sechs Stellen zugleich:
-
-```bash
-node tools/version.mjs          # zeigt die aktuelle
-node tools/version.mjs 0.2.0    # setzt sie überall + Changelog-Abschnitt
-```
 
 Betroffen: `js/version.js` (Quelle) · `package.json` · `index.html` **und
 `print.html`** (alle `?v=`) · `sw.js` (`SW_VERSION`) · `CHANGELOG.md`. Kommt eine
@@ -750,10 +875,6 @@ zurückzudrehen bricht den Cache-Schutz.
 Nach dem Push ein **annotierter** Tag (`-a`, nicht leichtgewichtig — ein Tag
 ohne Autor und Datum ist ein Zettel ohne Absender):
 
-```bash
-git tag -a v0.2.0 -m "…" && git push origin v0.2.0
-```
-
 Tags sind schwer zurückzunehmen — **erst nach Rückfrage setzen.**
 
 `node tests/run.mjs` prüft, dass alle Stellen übereinstimmen und dass der
@@ -764,47 +885,15 @@ Vergisst man eine, sieht der Nutzer alten Code und niemand merkt es.
 
 ### Nebenwirkung jedes Versionswechsels:
 
- `sw.js` ändert sich → der Browser
+`sw.js` ändert sich → der Browser
 installiert den neuen Worker → `controllerchange` in `index.html` **lädt offene
 Tabs neu**. Daten sind sicher (Auto-Save nach 800 ms), aber der Live-Modus
 springt kurz. Beim Aufbau mit dem Plan auf dem Monitor also nicht grundlos
 deployen.
 
-### Gewerk-Farben (`styles/base.css`, `--gw-*`) nicht per Hand ändern.
-
-Reihenfolge und Zuordnung sind das Ergebnis eines Suchlaufs über 720 Varianten
-(`tools/farbsuche.mjs`), der die CVD-Unterscheidbarkeit benachbarter Zeilen maximiert.
-Handanlegen macht die Validierung wertlos. Neu rechnen statt raten.
-
-### Neben jedem Farbton steht seine SCHRIFTFARBE (`--gw-t-*`), und die ist ebenfalls gerechnet.
-
- Gefüllte Balken tragen ihre Beschriftung auf der Farbe, und die
-Beschriftung ist die vorgeschriebene sekundäre Kodierung — sie muss lesbar sein.
-Weiß erreicht auf Gelb nur **2,17:1**, dunkle Tinte dagegen 8,23:1; auf Violett,
-Grün und Ocker ist es umgekehrt. Gewählt ist je Ton die Tinte, die in **hell UND
-dunkel** über 3:1 bleibt — deshalb feste Werte ohne Dunkel-Scope. Wer an `--gw-*`
-dreht, muss hier mitrechnen; die statische Prüfung «Schrift auf Gewerkfarbe hält
-3:1» in `tests/run.mjs` schlägt sonst an.
-
-### Die Farbe eines PROGRAMMPUNKTS ist wählbar, die eines GEWERKS nicht.
-
- Im
-Showablauf trägt ein Vorgang ein eigenes `slot` (null = erbt die Farbe seiner
-Bühne); die Auswahl im Panel bietet zehn Töne und einen Schalter für Schraffur —
-ein Farbplatz IST das Paar aus beidem (`slotAus`/`hueVon` in palette.js), deshalb
-reichen zehn Punkte für zwanzig Kombinationen. Gewählt wird AUS der Palette, nie
-eine freie Farbe. Im Bauzeitenplan bleibt die Zuordnung gerechnet: dort stehen 20
-Gewerke untereinander, und genau dafür ist die Farbsuche gemacht.
-
-### Balkenbeschriftung nicht entfernen.
-
- Rigging, Licht und Ton liegen auf hellem
-Grund unter 3:1 Kontrast. Die Beschriftung ist die vorgeschriebene sekundäre
-Kodierung — ohne sie hängt Identität an der Farbe allein.
-
 ### Was `tabIndex` trägt, muss auf Enter UND Leertaste reagieren.
 
- Ein Element, das
+Ein Element, das
 per Klick auswählbar ist, gehört in die Tab-Reihenfolge — und wer dort ankommt,
 muss weiterkommen. Fokussierbar ohne Auslöser ist eine Sackgasse: der Fokusring
 verspricht etwas, das keine Taste einlöst. Genau das lag bis v0.9.6 an drei
@@ -815,45 +904,15 @@ alle Marken laufen (`bindMark` in gantt.js), nicht je Renderzweig. Space braucht
 `preventDefault()`, sonst scrollt es die Seite statt auszuwählen. Eine Prüfung in
 `verify-edit.mjs` hält beides fest — und sie hat die Rauten gefunden, nicht das Auge.
 
-### Zeiten immer aus echten Zeitstempeln rechnen
-
- (`toMin()`), nie aus Ziffern auf
-Datumsstrings. Sonst ist die Dauer über den Sommerzeit-Sprung falsch — ein Bug, der
-genau einmal im Jahr zuschlägt.
-
-### `nowInZone` darf nie stumm zurückfallen
-
- (`gantt.js`). Sie formatiert «jetzt»
-per `Intl` in die Projekt-Zone und liest das Ergebnis wieder ein — beim Formatieren
-gehört `hourCycle: 'h23'` hin (nicht `hour12: false`: das wählt in manchen Engines
-h24, schreibt Mitternacht als «24:00» und ergibt ein Invalid Date) und beim Einlesen
-`replace(/\s+/, 'T')` (Intl liefert je nach Engine ein geschütztes Leerzeichen).
-Scheitert es doch, gilt lokale Zeit PLUS eine Warnung: eine falsche Jetzt-Linie ist
-schlimmer als keine. Testen lässt sich das nur mit **zwei Betrachtern in
-verschiedenen Zonen** auf demselben Projekt (`verify-live.mjs`) — ein Projekt erbt
-seine Zone vom Browser, für fast jeden sind beide gleich, und dann trifft auch der
-kaputte Rückfall zufällig das Richtige.
-
-### Zoomstufen in sichtbarer Zeitspanne bemessen
-
-, nicht in Pixeln. Eine
-„Tages"-Ansicht muss Tage zeigen. Die Tests setzen das durch.
-
 ### Themes: Gestaltung gehört in `styles/themes/`, Geometrie in `base.css`.
 
 Kein Theme definiert Gewerk-Farben neu. Jedes Theme braucht beide Dunkel-Scopes
 (`@media prefers-color-scheme` **und** `:root[data-theme="dark"]`) — der Umschalter
 des Betrachters muss die OS-Wahl in beide Richtungen schlagen. Details: `docs/themes.md`.
 
-### Rechenlogik bleibt DOM-frei.
-
- `schedule.js`, `timeaxis.js`, `store.js`,
-`conflicts.js` und `persistence.js` haben keinen DOM-Bezug und sind damit direkt
-testbar. So halten. Neue Logik dort → Test dazu.
-
 ### Der Store ist der einzige Weg, den Plan zu ändern.
 
- Nie direkt an `state`
+Nie direkt an `state`
 schreiben. Validierung läuft VOR der Änderung; ein abgelehnter Befehl darf
 nichts hinterlassen — kein halber Zustand, kein Undo-Eintrag, keine
 Ungesichert-Marke. Rückgängig läuft über Schnappschüsse, nicht über
@@ -862,33 +921,9 @@ Gegenbefehl wäre eine Fehlerquelle, die erst Stunden später beim ⌘Z auffäll
 
 ### Schraffur gehört der Gewerk-Identität
 
- (Platz 9–16), nicht dem Status. Sie war
+(Platz 9–16), nicht dem Status. Sie war
 früher für `status: geplant` belegt — das ist jetzt ein umrandeter Balken. Nicht
 zurückdrehen, sonst bedeutet dasselbe Muster zwei Dinge.
-
-### Ein `render()` der Tabelle wartet, solange in dem Feld getippt wird, das ihn ausgelöst hat.
-
- `render()` baut mit `replaceChildren` neu auf — wer gerade tippt,
-verliert dabei den Fokus, sein Knoten existiert nicht mehr. Bei Textfeldern fällt
-das nicht auf (`change` kommt erst beim Verlassen), bei `<input type="time">` im
-Showablauf schon: es feuert, sobald ein VOLLSTÄNDIGER Wert dasteht, und das Feld
-ist vorbelegt — also bereits nach der getippten Stunde. Aus «0930» wurde «08:09».
-Nachgeholt wird beim `focusout`; wandert der Fokus in ein anderes Feld derselben
-Tabelle, zieht er mit. **Die Einschränkung auf das AUSLÖSENDE Feld ist
-wesentlich** — sonst verschluckte die Tabelle auch ein ⌘Z, während der Cursor
-zufällig irgendwo steht, und zeigte stumm Veraltetes. Zwei Umwege, die nicht
-funktionieren: den Fokus danach wiederherzustellen greift bei `type="time"` nicht
-(für das aktive Segment gibt es keine API), und `document.activeElement` ist
-während des `change` in Firefox kurzzeitig `body` — sofort geprüft hält eine
-Absicherung jedes Tippen für ein Verlassen.
-
-### In der Tabelle nur an `change` hängen, nie zusätzlich an `blur`.
-
- Das erste
-`change` baut die Tabelle neu, der alte Knoten wird abgehängt und feuert danach
-trotzdem sein `blur` — mit dem veralteten Objekt aus der Closure. Jede Änderung
-lag dadurch doppelt auf dem Undo-Stapel und ⌘Z wirkte kaputt. Handler lesen den
-Stand immer frisch aus dem Store (`cur(id)`), nie aus der Closure.
 
 ### Die Jetzt-Linie tickt IMMER
 
@@ -900,60 +935,19 @@ jede Minute den DOM neu und risse die Auswahl weg. Nur `paintNow()`/`paintLive()
 
 ### Status wird nie automatisch gesetzt.
 
- Der Verzug (`js/live.js`) entsteht genau
+Der Verzug (`js/live.js`) entsteht genau
 daraus, dass die menschliche Aussage «geplant» der Uhr widerspricht. Schaltete
 etwas automatisch um, sähe der Plan immer nach Plan aus — und das Signal wäre weg.
 
-### Der Versatz verschiebt den ABLAUF, nie die UHR
-
- (`versatz` in gantt.js). Die
-Ansage vom Pult — «wir hängen fünf Minuten hinterher», positiv = Delay — rutscht
-die Balken nach rechts; Achse, Ticks, Bänder und die JETZT-Linie bleiben auf der
-echten Zeit stehen. Nur so liest man an der Achse ab, wann SIDO **wirklich** auf
-die Bühne geht. Wanderte die Linie mit, wäre es eine Lupe auf den Plan statt
-einer Aussage über die Wirklichkeit. Zwei Regeln halten das zusammen:
-
-- **Zwei Abbildungen Zeit → Pixel.** `x()` ist die echte Zeit (Achse, Linie),
-  `xp()` die des Ablaufs (Balken, Beschriftungen, Pfeile). Genau DREI Stellen
-  dürfen `xp()` rufen: `place()`, `updateLabels()`, `depAnchors()`. Wer eine
-  vierte braucht, verschiebt vermutlich gerade etwas, das zur Achse gehört.
-- **Die Logik bekommt die zurückgedrehte Uhr, nicht den Versatz.** «Was läuft im
-  verschobenen Plan?» ist dieselbe Frage wie «was lief im Original vor fünf
-  Minuten?» — deshalb kennt `live.js` den Versatz gar nicht, es bekommt
-  `nowPlan() = NOW − versatz`. Der Verzug rechnet damit von selbst gegen den
-  verschobenen Plan. **Die Uhr in der Show-Kopfzeile ist die Ausnahme**: sie
-  zeigt `now`, nicht `planNow` — sie ist der feste Punkt, gegen den der Versatz
-  überhaupt eine Aussage ist.
-
-Angezeigte Zeiten laufen durch `verschoben()` — Seitenspalte, Tooltip,
-Kopfzeile. Stünde links «20:00 Uhr» neben einem Balken auf 20:05, widerspräche
-sich das Blatt selbst. Relative Angaben («in 12 Min») brauchen **keine**
-Korrektur: Plan und Uhr sind gleich weit verschoben.
-
-Der Versatz gehört dem Abend, nicht dem Plan: `localStorage`, **nicht** im
-Export, und er gilt nur für den Tag, an dem er gesetzt wurde (`{min, tag}`).
-Sonst stünde der Plan am nächsten Morgen 45 Minuten daneben und niemand wüsste,
-warum. Beim Projektwechsel fällt er auf 0.
-
-### Im Showablauf wird das Verzugsfeld nie «im Plan» sagen, solange etwas läuft
-
- —
-dort steht alles auf «geplant», weil im Betrieb niemand Häkchen pflegt, und für
-den laufenden Punkt meldet die Rechnung deshalb immer seine bisherige Laufzeit.
-Das war schon vor dem Versatz so. Was der Versatz leistet, ist relativ: er zieht
-seinen Betrag ab, Minute für Minute. Eine Prüfung in `verify-showablauf.mjs`
-hält genau das fest — die naheliegende Erwartung «passender Versatz ⇒ im Plan»
-ist im Showablauf unerfüllbar und wäre eine falsche Zusicherung.
-
 ### `reorderGewerk` darf `slot` nicht anfassen.
 
- Farbe gehört dem Gewerk, nicht
+Farbe gehört dem Gewerk, nicht
 seiner Position; sonst färbt sich beim Sortieren der halbe Plan um. Ein Test
 prüft das.
 
 ### Der Autostart lädt die JSON, die JSON ist die Wahrheit.
 
- `boot()` holt beim
+`boot()` holt beim
 Start `klassentreffen-festival.json` (`BUNDLED`/`START` in app.js). Neuer Planstand
 = Datei austauschen und pushen, sonst nichts. Ob nachgeladen wird, entscheidet der
 `exported`-Stempel aus `serialize()`, mitgeführt in `project.quelle`: Datei neuer →
@@ -971,7 +965,7 @@ Fehlermeldung. Wer die App frisch öffnet, konnte nichts importieren.
 
 ### Der AMK-Plan ist quellentreu
 
- (`tools/make-amk.mjs`). Was im PDF steht, steht
+(`tools/make-amk.mjs`). Was im PDF steht, steht
 dort; was geschätzt ist, trägt `estimated: true` und eine gestrichelte Kante; wo
 das Gewerk im Original leer war, sagt es die Notiz. Nur DREI Verknüpfungen —
 die eine, die wörtlich im PDF steht («Leitern runter → sobald Backline und Set
@@ -981,7 +975,7 @@ mit der Wirklichkeit nichts zu tun haben. `tests/amk.test.mjs` hält das fest.
 
 ### `js/dom.js` ist der Ort für DOM-Kleinkram
 
- (`el`, `svgEl`, `$`, `escapeHtml`,
+(`el`, `svgEl`, `$`, `escapeHtml`,
 `toInput`, `STATUS`). Lag vorher fünfmal identisch herum. **Nicht** dort hin
 gehört `clone` — der Store dürfte dafür nicht auf persistence.js zeigen (Kern →
 äußere Schicht wäre der falsche Pfeil), und für eine Zeile ist die Wiederholung
@@ -989,7 +983,7 @@ billiger als eine schlechte Abhängigkeit.
 
 ### Ein Zustand, ein Besitzer.
 
- `#ins.hidden` hatte vier Schreiber (zwei in
+`#ins.hidden` hatte vier Schreiber (zwei in
 app.js, zwei in inspector.js) — und inspector.js kannte die Ansicht nicht, also
 holte jede Änderung das Panel in der Tabellen-Ansicht zurück. Der Inspector
 entscheidet jetzt nur über seinen INHALT, `syncPanel()` in app.js allein über
@@ -997,16 +991,15 @@ die Sichtbarkeit.
 
 ### Kein Cache in `computeSchedule`.
 
- Er müsste auf Objekt-Identität schlüsseln,
+Er müsste auf Objekt-Identität schlüsseln,
 und wer Vorgänge in dieselbe Array-Instanz schiebt (Tests, `tools/make-amk.mjs`),
 bekäme still ein veraltetes Ergebnis. Stattdessen wurde die Zahl der AUFRUFE
 gesenkt: `findConflicts(state, vorab)` nimmt eine fertige Rechnung an, `app.js`
 holt die Liste über `gantt.conflicts()`. Von 5 Läufen pro Änderung auf 2.
-Gemessen: 500 Vorgänge = 3,4 ms pro Lauf.
 
 ### Untervorgänge: der Elternvorgang ist die HÜLLE, nicht editierbar.
 
- Ein
+Ein
 Untervorgang ist ein Vorgang mit `parent` (Text-id, nie Relation) und demselben
 Gewerk wie sein Elternvorgang. `reflowParents(state)` läuft nach JEDER Änderung in
 `store.apply` und setzt Eltern-`start`/`end` auf frühesten Kindstart … spätestes
@@ -1031,7 +1024,7 @@ vergleichbar. Der Zuschnitt (`tagesScheiben`) liegt DOM-frei in `schedule.js`;
 
 ### Auf dem Blatt steht kein Text IM Balken.
 
- Er läge über der Schraffur, stünde
+Er läge über der Schraffur, stünde
 bei dunklen Gewerkfarben schwarz auf dunkel und würde bei schmalen Balken
 abgeschnitten — alles drei auf dem ersten Probedruck gesehen. Name, Zeit und
 Notiz stehen in der Namensspalte, die auf Papier ohnehin immer daneben liegt.
@@ -1040,21 +1033,9 @@ fällt weg, bevor sie unlesbar wird, statt die Zeile darüber anzuschneiden.
 
 ### Jede ausgelieferte HTML-Seite gehört in `tools/version.mjs` UND in die Versionsprüfung in `tests/run.mjs`.
 
- Beide kannten anfangs nur `index.html` —
+Beide kannten anfangs nur `index.html` —
 eine zweite Seite mit eigenen `?v=` wäre still auseinandergelaufen. Genau der
 Crewplaner-Fehler, der weiter unten als Gegenbeispiel steht.
-
-### Im BAUZEITENPLAN zeigt der Gantt eine Zeile je VORGANGSNAME, einen Balken je Termin
-
- (`seriesRows` in schedule.js, DOM-frei und getestet). Ein Bauzeitenplan
-wird tageweise gedruckt, deshalb steht dieselbe Tätigkeit mehrfach in der Quelle —
-das sind keine verschiedenen Vorgänge. Ohne die Bündelung hatte die Bühne sechs
-Zeilen für drei Dinge und die Crew 113 für 28; 353 Vorgänge ergeben **153 Zeilen**.
-Überlappen sich zwei Termine einer Serie, bekommen sie **Spuren** (`--lane`,
-Zeilenhöhe `rowH × lanes`) — sonst lägen sie übereinander. Marken (Konflikt, KRIT)
-gelten für die Zeile als Ganzes, Umbenennen benennt die ganze Serie um. **Die
-Tabelle bleibt flach**: sie ist der Editor, dort gehört jeder Termin einzeln
-bearbeitbar. Beide Ansichten sortieren weiter über `byStart`.
 
 ### Im SHOWABLAUF sind die Balken GEFÜLLT
 
@@ -1066,30 +1047,9 @@ Jetzt-Linie und die Live-Kopfzeile. Umgesetzt über `.bz[data-ebene="show"]` in
 den Themes (Füllung ist Gestaltung, gehört nicht in base.css); `gantt.js` setzt
 nur `data-ebene` und die beiden Variablen `--gw`/`--gw-t`.
 
-### Im SHOWABLAUF wird NICHT gebündelt
-
- (`buendeln` in gantt.js). Dort ist die
-Reihenfolge der Zeilen der ABLAUF selbst — Einlass, Band, Umbau, Band, Umbau —,
-und den liest man von oben nach unten. Gebündelt entstand daraus eine Zeile
-«Changeover» mit sechs Balken, die zwischen den Acts hing, und die Zeilenfolge
-richtete sich nach dem frühesten Termin jeder Serie statt nach dem Abend. Jeder
-Programmpunkt trägt seine eigene Zeile, `lanes` ist immer 1: zwei gleichzeitige
-Dinge auf einer Bühne sind zwei Zeilen, keine Spuren. **Uhrzeit und Dauer stehen
-links vor dem Namen** (`bz-lab-zeit`/`bz-lab-dauer`, beide mit fester Breite und
-`tabular-nums`, damit die Namen auf einer Kante beginnen) — damit ist die
-Seitenspalte allein schon der Ablaufplan: `14:00 Uhr (30 min) CREUTZFELD & JAKOB`.
-
-### Die Dauer in MINUTEN
-
-, nicht in «0,5 h»: bei einem Ablauf zählt man Minuten.
-Ein Meilenstein bekommt einen Strich, keine Null. Im Bauzeitenplan wäre beides
-falsch: dort stünde eine Uhrzeit stellvertretend für mehrere Termine.
-`seriesRows` bleibt unangetastet — die Funktion ist richtig, der Showablauf ruft
-sie nur nicht auf.
-
 ### Die Seitenspalte ist im Showablauf breiter
 
- (390 px statt 296). Drei Angaben
+(390 px statt 296). Drei Angaben
 nebeneinander brauchen Platz, und 17 Zeilen brauchen weniger Zeitstrahl als 153.
 Auf Handybreite erzwingt `base.css` 168 px und die Dauer bricht UNTER die Zeile
 — beide Textzeilen passen in die vorhandene Zeilenhöhe, die Geometrie ändert
@@ -1099,7 +1059,7 @@ nicht aus `O.sideW` genommen: sonst rechnet die Tagesansicht auf dem Handy um
 
 ### Die Achse beschriftet im Showablauf JEDE Stunde.
 
- `ticksFor` kennt `'hour'`
+`ticksFor` kennt `'hour'`
 längst; `tickScale` wählt es am Bildschirm nie, weil 24 Stunden im Bauzeitenplan
 zu dicht stehen. Über zehn Showstunden ist es genau richtig — ein Ablauf wird
 nach Uhrzeiten gelesen, nicht nach «zwischen 12 und 15». Erst ab `px >= 0.5`,
@@ -1107,14 +1067,14 @@ sonst kleben die Zahlen aneinander.
 
 ### „Tag 1/2/3" gehört nicht in den Titel.
 
- Der 24.08. IST Tag 1 — das sagt das
+Der 24.08. IST Tag 1 — das sagt das
 Datum. Im Namen erzwingt es eine Zeile je Tag und macht aus einer Tätigkeit drei.
 Die Tagesnummer gehört in die Notiz. Ein Test hält fest, dass kein Titel auf
 `Tag N` endet.
 
 ### Beschriftung neben einem Balken darf nie über den nächsten laufen.
 
- Ist ein
+Ist ein
 Balken zu schmal für seinen Text, steht dieser rechts daneben — in einer Serie
 also dort, wo der nächste Balken beginnt. `updateLabels()` blendet ihn dann aus
 (`data-next` trägt den Start des nächsten Balkens derselben Spur). Der Name steht
@@ -1123,200 +1083,28 @@ Rückfälle — die Zahlenprüfungen sahen diesen Fehler nicht.
 
 ### Eine Reihenfolge für beide Ansichten: `byStart` (schedule.js).
 
- Gantt und
+Gantt und
 Tabelle sortieren Vorgänge eines Gewerks über DENSELBEN Vergleicher (Start, dann
 Ende, dann Titel). Nie eine der beiden Ansichten separat sortieren — sonst sieht
 derselbe Plan zweimal anders aus und wirkt „nicht gleich".
 
 ### Der Verknüpfungs-Picker sucht, statt zu scrollen
 
- (`candidateGroups` in
+(`candidateGroups` in
 schedule.js, DOM-frei und getestet). Bei 100+ Vorgängen ist der native Dropdown
 unbenutzbar. Die reine Funktion gruppiert nach Gewerk, sortiert je Gewerk über
 `byStart` und filtert per Query (Titel/Gewerkname); der Inspector rendert nur ihr
 Ergebnis. Neue lange Auswahllisten genauso lösen — nie einen 122-Zeilen-`<select>`.
 
-### Die Oberfläche kennt DREI Ansichten, das Datenmodell zwei Ebenen plus Abschnitt.
-
- In der Werkzeugzeile steht EIN Umschalter — Bauzeitenplan · Setup ·
-Show, in der Reihenfolge des Tages —, und genau einer ist gedrückt. `app.js` hält
-dafür `ansicht` und leitet `ebene`/`abschnitt` daraus ab (`ebeneVon`,
-`abschnittVon`); `setAnsicht()` ist der einzige Schreiber aller drei.
-
-Vorher waren es zwei Umschalter (Ebene und Abschnitt) im selben Stil
-nebeneinander, mit je einem dunklen Knopf. Das las sich als EINE Leiste, in der
-zwei Dinge gleichzeitig angewählt sind — und niemand fand, wie man zwischen
-Setup und Show wechselt. **Zwei gleich aussehende Segmentgruppen nebeneinander
-sind eine Gruppe, egal was der Code meint.**
-
-`?ansicht=bau|setup|show` steuert das von außen; die alten `?ebene=`/`?abschnitt=`
-werden weiter übersetzt (Lesezeichen, Prüfwerkzeuge, print.html). **«alle» gibt es
-in der Oberfläche nicht mehr** — der ganze Showtag in einer Achse ist damit nicht
-mehr zu sehen. Der Durchlass lebt in `imAbschnitt` weiter, eine vierte Stufe wäre
-also ohne Umbau nachrüstbar.
-
-### Zwei Ebenen, ein Plan — und `js/ebene.js` ist die einzige Stelle, die das weiß.
-
-Der Bauzeitenplan zeigt GEWERKE, der Showablauf BÜHNEN; eine Bühne ist ein Gewerk mit
-`art:'buehne'`, ein Programmpunkt ein normaler Vorgang darin. Kein zweiter Store, kein
-zweites Undo, keine zweite Persistenz. Gantt, Tabelle und Druckseite FRAGEN
-(`sichtGewerke`/`sichtTasks`/`amTag`), sie entscheiden nicht selbst. Altdaten ohne
-`art` sind Gewerke — der Bauzeitenplan sieht aus wie immer. **Ein Gewerk wird nie
-nachträglich zur Bühne**: alle Vorgänge darin sprängen die Ebene.
-
-### Farbplätze werden JE EBENE vergeben
-
- (`freeSlot(state, art)` in store.js). Gewerke
-und Bühnen sind nie zusammen zu sehen, dürfen also dieselben Farben tragen. Zusammen
-gezählt wäre die Palette im Klassentreffen-Plan (20 Gewerke = `MAX_SLOTS`) mit der
-ersten Bühne erschöpft. `slotsExhausted` wird entsprechend gegen die Zahl der Bänder
-der AKTIVEN Ebene geprüft, nie gegen `gewerke.length`.
-
-### Der ZEITEINTRAG trägt den Abschnitt, nicht die Bühne.
-
- Es gibt EINE Bühne mit
-zwei zeitlichen Abläufen — Load-in und Setup bis zum Showstart, die Running Order
-danach —, nicht zwei Bühnen. In v0.9.1 hing das Feld am Band; das erzwang den
-Namen zweimal, und der Store verbietet doppelte Bühnennamen. Seit v0.9.2 steht
-`abschnitt: 'setup'|'show'` am Vorgang, `imAbschnitt` filtert die Einträge, und
-
-### `sichtGewerke` filtert NICHT
-
-: die Bühne bleibt in beiden Ansichten stehen,
-auch wenn sie dort noch nichts hat — genau da legt man den ersten Setup-Eintrag
-an. Jede Ansicht rechnet ihr Zeitfenster selbst (`programmFenster`): Setup zeigt
-den Morgen, Show den Abend. Fehlt das Feld, gilt `show`.
-
-### Ein Soundcheck ist ein ZEITEINTRAG, kein Feld.
-
- Als Feld am Act (`soundcheck`,
-bis v0.9.3) war er ein Startzeitpunkt ohne Dauer und ohne Ende — er tauchte in
-keiner Zeitachse auf, und zwei sich überschneidende Soundchecks sah niemand. Jetzt
-ist er ein normaler Eintrag im Setup-Abschnitt mit `fuer: <taskId>` (Text-id, nie
-Relation, wie `parent`). Damit hat er Balken, Dauer, Farbe, Notiz und
-Anforderungen geschenkt. Bedient wird er aus dem Panel des Acts — das ist der
-bequeme Weg, nicht ein zweiter Speicherort.
-
-### `removeTask` kaskadiert auch über `fuer`.
-
- Wer den Act löscht, löscht seinen
-Soundcheck mit; sonst bliebe eine Waise mit toter Zuordnung zurück, die niemand
-mehr findet. Dieselbe Begründung wie bei den Untervorgängen, ein ⌘Z holt beides
-zusammen zurück.
-
-### Zeitfelder im Showablauf tragen KEIN Datum
-
- — der Tag steht oben im
-Umschalter, und zwei Spalten à 205 px für eine Information, die schon dasteht,
-drängten die Anforderungen aus dem Bild. Zwei Fallen, beide in reinen Funktionen
-in `conflicts.js` gelöst und getestet:
-
-- **`mitUhrzeit` behält den Datumsteil.** Ein Eintrag vom Vortag ist über den
-  Tagesfilter auch am Folgetag sichtbar; schriebe das Feld den GEZEIGTEN Tag,
-  spränge er beim ersten Antippen einen Tag weit.
-- **`endeNachStart`: Ende vor Start meint den Folgetag.** «22:00 bis 03:00» ist
-  die selbstverständliche Schreibweise; ohne die Regel lehnte der Store ab. Der
-  Folgetag wird über den KALENDER gesucht, nicht mit +1440 — der 25.10.2026 hat
-  25 Stunden.
-
-Im **Bauzeitenplan bleiben die Felder datiert**: der läuft über vierzehn Tage.
-
 ### Neue Felder müssen durch `addTask` durch.
 
- Der Handler baut das Vorgangsobjekt
-Feld für Feld auf; was dort fehlt, fällt beim Anlegen still weg. `abschnitt` hat
-genau das erlebt: ein im Setup angelegter Eintrag landete in der Show und war im
-gezeigten Abschnitt sofort unsichtbar. Wer ein Feld ergänzt, prüft `addTask` mit.
-
-### Die Reihenfolge selbst angelegter Werte steht in `nachSort` (ebene.js) — an EINER Stelle.
-
- Sie lag dreimal herum (Arten, Abschnitte, Verwaltungsliste), und
-ein Fehler darin war entsprechend dreimal zu beheben: `?? 0` setzte einen Wert
-ohne `sort` auf Position 0, ein neu angelegter sprang damit vor alles Sortierte.
-Richtig ist `?? Infinity` — was keines hat, hängt hinten an —, und der Store
-vergibt beim Anlegen das nächste `sort`, sobald überhaupt sortiert wurde.
-
-### Welches Feld am Vorgang auf welche Auswahlliste zeigt, weiß NUR der Store
-
-(`LISTEN`, `benutztVon`). Die Verwaltung fragt danach, statt es selbst zu wissen:
-liefen die beiden auseinander, meldete der Löschknopf «0 Einträge» und stünde
-offen, während der Store gleich darauf ablehnt.
-
-### Verwaltet werden beide Listen über DIESELBEN drei Befehle
-
- (`setAuswahlLabel`,
-`removeAuswahl`, `reorderAuswahl` mit `liste: 'punktTypen'|'abschnitte'`), nicht
-über sechs fast gleiche. Drei Regeln daran:
-
-- **Umbenennen ändert nur das Label, nie die id.** Die id ist die Zuordnung;
-  änderte sie sich mit, verlöre jeder Eintrag still seine Art — `punktLabel`
-  reicht einen unbekannten Wert einfach durch, im Bild stünde die Kennung.
-- **Gelöscht wird nur, was niemand benutzt.** Die Alternative (Einträge auf den
-  Standard zurücksetzen) ändert fünf Zeilen hinter dem Rücken. Der Store nennt
-  die Zahl, der Knopf ist vorher schon gesperrt und sagt warum.
-- **Sortieren setzt `sort` bei ALLEN oder keinem.** Ab dem ersten Mal schlägt die
-  Handreihenfolge die Uhrzeit-Automatik der Abschnitte — eine Automatik, die den
-  Betrachter überstimmt, wäre keine Hilfe. Halbes `sort` ergäbe eine Reihenfolge,
-  die niemand gewählt hat, deshalb lehnt `reorderAuswahl` unvollständige Listen ab.
-
-### Ein Kasten, der über der Tabelle schwebt, merkt sich seine Position BEIM ÖFFNEN.
-
- Nach jedem Befehl baut die Tabelle neu auf; rechnet der Kasten seine
-Lage dann am inzwischen abgehängten Auswahlfeld neu, liefert
-`getBoundingClientRect()` lauter Nullen und er springt in die linke obere Ecke.
-Genau das war so — im Screenshot gesehen, von keiner Zusicherung bemerkt.
-`platziere()` nimmt deshalb ein Rechteck, keinen Knoten.
-
-### Abschnitte gehen denselben Weg wie die Eintragsarten — aber sie FILTERN weiter nur nach Setup und Show.
-
- Eigene stehen in `project.abschnitte`,
-`abschnitte(state)` führt sie mit den eingebauten zusammen, angelegt wird im
-Auswahlfeld der Spalte («Neu»). Sortiert werden sie nach ihrem FRÜHESTEN
-Eintrag: ein Load-in um 07:00 steht vor einer Aftershow um 23:30, ohne dass
-jemand sortiert; noch leere hängen hinten an.
-
-### Der Umschalter oben bleibt unverändert
-
- — er kennt Bauzeitenplan, Setup und
-Show. Ein eigener Abschnitt ist ein Etikett am Eintrag und zählt über
-`abschnittOf` zur SHOW-Ansicht. Daraus folgt eine Falle, die schon einmal in
-diesem Projekt zugeschlagen hat: wer im Setup steht und «Load-in» wählt, verliert
-die Zeile sofort aus dem Bild. Deshalb sagt die Tabelle es (`waehleAbschnitt` →
-`onHinweis`), statt es geschehen zu lassen — «der Knopf tut etwas, nur
-unsichtbar» ist genau das Gefühl von «geht nicht». Wer den Umschalter dynamisch
-machen will, muss hier ansetzen.
-
-### `migrate` darf einen eigenen Abschnitt nicht plattmachen.
-
- Die Zeile hieß
-einmal `if (t.abschnitt !== 'setup') t.abschnitt = 'show'` — mit selbst
-angelegten Abschnitten hätte sie jeden «Load-in» beim nächsten Laden gelöscht,
-still und ohne Rückweg. Normalisiert wird nur noch, was der Plan NICHT kennt;
-`setTaskField` und `addTask` lehnen unbekannte Abschnitte entsprechend ab, damit
-gar keine Waise entsteht.
-
-### Eintragsarten stehen an EINER Stelle — und eigene gehören in den PLAN.
-
-Die vier eingebauten (`PUNKT_TYPEN` in ebene.js) tragen jetzt ein drittes Feld
-`kompakt`: tritt die Art auf dem A3-Blatt zurück? Selbst angelegte liegen in
-`project.punktTypen` und reisen damit im Export mit — ein Eintrag trägt nur
-`punktTyp: "linecheck"`, und ohne die Namensliste in derselben Datei sähe der
-Empfänger genau das. `punktTypen(state)` führt beide zusammen; Dropdown,
-Live-Ansage (`typHinweis`) und Druckblatt fragen dort, nie an PUNKT_TYPEN vorbei.
-Angelegt wird im Auswahlfeld der Tabelle («+ Neue Art…»), nicht an einem zweiten
-Ort — das braucht man mitten im Tippen.
-
-### `store.js` führt die eingebauten Arten bewusst DOPPELT.
-
- Ein Import aus
-ebene.js liefe verkehrt herum (Kern → Ansichtsschicht), dieselbe Begründung wie
-bei `clone` und `artVon`. Damit die Kopie nicht auseinanderläuft, vergleicht ein
-Test in `tests/store.test.mjs` sie gegen `PUNKT_TYPEN` — doppelt geführt ist
-erlaubt, ungeprüft doppelt nicht. Genau das Muster der Versionsstellen.
+Der Handler baut das Vorgangsobjekt
+Feld für Feld auf; was dort fehlt, fällt beim Anlegen still weg. Der Fall `abschnitt`
+(siehe «Eigene Abschnitte sind Etiketten…») hat genau das erlebt. Wer ein Feld ergänzt, prüft `addTask` mit.
 
 ### Das Wort ist «Zeiteintrag», nicht «Programmpunkt».
 
- Im Showablauf heißt jede
+Im Showablauf heißt jede
 Zeile so — Spalte, Knopf, Zähler, Ecke der Seitenspalte, Vorgabename, Kennzahl.
 Ein Line-Check ist kein Programmpunkt. Das DATENFELD heißt weiter `punktTyp`
 (eine Umbenennung wäre eine Migration ohne Gegenwert), und auf dem A3-Blatt
@@ -1324,7 +1112,7 @@ bleibt «Programmpunkt» stehen: dort ist die Liste dem PDF nachempfunden.
 
 ### Ein leeres Band ist nur im Bauzeitenplan unsichtbar.
 
- Dort stehen 20 Gewerke,
+Dort stehen 20 Gewerke,
 ein leeres wäre Rauschen. Im Showablauf muss es stehen: eine frisch angelegte
 Bühne hat noch nichts, und wäre sie unsichtbar, wäre «+ Bühne» ein Klick ins
 Nichts. Dasselbe gilt für eine Bühne, die im gewählten Abschnitt leer ist. `Math.min(...[])` ist dabei `Infinity` — die Hülle muss auf `T0` fallen,
@@ -1332,7 +1120,7 @@ sonst zieht sich der Sammelbalken über die ganze Achse.
 
 ### Neue Vorgänge landen dort, wo man HINSCHAUT.
 
- `defaultStart()` in table.js
+`defaultStart()` in table.js
 schließt an den letzten Eintrag DES GEZEIGTEN TAGES UND ABSCHNITTS an, nicht an
 den letzten des Plans; `addRow` gibt den aktiven Abschnitt mit. Vorher kam bei zwei Showtagen der letzte Punkt des zweiten heraus: wer am
 ersten Tag anlegte, bekam es an den zweiten gehängt, und der Tagesfilter blendete
@@ -1341,7 +1129,7 @@ es sofort aus. Der Knopf tat etwas, nur unsichtbar — und das fühlt sich an wi
 
 ### Der Gantt meldet, wenn er sich von SELBST einpasst
 
- (`O.onView`). Das passiert
+(`O.onView`). Das passiert
 an zwei Stellen asynchron: beim ersten Programmpunkt eines leeren Showablaufs und
 beim Wiederauftauchen aus der Tabelle (ResizeObserver). Wer die Kopfzeile danach
 aktualisieren will — Zoomstufe, Mitteldatum —, kann den Zeitpunkt nicht raten;
@@ -1352,39 +1140,30 @@ währenddessen mit Breite 0 gerechnet wurde, bleibt für immer falsch.
 
 ### Der Showablauf ist tagesbezogen.
 
- Ein Umschalter wählt den Showtag; ohne ihn standen
+Ein Umschalter wählt den Showtag; ohne ihn standen
 die Acts des zweiten Tages als zehn Zeilen ohne Balken im Bild — genau die Fehlerart,
 die hier schon dreimal erst der Screenshot gefunden hat. Gantt und Tabelle bekommen
 DENSELBEN Tag gereicht, sonst zeigt derselbe Plan zwei verschiedene Tage.
 
 ### Bestand zählt die Sicht, Warnungen zählen den Plan.
 
- `gantt.stats()` meldet Vorgänge,
+`gantt.stats()` meldet Vorgänge,
 Bänder, laufend und Crew aus der sichtbaren Ebene — sonst stünden 353 Vorgänge über
 einem Blatt mit 17 Zeilen. Kritisch und Konflikte bleiben planweit: sie sind Aussagen
 über den Plan, nicht über den Ausschnitt, und müssen zur Prüf-Liste passen, die über
 `conflicts()`/`criticals()` ebenfalls alles zeigt. Zwei Zähler nebeneinander wären
 genau der Fehler, den die Eine-Quelle-Regel verbietet.
 
-### Verzug in der Live-Kopfzeile zählt nur, was noch aussteht oder läuft.
-
- `delaysAt`
-meldet auch längst vergangene, nie abgehakte Punkte; bei DOORS (12:00–14:00, Status
-«geplant») stand um 15:30 groß und rot «+4 Std» — an einem Abend, der exakt nach Plan
-lief. Das ist keine Verspätung, sondern fehlende Rückmeldung, und es überdeckte den
-Verzug, auf den es ankommt. Die Regel «Status wird nie automatisch gesetzt» bleibt
-unberührt; gefiltert wird die ANZEIGE, nicht die Rechnung.
-
 ### Kein Typ steht doppelt
 
- (`typHinweis` in ebene.js). Ein Programmpunkt «Changeover»
+(`typHinweis` in ebene.js). Ein Programmpunkt «Changeover»
 mit `punktTyp:'changeover'` ergab «Changeover: Changeover» in der Kopfzeile und
 «Changeover / Changeover» auf dem Blatt. Verglichen wird normalisiert und in beide
 Richtungen, damit auch «SHOW END» / «Show-Ende» als dasselbe gilt.
 
 ### Achsen-Ticks und Bänder werden auf `T1` geklemmt.
 
- Sie ragten über das Planende
+Sie ragten über das Planende
 hinaus und machten den Scroller um 1400 px breiter als seinen Inhalt — im
 Bauzeitenplan unsichtbar, im Showablauf rutschte der ganze Tag aus dem Bild. Und die
 Tagesansicht passt sich neu ein, wenn der Container die Breite ändert: «ein Kalendertag
@@ -1392,13 +1171,13 @@ füllt die Breite» ist eine Zusage, die bei jeder Breite gilt.
 
 ### Keine Platzhaltertexte in Freitextspalten.
 
- Ein «z. B. 2× Wedge» in siebzehn Zeilen
+Ein «z. B. 2× Wedge» in siebzehn Zeilen
 sieht aus wie siebzehnmal eingetragener Inhalt; SIDOs echtes «1 Riser 2×1 m» war
 darin nicht zu finden. Was die Spalte will, sagt ihre Überschrift.
 
 ### Das Running-Order-Blatt kennt den Abschnitt.
 
- Setup und Show sind zwei Abläufe
+Setup und Show sind zwei Abläufe
 mit verschiedenen Lesern — wer der Crew den Vormittag in die Hand gibt, will
 nicht die Running Order darunter. Die Steuerleiste hat deshalb dieselbe Wahl wie
 die App (Setup · Show · beides), der Blattkopf und der Fuß nennen sie, und
@@ -1407,7 +1186,7 @@ seine Tagesblätter zeigen Gewerke, nie Bühnen.
 
 ### `Element.append()` gibt `undefined` zurück.
 
- `wrap.append(el(…)).lastChild` warf
+`wrap.append(el(…)).lastChild` warf
 deshalb, und statt der Meldung «nichts eingetragen» sah man eine leere Seite. Das
 stand zweimal in print.js und fiel jahrelang nicht auf, weil es immer mindestens
 ein Blatt gab — erst die Abschnitts-Auswahl konnte eine leere Auswahl erzeugen.
@@ -1415,7 +1194,7 @@ Erst anlegen, füllen, dann anhängen.
 
 ### Das Running-Order-Blatt ist eine LISTE, kein Zeitstrahl
 
- (`roBlatt` in print.js).
+(`roBlatt` in print.js).
 So liest man einen Showablauf: von oben nach unten, Uhrzeit voran. Ein Gantt über zehn
 Stunden mit siebzehn Zeilen wäre auf Papier ein Streifenmuster, und die Felder zum
 Ausfüllen hätten keinen Platz. **Leere Felder drucken als Linie** — ein leerer Kasten
@@ -1424,67 +1203,13 @@ wird GEWICHTET gerechnet (Umbauzeilen zählen 0,62), sonst bleibt ein Viertel le
 
 ### Abhaken ist eine menschliche Aussage über eine gerechnete Warnung — persistiert, signaturgebunden.
 
- `ackCrit` (bool) nimmt einen kritischen Vorgang aus der
+`ackCrit` (bool) nimmt einen kritischen Vorgang aus der
 kritisch-Zahl; `ackConflictMin` (Minuten) akzeptiert eine Konfliktgröße. `findConflicts`
 überspringt den Konflikt nur, solange `shortBy <= ackConflictMin + EPS` — wird er
 GRÖSSER, meldet er sich wieder (kein stilles Wegdrücken). Läuft über `setTaskField`
 (Undo, Persistenz). **Eine Quelle:** Zählung, Prüf-Liste und `resolveConflictsCmd`
 lesen alle `findConflicts` — nie einen zweiten Zähler danebenstellen. „Kritisch" bleibt
 Information (kein automatisches Verschieben), nur die Sichtbarkeit wird abhakbar.
-
-### Personal & Maschinen: eine Zuweisung ist `{Bezeichnung, Anzahl, Zeitfenster}`, keine blanke Zahl.
-
- `t.res = [{rid, n, von, bis}]` ersetzt das frühere `crew`
-(eine Person je Vorgang, ohne Bezeichnung, ohne eigenes Fenster). `von`/`bis`
-= `null` heißt „der ganze Vorgang" — der Normalfall, dabei tippt niemand ein
-Datum; gesetzt sind es Zeitstempel wie `start`/`end` und MÜSSEN innerhalb der
-Vorgangsdauer liegen (`setTaskRes` in store.js) — ein Helfer, der vor dem
-Vorgang anfängt, ist ein Tippfehler, kein Fall. Bezeichnungen (Stagehand,
-Gabelstapler …) stehen in `project.ressourcen` (`kind: 'personal'|'maschine'`)
-und reisen im Export mit, genau wie Eintragsarten und Abschnitte — und gehen
-denselben Verwaltungsweg: `addRessource` plus dieselben drei generischen
-Befehle `setAuswahlLabel`/`removeAuswahl`/`reorderAuswahl` mit
-`liste:'ressourcen'`. **Anders als bei Arten und Abschnitten gibt es keine
-eingebauten** — «Stagehand» heißt bei der nächsten Produktion «Helfer», eine
-Vorgabe wäre nur eine weitere Löschkandidatin. `res` MUSS durch `addTask` —
-was der Handler nicht aufzählt, fällt beim Anlegen still weg, dieselbe Falle
-wie bei `abschnitt`.
-
-### Eine Bereitstellung ist ein ganz normaler Vorgang, kein zweites Datenmodell.
-
-`t.bereitstellung: true` macht aus einem Vorgang einen POOL: seine `res` sind
-nicht Bedarf, sondern Angebot — «10 Stagehands, 08:00–22:00», gegen das andere
-Vorgänge ihre Zuweisung rechnen (`bedarfsRaster` in resources.js). Er hat
-Balken, Zeitfenster, Notiz und Undo geschenkt, genau wie jeder Vorgang. Zwei
-Ausnahmen: `addDep` lehnt ihn als Quelle UND Ziel ab (ein Pfeil auf einen
-Vorrat ergibt keine Aussage), und `findConflicts`/der kritische Pfad nehmen ihn
-aus — er ist isoliert (keine Verknüpfungen möglich) und stünde nie im
-Konflikt. `setTaskField` verweigert `bereitstellung: true`, solange noch
-Verknüpfungen bestehen — erst lösen, dann umschalten.
-
-### Die Deckungslücke wird NUR gemeldet, wenn der Vorgang überhaupt eine Zuweisung dieser Art hat.
-
- `deckung(t, kind, state)` in resources.js liefert
-`null`, solange `t.res` keine Zuweisung von `kind` enthält — ein Vorgang ganz
-ohne Personal sagt nichts über Personal aus. Ohne diese Regel wären im
-Klassentreffen-Plan alle 353 Vorgänge „ungedeckt" und die Anzeige wertlos.
-Gerechnet wird je KIND (Personal ODER Maschine), nicht je Bezeichnung: „2 Std
-ohne Personal" ist die Aussage, nicht „2 Std ohne Rigger". Die Lücke ist kein
-Konflikt und steht nicht in der Prüf-Liste — unbesetzte Zeit ist oft gewollt
-(Trocknungszeit, Wartezeit); sie steht am Balken (`bz-bereit`, Panel) und im
-Panel im Klartext, ohne Alarmfarbe.
-
-### `crew` ist keine Ressource — es ist die MIGRIERTE Ressource «Crew».
-
- Beim
-Laden wandelt `persistence.js` jede blanke `crew: N` einmalig in
-`res: [{rid:'crew', n:N, von:null, bis:null}]` und legt bei Bedarf die
-Bezeichnung «Crew» im Plan an; danach ist `crew` gelöscht. Erzeugend wie die
-Soundcheck-Migration (v0.9.3) — sie darf beim zweiten Durchlauf keine zweite
-Zuweisung anlegen, geprüft in `tests/persistence.test.mjs`. Die vier Vorlagen
-(`js/templates.js`) bauen ihre Pläne direkt und laufen NICHT durch `migrate()`
-— `planFromTemplate` übersetzt ihr `crew`-Extra deshalb selbst in `res` und
-trägt die Bezeichnung «Crew» ins neue Projekt.
 
 ### `bz-bereit` (die Kontur der Bereitstellung) braucht KEINE Theme-Anpassung.
 
@@ -1498,7 +1223,7 @@ fünf Theme-Dateien anfasst.
 
 ### Personalbedarf und Maschinenbedarf sind zwei DARSTELLUNGEN, keine zweite Ansicht.
 
- Sie stehen neben Gantt und Tabelle im selben Umschalter
+Sie stehen neben Gantt und Tabelle im selben Umschalter
 (`data-view="personal"|"maschine"`) und bekommen dieselbe Ebene, denselben
 Bühnen-Filter, denselben Showtag und Abschnitt gereicht wie Gantt und Tabelle
 (`bedarf.setEbene(...)` läuft überall dort mit, wo auch `gantt.setEbene`/
@@ -1507,123 +1232,6 @@ der Rest der App gerade offen hat). Das Zeitraster ist ebenenabhängig: Tage im
 Bauzeitenplan (vierzehn Tage in Stunden wären unlesbar), Stunden im Showablauf
 (ein Tag ist dort ohnehin tagesbezogen). `js/bedarf.js` rendert nur — gerechnet
 wird ausschließlich in `bedarfsRaster()` (resources.js).
-
-### Die Schiene links trägt den MODUS — und sonst nichts
-
- (`js/rail.js`).
-Drei Einträge: Bauzeitenplan, Showablauf, Einrichten. Genau einer der beiden
-Modi ist aktiv.
-
-Sie trug in einem Zwischenstand von v0.12.0 auch die TAGE des aktiven Modus.
-Das war ein schlechter Tausch: zwei Showtage passten, aber ein Bauzeitenplan
-über zwei Wochen ergab vierzehn Datumszeilen in einer 108 px schmalen Spalte,
-und ein Plan über zwei Monate achtundfünfzig — also genau die Überladung,
-gegen die der Umbau angetreten war. **Eine Liste, die mit der Plangröße
-wächst, gehört nicht in eine feste schmale Spalte.**
-
-Zwei Regeln bleiben:
-
-- **Die Schiene rendert nur.** Sie schreibt nie an `ansicht` oder am Gantt,
-  sondern meldet über Rückrufe (`on.modus`/`on.einrichten`) nach app.js —
-  `setAnsicht()` bleibt der einzige Schreiber. Dieselbe Arbeitsteilung wie bei
-  `js/bedarf.js`.
-- **Nichts Wachsendes hinein.** Wer der Schiene einen vierten Eintrag geben
-  will, prüft zuerst, ob deren Zahl vom Plan abhängt. Wenn ja: nicht hierhin.
-
-### Der Tag wird über den Kalender-Knopf gewählt, und angeboten wird NUR, was im Plan steht
-
- (`tagWahl`/`planTage` in app.js). Vorher stand hier ein freies
-`<input type="date">` — damit sprang man auf einen Tag, an dem kein einziger
-Vorgang liegt, und stand vor einem leeren Blatt ohne zu wissen warum. Die Liste
-kommt aus `programmTage(sichtTasks(state, ebene))`: die Kalendertage, die von
-einem Vorgang berührt werden, über Mitternacht laufende auf beiden Tagen.
-
-- **EIN Knopf für beide Modi.** «Welcher Tag» ist dieselbe Frage; nur die
-  Antwort wirkt verschieden (im Bauzeitenplan springt die Achse, im Showablauf
-  wechselt der Showtag). Zwei Bedienelemente für eine Frage wären zwei Orte,
-  an denen dieselbe Auswahl auseinanderlaufen kann.
-- **Gewählt wird über `openMenu` (js/menu.js)**, nicht über einen neuen
-  schwebenden Kasten: Ankern, Umklappen am Rand, Klick daneben, Escape und
-  Fokus kann das Kontextmenü längst. Dafür ist `.mn` seit v0.12.1 gedeckelt
-  und scrollt (`max-height: 62vh`) — achtundfünfzig Tage ragten sonst unten
-  aus dem Bild.
-- **`syncTagKnopf()` ist der einzige Schreiber** von Beschriftung UND
-  Sichtbarkeit des Knopfs. Er steht im Bauzeitenplan nur in der
-  Plan-Darstellung (die Tabelle zeigt dort alle Tage zugleich), im Showablauf
-  immer — dort filtert der Tag auch Tabelle und Bedarf.
-
-### Was im aktiven Modus nichts bedeutet, steht nicht da.
-
- `setAnsicht()` blendet
-`#seg-abschnitt` außerhalb des Showablaufs aus und `.hd-zoom` außerhalb von
-Bauzeitenplan+Plan-Darstellung; `syncBuehnen()` zeigt die Bühnen-Häkchen nur im
-Showablauf. So sind aus 22 gleichzeitig sichtbaren Bedienelementen 12 im
-Bauzeitenplan und 10 im Showablauf geworden; mit dem Drucken-Knopf rechts
-(`#drucken`, beide Modi, Ziel je Modus in `data-href`) sind es 13 und 11. Die
-Zoomstufe ist ein App-Knopf mit `openMenu`, kein `<select>`. **Nachgezählt, nicht geschätzt** —
-gezählt werden die sichtbaren `button`, `input` und `select` in `.hd-bar` beim
-Klassentreffen-Plan mit einer Bühne, ohne Live und ohne offenen Konflikt. Wer
-die Zahl anzweifelt, zählt mit demselben Maß nach.
-
-Wer einen Knopf hinzufügt, sagt zuerst, in welchem Modus er etwas bedeutet —
-und blendet ihn im anderen aus.
-
-### Einrichten ist ein FENSTER über dem Plan, keine Seite
-
- (`#ein-dlg`, vier
-Reiter über eine `.seg`). Als Seite ersetzte es den Arbeitsbereich, und der
-Gantt-Container hatte dabei die Breite 0 — daraus entstand der
-Projektwechsel-Fehler, den `projektEinpassenAusstehend` bis heute abfängt.
-`openEinrichten`/`closeEinrichten` stehen auf **Modulebene**, nicht in `mount()`:
-Import, Neu und Projekte müssen beim allerersten Start ohne offenes Projekt
-funktionieren. Wer einen Knopf ins Fenster legt, legt ihn in EINEN Reiter — und
-ein Prüfwerkzeug, das ihn anklickt, muss vorher dessen `[data-ein="…"]` klicken.
-
-### Die Tabelle bleibt EIN Modul
-
-, auch wenn sonst alles getrennt ist. Zwei
-Module wären zwei Orte für Tippsperre, `commitOn`, `defaultStart` und die drei
-schwebenden Kästen. Getrennt sind die SPALTENSÄTZE (`SPALTEN.bau`/`SPALTEN.show`
-in table.js); sichtbar trennt die Schiene daneben. Im Showablauf sind
-`c-start`/`c-end` schmaler (112 statt 175 px) — dort steht kein Datum im Feld,
-und 175 px ist die Breite eines `datetime-local`.
-
-### Zwei gleich aussehende Segmentgruppen nebeneinander sind EINE Gruppe, egal was der Code meint.
-
- Das kostete in v0.9.0 die Bedienbarkeit — Ebene und
-Abschnitt standen im selben Stil nebeneinander, mit je einem dunklen Knopf, und
-niemand fand den Weg von Setup zu Show. Wer eine weitere `.seg` neben eine
-bestehende stellt, muss sie sichtbar absetzen oder sie gehört zusammengelegt.
-Die Reiter im Einrichten-Fenster (`.ein-reiter`) stehen deshalb allein in ihrer
-Zeile, nicht neben der Bedarfs-Unterwahl.
-
-### Die Knöpfe sind dieselben Elemente, nur umgezogen — keine zweite Verdrahtung.
-
- `#export`, `#import`, `#new-proj`, `#proj-menu`, `#add-gewerk`,
-`#theme-toggle` behalten ihre ids und ihre Handler aus `mount()`/Modulebene;
-sie stehen seit v0.12.0 im Fenster `#ein-dlg`, je Reiter eine `.ei-sec` mit
-`data-ein-tab`. Wer eine dieser ids programmatisch anklickt (Prüfwerkzeuge!),
-muss vorher `#rail-ein` klicken UND den Reiter, in dem der Knopf liegt
-(`[data-ein="baender"]` für `#add-gewerk`) — sonst ist er unsichtbar und der
-Playwright-Klick schlägt fehl. `tools/verify-edit.mjs` macht das vor.
-
-### Verwalten-Kästen lassen sich von außen öffnen.
-
- `table.openVerwalten(opt,
-ankerEl)` und `table.openNeuFragen(opt, ankerEl, fertig)` rufen dieselben
-privaten Funktionen wie das Auswahlfeld in der Tabelle — das Einrichten-Fenster
-bekommt damit „Arten verwalten…", „Abschnitte verwalten…" und „Personal &
-Maschinen verwalten…" GESCHENKT, ohne die Kasten-Logik (rename, sortieren,
-löschen, Fokus, Escape, Klick daneben) ein zweites Mal zu schreiben.
-
-### Personal und Maschinen stehen in DERSELBEN Verwalten-Liste, nicht in zwei getrennten.
-
- `reorderAuswahl` verlangt ALLE ids der Liste, nicht eine
-gefilterte Teilmenge — zwei Listen zu trennen hieße, eine gemeinsame
-Sortierung über beide Arten zu verlieren oder den Store-Befehl aufzubohren.
-Ein Kürzel je Zeile (`tb-verw-kind`, 👤/⚙) sagt wenigstens, was man vor sich
-hat. Anlegen geht trotzdem getrennt — zwei Knöpfe „+ Personal"/„+ Maschine"
-in Einrichten, weil `addRessource` das `kind` beim Anlegen braucht.
 
 ### Niemals `window.prompt`/`confirm`/`alert` — immer die eigenen App-Dialoge.
 
@@ -1641,7 +1249,7 @@ bleiben (Kommentare ausgenommen).
 
 ### Local-first.
 
- Der Plan lebt weiter in `localStorage`; das private Daten-Repo
+Der Plan lebt weiter in `localStorage`; das private Daten-Repo
 `M4dm0nky/Bauzeitenplan-Daten` (`main`, `projekte/<project.id>.json`, Inhalt =
 `serialize(plan)`) ist der Abgleich zwischen Geräten, nicht die Wahrheit. **Ohne
 eingetragenen Schlüssel verhält sich die App exakt wie vorher** — alle anderen

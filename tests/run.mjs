@@ -276,11 +276,18 @@ check('sw.js legt die HUELLE am HTTP-Cache vorbei an (cache: reload)', () => {
   return inst && /cache:\s*'reload'/.test(inst[0]) ? true : "install ohne { cache: 'reload' }";
 });
 
-check('CLAUDE.md hat höchstens 320 Zeilen', () => {
-  // Wird bei jeder Sitzung geladen. Wächst sie wieder, gehören Begründungen
-  // und Vorgeschichten nach docs/entscheidungen.md, nur die Regel bleibt hier.
-  const n = readFileSync(join(root, 'CLAUDE.md'), 'utf8').split('\n').length;
-  return n <= 320 ? true : `CLAUDE.md hat ${n} Zeilen (Grenze 320) — Begründungen nach docs/entscheidungen.md`;
+check('CLAUDE.md hat höchstens 320 Zeilen und 20 000 Zeichen, keine Zeile über 300 Zeichen (Tabellenzeilen ausgenommen)', () => {
+  // Wird bei jeder Sitzung geladen. Gemessen wird in Zeichen (= Token), nicht nur in
+  // Zeilen: lange Zeilen sparen nichts. Wächst die Datei, gehören Begründungen und
+  // Vorgeschichten nach docs/entscheidungen.md, nur die Regel bleibt hier.
+  const t = readFileSync(join(root, 'CLAUDE.md'), 'utf8');
+  const zeilen = t.split('\n');
+  const r = [];
+  if (zeilen.length > 320) r.push(`${zeilen.length} Zeilen (Grenze 320)`);
+  if (t.length > 20000) r.push(`${t.length} Zeichen (Grenze 20 000)`);
+  const lang = zeilen.map((z, i) => [i + 1, z]).filter(([, z]) => z.length > 300 && !z.startsWith('|'));
+  if (lang.length) r.push(`${lang.length} Zeile(n) über 300 Zeichen, erste: Zeile ${lang[0][0]}`);
+  return r.length ? r.join(' | ') + ' — Begründungen nach docs/entscheidungen.md' : true;
 });
 
 check('alle in index.html verdrahteten IDs kommen in app.js vor', () => {
