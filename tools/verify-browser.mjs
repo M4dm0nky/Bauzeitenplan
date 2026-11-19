@@ -486,6 +486,10 @@ for (const pg of PAGES) {
       }).filter(Boolean), MUSS[modus]);
       return bad.length ? bad.join(' · ') : true;
     });
+    await mc('Gantt-Bildlauffläche ≥ 50 % der Bildhöhe (Fuß frisst nicht den Plan)', async () => {
+      const r = await m.evaluate(() => ({ h: Math.round(document.querySelector('.bz-scroll').getBoundingClientRect().height), ih: innerHeight, ft: Math.round(document.querySelector('.ft').getBoundingClientRect().height) }));
+      return r.h >= r.ih * 0.5 ? true : `Gantt nur ${r.h} px von ${r.ih} (Fuß ${r.ft} px)`;
+    });
     await mc('Kopf läuft nicht seitlich über', async () => {
       // Nur der Kopf: die Seitenbreite prüft der HANDY-Block oben (Festival-Vorlage);
       // mit dem Klassentreffen-Plan stünde hier die Minimap-Jetzt-Marke (.bz-mini-now,

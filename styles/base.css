@@ -809,7 +809,14 @@ body { margin: 0; }
   .c-start, .c-end { width: 150px; }
 
   /* Tastatur-Hinweise sind am Touch-Gerät sinnlos — Platz für den Plan. */
-  .ft-keys { display: none; }
+  /* `.ft .ft-keys`: die Themes setzen `.ft-keys { display: flex }` später und
+     mit gleicher Stärke — das nackte `.ft-keys` verlor dagegen. Die Zeile trägt
+     auch «kritischer Pfad» und die Version; beides passt nicht in eine kurze
+     Zeile, also fällt sie ganz weg. */
+  .ft .ft-keys { display: none; }
+  /* Minimap kompakt: 20 Bänder zu je 5 px nahmen ~100 px, ein Fünftel des Bildes. */
+  .ft .ft-mini { margin-bottom: 0; }
+  .bz-mini-lane { height: 2px; margin-bottom: 0; }
 
   /* Die Farb-Legende wiederholt nur, was die Seitenspalte ohnehin benennt —
      auf dem schmalen Kopf ist der Platz wertvoller. */
