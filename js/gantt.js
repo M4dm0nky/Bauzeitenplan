@@ -7,8 +7,8 @@
 
 import { computeSchedule, toMin, toDate, byStart, seriesRows, reachable } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
-import { runningAt, delaysAt, verschoben } from './live.js';
-import { sichtGewerke, programmFenster, amTag, imAbschnitt } from './ebene.js';
+import { runningAt, offeneVerspaetungen, verschoben } from './live.js';
+import { sichtGewerke, programmFenster, amTag, imAbschnitt, programmTage } from './ebene.js';
 import { gewerkVar, gewerkTexture, gewerkInkVar } from './palette.js';
 import { el, svgEl } from './dom.js';
 import { resLabel } from './resources.js';
@@ -786,6 +786,7 @@ export function createGantt(root, opts = {}) {
   function select(sel) {
     selected = sel;
     paintSelection();
+    hideTip();   // das Panel geht auf, der Tooltip hat seine Aufgabe erfüllt
     if (O.onSelect) O.onSelect(sel);
   }
 
@@ -1097,6 +1098,7 @@ export function createGantt(root, opts = {}) {
   }
 
   // ── Tooltip ─────────────────────────────────────────────────────────────────
+  function hideTip() { tip.classList.remove('is-on'); }
   function bindTip(node, t) {
     const s = SCHED.get(t.id) || { critical: false, float: 0 };
     const g = gwById.get(t.gewerk);
@@ -1215,7 +1217,7 @@ export function createGantt(root, opts = {}) {
     const on = live;
     root.classList.toggle('is-live', on);
     const running = on ? runningAt(S.tasks, nowPlan()) : new Set();
-    const late = new Map(on ? delaysAt(S.tasks, nowPlan()).map((d) => [d.taskId, d]) : []);
+    const late = new Map(on ? offeneVerspaetungen(S.tasks, nowPlan()).map((d) => [d.taskId, d]) : []);
     for (const [key, node] of rowById) {
       if (!key.startsWith('task:')) continue;
       const id = key.slice(5);
@@ -1332,6 +1334,18 @@ export function createGantt(root, opts = {}) {
   // wenn der Aufbau erst in zwei Wochen beginnt: dann liegt die Jetzt-Linie
   // mitten in der Planungsphase und der Plan öffnet auf einem leeren Bild.
   // Also: Jetzt nur, wenn dort auch etwas los ist — sonst der Aufbaubeginn.
+  // «Heute» nur, wenn heute etwas liegt. Sonst der nächste Tag MIT Vorgängen
+  // (Lücke mitten im Plan, z. B. ein freier Freitag), sonst der letzte. Die
+  // Tage kommen aus programmTage — keine zweite Tagesrechnung. null = Plan leer.
+  function heuteOderNaechster() {
+    const tage = programmTage(VT);
+    if (!tage.length) return null;
+    const heute = local(toDate(NOW)).slice(0, 10);
+    if (tage.includes(heute)) return NOW;
+    const tag = tage.find((d) => d > heute) || tage[tage.length - 1];
+    return toMin(tag + 'T12:00');
+  }
+
   function initialFocus() {
     const aufbau = (S.phases || []).find((p) => /aufbau|load.?in/i.test(p.name));
     const spans = S.tasks.filter((t) => !t.milestone).map((t) => toMin(t.start));
@@ -1341,7 +1355,7 @@ export function createGantt(root, opts = {}) {
     // einzigen Balken im Bild. Es zählt allein, ob der Aufbau noch bevorsteht.
     if (NOW < anchor) return anchor;
     if (NOW > T1) return anchor;          // Projekt liegt ganz in der Vergangenheit
-    return NOW;
+    return heuteOderNaechster() ?? NOW;
   }
 
   // Erstansicht / nach Projektwechsel: in der Tagesansicht den Fokustag voll
@@ -1431,7 +1445,8 @@ export function createGantt(root, opts = {}) {
         return;
       }
       api.setZoomPreset('tage');
-      if (NOW > T0 && NOW < T1) centerOn(NOW, 0.3);
+      const fokus = NOW > T0 && NOW < T1 ? heuteOderNaechster() : null;
+      if (fokus != null) centerOn(fokus, 0.3);
       else scroller.scrollLeft = 0;
     },
     get ebene() { return ebene; },
@@ -1488,13 +1503,14 @@ export function createGantt(root, opts = {}) {
       relabelZeiten();
       return versatz;
     },
+    hideTip,
     get versatz() { return versatz; },
     liveInfo: () => ({
       now: NOW,                       // die echte Uhr — für Datum und Anzeige
       planNow: nowPlan(),             // wo der Ablauf steht — für jede Rechnung
       versatz,
       running: runningAt(S.tasks, nowPlan()),
-      late: delaysAt(S.tasks, nowPlan()),
+      late: offeneVerspaetungen(S.tasks, nowPlan()),
     }),
     // Die Vorgänge der sichtbaren Ebene — die Live-Kopfzeile des Showablaufs
     // fragt danach, statt selbst zu filtern. Kopie: niemand soll von außen in

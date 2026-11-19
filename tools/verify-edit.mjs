@@ -256,6 +256,17 @@ await check('Klick auf einen Balken öffnet das Panel', async () => {
   await page.waitForTimeout(300);
   return (await page.locator('#ins').isVisible()) ? true : 'Panel bleibt zu';
 });
+await check('Tooltip verschwindet beim Auswählen', async () => {
+  const bar = page.locator('.bz-bar').first();
+  await page.mouse.move(5, 5);
+  await bar.hover();
+  await page.waitForTimeout(200);
+  if (!(await page.locator('.bz-tip.is-on').count())) return 'Vorbedingung: Tooltip erscheint beim Hover nicht';
+  await bar.click();
+  await page.waitForTimeout(300);
+  if (!(await page.locator('#ins').isVisible())) return 'Panel bleibt zu';
+  return (await page.locator('.bz-tip.is-on').count()) === 0 ? true : 'Tooltip steht neben dem Panel';
+});
 await check('Panel zeigt den angeklickten Vorgang', async () => {
   const titel = await page.locator('.ins-title').textContent();
   const bar = await page.locator('.bz-bar').first().locator('.bz-bar-t').textContent();

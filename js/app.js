@@ -15,7 +15,7 @@ import { resolveConflictsCmd, local } from './conflicts.js';
 import { slotsExhausted, MAX_SLOTS, gewerkVar, gewerkTexture } from './palette.js';
 import { createInspector } from './inspector.js';
 import { openMenu } from './menu.js';
-import { liveStats, runningAt, nextUp, delaysAt, verschoben, versatzText } from './live.js';
+import { liveStats, runningAt, nextUp, offeneVerspaetungen, verschoben, versatzText } from './live.js';
 import { sichtGewerke, sichtTasks, typHinweis, programmTage } from './ebene.js';
 import { toMin, toDate } from './schedule.js';
 import { isoWeek } from './timeaxis.js';
@@ -1007,15 +1007,8 @@ function refreshShowhead() {
   const jetzt = punkte.filter((t) => laeuft.has(t.id)).sort((a, b) => toMin(a.start) - toMin(b.start));
   const naechst = nextUp(punkte, now);
 
-  // Verzug NUR aus dem, was noch aussteht oder gerade läuft.
-  //
-  // delaysAt meldet auch längst vergangene, nie abgehakte Punkte — bei DOORS
-  // (12:00–14:00, Status «geplant») stand um 15:30 groß und rot «+4 Std», und
-  // das an einem Abend, der exakt nach Plan lief. Das ist kein Verzug, sondern
-  // fehlende Rückmeldung, und es überdeckte den Verzug, auf den es ankommt.
-  // Die Regel bleibt unberührt: der Status wird nie automatisch gesetzt.
-  const offen = new Set(punkte.filter((t) => toMin(t.end) >= now).map((t) => t.id));
-  const verzug = delaysAt(punkte, now).filter((d) => offen.has(d.taskId));
+  // Verzug NUR aus dem, was noch aussteht oder läuft (Regel in live.js, auch fürs Zeilen-⚠).
+  const verzug = offeneVerspaetungen(punkte, now);
 
   // Ein Changeover ist kein Auftritt — er wird als Umbau angesagt, sonst stünde
   // «JETZT: Changeover» da, wo das Publikum einen Namen erwartet. Trägt der

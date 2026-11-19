@@ -188,6 +188,32 @@ await check('zweiter Aufruf öffnet die lokale Fassung', async () => {
   return (await fp.locator('#proj-name').textContent()).includes('Klassentreffen') ? true : 'Plan weg';
 });
 
+// Start an einem Tag OHNE Vorgänge mitten im Plan: der Plan öffnet nicht auf der
+// leeren Jetzt-Linie, sondern am nächsten Tag mit Vorgängen. Die Uhr steht auf
+// dem 27.08.; im Original liegt an jedem der 14 Tage etwas, also wird der 27.
+// im Testplan leergeräumt (alles, was ihn berührt, fliegt raus).
+console.log('\nSTART AN EINEM TAG OHNE VORGÄNGE');
+{
+  const plan = JSON.parse((await import('node:fs')).readFileSync(join(root, 'klassentreffen-festival.json'), 'utf8'));
+  const a = new Date('2026-08-27T00:00').getTime(), z = new Date('2026-08-28T00:00').getTime();
+  plan.tasks = plan.tasks.filter((t) => !(new Date(t.start).getTime() < z && new Date(t.end).getTime() >= a));
+  const gCtx = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  const gp = await gCtx.newPage();
+  await gp.clock.install({ time: new Date('2026-08-27T10:00:00') });
+  await gp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
+  await gp.waitForTimeout(700);
+  await gp.locator('.dlg-act .btn', { hasText: 'JSON importieren' }).click();
+  await gp.locator('#import-file').setInputFiles({ name: 'luecke.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(plan)) });
+  await gp.waitForTimeout(1500);
+  await check('Start an einem Tag ohne Vorgänge zeigt Balken', async () => {
+    const vis = await gp.locator('.bz-bar').evaluateAll((ns, w) =>
+      ns.filter((n) => { const r = n.getBoundingClientRect(); return r.width > 0 && r.right > 300 && r.left < w; }).length, 1600);
+    return vis >= 3 ? true : `nur ${vis} Balken im Bild`;
+  });
+  await gp.screenshot({ path: join(here, 'shots', 'klassentreffen-luecke.png') });
+  await gCtx.close();
+}
+
 // ?plan=leer im WIRKLICH frischen Browser (leerer Speicher) — so starten die
 // Erststart-Prüfungen. Im Kontext oben liegt der Plan schon, dort öffnet die App
 // dann richtigerweise das vorhandene Projekt statt eines Dialogs.

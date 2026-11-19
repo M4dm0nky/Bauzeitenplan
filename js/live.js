@@ -120,6 +120,20 @@ export function delaysAt(tasks, now) {
   return out.sort((a, b) => b.byMin - a.byMin);
 }
 
+/**
+ * Verzug NUR aus dem, was noch aussteht oder gerade läuft.
+ *
+ * delaysAt meldet auch längst vergangene, nie abgehakte Punkte — das ist keine
+ * Verspätung, sondern fehlende Rückmeldung, und es überdeckte den Verzug, auf
+ * den es ankommt. Live-Kopfzeile UND Zeilen-⚠ lesen hier (eine Quelle).
+ * Der Status wird weiter nie automatisch gesetzt: gefiltert wird die ANZEIGE.
+ * @returns {ReturnType<typeof delaysAt>} Teilmenge von delaysAt, gleiches Format
+ */
+export function offeneVerspaetungen(tasks, now) {
+  const offen = new Set(tasks.filter((t) => toMin(t.end) >= now).map((t) => t.id));
+  return delaysAt(tasks, now).filter((d) => offen.has(d.taskId));
+}
+
 /** Der nächste Vorgang, der ansteht. null, wenn nichts mehr kommt. */
 export function nextUp(tasks, now) {
   let best = null;
@@ -136,7 +150,7 @@ export function nextUp(tasks, now) {
 export function liveStats(tasks, now) {
   return {
     running: runningAt(tasks, now).size,
-    late: delaysAt(tasks, now).length,
+    late: offeneVerspaetungen(tasks, now).length,
     next: nextUp(tasks, now),
   };
 }

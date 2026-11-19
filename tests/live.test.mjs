@@ -1,4 +1,4 @@
-import { runningAt, delaysAt, nextUp, liveStats, verschoben, versatzText } from '../js/live.js';
+import { runningAt, delaysAt, offeneVerspaetungen, nextUp, liveStats, verschoben, versatzText } from '../js/live.js';
 import { toMin } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
@@ -14,6 +14,16 @@ const M = (id, title, at, extra = {}) =>
   ({ id, gewerk: 'g1', title, start: at, end: at, milestone: true, progress: 0, status: 'geplant', ...extra });
 
 const NOW = toMin('2026-07-15T12:00');
+
+console.log('\nOffene Verspätungen — nur was aussteht oder läuft');
+test('offeneVerspaetungen lässt längst Vergangenes weg', () => {
+  const t = [
+    T('alt', 'Gestern', '2026-07-14T12:00', '2026-07-14T14:00'),
+    T('jetzt', 'Läuft', '2026-07-15T11:50', '2026-07-15T14:00'),
+  ];
+  assert.equal(delaysAt(t, NOW).length, 2, 'Vorbedingung: delaysAt meldet beide');
+  assert.deepEqual(offeneVerspaetungen(t, NOW).map((d) => d.taskId), ['jetzt']);
+});
 
 console.log('\nWas läuft gerade?');
 test('Vorgang um den Zeitpunkt herum läuft', () => {

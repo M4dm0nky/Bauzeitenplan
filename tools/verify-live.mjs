@@ -119,6 +119,28 @@ await check('Verzug wird angezeigt', async () => {
 });
 await check('Verzug steht auch in der Gewerk-Spalte', async () =>
   (await page.locator('.bz-lab.is-late').count()) > 0 ? true : 'keine Markierung links');
+await check('⚠ nur an offenen Verspätungen — Zeilen == Live-Leiste, weniger als alle vergangenen', async () => {
+  // Zeitpunkt wie oben (07.08. 19:30): dort liegen längst vergangene, nie
+  // abgehakte Vorgänge. Sie dürfen weder die Leiste noch die Zeilen färben.
+  const r = await page.evaluate(async () => {
+    const { delaysAt } = await import('/js/live.js');
+    const { toMin } = await import('/js/schedule.js');
+    const id = localStorage.getItem('bzp_active');
+    const plan = JSON.parse(localStorage.getItem('bzp_p_' + id));
+    const d = new Date(), z = (n) => String(n).padStart(2, '0');
+    const now = toMin(`${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`);
+    return {
+      alle: delaysAt(plan.tasks, now).length,
+      zeilen: document.querySelectorAll('.bz-bar.is-late, .bz-ms.is-late').length,
+      leiste: document.getElementById('live-bar').textContent,
+    };
+  });
+  const m = /(\d+) im Verzug/.exec(r.leiste);
+  const leiste = m ? Number(m[1]) : 0;
+  if (r.zeilen !== leiste) return `Zeilen ${r.zeilen} != Leiste ${leiste} (${r.leiste})`;
+  if (!(r.zeilen < r.alle)) return `nicht weniger als alle vergangenen: ${r.zeilen} / ${r.alle}`;
+  return true;
+});
 await check('fertige Vorgänge gelten nie als überfällig', async () => {
   // Der Status ist eine Aussage von Menschen und schlägt die Uhr.
   const bad = await page.evaluate(() => {
