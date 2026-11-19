@@ -1079,6 +1079,22 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
       collapsed.clear();   // Eingeklapptes der anderen Ebene sagt hier nichts
     },
     get ebene() { return ebene; },
+    /**
+     * Einen Vorgang zeigen (Suche): Elternvorgang aufklappen, die
+     * Zeile in die Mitte holen und kurz markieren. Nimmt den Fokus NICHT — wer
+     * von der Suche kommt, tippt nicht gleich weiter.
+     */
+    zeige(id) {
+      const t = store.state.tasks.find((x) => x.id === id);
+      if (!t) return;
+      // Nur Elternvorgänge klappen in der Tabelle; die Gruppenzeilen stehen immer offen.
+      if (t.parent && collapsed.has(t.parent)) { collapsed.delete(t.parent); render(); }
+      for (const n of root.querySelectorAll('tr.is-treffer')) n.classList.remove('is-treffer');
+      const tr = root.querySelector(`tr[data-id="${CSS.escape(id)}"]`);
+      if (!tr) return;
+      tr.classList.add('is-treffer');
+      tr.scrollIntoView({ block: 'center' });
+    },
     setConflicts(list) { conflicts = new Map(list.map((c) => [c.taskId, c])); },
     /**
      * Die schwebenden Kästen von außen öffnen (Einrichten-Seite) — dieselbe

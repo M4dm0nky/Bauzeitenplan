@@ -48,6 +48,7 @@ const HUELLE = [
   'js/resources.js',
   'js/schedule.js',
   'js/store.js',
+  'js/suche.js',
   'js/sync.js',
   'js/table.js',
   'js/templates.js',

@@ -828,7 +828,25 @@ export function createGantt(root, opts = {}) {
     if (t.parent && collapsed.has(t.parent)) { collapsed.delete(t.parent); changed = true; }
     if (changed) { rebuild(); layout(); }
     select({ kind: 'task', id: taskId });
-    centerOn(toMin(t.start));
+    // Tagesansicht: den Tag des Vorgangs voll aufziehen, sonst wäre der Maßstab
+    // nach einem Sprung verschoben. Sonst nur hinscrollen.
+    if (zoomMode === 'tage') fitDay(local(toDate(toMin(t.start))).slice(0, 10));
+    else centerOn(toMin(t.start));
+    zeigeZeile(taskId);
+  }
+
+  // Senkrecht hinscrollen, falls die Zeile des Vorgangs nicht im Bild liegt.
+  // centerOn kennt nur die Zeit-Achse; ohne das stünde ein Treffer im 153-Zeilen-
+  // Plan ausgewählt, aber außer Sicht.
+  function zeigeZeile(taskId) {
+    const n = rowById.get('task:' + taskId);
+    if (!n) return;
+    const r = n.getBoundingClientRect();
+    if (!r.height) return;
+    const sr = scroller.getBoundingClientRect();
+    const kopf = axis.getBoundingClientRect().bottom;
+    if (r.top >= kopf + 4 && r.bottom <= sr.bottom - 4) return;
+    scroller.scrollTop += (r.top + r.bottom) / 2 - (kopf + sr.bottom) / 2;
   }
 
   function paintSelection() {

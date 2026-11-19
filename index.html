@@ -169,13 +169,19 @@
         <!-- Drucken bedeutet in beiden Modi etwas: Tagesblätter bzw. Running
              Order. Das Ziel setzt app.js (setAnsicht) — print.html liest
              ?ansicht=. Export bleibt im Einrichten-Fenster (selten). -->
-        <button class="btn" id="drucken" title="Drucken (A3 quer)">🖨 Drucken</button>
+        <!-- Suche: Titel, Gewerk, Notiz, Kontakt. «/» öffnet sie von überall
+             außer aus einem Eingabefeld. Liste und Sprung: js/suche.js, app.js. -->
+        <input type="search" class="suche" id="suche" placeholder="🔍 Suchen …  ( / )"
+               autocomplete="off" spellcheck="false" role="combobox" aria-label="Suchen"
+               aria-expanded="false" aria-controls="suche-liste" aria-autocomplete="list">
+        <button class="btn" id="drucken" title="Drucken (A3 quer)" aria-label="Drucken">🖨<span class="btn-wort"> Drucken</span></button>
         <span class="sync-state" id="sync-state" data-state="ok" role="status" hidden>☁</span>
         <span class="save-state" id="save-state" data-state="saved">gesichert</span>
       </div>
     </div>
 
     <div class="legend" id="legend"></div>
+    <div class="suche-liste" id="suche-liste" role="listbox" aria-label="Suchtreffer" hidden></div>
   </header>
 
   <!-- Live-Kopfzeile des Showablaufs: was läuft, was kommt, wie weit hängen wir.

@@ -11,12 +11,13 @@ import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
 import { createBedarf } from './bedarf.js';
 import { createRail } from './rail.js';
+import { createSuche } from './suche.js';
 import { resolveConflictsCmd, local } from './conflicts.js';
 import { slotsExhausted, MAX_SLOTS, gewerkVar, gewerkTexture } from './palette.js';
 import { createInspector } from './inspector.js';
 import { openMenu } from './menu.js';
 import { liveStats, runningAt, nextUp, offeneVerspaetungen, verschoben, versatzText } from './live.js';
-import { sichtGewerke, sichtTasks, typHinweis, programmTage, buehnenIds } from './ebene.js';
+import { sichtGewerke, sichtTasks, typHinweis, programmTage, buehnenIds, abschnittOf, amTag } from './ebene.js';
 import { toMin, toDate } from './schedule.js';
 import { isoWeek } from './timeaxis.js';
 import { $, el, escapeHtml } from './dom.js';
@@ -25,7 +26,7 @@ import { VERSION } from './version.js';
 // Der Speicher wird in main() gesetzt. Bis dahin null — nichts greift vorher
 // darauf zu.
 let repo = null;
-let store = null, gantt = null, table = null, bedarf = null, inspector = null, rail = null;
+let store = null, gantt = null, table = null, bedarf = null, inspector = null, rail = null, suche = null;
 
 // ── Darstellung ─────────────────────────────────────────────────────────────
 // Plan · Tabelle · Bedarf. Personal und Maschinen sind KEINE eigenen
@@ -291,6 +292,14 @@ function mount() {
     onConflicts: ({ error }) => toast(error, 'bad'),
     onHinweis: (text) => toast(text),
     onGewerkAnlegen: (anker) => addGewerk(anker),
+  });
+  // Die Suche rechnet über die GANZE aktive Ebene — auch über Bühnen, deren
+  // Häkchen aus sind: ein Treffer, den ein Filter verschluckt, wäre «gibt's
+  // nicht». Der Sprung stellt dann das Häkchen wieder an (springeZu).
+  suche = createSuche($('suche'), $('suche-liste'), {
+    daten: () => ({ tasks: sichtTasks(store.state, ebene), gewerke: sichtGewerke(store.state, ebene) }),
+    onWahl: springeZu,
+    blockiert: () => !!document.querySelector('.dlg:not([hidden])'),
   });
   bedarf = createBedarf($('bd'), { store, onEinrichten: (tab) => openEinrichten(tab) });
   inspector = createInspector($('ins'), {
@@ -911,6 +920,40 @@ function syncBuehnen() {
 // Der EINZIGE Ort, der über die Sichtbarkeit des Panels entscheidet.
 function syncPanel() {
   $('ins').hidden = view !== 'gantt' || !inspector.selection;
+}
+
+// ── Suche: zum Treffer springen ──────────────────────────────────────────────
+// Der EINZIGE Ort, der aus einem Treffer eine Ansicht macht. Reihenfolge:
+// erst Modus/Abschnitt/Tag/Bühne über die vorhandenen Schreiber (setAnsicht,
+// showTag, ausBlend) — nie ansicht/ebene/abschnitt direkt —, dann auswählen
+// und hinscrollen. setAnsicht() setzt die Auswahl zurück, also kommt sie danach.
+function springeZu(id) {
+  const t = store.state.tasks.find((x) => x.id === id);
+  if (!t) return;
+  let ziel = ansicht;
+  if (ebene === 'show') {
+    // Der Eintrag zählt zu genau einem Abschnitt und (über Mitternacht: zu
+    // seinem Starttag zuerst) zu einem Tag. Beides muss stimmen, sonst blendet
+    // der Filter den Treffer sofort wieder aus.
+    ziel = abschnittOf(t) === 'setup' ? 'setup' : 'show';
+    const tage = programmTage(sichtTasks(store.state, 'show'));
+    const start = String(t.start).slice(0, 10);
+    const tag = tage.includes(start) ? start
+      : tage.find((d) => amTag([t], d).length) || showTag;
+    showTag = tag;
+    ausBlend.delete(t.gewerk);               // abgehakte Bühne: Treffer zeigen
+    setAnsicht(ziel);
+  } else if (ziel !== 'bau') {
+    setAnsicht('bau');
+  }
+  if (view === 'bedarf') setView('gantt');    // der Bedarf kennt keinen einzelnen Vorgang
+  if (view === 'tabelle') {
+    gantt.select({ kind: 'task', id });
+    table.zeige(id);
+    return;
+  }
+  gantt.reveal(id);
+  syncTagKnopf();
 }
 
 function renderTable() {
