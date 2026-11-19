@@ -523,6 +523,17 @@ await check('DIE ANSAGE ZÄHLT: der Versatz rechnet den Verzug herunter', async 
   return mit.min === ohne.min - 3 ? true
     : `${ohne.min} − 3 sollte ${ohne.min - 3} sein, gemeldet wird ${mit.min}`;
 });
+await check('die Trefferliste der Suche zeigt dieselbe (verschobene) Uhrzeit wie die Seitenspalte', async () => {
+  await setVzShow(5);
+  const zeile = p.locator('.bz-lab:has(.bz-lab-zeit)').first();
+  const name = (await zeile.locator('.bz-lab-name').textContent()).trim();
+  const zeit = (await zeile.locator('.bz-lab-zeit').textContent()).trim().slice(0, 5);
+  await p.fill('#suche', name);
+  await p.waitForTimeout(250);
+  const zeiten = await p.locator('#suche-liste .suche-i .suche-z').allTextContents();
+  await p.keyboard.press('Escape');
+  return zeiten.some((z) => z.trim().endsWith(zeit)) ? true : `Seitenspalte ${zeit}, Liste ${JSON.stringify(zeiten)}`;
+});
 await setVzShow(5);
 await p.screenshot({ path: join(here, 'shots', 'showablauf-versatz.png') });
 await setVzShow(0);

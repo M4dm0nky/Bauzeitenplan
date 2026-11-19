@@ -15,6 +15,7 @@
 import { el } from './dom.js';
 import { suchTreffer } from './schedule.js';
 import { gewerkVar } from './palette.js';
+import { verschoben } from './live.js';
 
 /** «2026-08-29T15:20» → «29.08. 15:20» — nur Anzeige, gerechnet wird hier nichts. */
 const kurz = (iso) => {
@@ -27,7 +28,7 @@ const TIPPT = 'input, textarea, select, [contenteditable=""], [contenteditable="
 /**
  * @param {HTMLInputElement} input
  * @param {HTMLElement} liste
- * @param {{daten:()=>{tasks:object[],gewerke:object[]}, onWahl:(id:string)=>void, blockiert?:()=>boolean}} o
+ * @param {{daten:()=>{tasks:object[],gewerke:object[],versatz?:number,ebene?:string}, onWahl:(id:string)=>void, blockiert?:()=>boolean}} o
  */
 export function createSuche(input, liste, { daten, onWahl, blockiert = () => false }) {
   let treffer = [];      // flache Liste der Einträge in Anzeigereihenfolge
@@ -79,7 +80,7 @@ export function createSuche(input, liste, { daten, onWahl, blockiert = () => fal
   function render() {
     const q = input.value;
     if (!q.trim()) { zu(); return; }
-    const { tasks, gewerke } = daten();
+    const { tasks, gewerke, versatz = 0, ebene = 'bau' } = daten();
     const { groups, weitere } = suchTreffer({ tasks, gewerke, query: q });
     liste.replaceChildren();
     treffer = [];
@@ -103,7 +104,7 @@ export function createSuche(input, liste, { daten, onWahl, blockiert = () => fal
         b.id = 'suche-i-' + i;
         b.tabIndex = -1;
         b.setAttribute('role', 'option');
-        b.append(el('span', 'suche-t', t.title), el('span', 'suche-z', kurz(t.start)));
+        b.append(el('span', 'suche-t', t.title), el('span', 'suche-z', kurz(verschoben(t.start, versatz))));
         // mousedown nähme dem Feld den Fokus — und mit ihm die Tastatur.
         b.addEventListener('mousedown', (e) => e.preventDefault());
         b.addEventListener('click', () => wahl(i));
