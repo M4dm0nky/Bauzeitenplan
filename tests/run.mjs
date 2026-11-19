@@ -276,6 +276,13 @@ check('sw.js legt die HUELLE am HTTP-Cache vorbei an (cache: reload)', () => {
   return inst && /cache:\s*'reload'/.test(inst[0]) ? true : "install ohne { cache: 'reload' }";
 });
 
+check('CLAUDE.md hat höchstens 320 Zeilen', () => {
+  // Wird bei jeder Sitzung geladen. Wächst sie wieder, gehören Begründungen
+  // und Vorgeschichten nach docs/entscheidungen.md, nur die Regel bleibt hier.
+  const n = readFileSync(join(root, 'CLAUDE.md'), 'utf8').split('\n').length;
+  return n <= 320 ? true : `CLAUDE.md hat ${n} Zeilen (Grenze 320) — Begründungen nach docs/entscheidungen.md`;
+});
+
 check('alle in index.html verdrahteten IDs kommen in app.js vor', () => {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   const app = js('app.js');
