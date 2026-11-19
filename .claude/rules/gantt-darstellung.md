@@ -20,3 +20,7 @@ paths:
 - **Uhrzeit und Dauer links vor dem Namen** (`bz-lab-zeit`/`bz-lab-dauer`, `tabular-nums`); **Dauer in MINUTEN**, Meilenstein = Strich.
 - **Seitenspalte im Showablauf 390 px (sonst 296; Handy 168);** Breite am DOM messen (`sideWNow()`), nicht `O.sideW`.
 - **Showablauf-Achse: JEDE Stunde beschriftet** (`ticksFor` `'hour'`), ab `px >= 0.5`.
+- **Balken ziehen: Vorschau im DOM, EIN `moveTask` beim Loslassen** (ein ⌘Z); Escape verwirft; unter 4 px bleibt es ein Klick (Auswahl); unveränderte Zeit schreibt nichts.
+- **Ziehen rechnet in Differenzen (`dx / px`) über `gezogen`** — der Versatz kürzt sich heraus, gespeichert wird Planzeit; der Hinweis zeigt `verschoben()`. Keine vierte `xp()`-Stelle.
+- **Griffe (`.bz-grip`) nur an Blatt-Balken**; Sammelvorgang ohne, Meilenstein nur verschieben (an der Beschriftung, die Raute deckt `.bz-link`). `.bz-link` hat Vorrang, deshalb ist der rechte Griff 20 px breit.
+- **Touch: erst 300 ms halten, dann ziehen**; vorher Bewegung > 8 px = Wischen. Alt+←/→ verschiebt, Alt+Shift+←/→ ändert das Ende (je ein Befehl).
