@@ -613,6 +613,9 @@ export function createGantt(root, opts = {}) {
     const h = el('div', 'bz-link');
     h.dataset.from = atMin; h.dataset.to = atMin;
     h.dataset.linkFrom = task.id;
+    // Der Kreis sitzt NEBEN dem Ziel (Balken: rechts vom Ende, Meilenstein: rechts
+    // von der Raute), damit Dauer-Griff und Raute frei bleiben — siehe base.css.
+    h.classList.add(node.classList.contains('bz-ms') ? 'bz-link-ms' : 'bz-link-bar');
     // Senkrecht über markY — dieselbe Rechnung, die schon die Pfeilanker setzt.
     // Sie kennt Spuren, zugeklappte Gruppen und die Zieltermin-Zeile bereits.
     h.style.top = markY(row, task) + 'px';
@@ -863,6 +866,9 @@ export function createGantt(root, opts = {}) {
   }
 
   root.addEventListener('pointerdown', (e) => {
+    // Ein Zug, dessen pointerup nie ankam (Maus außerhalb des Fensters losgelassen),
+    // hängt sonst fest und sperrt jeden weiteren.
+    if (zug && e.buttons === 0) zugEnde(false);
     if (link || zug || e.target.closest('.bz-link')) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const node = e.target.closest('.bz-bar[data-task], .bz-ms[data-task]');
@@ -904,6 +910,10 @@ export function createGantt(root, opts = {}) {
     zugHinweis(t, r, e);
   });
 
+  // Langes Drücken öffnet am Handy das Kontextmenü — mitten im Halten/Ziehen nicht.
+  root.addEventListener('contextmenu', (e) => {
+    if (zug && zug.touch) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
   root.addEventListener('pointerup', (e) => { if (zug) zugEnde(true, e); });
   root.addEventListener('pointercancel', () => { if (zug) zugEnde(false); });
 
@@ -916,6 +926,10 @@ export function createGantt(root, opts = {}) {
     const t = S.tasks.find((q) => q.id === selected.id);
     if (!t || hatKinder(t.id)) return true;
     e.preventDefault();                       // Alt+← ist sonst «Zurück» im Browser
+    // Ein anderer Balken hat den Fokus als der ausgewählte: nichts verschieben,
+    // was man nicht sieht.
+    const fokus = e.target.closest && e.target.closest('[data-task]');
+    if (fokus && fokus.dataset.task !== selected.id) return true;
     const modus = e.shiftKey ? 'end' : 'move';
     const schritt = zugSchritt();
     const r = zugRechne(t, modus, (e.key === 'ArrowRight' ? 1 : -1) * schritt);

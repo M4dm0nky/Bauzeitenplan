@@ -22,5 +22,5 @@ paths:
 - **Showablauf-Achse: JEDE Stunde beschriftet** (`ticksFor` `'hour'`), ab `px >= 0.5`.
 - **Balken ziehen: Vorschau im DOM, EIN `moveTask` beim Loslassen** (ein ⌘Z); Escape verwirft; unter 4 px bleibt es ein Klick (Auswahl); unveränderte Zeit schreibt nichts.
 - **Ziehen rechnet in Differenzen (`dx / px`) über `gezogen`** — der Versatz kürzt sich heraus, gespeichert wird Planzeit; der Hinweis zeigt `verschoben()`. Keine vierte `xp()`-Stelle.
-- **Griffe (`.bz-grip`) nur an Blatt-Balken**; Sammelvorgang ohne, Meilenstein nur verschieben (an der Beschriftung, die Raute deckt `.bz-link`). `.bz-link` hat Vorrang, deshalb ist der rechte Griff 20 px breit.
+- **Griffe (`.bz-grip`) nur an Blatt-Balken**; Sammelvorgang ohne, Meilenstein nur verschieben (an der Raute). Der Verknüpfen-Kreis (`.bz-link`) sitzt NEBEN dem Ziel (`bz-link-bar` rechts vom Ende, `bz-link-ms` rechts der Raute) und ist beim Ziehen aus (`data-dragging`).
 - **Touch: erst 300 ms halten, dann ziehen**; vorher Bewegung > 8 px = Wischen. Alt+←/→ verschiebt, Alt+Shift+←/→ ändert das Ende (je ein Befehl).

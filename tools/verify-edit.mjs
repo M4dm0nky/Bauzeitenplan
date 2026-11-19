@@ -377,8 +377,13 @@ const pfeile = () => page.locator('path.bz-dep').count();
 // sein Mittelpunkt liegt auf der Oberkante. getBoundingClientRect statt
 // boundingBox(): der Griff ist bei opacity 0 trotzdem treffbar, aber Playwright
 // wartete sonst auf «sichtbar».
+// Der sichtbare Kreis liegt bei Balken RECHTS neben dem Ende (die Dauer-Griffe
+// brauchen das Balkenende frei), bei Meilensteinen rechts neben der Raute — der
+// Ursprung des Griffs (2 px breit, 0 hoch) ist nicht das, was man trifft.
 const griffPunkt = (id) => page.locator(`.bz-link[data-link-from="${id}"]`).first()
-  .evaluate((n) => { const r = n.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top }; });
+  .evaluate((n) => { const r = n.getBoundingClientRect();
+    const off = n.classList.contains('bz-link-ms') ? 9 : n.classList.contains('bz-link-bar') ? 0 : -r.width / 2;
+    return { x: r.right + off + 12, y: r.top }; });
 // Eine Quelle suchen, deren Griff wirklich im Bild steht — und sie notfalls
 // hinscrollen. Blind den ersten Balken zu nehmen schlug fehl: an dieser Stelle
 // im Lauf ist der Gantt längst gezoomt und verschoben, und das Ende des ersten
@@ -1363,7 +1368,11 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
       const hint = await pz.locator('.bz-tip-zug').count();
       const text = hint ? await pz.locator('.bz-tip-zug').first().textContent() : '';
       await pz.screenshot({ path: join(here, 'shots', 'edit-ziehen-hinweis.png') });
+      // Der Verknüpfen-Griff bliebe sonst am ALTEN Ende stehen und griffbereit.
+      const griffe = await pz.evaluate(() => [...document.querySelectorAll('.bz-link')]
+        .filter((h) => getComputedStyle(h).pointerEvents !== 'none' || getComputedStyle(h).opacity !== '0').length);
       await pz.mouse.up();
+      if (griffe) return griffe + ' Verknüpfen-Griffe bleiben beim Ziehen sichtbar/treffbar';
       if (!hint || !/Start/.test(text) || !/Ende/.test(text) || !/Dauer/.test(text)) return 'kein Hinweis beim Ziehen: «' + text + '»';
       const neu = await zeit(b1.id);
       if (neu.s <= alt.s) return 'Start nicht später: ' + alt.s + ' → ' + neu.s;
@@ -1380,7 +1389,11 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
       b1 = await balken(prep.frei);
       if (!b1) return 'kein Balken im Bild';
       const a = await zeit(b1.id);
-      await ziehe(b1, b1.r - 16, 50);
+      // Dreh- und Angelpunkt: 10 px vor dem Ende trifft der Zeiger den Dauer-Griff,
+      // nicht den Verknüpfen-Griff.
+      const wer = await pz.evaluate(([x, y]) => String(document.elementFromPoint(x, y).getAttribute('class')), [b1.r - 10, b1.y]);
+      if (!/bz-grip-r/.test(wer)) return 'bei Ende-10px liegt «' + wer + '» statt des Dauer-Griffs';
+      await ziehe(b1, b1.r - 10, 50);
       const n = await zeit(b1.id);
       if (n.s !== a.s) return 'Start hat sich bewegt';
       return n.e > a.e ? true : 'Ende nicht später: ' + a.e + ' → ' + n.e;
@@ -1443,20 +1456,18 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
       if (!prep.ms) return 'kein Meilenstein im Plan';
       const g = await pz.locator(`.bz-ms[data-task="${prep.ms}"] .bz-grip`).count();
       if (g) return 'Meilenstein trägt Griffe';
-      // Der Verknüpfen-Griff deckt die Raute selbst ab und hat Vorrang — gegriffen
-      // wird der Meilenstein an seiner Beschriftung.
+      // Die Raute selbst ist das Ziel; der Verknüpfen-Griff sitzt rechts daneben.
       const p = await pz.locator(`.bz-ms[data-task="${prep.ms}"]`).evaluate(async (n) => {
         n.scrollIntoView({ block: 'center', inline: 'center' });
         await new Promise((q) => requestAnimationFrame(q));
-        const t = n.querySelector('.bz-ms-t').getBoundingClientRect(), b = n.getBoundingClientRect();
-        const y = t.top + t.height / 2;
-        for (let x = t.right - 3; x > t.left; x -= 2) {
-          const h = document.elementFromPoint(x, y);
-          if (h && h.closest('.bz-ms') === n) return { x, y };
-        }
-        return null;
+        const d = n.querySelector('.bz-ms-d').getBoundingClientRect();
+        const x = d.left + d.width / 2, y = d.top + d.height / 2;
+        const mitte = document.elementFromPoint(x, y);
+        const rechts = document.elementFromPoint(x + 21, y);
+        return { x, y, mitte: String(mitte && mitte.getAttribute('class')), rechts: String(rechts && rechts.getAttribute('class')) };
       });
-      if (!p) return 'kein greifbarer Punkt auf dem Meilenstein';
+      if (!/bz-ms/.test(p.mitte)) return 'auf der Raute liegt «' + p.mitte + '»';
+      if (!/bz-link/.test(p.rechts)) return 'der Verknüpfen-Griff ist neben der Raute nicht erreichbar («' + p.rechts + '»)';
       const a = await zeit(prep.ms);
       await pz.mouse.move(p.x, p.y);
       await pz.mouse.down();

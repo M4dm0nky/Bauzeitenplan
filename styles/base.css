@@ -309,6 +309,13 @@ body { margin: 0; }
 @media (pointer: coarse) { .bz-link { opacity: 1; } }
 /* Während des Ziehens sind die übrigen Griffe nur Störung. */
 .bz[data-linking] .bz-link { opacity: 0; }
+/* Beim Balken-Ziehen bliebe der Griff am ALTEN Ende stehen und griffbereit. */
+.bz[data-dragging] .bz-link { opacity: 0; pointer-events: none; }
+/* Der Kreis beginnt am Ende des Balkens, nicht auf ihm: der rechte Dauer-Griff
+   bleibt in voller Breite frei. Beim Meilenstein sitzt er rechts neben der Raute,
+   damit die Raute selbst zum Verschieben greifbar ist. */
+.bz-link-bar::after { left: 100%; transform: translate(0, -50%); }
+.bz-link-ms::after { left: calc(100% + 9px); transform: translate(0, -50%); }
 .bz[data-linking] .bz-tip { opacity: 0 !important; }
 
 /* ── Tooltip ──────────────────────────────────────────────────────────────── */
@@ -861,16 +868,14 @@ body { margin: 0; }
 /* ── Balken ziehen ─────────────────────────────────────────────────────────── */
 /* Griffe sitzen IM Balken (er schneidet sie ab); höchstens ein Drittel des Balkens,
    damit bei einem schmalen Balken die Mitte zum Verschieben übrig bleibt. Unsichtbar,
-   nur der Cursor sagt es. Der rechte Griff ist breiter: der Verknüpfen-Griff (.bz-link)
-   deckt die äußeren 12 px des Balkenendes ab und hat Vorrang — übrig bleiben die
-   inneren 8 (Maus) bzw. 16 (Finger). Links genauso: ein einlaufender Pfeil fängt dort
-   die ersten Pixel ab. */
+   nur der Cursor sagt es. Der Verknüpfen-Griff (.bz-link) sitzt neben dem Balkenende,
+   nicht darauf. Ein einlaufender Pfeil fängt links die ersten Pixel ab. */
 .bz-grip { position: absolute; top: 0; bottom: 0; z-index: 1; cursor: ew-resize; }
 .bz-grip-l { left: 0; width: min(14px, 33%); }
-.bz-grip-r { right: 0; width: min(20px, 33%); }
+.bz-grip-r { right: 0; width: min(14px, 33%); }
 @media (pointer: coarse) {
   .bz-grip-l { width: min(24px, 33%); }
-  .bz-grip-r { width: min(28px, 33%); }
+  .bz-grip-r { width: min(24px, 33%); }
 }
 .bz-bar:not(.is-summary) { cursor: grab; }
 .bz-bar.is-drag, .bz[data-dragging] .bz-bar { cursor: grabbing; }
@@ -878,6 +883,3 @@ body { margin: 0; }
 .bz-ms.is-drag { opacity: .8; }
 .bz[data-dragging] { user-select: none; }
 .bz[data-dragging] .bz-tip:not(.bz-tip-zug) { opacity: 0 !important; }
-/* Der Verknüpfen-Griff deckt die Raute ab (Vorrang) — gegriffen wird ein Meilenstein
-   an seiner Beschriftung. */
-.bz-ms-t { pointer-events: auto; cursor: grab; }
