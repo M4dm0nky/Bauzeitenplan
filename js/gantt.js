@@ -820,9 +820,16 @@ export function createGantt(root, opts = {}) {
 
   // „Zeigen": den Vorgang sichtbar machen — Gewerk und ggf. Elternvorgang
   // aufklappen, auswählen, hinscrollen. Für die Prüf-Liste (kritisch/Konflikt).
+  // Nach einem Sprung («Zeigen», Suche) hört das Live-Folgen kurz auf: sonst risse
+  // der nächste Tick die Ansicht nach höchstens 15 s vom Treffer weg. Danach
+  // folgt sie wieder von selbst; Live bleibt an, die JETZT-Linie tickt weiter.
+  const FOLGE_PAUSE_MS = 60000;
+  let folgePauseBis = 0;
+
   function reveal(taskId) {
     const t = S.tasks.find((x) => x.id === taskId);
     if (!t) return;
+    folgePauseBis = Date.now() + FOLGE_PAUSE_MS;
     let changed = false;
     if (collapsed.has(t.gewerk)) { collapsed.delete(t.gewerk); changed = true; }
     if (t.parent && collapsed.has(t.parent)) { collapsed.delete(t.parent); changed = true; }
@@ -1290,7 +1297,7 @@ export function createGantt(root, opts = {}) {
     paintNow();
     paintLive();
     // «Immer folgen»: die Ansicht klebt an der Linie.
-    if (live && NOW >= T0 && NOW <= T1) centerOn(NOW, 0.4);
+    if (live && NOW >= T0 && NOW <= T1 && Date.now() >= folgePauseBis) centerOn(NOW, 0.4);
     if (O.onTick) O.onTick(NOW);
   }
 
@@ -1570,6 +1577,7 @@ export function createGantt(root, opts = {}) {
     get selected() { return selected; },
     setLive(on) {
       live = !!on;
+      folgePauseBis = 0;           // bewusst eingeschaltet: sofort folgen
       tickNow();
       paintLive();
       if (live) centerOn(NOW, 0.4);

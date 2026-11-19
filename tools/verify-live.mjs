@@ -181,6 +181,26 @@ await check('die Ansicht folgt der Zeit', async () => {
   const nachher = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
   return nachher > vorher ? true : `scrollLeft ${vorher} → ${nachher} — folgt nicht`;
 });
+await check('Sprung pausiert das Folgen 60 s, danach folgt die Ansicht wieder der Linie', async () => {
+  const liniesicht = () => page.evaluate(() => {
+    const sc = document.querySelector('.bz-scroll'), l = document.querySelector('.bz-now');
+    const x = parseFloat(l.style.left);
+    return x >= sc.scrollLeft && x <= sc.scrollLeft + sc.clientWidth;
+  });
+  if (!(await liniesicht())) return 'Vorbedingung: Linie schon vor dem Sprung nicht im Bild';
+  // Ein Treffer weit weg von «jetzt»: der früheste Vorgang des ersten Gewerks.
+  await page.fill('#suche', 'a');
+  await page.waitForTimeout(250);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(500);
+  if (await liniesicht()) return 'Vorbedingung: Sprungziel liegt im Bild der Linie';
+  await page.clock.fastForward('00:20');
+  await page.waitForTimeout(300);
+  if (await liniesicht()) return 'nach 20 s ist die Ansicht schon zurück auf der Linie';
+  await page.clock.fastForward('00:50');
+  await page.waitForTimeout(300);
+  return (await liniesicht()) ? true : 'nach 70 s folgt die Ansicht der Linie nicht wieder';
+});
 await check('Live-Zustand überlebt das Neuladen', async () => {
   await page.reload();
   await page.waitForTimeout(1000);
