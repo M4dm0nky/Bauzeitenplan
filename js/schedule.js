@@ -182,6 +182,14 @@ export function candidateGroups({ tasks = [], gewerke = [], deps = [], selfId, q
     || (gName.get(t.gewerk) || '').toLowerCase().includes(q);
   const cand = tasks.filter((t) => t.id !== selfId && !linked.has(t.id) && match(t));
 
+  return gruppiere(cand, gewerke);
+}
+
+/**
+ * Gemeinsame Gruppierung für Picker und Suche: je Gewerk (nach `sort`), darin
+ * byStart; Projekt-Zieltermine als eigene Gruppe am Ende. Leere Gruppen fallen weg.
+ */
+function gruppiere(cand, gewerke) {
   const groups = [];
   for (const g of [...gewerke].sort((a, b) => a.sort - b.sort)) {
     const items = cand.filter((t) => t.gewerk === g.id).sort(byStart);
@@ -190,6 +198,31 @@ export function candidateGroups({ tasks = [], gewerke = [], deps = [], selfId, q
   const proj = cand.filter((t) => t.gewerk === 'projekt').sort(byStart);
   if (proj.length) groups.push({ gewerk: { id: 'projekt', name: 'Zieltermine' }, items: proj });
   return groups;
+}
+
+/**
+ * Globale Suche über Titel, Gewerkname, Notiz und Kontakt (groß/klein-egal, de).
+ * Leere Query = keine Treffer. Höchstens `limit` Einträge werden geliefert, der
+ * Rest steht als Zahl in `weitere`. Rein, kein DOM.
+ * @returns {{groups:{gewerk:object, items:object[]}[], weitere:number}}
+ */
+export function suchTreffer({ tasks = [], gewerke = [], query = '', limit = 50 }) {
+  const q = String(query).trim().toLocaleLowerCase('de');
+  if (!q) return { groups: [], weitere: 0 };
+  const gName = new Map(gewerke.map((g) => [g.id, g.name]));
+  gName.set('projekt', 'Zieltermine');
+  const hit = (v) => String(v || '').toLocaleLowerCase('de').includes(q);
+  const cand = tasks.filter((t) => hit(t.title) || hit(gName.get(t.gewerk)) || hit(t.notes) || hit(t.kontakt));
+  const alle = gruppiere(cand, gewerke);
+  let rest = limit;
+  const groups = [];
+  for (const g of alle) {
+    if (rest <= 0) break;
+    const items = g.items.slice(0, rest);
+    rest -= items.length;
+    groups.push({ gewerk: g.gewerk, items });
+  }
+  return { groups, weitere: alle.reduce((n, g) => n + g.items.length, 0) - (limit - rest) };
 }
 
 /**

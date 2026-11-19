@@ -1,4 +1,4 @@
-import { computeSchedule, topoSort, toMin, byStart, candidateGroups, seriesRows, tagesScheiben, reachable } from '../js/schedule.js';
+import { computeSchedule, topoSort, toMin, byStart, candidateGroups, suchTreffer, seriesRows, tagesScheiben, reachable } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -457,3 +457,34 @@ test('nach Beginn sortiert', () => {
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);
+
+console.log('\nsuchTreffer — globale Suche');
+const stTasks = [
+  { id: 'a', gewerk: 'g1', title: 'Anlieferung', notes: 'Rampe frei halten', kontakt: 'Herr Meier', start: '2026-07-13T10:00', end: '2026-07-13T12:00' },
+  { id: 'b', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:30', end: '2026-07-13T09:30' },
+  { id: 'c', gewerk: 'g2', title: 'Motoren', start: '2026-07-13T07:00', end: '2026-07-13T08:00' },
+];
+const stGewerke = [{ id: 'g1', name: 'BÜHNE', sort: 0 }, { id: 'g2', name: 'Rigging', sort: 1 }];
+const st = (query, extra) => suchTreffer({ tasks: stTasks, gewerke: stGewerke, query, ...extra });
+const stIds = (r) => r.groups.flatMap((g) => g.items.map((t) => t.id));
+
+test('Treffer per Notiz', () => { assert.deepEqual(stIds(st('rampe')), ['a']); });
+test('Treffer per Kontakt', () => { assert.deepEqual(stIds(st('meier')), ['a']); });
+test('«bühne» findet «BÜHNE»', () => { assert.deepEqual(stIds(st('bühne')), ['b', 'a']); });
+test('Reihenfolge byStart je Gruppe, Gruppen nach sort', () => {
+  const r = st('bühne');
+  assert.deepEqual(r.groups.map((g) => g.gewerk.id), ['g1']);
+  assert.deepEqual(r.groups[0].items.map((t) => t.id), ['b', 'a']);
+});
+test('Limit: weitere zählt den Rest', () => {
+  const many = Array.from({ length: 60 }, (_, i) => ({ id: 'x' + i, gewerk: 'g1', title: 'Kiste', start: '2026-07-13T08:00', end: '2026-07-13T09:00' }));
+  const r = suchTreffer({ tasks: many, gewerke: stGewerke, query: 'kiste' });
+  assert.equal(stIds(r).length, 50);
+  assert.equal(r.weitere, 10);
+  assert.equal(st('podest').weitere, 0);
+});
+test('leere Query liefert keine Treffer', () => {
+  assert.deepEqual(st('').groups, []);
+  assert.deepEqual(st('   ').groups, []);
+  assert.equal(st('').weitere, 0);
+});
