@@ -29,6 +29,7 @@ p.on('pageerror', (e) => errors.push('JS: ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
 let bad = 0;
+let skipped = 0;   // ehrlich zählen: «bestanden» heißt nicht «alles geprüft»
 const check = async (name, fn) => {
   let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
   if (r === true) console.log('  ✓ ' + name); else { console.log('  ✗ ' + name + ': ' + r); bad++; }
@@ -168,6 +169,7 @@ console.log('\nPDF (A3 quer)');
 // in browsers.mjs prüft das Programm selbst, auf Mac, Windows und Linux.
 const chromExe = chromiumExe();
 if (!chromExe) {
+  skipped++;
   console.log('  – übersprungen: Chromium nicht installiert.');
   console.log('    Für echte PDFs einmalig:  npx playwright install chromium');
 } else {
@@ -214,27 +216,29 @@ for (const [w, h] of [[1440, 900], [1000, 800]]) {
 // kann nichts schiefgehen. Eigener Browser mit ui.useOverlayScrollbars=0.
 {
   const kb = await firefox.launch({ executablePath: exe, firefoxUserPrefs: { 'ui.useOverlayScrollbars': 0 } });
-  const kp = await (await kb.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
-  await kp.goto(BASE + '/print.html?plan=klassentreffen');
-  await kp.waitForSelector('.pr-sheet', { timeout: 15000 });
-  await kp.waitForTimeout(400);
-  const leiste = await kp.evaluate(() => innerWidth - document.documentElement.clientWidth);
-  if (leiste <= 0) {
-    // macOS-Firefox kennt in Playwright nur Overlay-Leisten (Prefs und Chromium-Flags
-    // geprüft: immer 0 px). Ehrlich überspringen — Windows/Linux prüfen es.
-    console.log('  – klassische Bildlaufleiste: dieser Rechner hat nur Overlay-Leisten (0 px), übersprungen');
-  } else {
-    await check('Blatt passt in die Vorschau — mit klassischer Bildlaufleiste (' + leiste + ' px)', async () => {
-      const r = await kp.locator('.pr-sheet').first().evaluate((n) => { const b = n.getBoundingClientRect(); return { l: b.left, r: b.right, cw: document.documentElement.clientWidth }; });
-      return r.l >= 15.5 && r.r <= r.cw - 15.5 ? true : JSON.stringify(r);
-    });
-  }
-  await kb.close();
+  try {
+    const kp = await (await kb.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+    await kp.goto(BASE + '/print.html?plan=klassentreffen');
+    await kp.waitForSelector('.pr-sheet', { timeout: 15000 });
+    await kp.waitForTimeout(400);
+    const leiste = await kp.evaluate(() => innerWidth - document.documentElement.clientWidth);
+    if (leiste <= 0) {
+      // macOS-Firefox kennt in Playwright nur Overlay-Leisten (Prefs und Chromium-Flags
+      // geprüft: immer 0 px). Ehrlich überspringen — Windows/Linux prüfen es.
+      skipped++;
+      console.log('  – klassische Bildlaufleiste: dieser Rechner hat nur Overlay-Leisten (0 px), übersprungen');
+    } else {
+      await check('Blatt passt in die Vorschau — mit klassischer Bildlaufleiste (' + leiste + ' px)', async () => {
+        const r = await kp.locator('.pr-sheet').first().evaluate((n) => { const b = n.getBoundingClientRect(); return { l: b.left, r: b.right, cw: document.documentElement.clientWidth }; });
+        return r.l >= 15.5 && r.r <= r.cw - 15.5 ? true : JSON.stringify(r);
+      });
+    }
+  } finally { await kb.close(); }
 }
 await p.setViewportSize({ width: 1700, height: 1000 });
 
 if (errors.length) { console.log('\n  ✗ Fehler:'); errors.slice(0, 5).forEach((e) => console.log('      ' + e)); bad += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 await b.close(); server.close();
-console.log(bad ? `\n${bad} Problem(e).\n` : '\nAlle Prüfungen bestanden.\n');
+console.log(bad ? `\n${bad} Problem(e).\n` : `\nAlle Prüfungen bestanden${skipped ? `, ${skipped} übersprungen` : ''}.\n`);
 process.exit(bad ? 1 : 0);
