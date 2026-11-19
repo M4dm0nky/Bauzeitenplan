@@ -1477,6 +1477,39 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
       if (n.s !== n.e) return 'Meilenstein hat jetzt eine Dauer';
       return n.s > a.s ? true : 'Meilenstein nicht verschoben';
     });
+    await check('hängender Zug (pointerup ging verloren): ein neues Drücken räumt ihn ab, der nächste Zug geht', async () => {
+      b1 = await balken(prep.frei);
+      const a = await zeit(b1.id);
+      // Zeigerereignisse selbst zustellen: Drücken + Bewegen, aber KEIN pointerup.
+      await pz.evaluate(([id, x, y]) => {
+        const n = document.querySelector(`.bz-bar[data-task="${id}"]`);
+        const ev = (t, el, dx, buttons) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true,
+          pointerId: 5, pointerType: 'mouse', isPrimary: true, clientX: x + dx, clientY: y, button: 0, buttons }));
+        ev('pointerdown', n, 0, 1);
+        ev('pointermove', n, 40, 1);
+      }, [b1.id, (b1.l + b1.r) / 2, b1.y]);
+      if (!(await pz.locator('.bz-tip-zug').count())) return 'Testaufbau: der Zug wurde nicht aktiv';
+      // Neues Drücken ohne gedrückte Taste (buttons 0) auf freier Fläche: der alte Zug muss weg.
+      await pz.evaluate(() => document.querySelector('.bz-rows').dispatchEvent(new PointerEvent('pointerdown',
+        { bubbles: true, pointerId: 5, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 0 })));
+      if (await pz.locator('.bz-tip-zug').count()) return 'der hängende Zug lebt weiter';
+      const mitte = await zeit(b1.id);
+      if (mitte.s !== a.s) return 'der abgeräumte Zug hat geschrieben';
+      await ziehe(b1, (b1.l + b1.r) / 2, 60);
+      const n = await zeit(b1.id);
+      return n.s > a.s ? true : 'der nächste Zug verschiebt nichts mehr';
+    });
+    await check('Alt+→ bei Fokus auf einem ANDEREN Balken als dem ausgewählten verschiebt nichts', async () => {
+      const ids = prep.frei;
+      const A = ids[0], B = ids[1];
+      await pz.locator(`.bz-bar[data-task="${A}"]`).focus();
+      await pz.keyboard.press('Enter');                        // A auswählen
+      const a0 = await zeit(A), b0 = await zeit(B);
+      await pz.locator(`.bz-bar[data-task="${B}"]`).focus();   // Fokus woanders, Auswahl bleibt
+      await pz.keyboard.press('Alt+ArrowRight');
+      const a1 = await zeit(A), b1z = await zeit(B);
+      return a1.s === a0.s && b1z.s === b0.s ? true : 'es bewegte sich ein Balken, den man nicht im Fokus hatte';
+    });
     await check('Alt+→ verschiebt, Alt+Shift+→ verlängert, jeder Druck ein ⌘Z; ←/→ ohne Alt blättert', async () => {
       b1 = await balken(prep.frei);
       await pz.locator(`.bz-bar[data-task="${b1.id}"]`).focus();

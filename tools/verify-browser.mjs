@@ -453,6 +453,20 @@ for (const pg of PAGES) {
     if (hinweis) return 'Hinweis erschien trotz Wischen';
     return nach === vor ? true : 'Start verschoben: ' + vor + ' → ' + nach;
   });
+  await mcheck('Touch: Halten OHNE Bewegung öffnet das Menü des Balkens, nichts verschoben', async () => {
+    const b = await touchBar();
+    const vor = await touchStart(b.id);
+    await touchEv(b.id, 'pointerdown', b.x, b.y);
+    await m.waitForTimeout(450);
+    await touchEv(b.id, 'pointerup', b.x, b.y);
+    await m.waitForTimeout(250);
+    const menu = await m.locator('.mn').isVisible().catch(() => false);
+    const nach = await touchStart(b.id);
+    await m.keyboard.press('Escape');
+    await m.waitForTimeout(150);
+    if (!menu) return 'kein Menü nach langem Drücken';
+    return nach === vor ? true : 'Start verschoben';
+  });
   await mcheck('Touch: Halten und Ziehen verschiebt den Balken', async () => {
     const b = await touchBar();
     const vor = await touchStart(b.id);
@@ -463,8 +477,11 @@ for (const pg of PAGES) {
     const hinweis = await m.locator('.bz-tip-zug').count();
     await m.screenshot({ path: join(shots, 'mobile-ziehen.png') });
     await touchEv(b.id, 'pointerup', b.x + 130, b.y);
+    await m.waitForTimeout(250);
+    const menu = await m.locator('.mn').isVisible().catch(() => false);
     const nach = await touchStart(b.id);
     if (!hinweis) return 'kein Hinweis beim Ziehen';
+    if (menu) return 'Menü öffnete sich trotz Ziehen';
     return nach > vor ? true : 'Start nicht später: ' + vor + ' → ' + nach;
   });
 

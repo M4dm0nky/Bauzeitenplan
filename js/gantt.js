@@ -844,12 +844,21 @@ export function createGantt(root, opts = {}) {
     if (!z.aktiv) return;
     // Nach einer echten Bewegung den folgenden click schlucken (Auswahl ginge auf,
     // obwohl gezogen wurde) — und im nächsten Tick abräumen, falls keiner kommt.
-    if (z.bewegt) {
+    // Halten ohne Bewegung = langes Drücken: das native contextmenu ist währenddessen
+    // unterdrückt (sonst zwei Menüs), also öffnet das Menü des Balkens HIER.
+    const menu = z.touch && commit && !z.bewegt && !!e;
+    if (z.bewegt || menu) {
       const schlucke = (c) => c.stopPropagation();
       const raeume = () => setTimeout(() => window.removeEventListener('click', schlucke, { capture: true }), 0);
       window.addEventListener('click', schlucke, { capture: true, once: true });
       // Escape mitten im Zug: die Maus ist noch unten, der click kommt erst nach dem Loslassen.
       if (e) raeume(); else window.addEventListener('pointerup', raeume, { capture: true, once: true });
+    }
+    if (menu) {
+      const sel = { kind: 'task', id: z.id };
+      select(sel);
+      if (O.onContext) O.onContext(sel, e.clientX, e.clientY);
+      return;
     }
     const t = S.tasks.find((q) => q.id === z.id);
     let r = null;
