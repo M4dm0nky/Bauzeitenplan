@@ -85,7 +85,8 @@ export function createSuche(input, liste, { daten, onWahl, blockiert = () => fal
     liste.replaceChildren();
     treffer = [];
     if (!groups.length) {
-      liste.append(el('div', 'suche-leer', 'Keine Treffer'));
+      liste.append(el('div', 'suche-leer',
+        (ebene === 'show' ? 'Nichts im Showablauf für «' : 'Nichts gefunden für «') + q.trim() + '»'));
     }
     for (const g of groups) {
       const kopf = el('div', 'suche-g');
@@ -118,10 +119,15 @@ export function createSuche(input, liste, { daten, onWahl, blockiert = () => fal
     markiere(treffer.length ? 0 : -1, false);
   }
 
+  // Klick auf Scrollbalken, Gruppenkopf oder «+ N weitere» nähme dem Feld den
+  // Fokus — das blur schlösse die Liste. Die Einträge selbst haben ihren eigenen.
+  liste.addEventListener('mousedown', (e) => e.preventDefault());
   input.addEventListener('input', render);
   input.addEventListener('focus', () => { if (input.value.trim()) render(); });
   input.addEventListener('blur', zu);
   input.addEventListener('keydown', (e) => {
+    // ⌘S/Ctrl+S ist die App-Sicherung, nicht «Seite sichern» des Browsers.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') return;
     e.stopPropagation();                     // ⌘Z und Co. gehören hier dem Feld
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       if (!treffer.length) return;

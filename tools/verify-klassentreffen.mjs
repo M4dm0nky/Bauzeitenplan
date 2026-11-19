@@ -383,6 +383,32 @@ console.log('\nFOKUSTAG NACH EBENENWECHSEL');
     const zu = await sp.locator('#suche-liste').isHidden();
     return v === '' && zu ? true : `Wert «${v}», Liste ${zu ? 'zu' : 'offen'}`;
   });
+  await check('Suche: ohne Treffer steht «Nichts gefunden für «…»»', async () => {
+    await suche('qqqxyz');
+    const t = await sp.locator('#suche-liste').innerText();
+    return t.trim() === 'Nichts gefunden für «qqqxyz»' ? true : t;
+  });
+  await check('Suche: Klick in die Liste (Gruppenkopf, Leertext) schließt sie nicht', async () => {
+    await suche('kran');
+    await sp.locator('#suche-liste .suche-g').first().dispatchEvent('mousedown');
+    const ev = await sp.evaluate(() => {
+      const e = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      document.querySelector('#suche-liste .suche-g').dispatchEvent(e);
+      return e.defaultPrevented;
+    });
+    await sp.waitForTimeout(150);
+    return ev && !(await sp.locator('#suche-liste').isHidden()) ? true : 'mousedown nicht verhindert oder Liste zu';
+  });
+  await check('Suche: ⌘S im Feld bleibt die App-Sicherung (nicht «Seite sichern»)', async () => {
+    await sp.locator('#suche').focus();
+    const prevented = await sp.evaluate(() => {
+      const e = new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true, cancelable: true });
+      document.getElementById('suche').dispatchEvent(e);
+      return e.defaultPrevented;
+    });
+    await sp.locator('#suche').fill('');
+    return prevented ? true : 'der Browser-Dialog «Seite sichern» bliebe offen';
+  });
   await check('Suche: «/» öffnet die Suche, tippt aber in einem Tabellenfeld ein «/»', async () => {
     await sp.locator('#undo').focus();
     await sp.keyboard.press('/');
