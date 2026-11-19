@@ -32,6 +32,20 @@ test('Meilenstein überfällig bleibt drin', () => {
   const t = [M('m', 'Abnahme', '2026-07-15T10:00')];
   assert.deepEqual(offeneVerspaetungen(t, NOW).map((d) => d.kind), ['meilenstein']);
 });
+test('Show-Meilenstein (SHOW END 21:50) ist um 23:00 nicht überfällig', () => {
+  const t = [M('se', 'SHOW END', '2026-07-15T21:50', { gewerk: 'b1' })];
+  const spaet = toMin('2026-07-15T23:00');
+  assert.equal(delaysAt(t, spaet).length, 1, 'Vorbedingung: delaysAt meldet ihn');
+  assert.deepEqual(offeneVerspaetungen(t, spaet, new Set(['b1'])), []);
+});
+test('Bauzeitenplan-Meilenstein bleibt auch mit Show-Bändern überfällig', () => {
+  const t = [M('m', 'Abnahme', '2026-07-15T10:00')];
+  assert.deepEqual(offeneVerspaetungen(t, NOW, new Set(['b1'])).map((d) => d.kind), ['meilenstein']);
+});
+test('liveStats reicht die Show-Bänder durch', () => {
+  const t = [M('se', 'SHOW END', '2026-07-15T21:50', { gewerk: 'b1' })];
+  assert.equal(liveStats(t, toMin('2026-07-15T23:00'), new Set(['b1'])).late, 0);
+});
 test('geplant und vorbei fällt raus', () => {
   const t = [T('d', 'Doors', '2026-07-15T08:00', '2026-07-15T10:00')];
   assert.equal(delaysAt(t, NOW).length, 1, 'Vorbedingung');

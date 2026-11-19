@@ -29,6 +29,9 @@ export const ART_FUER = { bau: 'gewerk', show: 'buehne' };
 /** Altdaten ohne `art` sind Gewerke — sonst verschwände der halbe Bestand. */
 export const artOf = (g) => g.art || 'gewerk';
 
+/** Ids aller Bühnen — dort wird kein Status gepflegt (siehe live.js offeneVerspaetungen). */
+export const buehnenIds = (state) => new Set(state.gewerke.filter((g) => artOf(g) === 'buehne').map((g) => g.id));
+
 /**
  * EINGEBAUTE Arten eines Zeiteintrags: `[id, Name, kompakt]`.
  *

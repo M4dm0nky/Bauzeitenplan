@@ -8,7 +8,7 @@
 import { computeSchedule, toMin, toDate, byStart, seriesRows, reachable } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
 import { runningAt, offeneVerspaetungen, verschoben } from './live.js';
-import { sichtGewerke, programmFenster, amTag, imAbschnitt, programmTage } from './ebene.js';
+import { sichtGewerke, programmFenster, amTag, imAbschnitt, programmTage, buehnenIds } from './ebene.js';
 import { gewerkVar, gewerkTexture, gewerkInkVar } from './palette.js';
 import { el, svgEl } from './dom.js';
 import { resLabel } from './resources.js';
@@ -1248,7 +1248,7 @@ export function createGantt(root, opts = {}) {
     const on = live;
     root.classList.toggle('is-live', on);
     const running = on ? runningAt(S.tasks, nowPlan()) : new Set();
-    const late = new Map(on ? offeneVerspaetungen(S.tasks, nowPlan()).map((d) => [d.taskId, d]) : []);
+    const late = new Map(on ? offeneVerspaetungen(S.tasks, nowPlan(), buehnenIds(S)).map((d) => [d.taskId, d]) : []);
     for (const [key, node] of rowById) {
       if (!key.startsWith('task:')) continue;
       const id = key.slice(5);
@@ -1586,7 +1586,7 @@ export function createGantt(root, opts = {}) {
       planNow: nowPlan(),             // wo der Ablauf steht — für jede Rechnung
       versatz,
       running: runningAt(S.tasks, nowPlan()),
-      late: offeneVerspaetungen(S.tasks, nowPlan()),
+      late: offeneVerspaetungen(S.tasks, nowPlan(), buehnenIds(S)),
     }),
     // Die Vorgänge der sichtbaren Ebene — die Live-Kopfzeile des Showablaufs
     // fragt danach, statt selbst zu filtern. Kopie: niemand soll von außen in

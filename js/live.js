@@ -129,11 +129,19 @@ export function delaysAt(tasks, now) {
  * Der Status wird weiter nie automatisch gesetzt: gefiltert wird die ANZEIGE.
  * @returns {ReturnType<typeof delaysAt>} Teilmenge von delaysAt, gleiches Format
  */
-export function offeneVerspaetungen(tasks, now) {
+export function offeneVerspaetungen(tasks, now, showBaender = null) {
   // Nur «nie gestartet UND schon vorbei» ist fehlende Rückmeldung. Wer läuft und
-  // überzogen ist ('ende') oder einen überfälligen Meilenstein hat, bleibt IMMER drin.
+  // überzogen ist ('ende'), bleibt IMMER drin.
+  // Meilensteine: im Bauzeitenplan wird der Status gepflegt, ein überfälliger ist
+  // echter Verzug. Im Showablauf pflegt niemand Häkchen — ein vergangenes «SHOW
+  // END» bliebe sonst für immer «überfällig». Dort gilt er wie 'start'.
+  // showBaender: Menge der Band-ids (art 'buehne'); den Begriff kennt der Aufrufer
+  // (ebene.js), live.js bleibt davon unabhängig.
   const ende = new Map(tasks.map((t) => [t.id, toMin(t.end)]));
-  return delaysAt(tasks, now).filter((d) => d.kind !== 'start' || ende.get(d.taskId) >= now);
+  const gewerk = new Map(tasks.map((t) => [t.id, t.gewerk]));
+  const ohneRueckmeldung = (d) => d.kind === 'start'
+    || (d.kind === 'meilenstein' && !!showBaender && showBaender.has(gewerk.get(d.taskId)));
+  return delaysAt(tasks, now).filter((d) => !ohneRueckmeldung(d) || ende.get(d.taskId) >= now);
 }
 
 /** Der nächste Vorgang, der ansteht. null, wenn nichts mehr kommt. */
@@ -149,10 +157,10 @@ export function nextUp(tasks, now) {
 }
 
 /** Kurzfassung für die Kopfzeile. */
-export function liveStats(tasks, now) {
+export function liveStats(tasks, now, showBaender = null) {
   return {
     running: runningAt(tasks, now).size,
-    late: offeneVerspaetungen(tasks, now).length,
+    late: offeneVerspaetungen(tasks, now, showBaender).length,
     next: nextUp(tasks, now),
   };
 }

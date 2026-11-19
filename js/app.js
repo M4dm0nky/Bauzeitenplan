@@ -16,7 +16,7 @@ import { slotsExhausted, MAX_SLOTS, gewerkVar, gewerkTexture } from './palette.j
 import { createInspector } from './inspector.js';
 import { openMenu } from './menu.js';
 import { liveStats, runningAt, nextUp, offeneVerspaetungen, verschoben, versatzText } from './live.js';
-import { sichtGewerke, sichtTasks, typHinweis, programmTage } from './ebene.js';
+import { sichtGewerke, sichtTasks, typHinweis, programmTage, buehnenIds } from './ebene.js';
 import { toMin, toDate } from './schedule.js';
 import { isoWeek } from './timeaxis.js';
 import { $, el, escapeHtml } from './dom.js';
@@ -980,7 +980,7 @@ function refreshLive() {
   $('vz-txt').hidden = !gantt.isLive;
   // planNow statt now: gezählt wird gegen den VERSCHOBENEN Plan. Wer fünf
   // Minuten angesagt hat und exakt fünf Minuten spät ist, ist im Plan.
-  const st = liveStats(store.state.tasks, gantt.liveInfo().planNow);
+  const st = liveStats(store.state.tasks, gantt.liveInfo().planNow, buehnenIds(store.state));
   const n = $('live-bar');
   // Im Showablauf trägt die große Kopfzeile dieselbe Aussage, nur genauer und
   // auf den Tag bezogen. Beides nebeneinander widerspräche sich sichtbar: hier
@@ -1022,7 +1022,7 @@ function refreshShowhead() {
   const naechst = nextUp(punkte, now);
 
   // Verzug NUR aus dem, was noch aussteht oder läuft (Regel in live.js, auch fürs Zeilen-⚠).
-  const verzug = offeneVerspaetungen(punkte, now);
+  const verzug = offeneVerspaetungen(punkte, now, buehnenIds(store.state));
 
   // Ein Changeover ist kein Auftritt — er wird als Umbau angesagt, sonst stünde
   // «JETZT: Changeover» da, wo das Publikum einen Namen erwartet. Trägt der

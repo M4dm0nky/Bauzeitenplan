@@ -1398,6 +1398,28 @@ if (chromeExe && existsSync(chromeExe)) {
   console.log('    Für echte PDFs einmalig:  npx playwright install chromium');
 }
 
+// ── Nach der Show: SHOW END ist nicht «überfällig» ───────────────────────────
+// Im Showablauf pflegt niemand Häkchen, alles bleibt «geplant». Ein vergangenes
+// «SHOW END» (21:50) darf um 23:00 weder «Verzug» noch «überfällig» melden.
+console.log('\nNACH DER SHOW (Uhr 23:00)');
+{
+  const sCtx = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  const sp = await sCtx.newPage();
+  await sp.clock.install({ time: new Date('2026-08-29T23:00:00') });
+  await sp.goto(BASE + '/index.html?plan=klassentreffen&ansicht=show');
+  await sp.waitForSelector('.bz-lab', { timeout: 20000 });
+  await sp.waitForTimeout(700);
+  await sp.locator('#live').click();
+  await sp.waitForTimeout(800);
+  await check('Live-Kopfzeile meldet um 23:00 keinen Verzug für SHOW END', async () => {
+    if (!(await sp.locator('#showhead').isVisible())) return 'Kopfzeile fehlt';
+    const v = (await sp.locator('#showhead .sh-late .sh-v').textContent()).trim();
+    const z = (await sp.locator('#showhead .sh-late .sh-z').count()) ? (await sp.locator('#showhead .sh-late .sh-z').textContent()).trim() : '';
+    return v === 'im Plan' && !/überfällig|SHOW END/.test(z) ? true : `«${v}» ${z}`;
+  });
+  await sCtx.close();
+}
+
 console.log('');
 await check('keine JS-Fehler', async () => (errors.length ? errors.slice(0, 3).join(' | ') : true));
 
