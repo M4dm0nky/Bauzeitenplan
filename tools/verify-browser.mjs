@@ -498,6 +498,30 @@ for (const pg of PAGES) {
   }
 }
 
+// ── Bedienelemente zählen ────────────────────────────────────────────────────
+// CLAUDE.md sagt: 13 im Bauzeitenplan, 11 im Showablauf — gemessen als sichtbare
+// button/input/select in .hd-bar (Klassentreffen, ohne Live, ohne offenen
+// Konflikt). Eine Zahl, die kein Werkzeug prüft, ist eine Zahl, die lügt.
+// Desktop UND Handy müssen dieselbe Zahl liefern: nichts fällt weg, nichts kommt dazu.
+{
+  console.log('\nBEDIENELEMENTE (sichtbare button/input/select in .hd-bar)');
+  const SOLL = { bau: 13, show: 11 };
+  for (const [w, h] of [[1600, 950], [390, 844]]) for (const modus of ['bau', 'show']) {
+    const m = await browser.newPage({ viewport: { width: w, height: h } });
+    let r;
+    try {
+      await m.goto(BASE + '/index.html?plan=klassentreffen&ansicht=' + modus, { waitUntil: 'load', timeout: 30000 });
+      await m.waitForSelector('.bz-lab', { timeout: 20000 });
+      await m.waitForTimeout(argBase ? 1600 : 800);
+      r = await m.evaluate(() => [...document.querySelectorAll('.hd-bar button, .hd-bar input, .hd-bar select')]
+        .filter((n) => { const q = n.getBoundingClientRect(); return q.width > 0 && q.height > 0 && getComputedStyle(n).visibility !== 'hidden' && n.type !== 'hidden'; }).length);
+    } catch (e) { r = 'Ausnahme: ' + e.message; }
+    await m.close();
+    if (r === SOLL[modus]) console.log(`  ✓ ${w}×${h} ${modus === 'bau' ? 'Bauzeitenplan' : 'Showablauf'}: ${r} Bedienelemente`);
+    else { console.log(`  ✗ ${w}×${h} ${modus === 'bau' ? 'Bauzeitenplan' : 'Showablauf'}: ${r} statt ${SOLL[modus]}`); problems++; }
+  }
+}
+
 await browser.close();
 if (server) server.close();
 console.log(problems ? `\n${problems} Problem(e) gefunden.\n` : `\nAlle Prüfungen bestanden (${PAGES.length} Seiten).\n`);

@@ -941,7 +941,16 @@ await check('die Zoomstufe ist ein App-Knopf mit Menü, auch per Tastatur', asyn
   await page.locator('.mn .mn-i', { hasText: 'Stunden' }).click();
   await page.waitForTimeout(300);
   if (!/Stunden/.test(await page.locator('#zoom-stufe').textContent())) return 'der Knopf zeigt die Stufe nicht';
-  const z = await page.evaluate(() => document.querySelector('.bz-scroll') && true);
+  // Die Wahl muss die ACHSE ändern, nicht nur die Beschriftung des Knopfs:
+  // gemessen als Pixel je Stunde an einem echten Balken (data-from/data-to in Minuten).
+  const pxH = () => page.evaluate(() => {
+    const b = [...document.querySelectorAll('.bz-bar[data-from][data-to]')].find((n) => n.offsetWidth > 0 && +n.dataset.to > +n.dataset.from);
+    return b ? b.getBoundingClientRect().width / ((+b.dataset.to - +b.dataset.from) / 60) : 0;
+  });
+  const stdPx = await pxH();
+  if (!(stdPx >= 60)) return 'Stunden gewählt, aber nur ' + Math.round(stdPx) + ' px je Stunde';
+  const ticks = (await page.locator('.bz-axis .bz-t-minor').allTextContents()).map((t) => parseInt(t, 10)).filter(Number.isFinite);
+  if (ticks.length < 5) return 'Stundenachse hat nur ' + ticks.length + ' Ticks';
   // Tastatur: Fokus, Enter öffnet, Escape schließt.
   await page.locator('#zoom-stufe').focus();
   await page.keyboard.press('Enter');
@@ -950,22 +959,31 @@ await check('die Zoomstufe ist ein App-Knopf mit Menü, auch per Tastatur', asyn
   if (await page.locator('.mn').count()) return 'Escape schließt das Menü nicht';
   await page.locator('#zoom-stufe').click();
   await page.locator('.mn .mn-i', { hasText: 'Wochen' }).click();
-  return z ? true : 'kein Gantt';
+  await page.waitForTimeout(300);
+  const wPx = await pxH();
+  return wPx > 0 && wPx < 20 ? true : 'Wochen zeigt ' + Math.round(wPx) + ' px je Stunde';
 });
 
-await check('Drucken steht in der Kopfzeile und übergibt den Modus', async () => {
+await check('Drucken steht in der Kopfzeile, ein KLICK öffnet print.html mit dem Modus', async () => {
   const b = page.locator('#drucken');
   if (!(await b.isVisible())) return 'kein Drucken-Knopf im Bauzeitenplan';
-  const u1 = await b.evaluate((n) => n.dataset.href || n.getAttribute('href') || '');
+  const klick = async () => {
+    const neu = page.context().waitForEvent('page', { timeout: 5000 });
+    await b.click();
+    const pg = await neu;
+    const url = pg.url();
+    await pg.close();
+    return url;
+  };
+  const u1 = await klick();
   if (!/print\.html/.test(u1) || /ansicht=/.test(u1)) return 'Bauzeitenplan: ' + u1;
-  await page.locator('[data-ansicht="show"]').first().click().catch(() => {});
   await page.locator('.rail-m:not(.rail-ein)').nth(1).click();
   await page.waitForTimeout(500);
   if (!(await b.isVisible())) return 'kein Drucken-Knopf im Showablauf';
-  const u2 = await b.evaluate((n) => n.dataset.href || n.getAttribute('href') || '');
+  const u2 = await klick();
   await page.locator('.rail-m:not(.rail-ein)').first().click();
   await page.waitForTimeout(400);
-  return /ansicht=(show|setup)/.test(u2) ? true : 'Showablauf: ' + u2;
+  return /print\.html\?.*ansicht=(show|setup)/.test(u2) ? true : 'Showablauf: ' + u2;
 });
 
 await check('die Schiene hat genau drei Einträge — zwei Modi und das Zahnrad', async () => {
