@@ -467,6 +467,35 @@ for (const pg of PAGES) {
     if (!menu) return 'kein Menü nach langem Drücken';
     return nach === vor ? true : 'Start verschoben';
   });
+  await mcheck('Touch: Halten und nur senkrecht ziehen öffnet kein Menü', async () => {
+    const b = await touchBar();
+    await touchEv(b.id, 'pointerdown', b.x, b.y);
+    await m.waitForTimeout(450);
+    await touchEv(b.id, 'pointermove', b.x, b.y + 25);
+    await touchEv(b.id, 'pointerup', b.x, b.y + 25);
+    await m.waitForTimeout(250);
+    const menu = await m.locator('.mn').isVisible().catch(() => false);
+    if (menu) await m.keyboard.press('Escape');
+    return menu ? 'Menü öffnete sich nach senkrechtem Ziehen' : true;
+  });
+  await mcheck('Touch: touchmove wird nur während des Ziehens abgefangen (Listener nicht passiv)', async () => {
+    const b = await touchBar();
+    const abgefangen = () => m.evaluate((id) => {
+      const ev = new Event('touchmove', { bubbles: true, cancelable: true });
+      document.querySelector(`.bz-bar[data-task="${id}"]`).dispatchEvent(ev);
+      return ev.defaultPrevented;
+    }, b.id);
+    if (await abgefangen()) return 'abgefangen, obwohl nichts gezogen wird (Wischen würde blockiert)';
+    await touchEv(b.id, 'pointerdown', b.x, b.y);
+    if (await abgefangen()) return 'schon vor dem Halten abgefangen';
+    await m.waitForTimeout(450);
+    await touchEv(b.id, 'pointermove', b.x + 40, b.y);
+    const beimZiehen = await abgefangen();
+    await touchEv(b.id, 'pointerup', b.x + 40, b.y);
+    const danach = await abgefangen();
+    if (!beimZiehen) return 'beim Ziehen nicht abgefangen — der Browser würde scrollen';
+    return danach ? 'nach dem Ziehen weiter abgefangen' : true;
+  });
   await mcheck('Touch: Halten und Ziehen verschiebt den Balken', async () => {
     const b = await touchBar();
     const vor = await touchStart(b.id);

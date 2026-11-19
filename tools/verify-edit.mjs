@@ -1323,7 +1323,7 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
       // der linke Griff braucht einen Balken ohne Vorgänger.
       const ohneVor = andere.filter((t) => !plan.deps.some((d) => d.to === t.id));
       return { elter: elter.id, kind: kind.id,
-        ms: (plan.tasks.find((t) => t.milestone) || {}).id, frei: andere.map((t) => t.id), ohneVor: ohneVor.map((t) => t.id) };
+        ms: (plan.tasks.find((t) => t.milestone) || {}).id, frei: andere.map((t) => t.id), mitDep: andere.filter((t) => plan.deps.some((d) => d.from === t.id || d.to === t.id)).map((t) => t.id), ohneVor: ohneVor.map((t) => t.id) };
     });
     await pz.reload();
     await pz.waitForTimeout(1100);
@@ -1498,6 +1498,76 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
       await ziehe(b1, (b1.l + b1.r) / 2, 60);
       const n = await zeit(b1.id);
       return n.s > a.s ? true : 'der nächste Zug verschiebt nichts mehr';
+    });
+    await check('Maus ohne gedrückte Taste (pointerup verloren): der Balken folgt dem Schweben nicht und speichert nichts', async () => {
+      b1 = await balken(prep.frei);
+      const a = await zeit(b1.id);
+      const ev = (t, dx, buttons) => pz.evaluate(([id, x, y, t, dx, buttons]) => {
+        const n = document.querySelector(`.bz-bar[data-task="${id}"]`);
+        n.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 6, pointerType: 'mouse',
+          isPrimary: true, clientX: x + dx, clientY: y, button: 0, buttons }));
+      }, [b1.id, (b1.l + b1.r) / 2, b1.y, t, dx, buttons]);
+      await ev('pointerdown', 0, 1);
+      await ev('pointermove', 40, 1);
+      if (!(await pz.locator('.bz-tip-zug').count())) return 'Testaufbau: der Zug wurde nicht aktiv';
+      await ev('pointermove', 80, 0);          // Taste längst losgelassen, nur noch Schweben
+      if (await pz.locator('.bz-tip-zug').count()) return 'der Balken folgt dem Schweben weiter';
+      if (await pz.locator('.bz').evaluate((n) => n.hasAttribute('data-dragging'))) return 'data-dragging bleibt stehen';
+      await ev('pointerup', 80, 0);
+      const n = await zeit(b1.id);
+      return n.s === a.s && n.e === a.e ? true : 'beim Loslassen wurde gespeichert';
+    });
+    await check('Panelfeld geändert und sofort einen Balken gegriffen: die Vorschau folgt, das Ergebnis wird gespeichert', async () => {
+      b1 = await balken(prep.frei);
+      const a = await zeit(b1.id);
+      // Auswahl auf einen anderen Vorgang, dann ein Panelfeld tippen OHNE Verlassen: der change feuert
+      // erst beim Greifen des Balkens und baut den Gantt neu auf.
+      const andere = prep.frei.find((i) => i !== b1.id);
+      await pz.locator(`.bz-bar[data-task="${andere}"]`).evaluate((n) => n.click());
+      const feld = pz.locator('#ins input[type="text"], #ins textarea').first();
+      await feld.fill('Geändert beim Ziehen');
+      b1 = await balken(prep.frei.filter((i) => i !== andere));
+      if (!b1) return 'kein Balken im Bild';
+      const mitte = (b1.l + b1.r) / 2;
+      await pz.mouse.move(mitte, b1.y);
+      await pz.mouse.down();
+      await pz.mouse.move(mitte + 8, b1.y, { steps: 2 });
+      await pz.mouse.move(mitte + 70, b1.y, { steps: 6 });
+      await pz.waitForTimeout(150);
+      const links = await pz.locator(`.bz-bar[data-task="${b1.id}"]`).evaluate((n) => n.getBoundingClientRect().left);
+      await pz.mouse.up();
+      const n = await zeit(b1.id);
+      if (links < b1.l + 40) return `die Vorschau am neuen Balken fehlt (links ${Math.round(links - b1.l)} px)`;
+      return n.s > a.s ? true : 'nichts gespeichert';
+    });
+    await check('Pfeile folgen der Vorschau, solange gezogen wird', async () => {
+      const ids = prep.mitDep;
+      b1 = await balken(ids);
+      if (!b1) return 'kein Balken mit Verknüpfung im Bild';
+      const pfade = () => pz.evaluate(() => [...document.querySelectorAll('path.bz-dep')].map((p) => p.getAttribute('d')).join('|'));
+      const vor = await pfade();
+      const mitte = (b1.l + b1.r) / 2;
+      await pz.mouse.move(mitte, b1.y);
+      await pz.mouse.down();
+      await pz.mouse.move(mitte + 8, b1.y, { steps: 2 });
+      await pz.mouse.move(mitte + 90, b1.y, { steps: 6 });
+      await pz.waitForTimeout(250);
+      const mid = await pfade();
+      await pz.keyboard.press('Escape');
+      await pz.mouse.up();
+      await pz.waitForTimeout(200);
+      const nach = await pfade();
+      if (mid === vor) return 'die Pfeile blieben beim Ziehen stehen';
+      return nach === vor ? true : 'nach Escape stehen die Pfeile nicht wieder am Anfang';
+    });
+    await check('Alt+← mit ausgewähltem Sammelvorgang verlässt die App nicht (kein Browser-«Zurück»)', async () => {
+      await pz.locator(`.bz-bar[data-task="${prep.elter}"]`).focus();
+      await pz.keyboard.press('Enter');                       // Sammelvorgang auswählen
+      // Der Browser selbst navigiert beim Testlauf nicht zuverlässig — geprüft wird, ob die App
+      // das Ereignis für sich beansprucht (defaultPrevented): sonst ginge Alt+← als «Zurück» durch.
+      const frei = await pz.locator(`.bz-bar[data-task="${prep.elter}"]`).evaluate((n) =>
+        n.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', altKey: true, bubbles: true, cancelable: true })));
+      return frei === false ? true : 'Alt+← wurde nicht abgefangen: der Browser ginge zurück';
     });
     await check('Alt+→ bei Fokus auf einem ANDEREN Balken als dem ausgewählten verschiebt nichts', async () => {
       const ids = prep.frei;

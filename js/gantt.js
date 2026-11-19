@@ -165,6 +165,7 @@ export function createGantt(root, opts = {}) {
   // bleiben auf der echten Uhr stehen. Eine Zahl, kein Zustand im Plan: der
   // Versatz gehört dem Abend, nicht dem Projekt, und wird deshalb auch nicht
   // exportiert.
+  let zugV = null, zugDepRaf = 0;   // Vorschau beim Balken-Ziehen (siehe zugPfeile)
   let versatz = 0;
 
   // ── DOM-Gerüst ──────────────────────────────────────────────────────────────
@@ -789,6 +790,16 @@ export function createGantt(root, opts = {}) {
     if (t.milestone) { node.style.left = x(a) + 'px'; return; }
     node.dataset.from = a; node.dataset.to = b;
     place(node);
+    // Das Pufferband hängt am Ende und wandert mit.
+    const sl = rowById.get('slack:' + t.id);
+    if (sl) { const len = +sl.dataset.to - +sl.dataset.from; sl.dataset.from = b; sl.dataset.to = b + len; place(sl); }
+  }
+
+  // Lage des gezogenen Vorgangs für die Pfeile (depAnchors liest sonst den Store).
+  function zugPfeile(id, a, b) {
+    zugV = { id, start: a, end: b };
+    if (zugDepRaf) return;
+    zugDepRaf = requestAnimationFrame(() => { zugDepRaf = 0; layoutDeps(); });
   }
 
   function zugHinweis(t, r, e) {
@@ -812,7 +823,11 @@ export function createGantt(root, opts = {}) {
     zugTip.style.transform = `translate(${Math.max(8, lx)}px,${Math.max(8, ly)}px)`;
   }
 
-  const zugBlock = (e) => { if (zug && zug.aktiv && e.cancelable) e.preventDefault(); };
+  // EINMAL und dauerhaft, nicht erst beim Aktivieren: Chrome/Safari entscheiden beim
+  // touchstart, ob touchmove abbrechbar ist — ein später registrierter Blocker käme zu spät,
+  // der Browser finge an zu scrollen und der Zug bräche mit pointercancel ab. Wischen bleibt
+  // Scrollen (zug.aktiv ist erst nach dem Halten wahr).
+  root.addEventListener('touchmove', (e) => { if (zug && zug.aktiv && e.cancelable) e.preventDefault(); }, { passive: false });
   const zugEsc = (e) => {
     if (e.key !== 'Escape' || !zug) return;
     e.preventDefault();
@@ -820,14 +835,26 @@ export function createGantt(root, opts = {}) {
     zugEnde(false);
   };
 
+  // Der Neuaufbau kann den gegriffenen Knoten abhängen: frisch holen, Ausgangslage neu lesen.
+  function zugKnoten() {
+    if (zug.node.isConnected) return;
+    const n = root.querySelector(`.bz-bar[data-task="${zug.id}"], .bz-ms[data-task="${zug.id}"]`);
+    if (!n) return;
+    zug.node = n;
+    const t = S.tasks.find((q) => q.id === zug.id);
+    if (t) { zug.start = toMin(t.start); zug.end = toMin(t.end); }
+    n.classList.add('is-drag');
+  }
+
   function zugAktiv(e) {
     zug.aktiv = true;
-    try { zug.node.setPointerCapture(e.pointerId); } catch (_) { /* egal */ }
+    // Capture auf root, nicht auf den Balken: ein Neuaufbau (etwa durch ein Panelfeld, das beim
+    // Greifen seinen change feuert) hängt den Balken ab — root bleibt.
+    try { root.setPointerCapture(e.pointerId); } catch (_) { /* egal */ }
     hideTip();
     root.dataset.dragging = '1';
     zug.node.classList.add('is-drag');
     folgePauseBis = Infinity;               // die Ansicht folgt der Uhr nicht unter dem Zeiger weg
-    window.addEventListener('touchmove', zugBlock, { passive: false });
   }
 
   function zugEnde(commit, e) {
@@ -835,8 +862,12 @@ export function createGantt(root, opts = {}) {
     const z = zug;
     zug = null;
     clearTimeout(z.timer);
+    if (zugV) { zugV = null; layoutDeps(); }
+    if (!z.node.isConnected) {
+      const n = root.querySelector(`.bz-bar[data-task="${z.id}"], .bz-ms[data-task="${z.id}"]`);
+      if (n) z.node = n;
+    }
     window.removeEventListener('keydown', zugEsc, true);
-    window.removeEventListener('touchmove', zugBlock);
     if (zugTip) { zugTip.remove(); zugTip = null; }
     root.removeAttribute('data-dragging');
     z.node.classList.remove('is-drag');
@@ -875,10 +906,11 @@ export function createGantt(root, opts = {}) {
   }
 
   root.addEventListener('pointerdown', (e) => {
-    // Ein Zug, dessen pointerup nie ankam (Maus außerhalb des Fensters losgelassen),
-    // hängt sonst fest und sperrt jeden weiteren.
-    if (zug && e.buttons === 0) zugEnde(false);
-    if (link || zug || e.target.closest('.bz-link')) return;
+    if (link) return;
+    // Ein bestehender Zug ist verwaist (pointerup ging verloren) oder ein zweiter Finger
+    // kommt dazu — in beiden Fällen gilt der alte nicht mehr.
+    if (zug) zugEnde(false);
+    if (e.target.closest('.bz-link')) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const node = e.target.closest('.bz-bar[data-task], .bz-ms[data-task]');
     if (!node) return;
@@ -887,7 +919,7 @@ export function createGantt(root, opts = {}) {
     const grip = !t.milestone && e.target.closest('.bz-grip');
     const modus = grip ? (grip.classList.contains('bz-grip-l') ? 'start' : 'end') : 'move';
     zug = {
-      id: t.id, node, modus, ms: !!t.milestone, touch: e.pointerType !== 'mouse',
+      id: t.id, pid: e.pointerId, node, modus, ms: !!t.milestone, touch: e.pointerType !== 'mouse',
       x0: e.clientX, y0: e.clientY, delta: 0, bewegt: false, aktiv: false,
       start: toMin(t.start), end: toMin(t.end), timer: 0,
     };
@@ -899,7 +931,11 @@ export function createGantt(root, opts = {}) {
   });
 
   root.addEventListener('pointermove', (e) => {
-    if (!zug || e.pointerId === undefined) return;
+    if (!zug || e.pointerId !== zug.pid) return;
+    // Maus ohne gedrückte Taste: das pointerup ging verloren — der Balken darf nicht dem
+    // bloßen Schweben folgen und beim nächsten Loslassen dort speichern.
+    if (!zug.touch && e.buttons === 0) { zugEnde(false); return; }
+    zugKnoten();
     const dx = e.clientX - zug.x0;
     if (!zug.aktiv) {
       if (zug.touch) {
@@ -910,12 +946,14 @@ export function createGantt(root, opts = {}) {
       if (Math.abs(dx) < ZUG_PIXEL) return;
       zugAktiv(e);
     }
-    if (Math.abs(dx) >= ZUG_PIXEL) zug.bewegt = true;
+    // Auch senkrechtes Ziehen ist Bewegung (sonst öffnete beim Loslassen das Menü).
+    if (Math.hypot(dx, e.clientY - zug.y0) >= ZUG_PIXEL) zug.bewegt = true;
     zug.delta = dx / px;
     const t = S.tasks.find((q) => q.id === zug.id);
     if (!t) return;
     const r = zugRechne(t, zug.modus, zug.delta);
     zugZeichne(zug.node, t, r.start, r.end);
+    zugPfeile(t.id, r.start, r.end);
     zugHinweis(t, r, e);
   });
 
@@ -923,8 +961,8 @@ export function createGantt(root, opts = {}) {
   root.addEventListener('contextmenu', (e) => {
     if (zug && zug.touch) { e.preventDefault(); e.stopPropagation(); }
   }, true);
-  root.addEventListener('pointerup', (e) => { if (zug) zugEnde(true, e); });
-  root.addEventListener('pointercancel', () => { if (zug) zugEnde(false); });
+  root.addEventListener('pointerup', (e) => { if (zug && e.pointerId === zug.pid) zugEnde(true, e); });
+  root.addEventListener('pointercancel', (e) => { if (zug && e.pointerId === zug.pid) zugEnde(false); });
 
   // Tastatur: Alt+←/→ verschiebt den ausgewählten Vorgang um einen Rasterschritt,
   // Alt+Shift+←/→ ändert sein Ende. Jeder Tastendruck ein Befehl (⌘Z einzeln).
@@ -933,8 +971,8 @@ export function createGantt(root, opts = {}) {
     if (!e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;
     if (!selected || selected.kind !== 'task') return false;
     const t = S.tasks.find((q) => q.id === selected.id);
+    e.preventDefault();                       // Alt+← ist sonst «Zurück» im Browser — auch wenn nichts passiert
     if (!t || hatKinder(t.id)) return true;
-    e.preventDefault();                       // Alt+← ist sonst «Zurück» im Browser
     // Ein anderer Balken hat den Fokus als der ausgewählte: nichts verschieben,
     // was man nicht sieht.
     const fokus = e.target.closest && e.target.closest('[data-task]');
@@ -1128,10 +1166,13 @@ export function createGantt(root, opts = {}) {
 
   function depAnchors(d, ra, rb) {
     const a = byId.get(d.from), b = byId.get(d.to);
-    const aFrom = collapsed.has(a.gewerk) && ra.kind === 'group' ? ra.gStart : toMin(a.start);
-    const aTo = collapsed.has(a.gewerk) && ra.kind === 'group' ? ra.gEnd : toMin(a.end);
-    const bFrom = collapsed.has(b.gewerk) && rb.kind === 'group' ? rb.gStart : toMin(b.start);
-    const bTo = collapsed.has(b.gewerk) && rb.kind === 'group' ? rb.gEnd : toMin(b.end);
+    // Beim Ziehen gilt die VORSCHAU des gezogenen Vorgangs, nicht der Store.
+    const von = (t) => (zugV && zugV.id === t.id ? zugV.start : toMin(t.start));
+    const bis = (t) => (zugV && zugV.id === t.id ? zugV.end : toMin(t.end));
+    const aFrom = collapsed.has(a.gewerk) && ra.kind === 'group' ? ra.gStart : von(a);
+    const aTo = collapsed.has(a.gewerk) && ra.kind === 'group' ? ra.gEnd : bis(a);
+    const bFrom = collapsed.has(b.gewerk) && rb.kind === 'group' ? rb.gStart : von(b);
+    const bTo = collapsed.has(b.gewerk) && rb.kind === 'group' ? rb.gEnd : bis(b);
     // FS/FF gehen vom Ende des Vorgängers, SS/SF von dessen Start.
     // xp(), nicht x(): die Pfeile gehören zum Ablauf und wandern mit ihren
     // Balken — sonst zeigten sie nach einem Versatz daneben ins Leere.

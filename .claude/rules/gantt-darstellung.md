@@ -24,3 +24,5 @@ paths:
 - **Ziehen rechnet in Differenzen (`dx / px`) über `gezogen`** — der Versatz kürzt sich heraus, gespeichert wird Planzeit; der Hinweis zeigt `verschoben()`. Keine vierte `xp()`-Stelle.
 - **Griffe (`.bz-grip`) nur an Blatt-Balken**; Sammelvorgang ohne, Meilenstein nur verschieben (an der Raute). Der Verknüpfen-Kreis (`.bz-link`) sitzt NEBEN dem Ziel (`bz-link-bar` rechts vom Ende, `bz-link-ms` rechts der Raute) und ist beim Ziehen aus (`data-dragging`).
 - **Touch: erst 300 ms halten, dann ziehen**; vorher Bewegung > 8 px = Wischen; Halten ohne Bewegung öffnet das Balkenmenü (natives `contextmenu` ist im Zug unterdrückt). Alt+←/→ verschiebt, Alt+Shift+←/→ ändert das Ende (je ein Befehl).
+- **Zeitraster rastert die VERSCHIEBUNG, nicht die Lage** (`gezogen`): Uhrzeit bleibt; ab 1440 ganze Kalendertage über `new Date(y,m,d+n,hh,mm)`.
+- **Zug robust:** Capture auf `root`, Knoten bei Neuaufbau frisch holen; Maus ohne Taste beendet den Zug; fremde Pointer ignorieren; `touchmove`-Blocker einmal dauerhaft (`passive:false`).
