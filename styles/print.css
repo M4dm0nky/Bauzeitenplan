@@ -58,6 +58,14 @@
   box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
 }
 
+/* Vorschau am Bildschirm: das Blatt (400 mm) passt sich der Fensterbreite an.
+   `zoom` statt `transform: scale` — zoom wirkt aufs Layout, es bleibt kein
+   Leerraum rechts und unten. print.js setzt --pr-zoom (höchstens 1). Im Druck
+   gilt das nicht: dort bleibt das Blatt 1:1. */
+@media screen {
+  .pr-sheet { zoom: var(--pr-zoom, 1); }
+}
+
 .pr-head { display: flex; align-items: baseline; gap: 8mm; padding-bottom: 2mm; border-bottom: .5mm solid var(--pr-ink); }
 .pr-head-t { font-size: 5mm; font-weight: 700; }
 .pr-head-d { font-size: 5mm; font-weight: 600; margin-left: auto; }

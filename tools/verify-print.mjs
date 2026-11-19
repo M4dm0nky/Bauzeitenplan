@@ -189,6 +189,29 @@ if (!chromExe) {
   await check('das PDF hat 14 Seiten — eine je Tag', async () => (seiten === 14 ? true : seiten + ' Seiten'));
 }
 
+// ── Vorschau passt ins Fenster, Druck bleibt 1:1 ─────────────────────────────
+console.log('\nVORSCHAU');
+for (const [w, h] of [[1440, 900], [1000, 800]]) {
+  for (const [name, url, sel] of [['Tagesblatt', '/print.html?plan=klassentreffen', '.pr-sheet'], ['Running Order', '/print.html?plan=klassentreffen&ansicht=show', '.pr-ro']]) {
+    await p.setViewportSize({ width: w, height: h });
+    await p.goto(BASE + url);
+    await p.waitForSelector(sel, { timeout: 15000 });
+    await p.waitForTimeout(400);
+    await check(`Blatt passt in die Vorschau — ${name} bei ${w} px`, async () => {
+      const r = await p.locator(sel).first().evaluate((n) => { const b = n.getBoundingClientRect(); return { l: b.left, r: b.right, iw: innerWidth }; });
+      return r.l >= 0 && r.r <= r.iw + 0.5 ? true : JSON.stringify(r);
+    });
+    if (w === 1440 && name === 'Tagesblatt') await p.screenshot({ path: join(here, 'shots', 'druck-vorschau-1440.png') });
+    await p.emulateMedia({ media: 'print' });
+    await check(`Druck bleibt 1:1 — ${name} bei ${w} px`, async () => {
+      const bw = await p.locator(sel).first().evaluate((n) => n.getBoundingClientRect().width);
+      return Math.abs(bw - 1511.8) <= 1 ? true : bw + ' px statt 1511.8';
+    });
+    await p.emulateMedia({ media: 'screen' });
+  }
+}
+await p.setViewportSize({ width: 1700, height: 1000 });
+
 if (errors.length) { console.log('\n  ✗ Fehler:'); errors.slice(0, 5).forEach((e) => console.log('      ' + e)); bad += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 await b.close(); server.close();

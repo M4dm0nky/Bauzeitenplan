@@ -226,6 +226,18 @@ function baueFenster(c, feld) {
   c.append(feld('Zeitfenster ab', tv), feld('bis', tb), feld(' ', auto));
 }
 
+// Vorschau-Maßstab: nur am Bildschirm wirksam (print.css, @media screen). Das
+// Blatt ist 400 mm breit; ist das Fenster schmaler, schrumpft die Vorschau,
+// statt links abgeschnitten zu werden. Der Druck bleibt 1:1.
+const BLATT_PX = (400 * 96) / 25.4;
+function passeEin() {
+  const wrap = $('sheets');
+  const cs = getComputedStyle(wrap);
+  const frei = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const z = frei > 0 ? Math.min(1, frei / BLATT_PX) : 1;
+  wrap.style.setProperty('--pr-zoom', String(z));
+}
+
 function zeichne() {
   const tasks = gewaehlteTasks();
   const tage = tageZwischen(wahl.von, wahl.bis);
@@ -234,6 +246,7 @@ function zeichne() {
 
   const wrap = $('sheets');
   wrap.replaceChildren();
+  passeEin();
 
   if (wahl.ebene === 'show') {
     // Ein Blatt je Tag UND Bühne: zwei Bühnen an zwei Tagen sind vier Blätter.
@@ -568,6 +581,7 @@ ladePlan().then((plan) => {
   wahl.bis = local(toDate(max)).slice(0, 10);
   wahl.fenster = { von: 0, bis: 24 };
   zeichne();
+  window.addEventListener('resize', passeEin);
 }).catch((e) => {
   // Dieselbe Falle: `append` gibt undefined zurück.
   const leer = el('div', 'pr-sheet');
