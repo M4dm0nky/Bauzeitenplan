@@ -54,7 +54,7 @@ node tools/verify-sync.mjs  # Sync: zwei Geräte, Konflikt, Offline-Start
 - **`?plan=leer` schaltet den Autostart ab** (`verify-browser`, `verify-edit`, `verify-live`, `verify-amk` hängen daran).
 - **Was der erste Start braucht, gehört auf Modulebene, nicht in `mount()`** (Import, Neu, Projekte, `openEinrichten`).
 - **Der AMK-Plan ist quellentreu** (`tools/make-amk.mjs`): Geschätztes = `estimated: true` + gestrichelte Kante; wo das Gewerk im Original leer war, sagt es die Notiz.
-- **AMK: nur DREI Verknüpfungen («Leitern runter → sobald Backline und Set weg», Kopplung der «Rigging/Set»-Zeile), **keine dazuerfinden** (`tests/amk.test.mjs`).
+- **AMK: nur DREI Verknüpfungen** («Leitern runter → sobald Backline und Set weg», Kopplung der «Rigging/Set»-Zeile), **keine dazuerfinden** (`tests/amk.test.mjs`).
 - **Abhaken ist persistiert und signaturgebunden** (`ackCrit` bool, `ackConflictMin` Minuten, via `setTaskField`); `findConflicts` überspringt nur, solange `shortBy <= ackConflictMin + EPS`. «Kritisch» bleibt Information (kein automatisches Verschieben), Abhaken blendet nur aus.
 - **Eine Quelle für Warnungen:** Zählung, Prüf-Liste, `resolveConflictsCmd` lesen alle `findConflicts`. `gantt.stats()` zählt die sichtbare Ebene, Kritisch/Konflikte den ganzen Plan.
 - **Auswahllisten (Arten, Abschnitte, Ressourcen): dieselben drei Befehle** `setAuswahlLabel`, `removeAuswahl`, `reorderAuswahl` (`liste: 'punktTypen'|'abschnitte'|'ressourcen'`).
@@ -93,7 +93,7 @@ node tools/verify-sync.mjs  # Sync: zwei Geräte, Konflikt, Offline-Start
 - **`bz-bereit` braucht KEINE Theme-Anpassung** (`outline: dashed currentColor`), steht nicht in `needed`; wie `is-estimated`.
 - **Per Klick Auswählbares gehört in die Tab-Reihenfolge, und was `tabIndex` trägt, reagiert auf Enter UND Leertaste** (`bindMark` in gantt.js, EINE Stelle; Space mit `preventDefault()`; auch Meilenstein-Rauten; Prüfung in `verify-edit.mjs`).
 - **Beschriftung läuft nie über den nächsten Balken** (`updateLabels()`, `data-next`; `verify-klassentreffen.mjs`).
-- **Eine Reihenfolge für beide Ansichten: `byStart`** (Start, Ende, Titel). **Verknüpfungs-Picker sucht** (`candidateGroups`, schedule.js); lange Listen nie als `<select>`.
+- **Eine Reihenfolge für beide Ansichten: `byStart`** (Start, Ende, Titel). **Verknüpfungs-Picker sucht** (`candidateGroups`), ebenso die **Suche** (`suchTreffer`, beide schedule.js, DOM-frei); lange Listen nie als `<select>`.
 - **Achsen-Ticks und Bänder auf `T1` klemmen;** ein Kalendertag füllt bei jeder Breite die Breite.
 - **`O.onView` meldet jedes Selbst-Einpassen;** kein `requestAnimationFrame` raten; der ResizeObserver merkt auch Breite **0**.
 - **Ein leeres Band ist nur im Bauzeitenplan unsichtbar;** `Math.min(...[])` = `Infinity`, Hülle fällt auf `T0`.
@@ -178,6 +178,7 @@ Local-first: Plan in `localStorage`; privates Repo `M4dm0nky/Bauzeitenplan-Daten
 | `js/conflicts.js` | Konflikte + Dauer-Kurzform — **DOM-frei** |
 | `js/persistence.js` | localStorage, Export/Import — **DOM-frei** |
 | `js/table.js` | Tabellen-Editor |
+| `js/suche.js` | Suchfeld + Trefferliste (rendert nur; `suchTreffer` in schedule.js, Sprung in app.js) |
 | `js/templates.js` | Vorlagen (`TEMPLATES`: fünf Einträge) |
 | `js/palette.js` | 10 Töne × 2 Schraffuren = 20 Plätze (HUES=10, MAX_SLOTS=20) |
 | `js/ebene.js` | Bänder, Showtage, Typ-Hinweis — **DOM-frei** |

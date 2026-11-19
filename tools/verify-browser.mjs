@@ -140,6 +140,19 @@ for (const pg of PAGES) {
     prints.set(fp, pg.name);
     return prev ? `sieht aus wie «${prev}» (${fp})` : true;
   });
+  if (pg.app) {
+    await check('Suchfeld und -liste sind in diesem Theme nicht durchsichtig', async () => {
+      const bg = await page.evaluate(() => {
+        const l = document.getElementById('suche-liste'), wasHidden = l.hidden;
+        l.hidden = false;
+        const f = getComputedStyle(document.getElementById('suche')).backgroundColor;
+        const g = getComputedStyle(l).backgroundColor;
+        l.hidden = wasHidden;
+        return [f, g];
+      });
+      return bg.every((c) => !/^rgba\(.*,\s*0\)$/.test(c) && c !== 'transparent') ? true : 'durchsichtig: ' + bg.join(' | ');
+    });
+  }
   await check('alle angeforderten Dateien wurden ausgeliefert', () =>
     missing.length === 0 ? true : missing.slice(0, 3).join(' · '));
 

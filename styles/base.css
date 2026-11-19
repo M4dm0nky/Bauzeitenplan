@@ -380,18 +380,18 @@ body { margin: 0; }
 .sh-z { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hd-right { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 
-/* Suche (js/suche.js). Farben nur aus Tokens, die JEDES Theme kennt (--panel,
-   currentColor) — ein Baustein ohne eigene Theme-Regeln, wie bz-bereit. */
+/* Suche (js/suche.js). Farben aus Tokens mit Rückfall (--panel, --card, --paper: je Theme
+   eines davon; currentColor) — ein Baustein ohne eigene Theme-Regeln, wie bz-bereit. */
 .suche {
   width: 190px; min-width: 0; padding: 5px 9px; font: inherit; color: inherit;
-  background: var(--panel); border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  background: var(--panel, var(--card, var(--paper, Canvas))); border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
   border-radius: 3px;
 }
 .suche::placeholder { color: color-mix(in srgb, currentColor 55%, transparent); }
 .suche:focus { outline: 2px solid var(--sel, currentColor); outline-offset: 1px; }
 .suche-liste {
   position: fixed; z-index: 75; overflow-y: auto; padding: 3px;
-  background: var(--panel); color: inherit;
+  background: var(--panel, var(--card, var(--paper, Canvas))); color: inherit;
   border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
   box-shadow: 0 14px 40px -10px rgba(0,0,0,.45);
 }
