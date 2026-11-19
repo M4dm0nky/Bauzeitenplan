@@ -595,4 +595,5 @@ ladePlan().then((plan) => {
   const leer = el('div', 'pr-sheet');
   leer.append(el('div', 'pr-leer', 'Konnte nicht laden: ' + (e.message || e)));
   $('sheets').append(leer);
+  passeEin();
 });

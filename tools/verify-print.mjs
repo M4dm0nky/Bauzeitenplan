@@ -210,17 +210,26 @@ for (const [w, h] of [[1440, 900], [1000, 800]]) {
     await p.emulateMedia({ media: 'screen' });
   }
 }
-// Klassische Bildlaufleiste erzwingen: sie darf die Passung nicht verschieben.
+// Klassische Bildlaufleiste: auf dem Mac sind Leisten Overlays ohne Breite, dort
+// kann nichts schiefgehen. Eigener Browser mit ui.useOverlayScrollbars=0.
 {
-  await p.setViewportSize({ width: 1440, height: 900 });
-  await p.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => { const st = document.createElement('style'); st.id = 'test-scroll'; st.textContent = 'html{overflow-y:scroll}'; document.head.append(st); }); });
-  await p.goto(BASE + '/print.html?plan=klassentreffen');
-  await p.waitForSelector('.pr-sheet', { timeout: 15000 });
-  await p.waitForTimeout(400);
-  await check('Blatt passt in die Vorschau — mit erzwungener Bildlaufleiste', async () => {
-    const r = await p.locator('.pr-sheet').first().evaluate((n) => { const b = n.getBoundingClientRect(); return { l: b.left, r: b.right, cw: document.documentElement.clientWidth }; });
-    return r.l >= 15.5 && r.r <= r.cw - 15.5 ? true : JSON.stringify(r);
-  });
+  const kb = await firefox.launch({ executablePath: exe, firefoxUserPrefs: { 'ui.useOverlayScrollbars': 0 } });
+  const kp = await (await kb.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+  await kp.goto(BASE + '/print.html?plan=klassentreffen');
+  await kp.waitForSelector('.pr-sheet', { timeout: 15000 });
+  await kp.waitForTimeout(400);
+  const leiste = await kp.evaluate(() => innerWidth - document.documentElement.clientWidth);
+  if (leiste <= 0) {
+    // macOS-Firefox kennt in Playwright nur Overlay-Leisten (Prefs und Chromium-Flags
+    // geprüft: immer 0 px). Ehrlich überspringen — Windows/Linux prüfen es.
+    console.log('  – klassische Bildlaufleiste: dieser Rechner hat nur Overlay-Leisten (0 px), übersprungen');
+  } else {
+    await check('Blatt passt in die Vorschau — mit klassischer Bildlaufleiste (' + leiste + ' px)', async () => {
+      const r = await kp.locator('.pr-sheet').first().evaluate((n) => { const b = n.getBoundingClientRect(); return { l: b.left, r: b.right, cw: document.documentElement.clientWidth }; });
+      return r.l >= 15.5 && r.r <= r.cw - 15.5 ? true : JSON.stringify(r);
+    });
+  }
+  await kb.close();
 }
 await p.setViewportSize({ width: 1700, height: 1000 });
 
