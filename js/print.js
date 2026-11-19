@@ -231,14 +231,23 @@ function baueFenster(c, feld) {
 // statt links abgeschnitten zu werden. Der Druck bleibt 1:1.
 const BLATT_PX = (400 * 96) / 25.4;
 function passeEin() {
+  // Fensterbreite OHNE Bildlaufleiste (html reserviert sie per scrollbar-gutter),
+  // nicht die des Containers: leer misst er breiter als mit Blättern.
   const wrap = $('sheets');
   const cs = getComputedStyle(wrap);
-  const frei = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const frei = document.documentElement.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   const z = frei > 0 ? Math.min(1, frei / BLATT_PX) : 1;
   wrap.style.setProperty('--pr-zoom', String(z));
 }
 
+// Erst die Blätter anhängen, dann den Maßstab rechnen — sonst misst er gegen
+// einen leeren Container.
 function zeichne() {
+  zeichneBlaetter();
+  passeEin();
+}
+
+function zeichneBlaetter() {
   const tasks = gewaehlteTasks();
   const tage = tageZwischen(wahl.von, wahl.bis);
   if (wahl.autoFenster) wahl.fenster = fensterFuer(tasks, tage);
@@ -246,7 +255,6 @@ function zeichne() {
 
   const wrap = $('sheets');
   wrap.replaceChildren();
-  passeEin();
 
   if (wahl.ebene === 'show') {
     // Ein Blatt je Tag UND Bühne: zwei Bühnen an zwei Tagen sind vier Blätter.

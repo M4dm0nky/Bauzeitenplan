@@ -199,7 +199,7 @@ for (const [w, h] of [[1440, 900], [1000, 800]]) {
     await p.waitForTimeout(400);
     await check(`Blatt passt in die Vorschau — ${name} bei ${w} px`, async () => {
       const r = await p.locator(sel).first().evaluate((n) => { const b = n.getBoundingClientRect(); return { l: b.left, r: b.right, iw: innerWidth }; });
-      return r.l >= 0 && r.r <= r.iw + 0.5 ? true : JSON.stringify(r);
+      return r.l >= 16 - 0.5 && r.r <= r.iw - 16 + 0.5 ? true : JSON.stringify(r);
     });
     if (w === 1440 && name === 'Tagesblatt') await p.screenshot({ path: join(here, 'shots', 'druck-vorschau-1440.png') });
     await p.emulateMedia({ media: 'print' });
@@ -209,6 +209,18 @@ for (const [w, h] of [[1440, 900], [1000, 800]]) {
     });
     await p.emulateMedia({ media: 'screen' });
   }
+}
+// Klassische Bildlaufleiste erzwingen: sie darf die Passung nicht verschieben.
+{
+  await p.setViewportSize({ width: 1440, height: 900 });
+  await p.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => { const st = document.createElement('style'); st.id = 'test-scroll'; st.textContent = 'html{overflow-y:scroll}'; document.head.append(st); }); });
+  await p.goto(BASE + '/print.html?plan=klassentreffen');
+  await p.waitForSelector('.pr-sheet', { timeout: 15000 });
+  await p.waitForTimeout(400);
+  await check('Blatt passt in die Vorschau — mit erzwungener Bildlaufleiste', async () => {
+    const r = await p.locator('.pr-sheet').first().evaluate((n) => { const b = n.getBoundingClientRect(); return { l: b.left, r: b.right, cw: document.documentElement.clientWidth }; });
+    return r.l >= 15.5 && r.r <= r.cw - 15.5 ? true : JSON.stringify(r);
+  });
 }
 await p.setViewportSize({ width: 1700, height: 1000 });
 

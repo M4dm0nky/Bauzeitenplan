@@ -63,6 +63,8 @@
    Leerraum rechts und unten. print.js setzt --pr-zoom (höchstens 1). Im Druck
    gilt das nicht: dort bleibt das Blatt 1:1. */
 @media screen {
+  html { scrollbar-gutter: stable; }
+  .pr-sheets { padding-left: 16px; padding-right: 16px; }
   .pr-sheet { zoom: var(--pr-zoom, 1); }
 }
 
