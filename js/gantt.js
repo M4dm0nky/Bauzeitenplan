@@ -1175,6 +1175,9 @@ export function createGantt(root, opts = {}) {
 
   // ── Minimap ─────────────────────────────────────────────────────────────────
   let mini, miniStrip, miniWin, miniNow;
+  // Auf [0, 100] % geklemmt (wie Ticks und Bänder auf T1): liegt «heute» hinter dem
+  // Planende, stünde die Marke bei 646 % und machte die Seite 2300 px breit.
+  const miniNowPct = () => Math.min(100, Math.max(0, (NOW - T0) / TOTAL_MIN * 100)) + '%';
 
   // Die Spuren werden neu gefüllt, wenn sich die Ebene ändert — dort wechselt
   // die ganze Auswahl UND die Zeitspanne, eine stehengebliebene Karte zeigte
@@ -1197,7 +1200,7 @@ export function createGantt(root, opts = {}) {
       miniStrip.append(lane);
     }
     miniNow = el('div', 'bz-mini-now');
-    miniNow.style.left = (NOW - T0) / TOTAL_MIN * 100 + '%';
+    miniNow.style.left = miniNowPct();
     miniStrip.append(miniNow);
     miniWin = el('div', 'bz-mini-win');
     miniStrip.append(miniWin);
@@ -1238,7 +1241,7 @@ export function createGantt(root, opts = {}) {
   function paintNow() {
     nowLine.style.left = x(NOW) + 'px';
     nowLine.style.display = NOW >= T0 && NOW <= T1 ? '' : 'none';
-    if (miniNow) miniNow.style.left = ((NOW - T0) / TOTAL_MIN * 100) + '%';
+    if (miniNow) miniNow.style.left = miniNowPct();
   }
 
   function paintLive() {

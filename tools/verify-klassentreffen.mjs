@@ -261,6 +261,10 @@ for (const [vw, vh, minBalken] of [[1600, 950, 3], [390, 844, 1]]) {   // Handy:
     });
     return r;
   });
+  await check(`Start nach dem Planende (${vw}x${vh}): Seite läuft nicht seitlich über (Minimap-Jetzt-Marke geklemmt)`, async () => {
+    const r = await np.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: innerWidth, mini: document.querySelector('.bz-mini-now')?.style.left }));
+    return r.sw <= r.iw ? true : `scrollWidth ${r.sw} > ${r.iw} (Marke bei ${r.mini})`;
+  });
   await np.screenshot({ path: join(here, 'shots', vw > 500 ? 'klassentreffen-nach-ende.png' : 'klassentreffen-nach-ende-handy.png') });
   await nCtx.close();
 }
