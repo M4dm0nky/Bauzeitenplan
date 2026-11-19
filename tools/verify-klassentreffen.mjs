@@ -214,6 +214,35 @@ console.log('\nSTART AN EINEM TAG OHNE VORGÄNGE');
   await gCtx.close();
 }
 
+// Heute liegt NACH dem Plan (Realfall): die App öffnet auf dem Planbeginn. Dort
+// haben nur untere Gewerke etwas — ohne vertikales Nachscrollen stünde ein leeres
+// Blatt im Bild und alle Balken unter dem Rand.
+console.log('\nSTART NACH DEM PLANENDE');
+{
+  const nCtx = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  const np = await nCtx.newPage();
+  await np.clock.install({ time: new Date('2026-11-19T10:00:00') });
+  await np.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
+  await np.waitForTimeout(700);
+  await np.locator('.dlg-act .btn', { hasText: 'JSON importieren' }).click();
+  await np.locator('#import-file').setInputFiles(join(root, 'klassentreffen-festival.json'));
+  await np.waitForTimeout(1500);
+  await check('Start nach dem Planende: Balken im Sichtfeld (waagerecht UND senkrecht)', async () => {
+    const vis = await np.evaluate(() => {
+      const sc = document.querySelector('.bz-scroll'), sr = sc.getBoundingClientRect();
+      const kopf = document.querySelector('.bz-axis').getBoundingClientRect().bottom;
+      const seite = document.querySelector('.bz-side')?.getBoundingClientRect().right ?? sr.left;
+      return [...sc.querySelectorAll('.bz-bar')].filter((n) => {
+        const r = n.getBoundingClientRect();
+        return r.width > 0 && r.top >= kopf && r.bottom <= sr.bottom && r.right > seite && r.left < sr.right;
+      }).length;
+    });
+    return vis >= 3 ? true : `nur ${vis} Balken im Sichtfeld`;
+  });
+  await np.screenshot({ path: join(here, 'shots', 'klassentreffen-nach-ende.png') });
+  await nCtx.close();
+}
+
 // ?plan=leer im WIRKLICH frischen Browser (leerer Speicher) — so starten die
 // Erststart-Prüfungen. Im Kontext oben liegt der Plan schon, dort öffnet die App
 // dann richtigerweise das vorhandene Projekt statt eines Dialogs.

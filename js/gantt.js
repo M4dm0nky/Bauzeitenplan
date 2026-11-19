@@ -1323,11 +1323,37 @@ export function createGantt(root, opts = {}) {
     return local(toDate(mid)).slice(0, 10);
   }
 
+  // Liegt im Bild kein einziger Balken des gezeigten Tages, weil die Gewerke, die
+  // an diesem Tag etwas tun, weiter unten stehen — nach unten scrollen, so dass
+  // die erste Zeile (in Anzeigereihenfolge) mit einem Balken oben steht. Sonst
+  // sieht man ein leeres Blatt und die Balken liegen unter dem Bildrand.
+  // NUR bei Erstansicht und ausdrücklichem Tagessprung gerufen, nie bei jedem
+  // Neuaufbau: wer selbst gescrollt hat, wird nicht zurückgeholt.
+  function zeigeBalkenDesTages() {
+    const d0 = toMin(centerDayIso() + 'T00:00'), d1 = d0 + 1440;
+    const ids = new Set(VT.filter((t) => toMin(t.start) < d1 && Math.max(toMin(t.end), toMin(t.start)) >= d0).map((t) => t.id));
+    if (!ids.size) return;
+    const sr = scroller.getBoundingClientRect();
+    const kopf = axis.getBoundingClientRect().bottom;
+    const rects = [];
+    for (const n of scroller.querySelectorAll('.bz-bar[data-task], .bz-ms[data-task]')) {
+      if (!ids.has(n.dataset.task)) continue;
+      const r = n.getBoundingClientRect();
+      if (!r.height) continue;       // eingeklapptes Band
+      rects.push(r);
+    }
+    if (!rects.length) return;
+    if (rects.some((r) => r.top >= kopf && r.bottom <= sr.bottom)) return;
+    const top = Math.min(...rects.map((r) => r.top));
+    scroller.scrollTop += top - kopf - 4;
+  }
+
   // Zu einem Tag springen: in der Tagesansicht neu einpassen, sonst hinscrollen.
   function goToDay(iso) {
     const day = String(iso).slice(0, 10);
     if (zoomMode === 'tage') fitDay(day);
     else centerOn(toMin(day + 'T12:00'));
+    zeigeBalkenDesTages();
   }
 
   // Wohin beim Öffnen? «Jetzt» ist die naheliegende Antwort, aber die falsche,
@@ -1363,6 +1389,7 @@ export function createGantt(root, opts = {}) {
   function goToInitial() {
     if (zoomMode === 'tage') fitDay(local(toDate(initialFocus())).slice(0, 10));
     else centerOn(initialFocus());
+    zeigeBalkenDesTages();
   }
 
   scroller.addEventListener('scroll', () => {
@@ -1410,7 +1437,7 @@ export function createGantt(root, opts = {}) {
     },
     zoomIn() { setZoom(px * 1.6); },
     zoomOut() { setZoom(px / 1.6); },
-    goToNow() { zoomMode === 'tage' ? fitDay(local(toDate(NOW)).slice(0, 10)) : centerOn(NOW); },
+    goToNow() { zoomMode === 'tage' ? fitDay(local(toDate(NOW)).slice(0, 10)) : centerOn(NOW); zeigeBalkenDesTages(); },
     goTo(iso) { centerOn(toMin(iso)); },
     goToDay(iso) { goToDay(iso); },
     centerDayIso() { return centerDayIso(); },
@@ -1448,6 +1475,7 @@ export function createGantt(root, opts = {}) {
       const fokus = NOW > T0 && NOW < T1 ? heuteOderNaechster() : null;
       if (fokus != null) centerOn(fokus, 0.3);
       else scroller.scrollLeft = 0;
+      zeigeBalkenDesTages();
     },
     get ebene() { return ebene; },
     minimapNode: O.minimap ? buildMinimap() : null,
