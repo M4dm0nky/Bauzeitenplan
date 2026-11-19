@@ -1420,6 +1420,48 @@ console.log('\nNACH DER SHOW (Uhr 23:00)');
   await sCtx.close();
 }
 
+// ── Suche im Showablauf: der Treffer liegt an einem anderen Tag ─────────────
+{
+  console.log('\nSUCHE IM SHOWABLAUF');
+  const xCtx = await b.newContext({ viewport: { width: 1700, height: 1000 } });
+  const xp = await xCtx.newPage();
+  xp.setDefaultTimeout(5000);
+  const xerr = [];
+  xp.on('pageerror', (e) => xerr.push('JS: ' + e.message));
+  await xp.clock.install({ time: new Date('2026-08-29T15:30:00') });
+  await xp.goto(BASE + '/index.html?plan=klassentreffen&ansicht=setup');
+  await xp.waitForSelector('.bz-lab', { timeout: 20000 });
+  await xp.waitForTimeout(700);
+  // Vorbedingung: im Setup (leer) und am 29.08.; CHEFKET spielt nur am 30.08. in der Show.
+  await check('Vorbedingung: Setup-Ansicht, Tag 29.08.', async () => {
+    const t = await xp.locator('#tag-wahl').textContent();
+    const sel = await xp.locator('#seg-abschnitt button[data-ansicht="setup"]').getAttribute('aria-pressed');
+    return /29\.08/.test(t) && sel === 'true' ? true : t + ' / setup ' + sel;
+  });
+  await xp.fill('#suche', 'chefket');
+  await xp.waitForTimeout(250);
+  await xp.keyboard.press('Enter');
+  await xp.waitForTimeout(700);
+  await check('Treffer am anderen Tag: Abschnitt Show und Tag 30.08. sind gewählt', async () => {
+    const t = await xp.locator('#tag-wahl').textContent();
+    const show = await xp.locator('#seg-abschnitt button[data-ansicht="show"]').getAttribute('aria-pressed');
+    return /30\.08/.test(t) && show === 'true' ? true : t + ' / show ' + show;
+  });
+  await check('Gantt zeigt und wählt den Treffer, Panel nennt ihn', async () => {
+    const n = await xp.locator('.bz-lab.is-sel').count();
+    const panel = await xp.locator('#ins').innerText().catch(() => '');
+    return n >= 1 && /CHEFKET/.test(panel) ? true : `ausgewählt ${n}, Panel «${panel.slice(0, 40)}»`;
+  });
+  await check('Tabelle zeigt denselben Tag (CHEFKET da, CURSE vom 29.08. nicht)', async () => {
+    await xp.locator('[data-view="tabelle"]').click();
+    await xp.waitForTimeout(500);
+    const txt = await xp.locator('#tb').evaluate((n) => [...n.querySelectorAll('.c-title input')].map((i) => i.value).join('|'));
+    return /CHEFKET/.test(txt) && !/CURSE/.test(txt) ? true : txt.slice(0, 120);
+  });
+  if (xerr.length) { console.log('  ✗ JS-Fehler: ' + xerr[0]); bad++; }
+  await xCtx.close();
+}
+
 console.log('');
 await check('keine JS-Fehler', async () => (errors.length ? errors.slice(0, 3).join(' | ') : true));
 

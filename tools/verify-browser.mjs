@@ -445,8 +445,8 @@ for (const pg of PAGES) {
   const HANDY_THEMES = ['callboard', ...THEMES];
   // Was je Modus sichtbar bleiben MUSS (Zoom-Gruppe gibt es nur im Bauzeitenplan).
   const MUSS = {
-    bau: ['#tag-wahl', '[data-view="gantt"]', '[data-view="tabelle"]', '[data-view="bedarf"]', '#zoom-stufe', '#zout', '#zin', '#now', '#fold', '#undo', '#redo', '#live', '#drucken', '#save-state'],
-    show: ['#tag-wahl', '[data-ansicht="setup"]', '[data-ansicht="show"]', '[data-view="gantt"]', '[data-view="tabelle"]', '[data-view="bedarf"]', '#undo', '#redo', '#live', '#drucken', '#save-state'],
+    bau: ['#tag-wahl', '[data-view="gantt"]', '[data-view="tabelle"]', '[data-view="bedarf"]', '#zoom-stufe', '#zout', '#zin', '#now', '#fold', '#undo', '#redo', '#live', '#suche', '#drucken', '#save-state'],
+    show: ['#tag-wahl', '[data-ansicht="setup"]', '[data-ansicht="show"]', '[data-view="gantt"]', '[data-view="tabelle"]', '[data-view="bedarf"]', '#undo', '#redo', '#live', '#suche', '#drucken', '#save-state'],
   };
   for (const t of HANDY_THEMES) for (const modus of ['bau', 'show']) {
     const m = await browser.newPage({ viewport: { width: 390, height: 844 } });
@@ -503,13 +503,13 @@ for (const pg of PAGES) {
 }
 
 // ── Bedienelemente zählen ────────────────────────────────────────────────────
-// CLAUDE.md sagt: 13 im Bauzeitenplan, 11 im Showablauf — gemessen als sichtbare
+// CLAUDE.md sagt: 14 im Bauzeitenplan, 12 im Showablauf — gemessen als sichtbare
 // button/input/select in .hd-bar (Klassentreffen, ohne Live, ohne offenen
 // Konflikt). Eine Zahl, die kein Werkzeug prüft, ist eine Zahl, die lügt.
 // Desktop UND Handy müssen dieselbe Zahl liefern: nichts fällt weg, nichts kommt dazu.
 {
   console.log('\nBEDIENELEMENTE (sichtbare button/input/select in .hd-bar)');
-  const SOLL = { bau: 13, show: 11 };
+  const SOLL = { bau: 14, show: 12 };
   for (const [w, h] of [[1600, 950], [390, 844]]) for (const modus of ['bau', 'show']) {
     const m = await browser.newPage({ viewport: { width: w, height: h } });
     let r;

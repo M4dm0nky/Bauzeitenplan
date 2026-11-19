@@ -305,6 +305,154 @@ console.log('\nFOKUSTAG NACH EBENENWECHSEL');
   await fCtx.close();
 }
 
+// ── Suche (Kopfzeile): tippen, Liste, Enter springt ──────────────────────────
+{
+  console.log('\nSUCHE');
+  const sCtx = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  const sp = await sCtx.newPage();
+  sp.setDefaultTimeout(5000);
+  const serr = [];
+  sp.on('pageerror', (e) => serr.push('JS: ' + e.message));
+  await sp.clock.install({ time: new Date('2026-08-27T10:00:00') });
+  await sp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=klassentreffen');
+  await sp.waitForSelector('.bz-lab', { timeout: 20000 });
+  await sp.waitForTimeout(800);
+  // Der ausgewählte Balken liegt vollständig im sichtbaren Ausschnitt des Gantt.
+  const selImBild = () => sp.evaluate(() => {
+    const sc = document.querySelector('.bz-scroll'); if (!sc) return 'kein Gantt';
+    const sr = sc.getBoundingClientRect();
+    const kopf = document.querySelector('.bz-axis').getBoundingClientRect().bottom;
+    const seite = document.querySelector('.bz-side').getBoundingClientRect().right;
+    const n = [...sc.querySelectorAll('.bz-bar.is-sel, .bz-ms.is-sel')].find((q) => q.getBoundingClientRect().height > 0);
+    if (!n) return 'kein ausgewählter Balken';
+    const r = n.getBoundingClientRect();
+    return r.top >= kopf - 1 && r.bottom <= sr.bottom + 1 && r.right > seite && r.left < sr.right ? true
+      : `außerhalb: top ${Math.round(r.top)} bottom ${Math.round(r.bottom)} left ${Math.round(r.left)} (Bild ${Math.round(kopf)}–${Math.round(sr.bottom)}, x ${Math.round(seite)}–${Math.round(sr.right)})`;
+  });
+  const suche = async (q) => { await sp.fill('#suche', ''); await sp.fill('#suche', q); await sp.waitForTimeout(250); };
+
+  await check('Suche: «kran» liefert Treffer in der Liste', async () => {
+    await suche('kran');
+    const n = await sp.locator('#suche-liste .suche-i').count();
+    return n >= 1 ? true : 'keine Treffer (' + n + ')';
+  });
+  await check('Suche: Umlaute und Groß/Klein («BÜHNE» = «bühne», mit Treffern)', async () => {
+    await suche('bühne');
+    const a = await sp.locator('#suche-liste .suche-i').count();
+    await suche('BÜHNE');
+    const c = await sp.locator('#suche-liste .suche-i').count();
+    return a >= 1 && a === c ? true : a + ' vs ' + c;
+  });
+  await check('Suche: Enter springt — Balken ausgewählt, im Bild, Panel zeigt den Titel', async () => {
+    await suche('kran');
+    await sp.keyboard.press('Enter');
+    await sp.waitForTimeout(500);
+    const bild = await selImBild();
+    if (bild !== true) return bild;
+    const panel = await sp.locator('#ins').innerText().catch(() => '');
+    return /kran/i.test(panel) ? true : 'Panel ohne «Kran»: ' + panel.slice(0, 60);
+  });
+  await check('Suche: nach dem Sprung ist die Liste zu', async () =>
+    (await sp.locator('#suche-liste').isHidden()) ? true : 'Liste noch offen');
+  await check('Suche: Treffer in zugeklappter Gruppe wird sichtbar', async () => {
+    await sp.locator('#fold').click();
+    await sp.waitForTimeout(400);
+    const zu = await sp.locator('.bz-lab-group.is-collapsed').count();
+    if (!zu) return 'Vorbedingung: nichts zugeklappt';
+    await suche('kran');
+    await sp.keyboard.press('Enter');
+    await sp.waitForTimeout(500);
+    return await selImBild();
+  });
+  await check('Suche: ↓ + Enter wählt den zweiten Treffer', async () => {
+    await suche('kran');
+    const n = await sp.locator('#suche-liste .suche-i').count();
+    if (n < 2) return 'Vorbedingung: nur ' + n + ' Treffer';
+    await sp.keyboard.press('ArrowDown');
+    const aktiv = await sp.locator('#suche-liste .suche-i.is-aktiv .suche-t').textContent();
+    await sp.keyboard.press('Enter');
+    await sp.waitForTimeout(400);
+    const bild = await selImBild();
+    return bild === true || /kran/i.test(aktiv) ? true : bild;
+  });
+  await check('Suche: Escape schließt die Liste und leert das Feld', async () => {
+    await suche('kran');
+    await sp.keyboard.press('Escape');
+    await sp.waitForTimeout(150);
+    const v = await sp.inputValue('#suche');
+    const zu = await sp.locator('#suche-liste').isHidden();
+    return v === '' && zu ? true : `Wert «${v}», Liste ${zu ? 'zu' : 'offen'}`;
+  });
+  await check('Suche: «/» öffnet die Suche, tippt aber in einem Tabellenfeld ein «/»', async () => {
+    await sp.locator('#undo').focus();
+    await sp.keyboard.press('/');
+    const fokus = await sp.evaluate(() => document.activeElement && document.activeElement.id);
+    if (fokus !== 'suche') return 'Fokus nicht im Suchfeld: ' + fokus;
+    await sp.keyboard.press('Escape');
+    await sp.locator('[data-view="tabelle"]').click();
+    await sp.waitForTimeout(500);
+    const feld = sp.locator('.c-title input').first();
+    await feld.focus();
+    const vorher = await feld.inputValue();
+    await sp.keyboard.press('End');
+    await sp.keyboard.type('/');
+    const nachher = await feld.inputValue();
+    const fokus2 = await sp.evaluate(() => document.activeElement && document.activeElement.id);
+    if (fokus2 === 'suche') return 'die Suche hat den Fokus aus dem Tabellenfeld geholt';
+    return nachher === vorher + '/' ? true : `«${vorher}» → «${nachher}»`;
+  });
+  await check('Suche in der Tabelle: Zeile markiert und im Bild', async () => {
+    await sp.locator('#undo').focus();
+    await suche('kran');
+    await sp.keyboard.press('Enter');
+    await sp.waitForTimeout(600);
+    const r = await sp.evaluate(() => {
+      const tr = document.querySelector('tr.is-treffer'); if (!tr) return 'keine markierte Zeile';
+      const q = tr.getBoundingClientRect(), sc = document.querySelector('#tb').getBoundingClientRect();
+      return q.top >= sc.top - 1 && q.bottom <= sc.bottom + 1 ? true : `Zeile ${Math.round(q.top)}–${Math.round(q.bottom)} außerhalb ${Math.round(sc.top)}–${Math.round(sc.bottom)}`;
+    });
+    return r;
+  });
+  await sp.locator('[data-view="gantt"]').click();
+  await sp.waitForTimeout(400);
+  await suche('kran');
+  await sp.screenshot({ path: join(here, 'shots', 'suche-desktop.png') });
+  await sp.keyboard.press('Escape');
+  if (serr.length) { console.log('  ✗ JS-Fehler in der Suche: ' + serr[0]); bad++; }
+  await sCtx.close();
+
+  const hCtx = await b.newContext({ viewport: { width: 390, height: 844 } });
+  const hp = await hCtx.newPage();
+  hp.setDefaultTimeout(5000);
+  await hp.clock.install({ time: new Date('2026-08-27T10:00:00') });
+  await hp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=klassentreffen');
+  await hp.waitForSelector('.bz-lab', { timeout: 20000 });
+  await hp.waitForTimeout(800);
+  await check('Suche Handy: erreichbar, Kopf ≤ 300 px, Gantt ≥ 50 %', async () => {
+    const sichtbar = await hp.locator('#suche').isVisible();
+    if (!sichtbar) return 'Suchfeld nicht sichtbar';
+    await hp.fill('#suche', 'kran');
+    await hp.waitForTimeout(250);
+    const r = await hp.evaluate(() => ({
+      kopf: Math.round(document.querySelector('.hd').getBoundingClientRect().bottom),
+      bz: Math.round(document.querySelector('.bz-scroll').getBoundingClientRect().height), h: innerHeight,
+      liste: (() => { const l = document.querySelector('#suche-liste'); const q = l.getBoundingClientRect(); return { n: l.querySelectorAll('.suche-i').length, r: Math.round(q.right), l: Math.round(q.left), b: Math.round(q.bottom) }; })(),
+      sw: document.documentElement.scrollWidth,
+    }));
+    if (r.kopf > 300) return 'Kopf ' + r.kopf + ' px';
+    if (r.liste.n < 1) return 'keine Treffer';
+    if (r.liste.r > 390 || r.liste.l < 0) return 'Liste ragt aus dem Bild: ' + JSON.stringify(r.liste);
+    if (r.sw > 391) return 'Seite scrollt seitwärts: ' + r.sw;
+    return r.bz >= r.h * 0.5 ? true : 'Gantt nur ' + r.bz + ' von ' + r.h + ' px';
+  });
+  await hp.screenshot({ path: join(here, 'shots', 'suche-handy.png') });
+  await hp.keyboard.press('Enter');
+  await hp.waitForTimeout(500);
+  await check('Suche Handy: Enter springt zum Treffer', async () =>
+    (await hp.locator('.bz-bar.is-sel, .bz-ms.is-sel').count()) >= 1 ? true : 'nichts ausgewählt');
+  await hCtx.close();
+}
+
 // ?plan=leer im WIRKLICH frischen Browser (leerer Speicher) — so starten die
 // Erststart-Prüfungen. Im Kontext oben liegt der Plan schon, dort öffnet die App
 // dann richtigerweise das vorhandene Projekt statt eines Dialogs.

@@ -136,7 +136,7 @@ node tools/verify-sync.mjs  # Sync: zwei Geräte, Konflikt, Offline-Start
 - **Die Schiene (`js/rail.js`) trägt nur den MODUS** (Bauzeitenplan, Showablauf, Einrichten), rendert nur, meldet per `on.modus`/`on.einrichten`. **Nichts Wachsendes hinein** (keine Tage).
 - **Tagwahl nur über den Kalender-Knopf, nur Tage aus dem Plan** (`tagWahl`/`planTage`, `programmTage(sichtTasks(state, ebene))`): EIN Knopf für beide Modi, via `openMenu` (`.mn` `max-height: 62vh`); `syncTagKnopf()` einziger Schreiber.
 - **Was im Modus nichts bedeutet, steht nicht da:** `setAnsicht()` blendet `#seg-abschnitt` außerhalb Showablauf, `.hd-zoom` außerhalb Bauzeitenplan+Plan aus; `syncBuehnen()` nur im Showablauf.
-- Sichtbare `button`/`input`/`select` in `.hd-bar` (Klassentreffen, eine Bühne, ohne Live/Konflikt): **13 Bauzeitenplan, 11 Showablauf** (inkl. `#drucken`). Zoom = `openMenu`.
+- Sichtbare `button`/`input`/`select` in `.hd-bar` (Klassentreffen, eine Bühne, ohne Live/Konflikt): **14 Bauzeitenplan, 12 Showablauf** (inkl. `#drucken`, `#suche`). Zoom = `openMenu`.
 - **Neuer Knopf:** erst den Modus nennen, in dem er etwas bedeutet, im anderen ausblenden.
 - **Einrichten ist ein FENSTER** (`#ein-dlg`, vier Reiter). Ein Knopf liegt in EINEM Reiter; Prüfwerkzeuge klicken vorher `#rail-ein` UND `[data-ein="…"]`.
 - **Umgezogene Knöpfe behalten ids und Handler** (`#export`, `#import`, `#new-proj`, `#proj-menu`, `#add-gewerk` in `[data-ein="baender"]`, `#theme-toggle`; je Reiter eine `.ei-sec` mit `data-ein-tab`).
