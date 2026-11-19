@@ -78,6 +78,10 @@ body { margin: 0; }
    Theme. */
 .app { display: flex; flex-direction: row; height: 100vh; min-height: 0; }
 .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+/* Auf dem Handy ist .app eine SPALTE: ohne min-height:0 wächst .col auf die Höhe
+   des Inhalts (353 Vorgänge = 6000 px), der Gantt scrollt nicht mehr in sich,
+   und die Seite scrollt — Sprünge per scrollTop laufen dann ins Leere. */
+.col { min-height: 0; }
 
 /* Drei Einträge — zwei Modi und das Zahnrad. Sie trug in einem Zwischenstand
    auch die Tage des aktiven Modus; bei einem Bauzeitenplan über zwei Wochen

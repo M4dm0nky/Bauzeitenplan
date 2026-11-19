@@ -219,8 +219,10 @@ console.log('\nSTART AN EINEM TAG OHNE VORGÄNGE');
 // haben nur untere Gewerke etwas — ohne vertikales Nachscrollen stünde ein leeres
 // Blatt im Bild und alle Balken unter dem Rand.
 console.log('\nSTART NACH DEM PLANENDE');
-{
-  const nCtx = await b.newContext({ viewport: { width: 1600, height: 950 } });
+// Desktop UND Handy: auf dem Handy (390x844) stand beim echten Realfall «FR 21.08.»
+// mit Bühne/Rigging/Licht und keinem einzigen Balken im Bild.
+for (const [vw, vh, minBalken] of [[1600, 950, 3], [390, 844, 1]]) {   // Handy: Kopf frisst die Hälfte, ein Balken genügt
+  const nCtx = await b.newContext({ viewport: { width: vw, height: vh } });
   const np = await nCtx.newPage();
   await np.clock.install({ time: new Date('2026-11-19T10:00:00') });
   await np.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
@@ -228,20 +230,75 @@ console.log('\nSTART NACH DEM PLANENDE');
   await np.locator('.dlg-act .btn', { hasText: 'JSON importieren' }).click();
   await np.locator('#import-file').setInputFiles(join(root, 'klassentreffen-festival.json'));
   await np.waitForTimeout(1500);
-  await check('Start nach dem Planende: Balken im Sichtfeld (waagerecht UND senkrecht)', async () => {
+  await check(`Start nach dem Planende (${vw}x${vh}): Balken im Sichtfeld (waagerecht UND senkrecht)`, async () => {
     const vis = await np.evaluate(() => {
       const sc = document.querySelector('.bz-scroll'), sr = sc.getBoundingClientRect();
       const kopf = document.querySelector('.bz-axis').getBoundingClientRect().bottom;
       const seite = document.querySelector('.bz-side')?.getBoundingClientRect().right ?? sr.left;
       return [...sc.querySelectorAll('.bz-bar')].filter((n) => {
         const r = n.getBoundingClientRect();
-        return r.width > 0 && r.top >= kopf && r.bottom <= sr.bottom && r.right > seite && r.left < sr.right;
+        return r.width > 0 && r.top >= kopf && r.bottom <= Math.min(sr.bottom, innerHeight) && r.right > seite && r.left < sr.right;
       }).length;
     });
-    return vis >= 3 ? true : `nur ${vis} Balken im Sichtfeld`;
+    return vis >= minBalken ? true : `nur ${vis} Balken im Sichtfeld`;
   });
-  await np.screenshot({ path: join(here, 'shots', 'klassentreffen-nach-ende.png') });
+  await check(`Start nach dem Planende (${vw}x${vh}): Gruppenzeile der obersten Balkenzeile steht im Bild`, async () => {
+    const r = await np.evaluate(() => {
+      const sc = document.querySelector('.bz-scroll'), sr = sc.getBoundingClientRect();
+      const kopf = document.querySelector('.bz-axis').getBoundingClientRect().bottom;
+      const seite = document.querySelector('.bz-side')?.getBoundingClientRect().right ?? sr.left;
+      const sichtbar = [...sc.querySelectorAll('.bz-bar')].filter((n) => {
+        const q = n.getBoundingClientRect();
+        return q.width > 0 && q.top >= kopf && q.bottom <= Math.min(sr.bottom, innerHeight) && q.right > seite && q.left < sr.right;
+      }).sort((a, c) => a.getBoundingClientRect().top - c.getBoundingClientRect().top);
+      if (!sichtbar.length) return 'kein sichtbarer Balken';
+      const gr = [...sc.querySelectorAll('.bz-lab-group')]
+        .map((n) => n.getBoundingClientRect())
+        .filter((q) => q.bottom <= sichtbar[0].getBoundingClientRect().top + 1)
+        .sort((a, c) => c.top - a.top)[0];
+      if (!gr) return 'keine Gruppenzeile über dem obersten Balken';
+      return gr.top >= kopf - 1 && gr.bottom <= Math.min(sr.bottom, innerHeight) ? true : `Gruppenzeile bei ${Math.round(gr.top)}–${Math.round(gr.bottom)}, Kopf endet ${Math.round(kopf)}`;
+    });
+    return r;
+  });
+  await np.screenshot({ path: join(here, 'shots', vw > 500 ? 'klassentreffen-nach-ende.png' : 'klassentreffen-nach-ende-handy.png') });
   await nCtx.close();
+}
+
+// Fokustag statt Bildmitte (Ebenenwechsel): um 21:00 liegt die Bildmitte nach
+// centerOn(…, 0.3) schon am Folgetag. Der 27. trägt nur ein Gewerk weit unten,
+// der 28. nichts — wer den Tag aus der Bildmitte liest, sucht am 28. und scrollt nicht.
+console.log('\nFOKUSTAG NACH EBENENWECHSEL');
+{
+  const plan = JSON.parse(readFileSync(join(root, 'klassentreffen-festival.json'), 'utf8'));
+  const tag = (d) => new Date(d + 'T00:00').getTime();
+  const beruehrt = (t, d) => new Date(t.start).getTime() < tag(d) + 864e5 && new Date(t.end).getTime() > tag(d);
+  const unten = [...plan.gewerke].reverse().find((g) => plan.tasks.some((t) => t.gewerk === g.id && beruehrt(t, '2026-08-27'))).id;
+  plan.tasks = plan.tasks.filter((t) => !beruehrt(t, '2026-08-28') && (!beruehrt(t, '2026-08-27') || t.gewerk === unten));
+  const hatUnten = plan.tasks.some((t) => t.gewerk === unten && beruehrt(t, '2026-08-27'));
+  const fCtx = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  const fpg = await fCtx.newPage();
+  await fpg.clock.install({ time: new Date('2026-08-27T21:00:00') });
+  await fpg.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
+  await fpg.waitForTimeout(700);
+  await fpg.locator('.dlg-act .btn', { hasText: 'JSON importieren' }).click();
+  await fpg.locator('#import-file').setInputFiles({ name: 'fokus.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(plan)) });
+  await fpg.waitForTimeout(1500);
+  await fpg.locator('.rail-m', { hasText: 'Showablauf' }).click();
+  await fpg.waitForTimeout(500);
+  await fpg.locator('.rail-m', { hasText: 'Bauzeitenplan' }).click();
+  await fpg.waitForTimeout(800);
+  await check('Vorbedingung: der 27. trägt ein Gewerk ganz unten', async () => hatUnten ? true : 'Testplan trägt dort nichts');
+  await check('nach dem Ebenenwechsel steht der Balken des Fokustages im Bild', async () => {
+    const vis = await fpg.evaluate(() => {
+      const sc = document.querySelector('.bz-scroll'), sr = sc.getBoundingClientRect();
+      const kopf = document.querySelector('.bz-axis').getBoundingClientRect().bottom;
+      const seite = document.querySelector('.bz-side').getBoundingClientRect().right;
+      return [...sc.querySelectorAll('.bz-bar')].filter((n) => { const r = n.getBoundingClientRect(); return r.width > 0 && r.top >= kopf && r.bottom <= sr.bottom && r.right > seite && r.left < sr.right; }).length;
+    });
+    return vis >= 1 ? true : 'kein Balken im Bild (Tag aus der Bildmitte gelesen?)';
+  });
+  await fCtx.close();
 }
 
 // ?plan=leer im WIRKLICH frischen Browser (leerer Speicher) — so starten die

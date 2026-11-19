@@ -1323,28 +1323,39 @@ export function createGantt(root, opts = {}) {
     return local(toDate(mid)).slice(0, 10);
   }
 
-  // Liegt im Bild kein einziger Balken des gezeigten Tages, weil die Gewerke, die
-  // an diesem Tag etwas tun, weiter unten stehen — nach unten scrollen, so dass
-  // die erste Zeile (in Anzeigereihenfolge) mit einem Balken oben steht. Sonst
-  // sieht man ein leeres Blatt und die Balken liegen unter dem Bildrand.
+  // Liegt im Bild kein einziger Balken des Fokustages (samt der Gruppenzeile, zu
+  // der er gehört), weil die Gewerke, die an diesem Tag etwas tun, weiter unten
+  // stehen — nach unten scrollen, so dass die GRUPPENZEILE (Gewerkname) der
+  // obersten Zeile mit einem Balken direkt unter der Achse steht. Auf den Balken
+  // selbst zu scrollen schnitte den Namen ab.
+  // Der Tag kommt vom Aufrufer (iso): aus der Bildmitte gelesen wäre er nach
+  // centerOn(…, 0.3) ab ~16:48 schon der Folgetag, in «Wochen» Tage daneben.
   // NUR bei Erstansicht und ausdrücklichem Tagessprung gerufen, nie bei jedem
   // Neuaufbau: wer selbst gescrollt hat, wird nicht zurückgeholt.
-  function zeigeBalkenDesTages() {
-    const d0 = toMin(centerDayIso() + 'T00:00'), d1 = d0 + 1440;
-    const ids = new Set(VT.filter((t) => toMin(t.start) < d1 && Math.max(toMin(t.end), toMin(t.start)) >= d0).map((t) => t.id));
-    if (!ids.size) return;
+  function zeigeBalkenDesTages(iso) {
+    const d0 = toMin(String(iso || centerDayIso()).slice(0, 10) + 'T00:00'), d1 = d0 + 1440;
+    const gewerkVon = new Map();
+    for (const t of VT) {
+      // Vorgang mit Dauer, der um 00:00 endet, gehört nicht mehr zu diesem Tag
+      const a = toMin(t.start), e = toMin(t.end);
+      if (a < d1 && (e > d0 || (e === a && a >= d0))) gewerkVon.set(t.id, t.gewerk);
+    }
+    if (!gewerkVon.size) return;
     const sr = scroller.getBoundingClientRect();
     const kopf = axis.getBoundingClientRect().bottom;
-    const rects = [];
+    const zeilen = [];
     for (const n of scroller.querySelectorAll('.bz-bar[data-task], .bz-ms[data-task]')) {
-      if (!ids.has(n.dataset.task)) continue;
+      const g = gewerkVon.get(n.dataset.task);
+      if (g === undefined) continue;
       const r = n.getBoundingClientRect();
       if (!r.height) continue;       // eingeklapptes Band
-      rects.push(r);
+      const gl = side.querySelector('.bz-lab-group[data-gewerk="' + CSS.escape(g) + '"]');
+      zeilen.push({ r, gr: gl ? gl.getBoundingClientRect() : r });
     }
-    if (!rects.length) return;
-    if (rects.some((r) => r.top >= kopf && r.bottom <= sr.bottom)) return;
-    const top = Math.min(...rects.map((r) => r.top));
+    if (!zeilen.length) return;
+    const inBild = (q) => q.top >= kopf && q.bottom <= sr.bottom;
+    if (zeilen.some((z) => inBild(z.r) && inBild(z.gr))) return;
+    const top = Math.min(...zeilen.map((z) => z.gr.top));
     scroller.scrollTop += top - kopf - 4;
   }
 
@@ -1353,13 +1364,9 @@ export function createGantt(root, opts = {}) {
     const day = String(iso).slice(0, 10);
     if (zoomMode === 'tage') fitDay(day);
     else centerOn(toMin(day + 'T12:00'));
-    zeigeBalkenDesTages();
+    zeigeBalkenDesTages(day);
   }
 
-  // Wohin beim Öffnen? «Jetzt» ist die naheliegende Antwort, aber die falsche,
-  // wenn der Aufbau erst in zwei Wochen beginnt: dann liegt die Jetzt-Linie
-  // mitten in der Planungsphase und der Plan öffnet auf einem leeren Bild.
-  // Also: Jetzt nur, wenn dort auch etwas los ist — sonst der Aufbaubeginn.
   // «Heute» nur, wenn heute etwas liegt. Sonst der nächste Tag MIT Vorgängen
   // (Lücke mitten im Plan, z. B. ein freier Freitag), sonst der letzte. Die
   // Tage kommen aus programmTage — keine zweite Tagesrechnung. null = Plan leer.
@@ -1372,6 +1379,11 @@ export function createGantt(root, opts = {}) {
     return toMin(tag + 'T12:00');
   }
 
+  // Wohin beim Öffnen? «Jetzt» ist die naheliegende Antwort, aber die falsche,
+  // wenn der Aufbau erst in zwei Wochen beginnt: dann liegt die Jetzt-Linie
+  // mitten in der Planungsphase und der Plan öffnet auf einem leeren Bild.
+  // Also: Vor dem Aufbau der Aufbaubeginn, nach dem Planende ebenfalls, dazwischen
+  // heuteOderNaechster().
   function initialFocus() {
     const aufbau = (S.phases || []).find((p) => /aufbau|load.?in/i.test(p.name));
     const spans = S.tasks.filter((t) => !t.milestone).map((t) => toMin(t.start));
@@ -1387,9 +1399,10 @@ export function createGantt(root, opts = {}) {
   // Erstansicht / nach Projektwechsel: in der Tagesansicht den Fokustag voll
   // aufziehen, sonst nur hinscrollen.
   function goToInitial() {
-    if (zoomMode === 'tage') fitDay(local(toDate(initialFocus())).slice(0, 10));
-    else centerOn(initialFocus());
-    zeigeBalkenDesTages();
+    const fokus = initialFocus(), tag = local(toDate(fokus)).slice(0, 10);
+    if (zoomMode === 'tage') fitDay(tag);
+    else centerOn(fokus);
+    zeigeBalkenDesTages(tag);
   }
 
   scroller.addEventListener('scroll', () => {
@@ -1437,7 +1450,11 @@ export function createGantt(root, opts = {}) {
     },
     zoomIn() { setZoom(px * 1.6); },
     zoomOut() { setZoom(px / 1.6); },
-    goToNow() { zoomMode === 'tage' ? fitDay(local(toDate(NOW)).slice(0, 10)) : centerOn(NOW); zeigeBalkenDesTages(); },
+    goToNow() {
+      const tag = local(toDate(NOW)).slice(0, 10);
+      zoomMode === 'tage' ? fitDay(tag) : centerOn(NOW);
+      zeigeBalkenDesTages(tag);
+    },
     goTo(iso) { centerOn(toMin(iso)); },
     goToDay(iso) { goToDay(iso); },
     centerDayIso() { return centerDayIso(); },
@@ -1475,7 +1492,7 @@ export function createGantt(root, opts = {}) {
       const fokus = NOW > T0 && NOW < T1 ? heuteOderNaechster() : null;
       if (fokus != null) centerOn(fokus, 0.3);
       else scroller.scrollLeft = 0;
-      zeigeBalkenDesTages();
+      zeigeBalkenDesTages(fokus != null ? local(toDate(fokus)).slice(0, 10) : local(toDate(T0)).slice(0, 10));
     },
     get ebene() { return ebene; },
     minimapNode: O.minimap ? buildMinimap() : null,
