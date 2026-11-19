@@ -3,6 +3,18 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unveröffentlicht
+
+**Balken im Gantt ziehen.**
+
+- Einen Vorgang in der Mitte greifen und verschieben, am rechten oder linken Rand greifen und die Dauer ändern. Beim Ziehen zeigt ein Hinweis Start, Ende und Dauer; Escape bricht ab. Ein Zug ist ein Schritt für ⌘Z.
+- Das Raster richtet sich nach dem Zoom: 15 Minuten in Tages-/Stundenansicht, 1 Stunde in Wochen, 1 Tag in Monaten.
+- Nur der gezogene Balken bewegt sich. Gerät ein Nachfolger dadurch zu früh, zeigt ihn die Konfliktmarke; «Konflikte auflösen» schiebt ihn auf Wunsch nach.
+- Sammelvorgänge lassen sich nicht ziehen (sie folgen ihren Untervorgängen), Meilensteine nur verschieben (an der Raute greifen).
+- Tastatur: Balken auswählen, Alt+←/→ verschiebt, Alt+Shift+←/→ ändert die Dauer. Handy: kurz halten, dann ziehen — Wischen scrollt weiter.
+- Der Kreis zum Verknüpfen sitzt jetzt knapp rechts neben dem Balkenende, damit der Rand zum Längerziehen frei bleibt; während des Ziehens ist er ausgeblendet.
+- Mit gesetztem Versatz landet ein gezogener Vorgang auf der Planzeit; im Live-Modus folgt die Ansicht während des Ziehens nicht der Uhr.
+
 ## 0.17.0 — 2026-11-19
 
 **Schnell finden: ein Suchfeld in der Kopfzeile.**
