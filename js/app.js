@@ -269,6 +269,8 @@ function mount() {
       if (r && r.id) gantt.select({ kind: 'dep', id: r.id });
     },
     onRemoveDep: (id) => apply({ type: 'removeDep', id }),
+    // Leerer Gantt: derselbe Weg wie in der Tabelle (addRow bzw. addGewerk).
+    onLeer: (w) => (w.art === 'gewerk' ? addGewerk(w.anker) : table.anlegen(w.gewerk)),
     // Der Gantt hat sich von selbst neu eingepasst — die Kopfzeile muss nach.
     onView: () => {
       if (syncZoomSeg) syncZoomSeg();

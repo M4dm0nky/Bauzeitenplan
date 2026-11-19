@@ -1068,6 +1068,8 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
 
   return {
     render,
+    /** Neuen Eintrag im Gewerk anlegen — derselbe Weg wie der Knopf der Gruppenzeile. */
+    anlegen(gewerkId) { addRow(gewerkId, null); },
     /** Ebene wechseln — die App entscheidet, die Tabelle zeigt. */
     setEbene(name, aus = new Set(), showTag = null, absch = 'alle') {
       ebene = name;

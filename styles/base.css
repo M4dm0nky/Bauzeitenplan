@@ -105,6 +105,13 @@ body { margin: 0; }
 
 /* ── Gantt-Rahmen ─────────────────────────────────────────────────────────── */
 .bz { position: relative; flex: 1; min-height: 0; display: flex; }
+.bz-leer {
+  position: absolute; left: var(--side-w); right: 0; top: 96px; z-index: 6;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 24px 16px; text-align: center; color: var(--muted, inherit);
+}
+.bz-leer[hidden] { display: none; }
+.bz-leer-t { margin: 0; }
 .bz-scroll { flex: 1; overflow: auto; overscroll-behavior-x: contain; min-height: 0; }
 .bz-grid {
   display: grid;

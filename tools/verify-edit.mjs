@@ -1242,6 +1242,33 @@ await check('Leere Tabelle, Bedarf und Showablauf ohne Bühne bieten den passend
   } finally { await c5.close(); }
 });
 
+await check('Leerer Bauzeitenplan: der GANTT (nicht die Tabelle) bietet EINEN Knopf an, und er legt einen Vorgang an', async () => {
+  const c6 = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  try {
+    const p6 = await c6.newPage();
+    const fehler = [];
+    p6.on('pageerror', (e) => fehler.push(e.message));
+    await p6.goto(BASE + '/index.html?plan=leer');
+    await p6.waitForTimeout(700);
+    await p6.fill('.dlg-f:first-child input', 'Leerplan Gantt');
+    await p6.locator('.dlg-t[data-k="leer"]').click();
+    await p6.locator('.dlg-act .btn-p').click();
+    await p6.waitForTimeout(700);
+    if (!(await p6.locator('#bz').isVisible())) return 'Gantt nicht sichtbar (Tabelle offen?)';
+    const kn = p6.locator('#bz .bz-leer button');
+    if ((await kn.count()) !== 1 || !(await kn.isVisible())) return 'kein sichtbarer Leerknopf im Gantt';
+    if (!/Vorgang/.test(await kn.textContent())) return 'Beschriftung: ' + await kn.textContent();
+    await p6.screenshot({ path: join(here, 'shots', 'edit-gantt-leer.png') });
+    await kn.click();
+    await p6.waitForTimeout(500);
+    const n = await p6.locator('#bz .bz-bar').count();
+    if (n !== 1) return n + ' Balken nach dem Klick statt 1';
+    if (await p6.locator('#bz .bz-leer').isVisible()) return 'Leerhinweis bleibt trotz Vorgang stehen';
+    if (fehler.length) return 'pageerror: ' + fehler[0];
+    return true;
+  } finally { await c6.close(); }
+});
+
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 

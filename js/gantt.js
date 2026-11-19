@@ -210,7 +210,16 @@ export function createGantt(root, opts = {}) {
   canvas.append(bandLayer, rowLayer, depLayer, linkLayer, nowLine);
 
   const tip = el('div', 'bz-tip');
-  root.append(scroller, tip);
+  // Leerhinweis: keine einzige sichtbare Zeile (leerer Bauzeitenplan — leere
+  // Gewerke sind dort unsichtbar). Ohne ihn stünde eine leere Fläche ohne Ausweg
+  // da. Der Gantt schreibt nicht selbst, er meldet den Wunsch über O.onLeer.
+  const leer = el('div', 'bz-leer');
+  leer.hidden = true;
+  const leerText = el('p', 'bz-leer-t');
+  const leerKnopf = el('button', 'btn btn-p');
+  leerKnopf.type = 'button';
+  leer.append(leerText, leerKnopf);
+  root.append(scroller, leer, tip);
 
   // ── Zeilenmodell ────────────────────────────────────────────────────────────
   // Flache Liste aus Gruppen- und Vorgangszeilen. y wird bei jedem Rebuild neu
@@ -310,9 +319,28 @@ export function createGantt(root, opts = {}) {
   const labById = new Map();   // id → Zeile in der Seitenspalte
   let selected = null;        // {kind:'task'|'gewerk', id}
 
+  // Hat der Gantt keine Vorgangszeile, bietet er EINEN Knopf an: «+ Vorgang», und
+  // gibt es noch gar kein Gewerk (bzw. keine Bühne), «+ Gewerk» / «+ Bühne».
+  function syncLeer() {
+    const leerAnsicht = !rows.some((r) => r.kind === 'task' || r.kind === 'projekt');
+    leer.hidden = !(leerAnsicht && O.onLeer);
+    if (leer.hidden) return;
+    const buehne = ebene === 'show';
+    if (!VG.length) {
+      leerText.textContent = buehne ? 'Noch keine Bühne angelegt.' : 'Noch kein Gewerk angelegt.';
+      leerKnopf.textContent = buehne ? '+ Bühne' : '+ Gewerk';
+      leerKnopf.onclick = () => O.onLeer({ art: 'gewerk', anker: leerKnopf });
+    } else {
+      leerText.textContent = buehne ? 'Noch nichts eingetragen.' : 'Noch kein Vorgang im Plan.';
+      leerKnopf.textContent = buehne ? '+ Zeiteintrag' : '+ Vorgang';
+      leerKnopf.onclick = () => O.onLeer({ art: 'vorgang', gewerk: VG[0].id });
+    }
+  }
+
   // ── Statisches Gerüst: Seitenspalte + Zeilenspuren ──────────────────────────
   function rebuild() {
     const totalH = buildRows();
+    syncLeer();
     side.replaceChildren();
     rowLayer.replaceChildren();
     linkLayer.replaceChildren();   // die Ziehgriffe hängen in einer eigenen Ebene
