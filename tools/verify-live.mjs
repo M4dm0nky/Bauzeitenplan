@@ -335,6 +335,51 @@ await check('der Versatz überlebt das Neuladen', async () => {
   return (v === '7' && t === '7 Min Delay') ? true : `nach Reload: ${v} / ${t}`;
 });
 
+await check('Ziehen mit Versatz: gespeichert wird die Planzeit, der Balken landet, wo der Hinweis ihn zeigte', async () => {
+  // Der Hinweis zeigt die VERSCHOBENE Zeit (wie Balken und Tooltip); gespeichert
+  // wird die Planzeit = Hinweis minus Versatz. Wäre es dieselbe Zahl, stünde der
+  // Balken nach dem Loslassen um den Versatz daneben.
+  const VZ = 7;
+  const p = await page.evaluate(async () => {
+    const L = Math.ceil(document.querySelector('.bz-side').getBoundingClientRect().right) + 30;
+    for (const n of document.querySelectorAll('.bz-bar[data-task]:not(.is-summary)')) {
+      n.scrollIntoView({ block: 'center', inline: 'center' });
+      await new Promise((r) => requestAnimationFrame(r));
+      const r = n.getBoundingClientRect();
+      if (r.width >= 110 && r.left > L && r.right < innerWidth - 420 && r.top > 140 && r.bottom < innerHeight - 100)
+        return { id: n.dataset.task, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    return null;
+  });
+  if (!p) return 'kein Balken im Bild';
+  const gespeichert = async () => {
+    await page.clock.runFor(1200);   // Auto-Save läuft über die gestellte Uhr
+    return page.evaluate((id) => {
+      const k = localStorage.getItem('bzp_active');
+      return JSON.parse(localStorage.getItem('bzp_p_' + k)).tasks.find((x) => x.id === id).start;
+    }, p.id);
+  };
+  const vor = await gespeichert();
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.down();
+  await page.mouse.move(p.x + 6, p.y, { steps: 2 });
+  await page.mouse.move(p.x + 75, p.y, { steps: 6 });
+  await page.waitForTimeout(150);
+  const hinweis = await page.locator('.bz-tip-zug dd').first().textContent();
+  const links = await page.locator(`.bz-bar[data-task="${p.id}"]`).evaluate((n) => parseFloat(n.style.left));
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const hm = /(\d\d):(\d\d)/.exec(hinweis);
+  if (!hm) return 'kein Zeitstempel im Hinweis: «' + hinweis + '»';
+  const nach = await gespeichert();
+  if (nach === vor) return 'Start unverändert';
+  const min = (str) => Number(str.slice(11, 13)) * 60 + Number(str.slice(14, 16));
+  const erwartet = ((Number(hm[1]) * 60 + Number(hm[2]) - VZ) % 1440 + 1440) % 1440;
+  if (min(nach) !== erwartet) return `gespeichert ${nach.slice(11, 16)}, erwartet ${Math.floor(erwartet / 60)}:${String(erwartet % 60).padStart(2, '0')} (Hinweis ${hm[0]} minus ${VZ})`;
+  const danach = await page.locator(`.bz-bar[data-task="${p.id}"]`).evaluate((n) => parseFloat(n.style.left));
+  return Math.abs(danach - links) < 1.5 ? true : `Balken sprang beim Loslassen von ${links} auf ${danach}`;
+});
+
 await check('ein Versatz von GESTERN gilt heute nicht mehr', async () => {
   // Sonst stünde der Plan am nächsten Morgen kommentarlos daneben, und niemand
   // wüsste, warum. Der Live-Knopf selbst überlebt bewusst — der Versatz nicht.

@@ -1287,6 +1287,208 @@ await check('Leerer Bauzeitenplan: der GANTT (nicht die Tabelle) bietet EINEN Kn
   } finally { await c6.close(); }
 });
 
+console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur)');
+{
+  const cz = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const pz = await cz.newPage();
+  pz.on('pageerror', (e) => errors.push('JS: ' + e.message));
+  try {
+    await pz.goto(BASE + '/index.html?plan=leer');
+    await pz.waitForTimeout(700);
+    await pz.fill('.dlg-f:first-child input', 'Zieh-Test');
+    await pz.fill('.dlg-f:nth-child(3) input', '2026-08-05T06:00');
+    await pz.locator('.dlg-t[data-k="festival"]').click();
+    await pz.locator('.dlg-act .btn-p').click();
+    await pz.waitForTimeout(900);
+    // Plan präparieren: ein Sammelvorgang (Elternvorgang mit einem Kind).
+    const prep = await pz.evaluate(() => {
+      const id = localStorage.getItem('bzp_active');
+      const plan = JSON.parse(localStorage.getItem('bzp_p_' + id));
+      const flach = plan.tasks.filter((t) => !t.milestone);
+      let elter = null, kind = null;
+      for (const g of plan.gewerke) {
+        const l = flach.filter((t) => t.gewerk === g.id);
+        if (l.length >= 2) { elter = l[0]; kind = l[1]; break; }
+      }
+      kind.parent = elter.id;
+      elter.start = kind.start; elter.end = kind.end;
+      localStorage.setItem('bzp_p_' + id, JSON.stringify(plan));
+      const andere = plan.tasks.filter((t) => !t.milestone && t.id !== elter.id && t.id !== kind.id && !t.parent);
+      // Ein einlaufender Pfeil legt eine breite Trefferspur über den Balkenanfang:
+      // der linke Griff braucht einen Balken ohne Vorgänger.
+      const ohneVor = andere.filter((t) => !plan.deps.some((d) => d.to === t.id));
+      return { elter: elter.id, kind: kind.id,
+        ms: (plan.tasks.find((t) => t.milestone) || {}).id, frei: andere.map((t) => t.id), ohneVor: ohneVor.map((t) => t.id) };
+    });
+    await pz.reload();
+    await pz.waitForTimeout(1100);
+    const zeit = async (id) => {
+      await pz.waitForTimeout(1100);   // Auto-Save
+      return pz.evaluate((id) => {
+        const k = localStorage.getItem('bzp_active');
+        const t = JSON.parse(localStorage.getItem('bzp_p_' + k)).tasks.find((x) => x.id === id);
+        return { s: new Date(t.start).getTime() / 60000, e: new Date(t.end).getTime() / 60000 };
+      }, id);
+    };
+    // Einen Balken suchen, dessen beide Kanten im Bild stehen, und seine Lage melden.
+    const balken = async (ids) => pz.evaluate(async (ids) => {
+      const L = Math.ceil(document.querySelector('.bz-side').getBoundingClientRect().right) + 30;
+      for (const id of ids) {
+        const n = document.querySelector(`.bz-bar[data-task="${id}"]`);
+        if (!n) continue;
+        n.scrollIntoView({ block: 'center', inline: 'center' });
+        await new Promise((r) => requestAnimationFrame(r));
+        const r = n.getBoundingClientRect();
+        if (r.width >= 110 && r.left > L && r.right < innerWidth - 420 && r.top > 140 && r.bottom < innerHeight - 100)
+          return { id, l: r.left, r: r.right, y: r.top + r.height / 2, h: r.height };
+      }
+      return null;
+    }, ids);
+    const ziehe = async (b, vonX, dx, { halten = false, loslassen = true } = {}) => {
+      await pz.mouse.move(vonX, b.y);
+      await pz.mouse.down();
+      await pz.mouse.move(vonX + Math.sign(dx) * 6, b.y, { steps: 2 });
+      await pz.mouse.move(vonX + dx, b.y, { steps: 6 });
+      await pz.waitForTimeout(150);
+      if (loslassen) await pz.mouse.up();
+    };
+
+    let b1 = await balken(prep.frei);
+    let alt = null;
+    await check('Verschieben: Start und Ende wandern um denselben Betrag, die Dauer bleibt', async () => {
+      if (!b1) return 'kein Balken mit beiden Kanten im Bild';
+      alt = await zeit(b1.id);
+      const mitte = (b1.l + b1.r) / 2;
+      await ziehe(b1, mitte, 60, { loslassen: false });
+      const hint = await pz.locator('.bz-tip-zug').count();
+      const text = hint ? await pz.locator('.bz-tip-zug').first().textContent() : '';
+      await pz.screenshot({ path: join(here, 'shots', 'edit-ziehen-hinweis.png') });
+      await pz.mouse.up();
+      if (!hint || !/Start/.test(text) || !/Ende/.test(text) || !/Dauer/.test(text)) return 'kein Hinweis beim Ziehen: «' + text + '»';
+      const neu = await zeit(b1.id);
+      if (neu.s <= alt.s) return 'Start nicht später: ' + alt.s + ' → ' + neu.s;
+      if (neu.e - neu.s !== alt.e - alt.s) return 'Dauer verändert: ' + (alt.e - alt.s) + ' → ' + (neu.e - neu.s);
+      return true;
+    });
+    await check('ein ⌘Z macht den ganzen Zug rückgängig', async () => {
+      if (!alt) return 'kein Ausgangswert';
+      await pz.keyboard.press('Meta+z');
+      const z = await zeit(b1.id);
+      return z.s === alt.s && z.e === alt.e ? true : `Start ${alt.s} → ${z.s}, Ende ${alt.e} → ${z.e}`;
+    });
+    await check('rechten Griff ziehen: nur das Ende wandert', async () => {
+      b1 = await balken(prep.frei);
+      if (!b1) return 'kein Balken im Bild';
+      const a = await zeit(b1.id);
+      await ziehe(b1, b1.r - 16, 50);
+      const n = await zeit(b1.id);
+      if (n.s !== a.s) return 'Start hat sich bewegt';
+      return n.e > a.e ? true : 'Ende nicht später: ' + a.e + ' → ' + n.e;
+    });
+    await check('linken Griff ziehen: nur der Start wandert', async () => {
+      b1 = await balken(prep.ohneVor);
+      const a = await zeit(b1.id);
+      console.log('   DBG', JSON.stringify(b1), JSON.stringify(await pz.evaluate(([x,y]) => [2,8,14,20].map((dx) => String(document.elementFromPoint(x + dx, y).getAttribute('class'))), [b1.l, b1.y])));
+      await ziehe(b1, b1.l + 8, 30);
+      const n = await zeit(b1.id);
+      if (n.e !== a.e) return 'Ende hat sich bewegt';
+      return n.s > a.s ? true : 'Start nicht später: ' + a.s + ' → ' + n.s;
+    });
+    await check('Escape beim Ziehen: nichts geschrieben, der Balken steht wieder da', async () => {
+      b1 = await balken(prep.frei);
+      const a = await zeit(b1.id);
+      await ziehe(b1, (b1.l + b1.r) / 2, 80, { loslassen: false });
+      await pz.keyboard.press('Escape');
+      await pz.mouse.up();
+      await pz.waitForTimeout(200);
+      const n = await zeit(b1.id);
+      const links = await pz.locator(`.bz-bar[data-task="${b1.id}"]`).evaluate((e) => e.getBoundingClientRect().left);
+      if (n.s !== a.s || n.e !== a.e) return 'trotz Escape gespeichert';
+      if (await pz.locator('.bz-tip-zug').count()) return 'Hinweis bleibt stehen';
+      return Math.abs(links - b1.l) < 2 ? true : `Balken steht ${Math.round(links - b1.l)} px daneben`;
+    });
+    await check('Klick bleibt Auswahl: Panel geht auf, nichts verschoben (auch bei 2 px Wackeln)', async () => {
+      b1 = await balken(prep.frei);
+      const a = await zeit(b1.id);
+      const mx = (b1.l + b1.r) / 2;
+      await pz.mouse.move(mx, b1.y);
+      await pz.mouse.down();
+      await pz.mouse.move(mx + 2, b1.y);
+      await pz.mouse.up();
+      await pz.waitForTimeout(300);
+      const n = await zeit(b1.id);
+      if (n.s !== a.s || n.e !== a.e) return 'ein Klick hat den Balken verschoben';
+      const sel = await pz.locator(`.bz-bar[data-task="${b1.id}"].is-sel`).count();
+      return sel === 1 ? true : 'Balken nicht ausgewählt';
+    });
+    await check('Sammelvorgang trägt keine Griffe und lässt sich nicht ziehen', async () => {
+      const griffe = await pz.locator(`.bz-bar[data-task="${prep.elter}"] .bz-grip`).count();
+      if (griffe) return griffe + ' Griffe am Sammelbalken';
+      const a = await zeit(prep.elter);
+      const r = await pz.locator(`.bz-bar[data-task="${prep.elter}"]`).evaluate(async (n) => {
+        n.scrollIntoView({ block: 'center', inline: 'center' });
+        await new Promise((q) => requestAnimationFrame(q));
+        const b = n.getBoundingClientRect();
+        return { x: Math.max(b.left, 420) + 20, y: b.top + b.height / 2 };
+      });
+      await pz.mouse.move(r.x, r.y);
+      await pz.mouse.down();
+      await pz.mouse.move(r.x + 60, r.y, { steps: 5 });
+      const hint = await pz.locator('.bz-tip-zug').count();
+      await pz.mouse.up();
+      const n = await zeit(prep.elter);
+      return !hint && n.s === a.s && n.e === a.e ? true : 'Sammelbalken wurde gezogen';
+    });
+    await check('Meilenstein: keine Dauer-Griffe, aber verschiebbar', async () => {
+      if (!prep.ms) return 'kein Meilenstein im Plan';
+      const g = await pz.locator(`.bz-ms[data-task="${prep.ms}"] .bz-grip`).count();
+      if (g) return 'Meilenstein trägt Griffe';
+      // Der Verknüpfen-Griff deckt die Raute selbst ab und hat Vorrang — gegriffen
+      // wird der Meilenstein an seiner Beschriftung.
+      const p = await pz.locator(`.bz-ms[data-task="${prep.ms}"]`).evaluate(async (n) => {
+        n.scrollIntoView({ block: 'center', inline: 'center' });
+        await new Promise((q) => requestAnimationFrame(q));
+        const t = n.querySelector('.bz-ms-t').getBoundingClientRect(), b = n.getBoundingClientRect();
+        const y = t.top + t.height / 2;
+        for (let x = t.right - 3; x > t.left; x -= 2) {
+          const h = document.elementFromPoint(x, y);
+          if (h && h.closest('.bz-ms') === n) return { x, y };
+        }
+        return null;
+      });
+      if (!p) return 'kein greifbarer Punkt auf dem Meilenstein';
+      const a = await zeit(prep.ms);
+      await pz.mouse.move(p.x, p.y);
+      await pz.mouse.down();
+      await pz.mouse.move(p.x + 70, p.y, { steps: 6 });
+      await pz.mouse.up();
+      const n = await zeit(prep.ms);
+      if (n.s !== n.e) return 'Meilenstein hat jetzt eine Dauer';
+      return n.s > a.s ? true : 'Meilenstein nicht verschoben';
+    });
+    await check('Alt+→ verschiebt, Alt+Shift+→ verlängert, jeder Druck ein ⌘Z; ←/→ ohne Alt blättert', async () => {
+      b1 = await balken(prep.frei);
+      await pz.locator(`.bz-bar[data-task="${b1.id}"]`).focus();
+      await pz.keyboard.press('Enter');
+      const a = await zeit(b1.id);
+      await pz.keyboard.press('Alt+ArrowRight');
+      const m = await zeit(b1.id);
+      if (m.s <= a.s || m.e - m.s !== a.e - a.s) return 'Alt+→ hat nicht verschoben: ' + JSON.stringify([a, m]);
+      await pz.keyboard.press('Alt+Shift+ArrowRight');
+      const v = await zeit(b1.id);
+      if (v.s !== m.s || v.e <= m.e) return 'Alt+Shift+→ hat das Ende nicht verlängert';
+      await pz.keyboard.press('Meta+z');
+      const z = await zeit(b1.id);
+      if (z.s !== m.s || z.e !== m.e) return 'ein ⌘Z machte nicht genau den letzten Tastendruck rückgängig';
+      const sl = await pz.locator('.bz-scroll').evaluate((e) => e.scrollLeft);
+      await pz.locator(`.bz-bar[data-task="${b1.id}"]`).focus();
+      await pz.keyboard.press('ArrowRight');
+      const sl2 = await pz.locator('.bz-scroll').evaluate((e) => e.scrollLeft);
+      return sl2 > sl ? true : 'ArrowRight ohne Alt blättert nicht mehr';
+    });
+  } finally { await cz.close(); }
+}
+
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 

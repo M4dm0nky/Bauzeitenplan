@@ -21,7 +21,7 @@ const personalSum = (t, state) =>
     .reduce((a, z) => a + z.n, 0);
 import {
   ZOOM, clampZoom, zoomAnchored, nearestPreset, fitPx, tickScale, ticksFor,
-  weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat,
+  weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat, rasterMin, gezogen,
 } from './timeaxis.js';
 
 // T0/T1/NOW/TOTAL_MIN hingen früher als Modul-Konstanten an einem festen
@@ -546,6 +546,9 @@ export function createGantt(root, opts = {}) {
             // Relief-Regel: Balkenfarben unter 3:1 tragen die Identität nicht
             // allein — jeder Balken bekommt sichtbare Direktbeschriftung.
             b.append(el('span', 'bz-bar-t', t.title));
+            // Dauer-Griffe: Sammelvorgänge (Hülle) bieten keine an, der Store
+            // lehnte das Verschieben ohnehin ab.
+            if (!r.parent) b.append(el('span', 'bz-grip bz-grip-l'), el('span', 'bz-grip bz-grip-r'));
             // Puffer nur zeichnen, solange er disponierbar ist. Ein Planungsvorgang
             // mit 45 Tagen Luft ergäbe ein Schraffurband quer über den ganzen
             // Aufbau — reines Rauschen. Die genaue Zahl steht im Tooltip.
@@ -757,6 +760,172 @@ export function createGantt(root, opts = {}) {
   });
 
   root.addEventListener('pointercancel', endLink);
+
+  // ── Balken ziehen ───────────────────────────────────────────────────────────
+  // Verschieben (Balken), Anfang/Ende ziehen (Griffe). Während des Ziehens nur
+  // Vorschau — geschrieben wird EIN moveTask beim Loslassen, also ein ⌘Z.
+  // Die Rechnung steht DOM-frei in timeaxis.js (`gezogen`). Pixel → Minuten ist
+  // hier eine DIFFERENZ (dx / px): der Versatz kürzt sich heraus, gespeichert wird
+  // damit Planzeit, und xp() braucht keine vierte Aufrufstelle.
+  const ZUG_PIXEL = 4;          // darunter bleibt es ein Klick (Auswahl)
+  const ZUG_HALTEN_MS = 300;    // Touch: erst Halten, dann Ziehen — davor scrollt Wischen
+  let zug = null;
+  let zugTip = null;
+
+  const zugSchritt = () => rasterMin(zoomMode ?? nearestPreset(px));
+  const hatKinder = (id) => S.tasks.some((x) => x.parent === id);
+
+  function zugRechne(t, modus, deltaMin) {
+    return gezogen({
+      start: toMin(t.start), end: toMin(t.end), modus, deltaMin,
+      schritt: zugSchritt(), milestone: !!t.milestone,
+    });
+  }
+
+  function zugZeichne(node, t, a, b) {
+    if (t.milestone) { node.style.left = x(a) + 'px'; return; }
+    node.dataset.from = a; node.dataset.to = b;
+    place(node);
+  }
+
+  function zugHinweis(t, r, e) {
+    if (!zugTip) { zugTip = el('div', 'bz-tip bz-tip-zug is-on'); root.append(zugTip); }
+    const sd = new Date(verschoben(local(toDate(r.start)), versatz));
+    const ed = new Date(verschoben(local(toDate(r.end)), versatz));
+    const dl = el('dl', 'bz-tip-dl');
+    const add = (k, v) => dl.append(el('dt', null, k), el('dd', null, v));
+    if (t.milestone) add('Termin', fmtDay(sd) + ', ' + fmtTime(sd));
+    else {
+      add('Start', fmtDay(sd) + ', ' + fmtTime(sd));
+      add('Ende', fmtDay(ed) + ', ' + fmtTime(ed));
+      add('Dauer', fmtDur(r.end - r.start));
+    }
+    zugTip.replaceChildren(el('div', 'bz-tip-t', t.title), dl);
+    const rr = root.getBoundingClientRect();
+    const tw = zugTip.offsetWidth, th = zugTip.offsetHeight;
+    let lx = e.clientX - rr.left + 14, ly = e.clientY - rr.top - th - 14;
+    if (lx + tw > rr.width - 8) lx = e.clientX - rr.left - tw - 14;
+    if (ly < 8) ly = e.clientY - rr.top + 22;
+    zugTip.style.transform = `translate(${Math.max(8, lx)}px,${Math.max(8, ly)}px)`;
+  }
+
+  const zugBlock = (e) => { if (zug && zug.aktiv && e.cancelable) e.preventDefault(); };
+  const zugEsc = (e) => {
+    if (e.key !== 'Escape' || !zug) return;
+    e.preventDefault();
+    e.stopPropagation();
+    zugEnde(false);
+  };
+
+  function zugAktiv(e) {
+    zug.aktiv = true;
+    try { zug.node.setPointerCapture(e.pointerId); } catch (_) { /* egal */ }
+    hideTip();
+    root.dataset.dragging = '1';
+    zug.node.classList.add('is-drag');
+    folgePauseBis = Infinity;               // die Ansicht folgt der Uhr nicht unter dem Zeiger weg
+    window.addEventListener('touchmove', zugBlock, { passive: false });
+  }
+
+  function zugEnde(commit, e) {
+    if (!zug) return;
+    const z = zug;
+    zug = null;
+    clearTimeout(z.timer);
+    window.removeEventListener('keydown', zugEsc, true);
+    window.removeEventListener('touchmove', zugBlock);
+    if (zugTip) { zugTip.remove(); zugTip = null; }
+    root.removeAttribute('data-dragging');
+    z.node.classList.remove('is-drag');
+    if (z.aktiv) folgePauseBis = Date.now() + FOLGE_PAUSE_MS;
+    if (!z.aktiv) return;
+    // Nach einer echten Bewegung den folgenden click schlucken (Auswahl ginge auf,
+    // obwohl gezogen wurde) — und im nächsten Tick abräumen, falls keiner kommt.
+    if (z.bewegt) {
+      const schlucke = (c) => c.stopPropagation();
+      const raeume = () => setTimeout(() => window.removeEventListener('click', schlucke, { capture: true }), 0);
+      window.addEventListener('click', schlucke, { capture: true, once: true });
+      // Escape mitten im Zug: die Maus ist noch unten, der click kommt erst nach dem Loslassen.
+      if (e) raeume(); else window.addEventListener('pointerup', raeume, { capture: true, once: true });
+    }
+    const t = S.tasks.find((q) => q.id === z.id);
+    let r = null;
+    if (commit && z.bewegt && t) {
+      r = zugRechne(t, z.modus, z.delta);
+      if (r.start === z.start && r.end === z.end) r = null;
+    }
+    if (!r) { zugZeichne(z.node, t || { milestone: z.ms }, z.start, z.end); return; }
+    const res = store.apply({ type: 'moveTask', id: z.id, start: local(toDate(r.start)), end: local(toDate(r.end)) });
+    if (res.ok === false) {
+      zugZeichne(z.node, t, z.start, z.end);   // der Balken springt zurück
+      if (O.onError) O.onError(res.error);
+    }
+  }
+
+  root.addEventListener('pointerdown', (e) => {
+    if (link || zug || e.target.closest('.bz-link')) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const node = e.target.closest('.bz-bar[data-task], .bz-ms[data-task]');
+    if (!node) return;
+    const t = S.tasks.find((q) => q.id === node.dataset.task);
+    if (!t || hatKinder(t.id)) return;
+    const grip = !t.milestone && e.target.closest('.bz-grip');
+    const modus = grip ? (grip.classList.contains('bz-grip-l') ? 'start' : 'end') : 'move';
+    zug = {
+      id: t.id, node, modus, ms: !!t.milestone, touch: e.pointerType !== 'mouse',
+      x0: e.clientX, y0: e.clientY, delta: 0, bewegt: false, aktiv: false,
+      start: toMin(t.start), end: toMin(t.end), timer: 0,
+    };
+    window.addEventListener('keydown', zugEsc, true);
+    if (zug.touch) {
+      const z = zug, pe = e;
+      z.timer = setTimeout(() => { if (zug === z) zugAktiv(pe); }, ZUG_HALTEN_MS);
+    }
+  });
+
+  root.addEventListener('pointermove', (e) => {
+    if (!zug || e.pointerId === undefined) return;
+    const dx = e.clientX - zug.x0;
+    if (!zug.aktiv) {
+      if (zug.touch) {
+        // Vor dem Halten heißt Bewegung: der Finger scrollt — Zug verwerfen.
+        if (Math.hypot(dx, e.clientY - zug.y0) > 8) zugEnde(false);
+        return;
+      }
+      if (Math.abs(dx) < ZUG_PIXEL) return;
+      zugAktiv(e);
+    }
+    if (Math.abs(dx) >= ZUG_PIXEL) zug.bewegt = true;
+    zug.delta = dx / px;
+    const t = S.tasks.find((q) => q.id === zug.id);
+    if (!t) return;
+    const r = zugRechne(t, zug.modus, zug.delta);
+    zugZeichne(zug.node, t, r.start, r.end);
+    zugHinweis(t, r, e);
+  });
+
+  root.addEventListener('pointerup', (e) => { if (zug) zugEnde(true, e); });
+  root.addEventListener('pointercancel', () => { if (zug) zugEnde(false); });
+
+  // Tastatur: Alt+←/→ verschiebt den ausgewählten Vorgang um einen Rasterschritt,
+  // Alt+Shift+←/→ ändert sein Ende. Jeder Tastendruck ein Befehl (⌘Z einzeln).
+  // ←/→ ohne Alt blättern weiter.
+  function zugTaste(e) {
+    if (!e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;
+    if (!selected || selected.kind !== 'task') return false;
+    const t = S.tasks.find((q) => q.id === selected.id);
+    if (!t || hatKinder(t.id)) return true;
+    e.preventDefault();                       // Alt+← ist sonst «Zurück» im Browser
+    const modus = e.shiftKey ? 'end' : 'move';
+    const schritt = zugSchritt();
+    const r = zugRechne(t, modus, (e.key === 'ArrowRight' ? 1 : -1) * schritt);
+    if (r.start === toMin(t.start) && r.end === toMin(t.end)) return true;
+    const res = store.apply({ type: 'moveTask', id: t.id, start: local(toDate(r.start)), end: local(toDate(r.end)) });
+    if (res.ok === false && O.onError) O.onError(res.error);
+    const n = rowById.get('task:' + t.id);
+    if (n) n.focus({ preventScroll: true });
+    return true;
+  }
 
   function bindRow(lab, sel, nameNode, serie) {
     lab.addEventListener('click', (e) => {
@@ -1489,6 +1658,7 @@ export function createGantt(root, opts = {}) {
       if (O.onRemoveDep) O.onRemoveDep(selected.id);
       return;
     }
+    if (zugTaste(e)) return;
     const step = scroller.clientWidth * 0.8;
     if (e.key === 'ArrowRight') { scroller.scrollLeft += step; e.preventDefault(); }
     else if (e.key === 'ArrowLeft') { scroller.scrollLeft -= step; e.preventDefault(); }

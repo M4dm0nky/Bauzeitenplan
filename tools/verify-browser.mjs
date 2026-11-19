@@ -418,6 +418,56 @@ for (const pg of PAGES) {
     (await m.locator('.bz-bar').count()) > 20 ? true : 'zu wenige Balken');
   await m.screenshot({ path: join(shots, 'mobile-gantt.png') });
 
+  // Touch: Firefox kennt hasTouch nicht — die Zeigerereignisse werden mit
+  // pointerType 'touch' selbst zugestellt. Wischen (zu früh bewegt) scrollt und
+  // verschiebt nichts; Halten (300 ms) und dann Ziehen verschiebt.
+  const touchBar = () => m.evaluate(() => {
+    const n = [...document.querySelectorAll('.bz-bar[data-task]:not(.is-summary)')].find((b) => b.getBoundingClientRect().width > 30);
+    if (!n) return null;
+    n.scrollIntoView({ block: 'center', inline: 'center' });
+    const r = n.getBoundingClientRect();
+    return { id: n.dataset.task, x: Math.min(Math.max(r.left + r.width / 2, 120), 330), y: r.top + r.height / 2 };
+  });
+  const touchEv = (id, type, x, y) => m.evaluate(([id, type, x, y]) => {
+    document.querySelector(`.bz-bar[data-task="${id}"]`).dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, button: 0 }));
+  }, [id, type, x, y]);
+  const touchStart = async (id) => {
+    await m.waitForTimeout(1100);
+    return m.evaluate((id) => {
+      const k = localStorage.getItem('bzp_active');
+      return JSON.parse(localStorage.getItem('bzp_p_' + k)).tasks.find((x) => x.id === id).start;
+    }, id);
+  };
+  await mcheck('Touch: Wischen über einen Balken verschiebt nichts (scrollt)', async () => {
+    const b = await touchBar();
+    if (!b) return 'kein Balken';
+    const vor = await touchStart(b.id);
+    await touchEv(b.id, 'pointerdown', b.x, b.y);
+    await touchEv(b.id, 'pointermove', b.x + 40, b.y);     // zu früh bewegt = Wischen
+    await m.waitForTimeout(450);
+    await touchEv(b.id, 'pointermove', b.x + 120, b.y);
+    const hinweis = await m.locator('.bz-tip-zug').count();
+    await touchEv(b.id, 'pointerup', b.x + 120, b.y);
+    const nach = await touchStart(b.id);
+    if (hinweis) return 'Hinweis erschien trotz Wischen';
+    return nach === vor ? true : 'Start verschoben: ' + vor + ' → ' + nach;
+  });
+  await mcheck('Touch: Halten und Ziehen verschiebt den Balken', async () => {
+    const b = await touchBar();
+    const vor = await touchStart(b.id);
+    await touchEv(b.id, 'pointerdown', b.x, b.y);
+    await m.waitForTimeout(450);                           // > 300 ms gehalten
+    await touchEv(b.id, 'pointermove', b.x + 60, b.y);
+    await touchEv(b.id, 'pointermove', b.x + 130, b.y);
+    const hinweis = await m.locator('.bz-tip-zug').count();
+    await m.screenshot({ path: join(shots, 'mobile-ziehen.png') });
+    await touchEv(b.id, 'pointerup', b.x + 130, b.y);
+    const nach = await touchStart(b.id);
+    if (!hinweis) return 'kein Hinweis beim Ziehen';
+    return nach > vor ? true : 'Start nicht später: ' + vor + ' → ' + nach;
+  });
+
   await mcheck('Panel öffnet als Overlay-Drawer (position:fixed, schmal)', async () => {
     // Auswahl auslösen, ohne Hit-Testing: dispatchEvent stellt den Klick direkt
     // zu (der Balken liegt teils unter der klebenden Spalte/Achse). Getestet wird
