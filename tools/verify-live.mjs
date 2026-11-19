@@ -128,13 +128,23 @@ await check('⚠ nur an offenen Verspätungen — Zeilen == Live-Leiste, weniger
     const id = localStorage.getItem('bzp_active');
     const plan = JSON.parse(localStorage.getItem('bzp_p_' + id));
     const d = new Date(), z = (n) => String(n).padStart(2, '0');
-    const now = toMin(`${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`);
+    // Gleiche Grundlage wie die App: «jetzt» MINUS Versatz (nowPlan) und nur die
+    // Ebene, die der Gantt zeigt — die Leiste zählt den ganzen Plan, die Zeilen nur
+    // die sichtbare Ebene. Gleich sind beide nur, wenn der Plan keine Bühne hat
+    // (Festival-Vorlage); `buehnen` hält das fest, statt es stillschweigend anzunehmen.
+    let vz = 0;
+    try { const v = JSON.parse(localStorage.getItem('bzp_versatz') || 'null'); if (v && v.tag === `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`) vz = v.min || 0; } catch { /* kein Versatz */ }
+    const now = toMin(`${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`) - vz;
+    const buehnen = plan.gewerke.filter((g) => g.art === 'buehne').length;
     return {
+      vz, buehnen,
       alle: delaysAt(plan.tasks, now).length,
       zeilen: document.querySelectorAll('.bz-bar.is-late, .bz-ms.is-late').length,
       leiste: document.getElementById('live-bar').textContent,
     };
   });
+  if (r.buehnen) return `Plan hat ${r.buehnen} Bühne(n): Leiste (ganzer Plan) und Zeilen (eine Ebene) wären nicht vergleichbar`;
+  if (r.vz) return `Versatz ${r.vz} min steht — die Prüfung rechnet dann gegen den verschobenen Plan`;
   const m = /(\d+) im Verzug/.exec(r.leiste);
   const leiste = m ? Number(m[1]) : 0;
   if (r.zeilen !== leiste) return `Zeilen ${r.zeilen} != Leiste ${leiste} (${r.leiste})`;
