@@ -24,6 +24,19 @@ test('offeneVerspaetungen lässt längst Vergangenes weg', () => {
   assert.equal(delaysAt(t, NOW).length, 2, 'Vorbedingung: delaysAt meldet beide');
   assert.deepEqual(offeneVerspaetungen(t, NOW).map((d) => d.taskId), ['jetzt']);
 });
+test('läuft und überzogen bleibt drin', () => {
+  const t = [T('rig', 'Rigging', '2026-07-15T08:00', '2026-07-15T10:00', { status: 'laeuft' })];
+  assert.deepEqual(offeneVerspaetungen(t, NOW).map((d) => d.kind), ['ende']);
+});
+test('Meilenstein überfällig bleibt drin', () => {
+  const t = [M('m', 'Abnahme', '2026-07-15T10:00')];
+  assert.deepEqual(offeneVerspaetungen(t, NOW).map((d) => d.kind), ['meilenstein']);
+});
+test('geplant und vorbei fällt raus', () => {
+  const t = [T('d', 'Doors', '2026-07-15T08:00', '2026-07-15T10:00')];
+  assert.equal(delaysAt(t, NOW).length, 1, 'Vorbedingung');
+  assert.deepEqual(offeneVerspaetungen(t, NOW), []);
+});
 
 console.log('\nWas läuft gerade?');
 test('Vorgang um den Zeitpunkt herum läuft', () => {

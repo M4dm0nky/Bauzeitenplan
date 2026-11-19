@@ -130,8 +130,10 @@ export function delaysAt(tasks, now) {
  * @returns {ReturnType<typeof delaysAt>} Teilmenge von delaysAt, gleiches Format
  */
 export function offeneVerspaetungen(tasks, now) {
-  const offen = new Set(tasks.filter((t) => toMin(t.end) >= now).map((t) => t.id));
-  return delaysAt(tasks, now).filter((d) => offen.has(d.taskId));
+  // Nur «nie gestartet UND schon vorbei» ist fehlende Rückmeldung. Wer läuft und
+  // überzogen ist ('ende') oder einen überfälligen Meilenstein hat, bleibt IMMER drin.
+  const ende = new Map(tasks.map((t) => [t.id, toMin(t.end)]));
+  return delaysAt(tasks, now).filter((d) => d.kind !== 'start' || ende.get(d.taskId) >= now);
 }
 
 /** Der nächste Vorgang, der ansteht. null, wenn nichts mehr kommt. */

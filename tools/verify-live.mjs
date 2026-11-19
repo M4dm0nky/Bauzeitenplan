@@ -141,6 +141,19 @@ await check('⚠ nur an offenen Verspätungen — Zeilen == Live-Leiste, weniger
   if (!(r.zeilen < r.alle)) return `nicht weniger als alle vergangenen: ${r.zeilen} / ${r.alle}`;
   return true;
 });
+await check('«läuft» und überzogen: Zeile hat ⚠ und die Leiste zählt ihn', async () => {
+  // «Scheinwerfer hängen» steht auf «läuft» und endete 07.08. 16:00 — jetzt 19:30.
+  // Das ist ECHTER Verzug (nicht fehlende Rückmeldung) und darf nie wegfallen.
+  const r = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.bz-bar')].filter((n) => n.querySelector('.bz-bar-t')?.textContent === 'Scheinwerfer hängen');
+    return { n: b.length, late: b.filter((n) => n.classList.contains('is-late')).length, laeuft: b.filter((n) => n.classList.contains('bz-st-laeuft')).length };
+  });
+  if (!r.n) return 'Balken «Scheinwerfer hängen» nicht gefunden';
+  if (!r.laeuft) return 'Balken hat nicht den Status läuft';
+  if (!r.late) return 'läuft + überzogen trägt kein is-late';
+  const t = await page.locator('#live-bar').textContent();
+  return /\d+ im Verzug/.test(t) ? true : 'Leiste zählt keinen Verzug: ' + t;
+});
 await check('fertige Vorgänge gelten nie als überfällig', async () => {
   // Der Status ist eine Aussage von Menschen und schlägt die Uhr.
   const bad = await page.evaluate(() => {
