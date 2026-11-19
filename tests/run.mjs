@@ -276,18 +276,46 @@ check('sw.js legt die HUELLE am HTTP-Cache vorbei an (cache: reload)', () => {
   return inst && /cache:\s*'reload'/.test(inst[0]) ? true : "install ohne { cache: 'reload' }";
 });
 
-check('CLAUDE.md hat höchstens 320 Zeilen und 22 000 Zeichen, keine Zeile über 300 Zeichen (Tabellenzeilen ausgenommen)', () => {
+check('CLAUDE.md (Kern) hat höchstens 130 Zeilen und 9 200 Zeichen, keine Zeile über 300 Zeichen (Tabellenzeilen ausgenommen)', () => {
   // Wird bei jeder Sitzung geladen. Gemessen wird in Zeichen (= Token), nicht nur in
-  // Zeilen: lange Zeilen sparen nichts. Wächst die Datei, gehören Begründungen und
-  // Vorgeschichten nach docs/entscheidungen.md, nur die Regel bleibt hier.
+  // Zeilen: lange Zeilen sparen nichts. Wächst der Kern, gehört die Regel in eine
+  // `.claude/rules/*.md` mit `paths:` (lädt nur bei passenden Dateien), Begründungen
+  // und Vorgeschichten nach docs/entscheidungen.md.
   const t = readFileSync(join(root, 'CLAUDE.md'), 'utf8');
   const zeilen = t.split('\n');
   const r = [];
-  if (zeilen.length > 320) r.push(`${zeilen.length} Zeilen (Grenze 320)`);
-  if (t.length > 22000) r.push(`${t.length} Zeichen (Grenze 22 000)`);
+  if (zeilen.length > 130) r.push(`${zeilen.length} Zeilen (Grenze 130)`);
+  if (t.length > 9200) r.push(`${t.length} Zeichen (Grenze 9 200)`);
   const lang = zeilen.map((z, i) => [i + 1, z]).filter(([, z]) => z.length > 300 && !z.startsWith('|'));
   if (lang.length) r.push(`${lang.length} Zeile(n) über 300 Zeichen, erste: Zeile ${lang[0][0]}`);
-  return r.length ? r.join(' | ') + ' — Begründungen nach docs/entscheidungen.md' : true;
+  return r.length ? r.join(' | ') + ' — Regel in .claude/rules/ auslagern, Begründungen nach docs/entscheidungen.md' : true;
+});
+
+// Regeldateien: `paths:`-Muster müssen existierende Dateien treffen, sonst lädt die Regel nie.
+const globRe = (g) => new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  .replace(/\*\*\//g, '\u0000').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\u0000/g, '(?:.*/)?') + '$');
+function pruefeRegeln(dir) {
+  const r = [];
+  const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean);
+  let dateien = [];
+  try { dateien = readdirSync(dir).filter((x) => x.endsWith('.md')).sort(); } catch { return [`${dir} fehlt`]; }
+  if (!dateien.length) r.push('keine Regeldatei');
+  for (const f of dateien) {
+    const t = readFileSync(join(dir, f), 'utf8');
+    if (t.length > 6000) r.push(`${f}: ${t.length} Zeichen (Grenze 6 000)`);
+    const m = t.match(/^---\n([\s\S]*?)\n---\n/);
+    const pm = m && m[1].match(/^paths:\n((?:  - ".+"\n?)+)$/);
+    if (!pm) { r.push(`${f}: Frontmatter mit paths: fehlt oder ist ungültig`); continue; }
+    for (const g of [...pm[1].matchAll(/"(.+)"/g)].map((x) => x[1])) {
+      const re = globRe(g);
+      if (!tracked.some((x) => re.test(x))) r.push(`${f}: Muster «${g}» trifft keine Datei`);
+    }
+  }
+  return r;
+}
+check('.claude/rules/*.md: gültiges Frontmatter paths:, jedes Muster trifft eine Datei, höchstens 6 000 Zeichen', () => {
+  const r = pruefeRegeln(join(root, '.claude', 'rules'));
+  return r.length ? r.join(' | ') : true;
 });
 
 check('alle in index.html verdrahteten IDs kommen in app.js vor', () => {

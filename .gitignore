@@ -12,4 +12,5 @@ pocketbase/pb_data/
 tools/_*.mjs
 
 # Lokale Claude-Code-Berechtigungen — maschinenabhängig, kein Projektinhalt.
-.claude/
+.claude/*
+!.claude/rules/
