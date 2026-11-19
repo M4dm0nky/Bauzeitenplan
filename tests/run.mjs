@@ -302,15 +302,27 @@ check('alle in index.html verdrahteten IDs kommen in app.js vor', () => {
   return bad.length ? 'ohne Verwendung: ' + bad.join(', ') : true;
 });
 
+// Rein: true, sobald nach dem ERSTEN process.exit (außerhalb von Kommentarzeilen)
+// noch ein test()/check() folgt — so ein Test läuft nie.
+const hatToteTests = (src) => {
+  const zeilen = src.split('\n');
+  const kommentar = (z) => /^\s*(\/\/|\*|\/\*)/.test(z);
+  const i = zeilen.findIndex((z) => !kommentar(z) && /process\.exit/.test(z));
+  if (i < 0) return false;
+  return zeilen.slice(i + 1).some((z) => !kommentar(z) && /^\s*(await\s+)?(test|check)\(/.test(z));
+};
+
 check('kein test()/check() nach process.exit in tests/*.test.mjs (toter Test)', () => {
-  const bad = [];
-  for (const f of readdirSync(join(root, 'tests')).filter((x) => x.endsWith('.test.mjs'))) {
-    const src = readFileSync(join(root, 'tests', f), 'utf8');
-    const i = src.lastIndexOf('process.exit');
-    if (i < 0) continue;
-    const nach = src.slice(i).split('\n').slice(1).join('\n');
-    if (/^\s*(test|check)\(/m.test(nach)) bad.push(f);
-  }
+  const selbst = [
+    ['Exit mitten in der Datei', "test('a')\nprocess.exit(0);\ntest('b')\nprocess.exit(0)", true],
+    ['await test nach Exit', "process.exit(0);\nawait test('b', () => {})", true],
+    ['Exit nur im Kommentar', "// process.exit(0)\ntest('a')\nprocess.exit(0)", false],
+    ['sauber', "test('a')\nprocess.exit(0)", false],
+  ];
+  const kaputt = selbst.filter(([, q, erwartet]) => hatToteTests(q) !== erwartet).map(([n]) => n);
+  if (kaputt.length) return 'Selbstprüfung der Sperre falsch bei: ' + kaputt.join(', ');
+  const bad = readdirSync(join(root, 'tests')).filter((x) => x.endsWith('.test.mjs'))
+    .filter((f) => hatToteTests(readFileSync(join(root, 'tests', f), 'utf8')));
   return bad.length ? 'Tests nach process.exit (laufen nie): ' + bad.join(', ') : true;
 });
 
