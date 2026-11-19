@@ -204,6 +204,32 @@ test('Sommerzeit-Nacht 25.10.2026: Verschieben um 60 min behaelt echte Dauer', (
   assert.equal(r.end - r.start, 240);
   assert.equal(r.start, s + 60);
 });
+test('Monate (1440): die Uhrzeit bleibt, es wandern ganze Tage', () => {
+  const s = T('2026-07-13T08:00'), e = T('2026-07-13T18:00');
+  const r = gezogen({ start: s, end: e, modus: 'move', deltaMin: 1440 + 200, schritt: 1440 });
+  assert.equal(r.start, T('2026-07-14T08:00')); assert.equal(r.end, T('2026-07-14T18:00'));
+  const k = gezogen({ start: s, end: e, modus: 'move', deltaMin: 5, schritt: 1440 });
+  assert.deepEqual(k, { start: s, end: e }, 'ein paar Pixel verschieben nichts');
+});
+test('Monate: Ende ziehen behaelt die Uhrzeit des Endes, Start ebenso', () => {
+  const s = T('2026-07-13T08:00'), e = T('2026-07-13T17:00');
+  const r = gezogen({ start: s, end: e, modus: 'end', deltaMin: 2 * 1440, schritt: 1440 });
+  assert.equal(r.end, T('2026-07-15T17:00')); assert.equal(r.start, s);
+  const q = gezogen({ start: s, end: T('2026-07-20T17:00'), modus: 'start', deltaMin: -1440, schritt: 1440 });
+  assert.equal(q.start, T('2026-07-12T08:00'));
+});
+test('Wochen (60): Start 10:20 bleibt 10:20 nach 0 Stunden Zug, 90 min werden 2 Stunden', () => {
+  const s = T('2026-07-13T10:20'), e = T('2026-07-13T12:20');
+  assert.deepEqual(gezogen({ start: s, end: e, modus: 'move', deltaMin: 10, schritt: 60 }), { start: s, end: e });
+  assert.equal(gezogen({ start: s, end: e, modus: 'move', deltaMin: 90, schritt: 60 }).start, T('2026-07-13T12:20'));
+});
+test('Monate ueber die Sommerzeit-Nacht 25.10.2026: Uhrzeit bleibt, Dauer in echten Minuten', () => {
+  const s = T('2026-10-25T01:00'), e = T('2026-10-25T04:00');
+  const r = gezogen({ start: s, end: e, modus: 'move', deltaMin: 1440, schritt: 1440 });
+  assert.equal(r.start, T('2026-10-26T01:00'));
+  assert.equal(r.end - r.start, e - s);
+  assert.equal(T('2026-10-26T01:00') - s, 1500, 'der Tag hat 25 Stunden');
+});
 test('planMinute: Versatz 5 liefert 5 min frueher', () => {
   const o = { T0: 1000, px: 0.5 };
   const a = planMinute(100, { ...o, versatz: 0 });

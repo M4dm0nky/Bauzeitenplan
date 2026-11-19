@@ -189,25 +189,42 @@ export function schnapp(min, schritt) {
 }
 
 /**
+ * Rasterung der VERSCHIEBUNG, nicht der Lage: ein Balken auf 08:00–18:00 bleibt im Zoom
+ * «Monate» auf 08:00–18:00 und wandert nur um ganze Tage; 4 px verschieben nichts. Ab einem Tag
+ * über den Kalender (`new Date(y, m, d + n, hh, mm)`): die Uhrzeit bleibt, die Sommerzeit stimmt.
+ */
+function verschobenUm(min, deltaMin, schritt) {
+  if (schritt >= 1440) {
+    const n = Math.round(deltaMin / 1440);
+    if (!n) return min;
+    const d = new Date(min * 60000);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes()).getTime() / 60000;
+  }
+  return min + Math.round(deltaMin / schritt) * schritt;
+}
+
+/**
  * Neue Lage eines gezogenen Balkens (Minuten). modus: 'move' | 'start' | 'end'.
- * Verschieben schnappt den Start und behält die Dauer in echten Minuten.
- * Mindestdauer ist ein Schritt. Meilenstein: nur 'move' wirkt, 'start'/'end' bleiben ohne Wirkung.
+ * Verschieben rastert die Verschiebung und behält die Dauer in echten Minuten.
+ * Mindestdauer ist ein Schritt (bei Tagesraster 15 min: ein Balken von 10 h ist kürzer als ein Tag).
+ * Meilenstein: nur 'move' wirkt, 'start'/'end' bleiben ohne Wirkung.
  */
 export function gezogen({ start, end, modus, deltaMin, schritt, milestone }) {
+  const mind = schritt >= 1440 ? 15 : schritt;
   if (milestone) {
     if (modus !== 'move') return { start, end };
-    const s = schnapp(start + deltaMin, schritt);
+    const s = verschobenUm(start, deltaMin, schritt);
     return { start: s, end: s };
   }
   if (modus === 'move') {
-    const s = schnapp(start + deltaMin, schritt);
+    const s = verschobenUm(start, deltaMin, schritt);
     return { start: s, end: s + (end - start) };
   }
   if (modus === 'start') {
-    return { start: Math.min(schnapp(start + deltaMin, schritt), end - schritt), end };
+    return { start: Math.min(verschobenUm(start, deltaMin, schritt), end - mind), end };
   }
   if (modus === 'end') {
-    return { start, end: Math.max(schnapp(end + deltaMin, schritt), start + schritt) };
+    return { start, end: Math.max(verschobenUm(end, deltaMin, schritt), start + mind) };
   }
   return { start, end };
 }
