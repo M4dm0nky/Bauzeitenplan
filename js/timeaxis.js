@@ -167,3 +167,50 @@ export const fmtFloat = (min) => {
   if (h < 48) return Math.round(h) + ' h Puffer';
   return Math.round(h / 24) + ' Tage Puffer';
 };
+
+// ── Balken ziehen: reine Rechnung (Minuten = echte Epochenminuten, wie toMin) ──
+
+/** Rasterschritt in Minuten je Zoomstufe: Stunden/Tage 15 min, Wochen 1 h, Monate 1 Tag. */
+export function rasterMin(zoomName) {
+  if (zoomName === 'monate') return 1440;
+  if (zoomName === 'wochen') return 60;
+  return 15;
+}
+
+/** Rundet auf den nächsten Schritt. Ab einem Tag auf die lokale Mitternacht (nie auf UTC). */
+export function schnapp(min, schritt) {
+  if (schritt >= 1440) {
+    const d = new Date(min * 60000);
+    const vor = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 60000;
+    const nach = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() / 60000;
+    return min - vor < nach - min ? vor : nach;
+  }
+  return Math.round(min / schritt) * schritt;
+}
+
+/**
+ * Neue Lage eines gezogenen Balkens (Minuten). modus: 'move' | 'start' | 'end'.
+ * Verschieben schnappt den Start und behält die Dauer in echten Minuten.
+ * Mindestdauer ist ein Schritt. Meilenstein: nur 'move' wirkt, 'start'/'end' bleiben ohne Wirkung.
+ */
+export function gezogen({ start, end, modus, deltaMin, schritt, milestone }) {
+  if (milestone) {
+    if (modus !== 'move') return { start, end };
+    const s = schnapp(start + deltaMin, schritt);
+    return { start: s, end: s };
+  }
+  if (modus === 'move') {
+    const s = schnapp(start + deltaMin, schritt);
+    return { start: s, end: s + (end - start) };
+  }
+  if (modus === 'start') {
+    return { start: Math.min(schnapp(start + deltaMin, schritt), end - schritt), end };
+  }
+  if (modus === 'end') {
+    return { start, end: Math.max(schnapp(end + deltaMin, schritt), start + schritt) };
+  }
+  return { start, end };
+}
+
+/** Umkehrung von xp(): Pixel → Planminute. Versatz verschiebt den Ablauf, also zurückrechnen. */
+export const planMinute = (xPx, { T0, px, versatz = 0 }) => xPx / px + T0 - versatz;

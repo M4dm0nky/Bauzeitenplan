@@ -1,5 +1,6 @@
-import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM } from '../js/timeaxis.js';
+import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM, rasterMin, schnapp, gezogen, planMinute } from '../js/timeaxis.js';
 import assert from 'node:assert/strict';
+import { toMin } from '../js/schedule.js';
 
 let pass = 0, fail = 0;
 const test = (name, fn) => {
@@ -152,6 +153,62 @@ test('Band läuft von Samstag 00:00 bis Montag 00:00', () => {
   assert.equal(b[0].from.getDay(), 6, 'startet Samstag');
   assert.equal(b[0].to.getDay(), 1, 'endet Montag');
   assert.equal((b[0].to - b[0].from) / 3600000, 48, 'genau 48 Stunden');
+});
+
+console.log('\nBalken ziehen: Rechnung');
+const T = (iso) => toMin(iso);
+test('rasterMin je Zoomstufe', () => {
+  assert.equal(rasterMin('stunden'), 15); assert.equal(rasterMin('tage'), 15);
+  assert.equal(rasterMin('wochen'), 60); assert.equal(rasterMin('monate'), 1440);
+});
+test('schnapp rundet auf den naechsten Schritt', () => {
+  assert.equal(schnapp(T('2026-07-13T10:07'), 15), T('2026-07-13T10:00'));
+  assert.equal(schnapp(T('2026-07-13T10:08'), 15), T('2026-07-13T10:15'));
+  assert.equal(schnapp(T('2026-07-13T11:10'), 1440), T('2026-07-13T00:00'));
+  assert.equal(schnapp(T('2026-07-13T12:30'), 1440), T('2026-07-14T00:00'));
+});
+test('Verschieben behaelt die Dauer', () => {
+  const s = T('2026-07-13T10:00'), e = T('2026-07-13T12:30');
+  const r = gezogen({ start: s, end: e, modus: 'move', deltaMin: 52, schritt: 15 });
+  assert.equal(r.end - r.start, 150);
+  assert.equal(r.start, T('2026-07-13T10:45'));
+});
+test('Ende ziehen schnappt auf Raster', () => {
+  const s = T('2026-07-13T10:00'), e = T('2026-07-13T12:00');
+  const r = gezogen({ start: s, end: e, modus: 'end', deltaMin: 38, schritt: 15 });
+  assert.equal(r.start, s); assert.equal(r.end, T('2026-07-13T12:45'));
+});
+test('Mindestdauer ist ein Rasterschritt (Ende)', () => {
+  const s = T('2026-07-13T10:00'), e = T('2026-07-13T12:00');
+  const r = gezogen({ start: s, end: e, modus: 'end', deltaMin: -500, schritt: 15 });
+  assert.equal(r.end - r.start, 15);
+});
+test('Start ueber das Ende hinaus wird begrenzt', () => {
+  const s = T('2026-07-13T10:00'), e = T('2026-07-13T12:00');
+  const r = gezogen({ start: s, end: e, modus: 'start', deltaMin: 600, schritt: 15 });
+  assert.equal(r.end, e); assert.equal(r.end - r.start, 15);
+});
+test('Meilenstein: Verschieben ja, Start/Ende ziehen wird ignoriert', () => {
+  const m = T('2026-07-13T10:00');
+  const a = gezogen({ start: m, end: m, modus: 'move', deltaMin: 30, schritt: 15, milestone: true });
+  assert.equal(a.start, m + 30); assert.equal(a.end, a.start);
+  for (const modus of ['start', 'end']) {
+    const b = gezogen({ start: m, end: m, modus, deltaMin: 30, schritt: 15, milestone: true });
+    assert.deepEqual(b, { start: m, end: m });
+  }
+});
+test('Sommerzeit-Nacht 25.10.2026: Verschieben um 60 min behaelt echte Dauer', () => {
+  const s = T('2026-10-25T01:00'), e = T('2026-10-25T04:00'); // 4 echte Stunden
+  assert.equal(e - s, 240);
+  const r = gezogen({ start: s, end: e, modus: 'move', deltaMin: 60, schritt: 15 });
+  assert.equal(r.end - r.start, 240);
+  assert.equal(r.start, s + 60);
+});
+test('planMinute: Versatz 5 liefert 5 min frueher', () => {
+  const o = { T0: 1000, px: 0.5 };
+  const a = planMinute(100, { ...o, versatz: 0 });
+  const b = planMinute(100, { ...o, versatz: 5 });
+  assert.equal(a, 1200); assert.equal(b, a - 5);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
