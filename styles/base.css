@@ -362,13 +362,6 @@ body { margin: 0; }
 /* Die Zoomstufe als Klappmenü: vier Knöpfe kosteten ein Viertel der Leiste. */
 .tag-wahl { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .zoom-sel { min-width: 92px; white-space: nowrap; }
-/* Nur für Screenreader — das Klappmenü braucht eine Beschriftung, das Auge
-   nicht: die vier Werte sagen selbst, worum es geht. */
-.vh {
-  position: absolute; width: 1px; height: 1px; overflow: hidden;
-  clip-path: inset(50%); white-space: nowrap;
-}
-
 /* Bühnen-Häkchen (nur Showablauf). Umbrechend, damit acht Bühnen die
    Werkzeugzeile nicht aus dem Fenster schieben. */
 .buehnen { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
@@ -767,14 +760,13 @@ body { margin: 0; }
   }
   .hd .kpi-v { font-size: 15px; line-height: 1.1; letter-spacing: 0; }
   .hd .kpi-k {
-    font-size: 7.5px; letter-spacing: .04em; margin-top: 1px;
+    font-size: 9px; letter-spacing: .04em; margin-top: 1px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .hd .hd-bar { padding: 0 10px 6px; gap: 6px; }
+  .hd .hd-bar { padding: 0 10px 6px; gap: 4px; }
   .hd-zoom, .hd-right { display: contents; }
   .hd .btn { padding-left: 7px; padding-right: 7px; letter-spacing: 0; }
   .hd .seg button { padding-left: 8px; padding-right: 8px; letter-spacing: 0; }
-  .hd .hd-bar { gap: 4px; }
 
   /* Fingergerechte Tap-Ziele (≥ 40 px hoch). */
   .seg button, .btn, .tb-ico, .ins-x { min-height: 40px; }

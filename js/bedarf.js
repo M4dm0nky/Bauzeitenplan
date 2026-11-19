@@ -26,7 +26,7 @@ export function createBedarf(root, { store, onEinrichten } = {}) {
       const leer = el('div', 'bd-empty',
         'Noch keine ' + (kind === 'personal' ? 'Personal-' : 'Maschinen-') + 'Bezeichnung angelegt. ');
       if (onEinrichten) {
-        const b = el('button', 'btn btn-p', '+ ' + (kind === 'personal' ? 'Personal' : 'Maschine') + ' anlegen');
+        const b = el('button', 'btn btn-p', 'Personal & Maschinen einrichten…');
         b.onclick = () => onEinrichten('res');
         leer.append(b);
       }
