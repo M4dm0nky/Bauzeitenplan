@@ -9,15 +9,15 @@ Starten: `python3 -m http.server 8080`. Nur Regeln hier; Begründungen: `docs/en
 ## Vor jeder Änderung
 
 ```bash
-node tests/run.mjs
-node tools/verify-browser.mjs
-node tools/verify-edit.mjs
-node tools/verify-live.mjs
-node tools/verify-amk.mjs
-node tools/verify-klassentreffen.mjs
-node tools/verify-print.mjs
-node tools/verify-showablauf.mjs
-node tools/verify-sync.mjs
+node tests/run.mjs  # Unit-Tests + statische Prüfungen
+node tools/verify-browser.mjs  # Darstellung: App in allen 5 Themes
+node tools/verify-edit.mjs  # Bearbeiten: anlegen, tippen, Undo, Panel, Menü
+node tools/verify-live.mjs  # Live-Modus mit gestellter Uhr
+node tools/verify-amk.mjs  # AMK-Plan importieren
+node tools/verify-klassentreffen.mjs  # V07-Plan + Autostart über die Adresse
+node tools/verify-print.mjs  # Tagesblätter A3: Zuschnitt, Filter, Maßstab
+node tools/verify-showablauf.mjs  # Showablauf: Ebene, Bühnen, Kopfzeile, Blatt
+node tools/verify-sync.mjs  # Sync: zwei Geräte, Konflikt, Offline-Start
 ```
 
 - **Alle neun müssen grün sein**, bevor etwas fertig ist (parallel startbar). `verify-browser.mjs` braucht einmalig `npx playwright install firefox`.
@@ -53,23 +53,25 @@ node tools/verify-sync.mjs
 - **Die JSON ist die Wahrheit:** `boot()` holt `klassentreffen-festival.json` (`BUNDLED`/`START` in app.js); neuer Planstand = Datei tauschen + pushen. `exported`-Stempel (`project.quelle`): Datei neuer → Datei; gleich/unerreichbar → lokal.
 - **`?plan=leer` schaltet den Autostart ab** (`verify-browser`, `verify-edit`, `verify-live`, `verify-amk` hängen daran).
 - **Was der erste Start braucht, gehört auf Modulebene, nicht in `mount()`** (Import, Neu, Projekte, `openEinrichten`).
-- **Der AMK-Plan ist quellentreu** (`tools/make-amk.mjs`): Geschätztes = `estimated: true` + gestrichelte Kante; nur DREI Verknüpfungen, **keine dazuerfinden** (`tests/amk.test.mjs`).
-- **Abhaken ist persistiert und signaturgebunden** (`ackCrit` bool, `ackConflictMin` Minuten, via `setTaskField`); `findConflicts` überspringt nur, solange `shortBy <= ackConflictMin + EPS`.
+- **Der AMK-Plan ist quellentreu** (`tools/make-amk.mjs`): Geschätztes = `estimated: true` + gestrichelte Kante; wo das Gewerk im Original leer war, sagt es die Notiz.
+- **AMK: nur DREI Verknüpfungen («Leitern runter → sobald Backline und Set weg», Kopplung der «Rigging/Set»-Zeile), **keine dazuerfinden** (`tests/amk.test.mjs`).
+- **Abhaken ist persistiert und signaturgebunden** (`ackCrit` bool, `ackConflictMin` Minuten, via `setTaskField`); `findConflicts` überspringt nur, solange `shortBy <= ackConflictMin + EPS`. «Kritisch» bleibt Information (kein automatisches Verschieben), Abhaken blendet nur aus.
 - **Eine Quelle für Warnungen:** Zählung, Prüf-Liste, `resolveConflictsCmd` lesen alle `findConflicts`. `gantt.stats()` zählt die sichtbare Ebene, Kritisch/Konflikte den ganzen Plan.
 - **Auswahllisten (Arten, Abschnitte, Ressourcen): dieselben drei Befehle** `setAuswahlLabel`, `removeAuswahl`, `reorderAuswahl` (`liste: 'punktTypen'|'abschnitte'|'ressourcen'`).
-- **Umbenennen ändert nur das Label, nie die id.** Gelöscht wird nur, was niemand benutzt (Knopf vorher gesperrt). **Sortieren setzt `sort` bei ALLEN oder keinem** (`reorderAuswahl` lehnt Teillisten ab).
+- **Umbenennen ändert nur das Label, nie die id.** Gelöscht wird nur, was niemand benutzt (Knopf vorher gesperrt UND sagt warum). **Sortieren setzt `sort` bei ALLEN oder keinem** (`reorderAuswahl` lehnt Teillisten ab).
 - **Welches Feld auf welche Liste zeigt, weiß NUR der Store** (`LISTEN`, `benutztVon`); Sortierung nur in `nachSort` (ebene.js): `?? Infinity`, nie `?? 0`.
 - **Eintragsarten: eingebaute `PUNKT_TYPEN` (ebene.js, Feld `kompakt`), eigene im PLAN** (`project.punktTypen`, im Export). `punktTypen(state)` führt beide zusammen; Dropdown, `typHinweis`, Druckblatt fragen nur dort.
+- Neue Art/Abschnitt entsteht im Auswahlfeld der Tabelle («+ Neue Art…»/«Neu»), an keinem zweiten Ort.
 - **`store.js` führt die eingebauten Arten DOPPELT;** `tests/store.test.mjs` vergleicht gegen `PUNKT_TYPEN` (doppelt nur mit Test).
 - **Eigene Abschnitte** (`project.abschnitte`, `abschnitte(state)`) FILTERN weiter nur nach Setup/Show; Sortierung nach frühestem Eintrag, leere hinten.
 - **`crew` ist die MIGRIERTE Ressource «Crew»:** `persistence.js` wandelt `crew: N` einmalig in `res: [{rid:'crew', n:N, von:null, bis:null}]` (idempotent, `tests/persistence.test.mjs`). Vorlagen laufen NICHT durch `migrate()`; `planFromTemplate` übersetzt selbst.
-- **Keine Platzhaltertexte in Freitextspalten.** **„Tag 1/2/3" gehört in die Notiz, nicht in den Titel** (Test). **Das Wort ist «Zeiteintrag»** (Datenfeld `punktTyp`; auf dem A3-Blatt bleibt «Programmpunkt»).
+- **Keine Platzhaltertexte in Freitextspalten.** **„Tag 1/2/3" gehört in die Notiz, nicht in den Titel** (Test). **Das Wort ist «Zeiteintrag»** in Spalte, Knopf, Zähler, Ecke der Seitenspalte, Vorgabename, Kennzahl (Datenfeld `punktTyp`; auf dem A3-Blatt bleibt «Programmpunkt»).
 
 ## Zeit und Live
 
 - **Zeiten aus echten Zeitstempeln** (`toMin()`), nie aus Ziffern auf Datumsstrings.
 - **`nowInZone` darf nie stumm zurückfallen** (`gantt.js`): `hourCycle: 'h23'` (nicht `hour12: false`), `replace(/\s+/, 'T')`; bei Fehler lokale Zeit PLUS Warnung. Test: **zwei Betrachter in verschiedenen Zonen** (`verify-live.mjs`).
-- **Zoomstufen in sichtbarer Zeitspanne**, nicht in Pixeln (Tests).
+- **Zoomstufen in sichtbarer Zeitspanne**, nicht in Pixeln (eine «Tagesansicht» zeigt Tage; Tests).
 - **Die Jetzt-Linie tickt IMMER** (`startTicking()`, 15 s), ohne `layout()`: nur `paintNow()`/`paintLive()`.
 - **Status wird nie automatisch gesetzt** (Verzug in `js/live.js`).
 - **Der Versatz verschiebt den ABLAUF, nie die UHR** (`versatz`, positiv = Delay): Balken wandern; Achse, Ticks, Bänder, JETZT-Linie bleiben echt.
@@ -83,13 +85,13 @@ node tools/verify-sync.mjs
 ## Gantt und Darstellung
 
 - **Gewerk-Farben (`styles/base.css`, `--gw-*`) nicht per Hand ändern** (Suchlauf `tools/farbsuche.mjs`, 720 Varianten): neu rechnen statt raten.
-- **Jeder Farbton hat eine gerechnete SCHRIFTFARBE (`--gw-t-*`)**, in **hell UND dunkel** über **3:1**, feste Werte. Wer `--gw-*` ändert, rechnet mit (Prüfung «Schrift auf Gewerkfarbe hält 3:1»).
+- **Jeder Farbton hat eine gerechnete SCHRIFTFARBE (`--gw-t-*`)**, in **hell UND dunkel** über **3:1**, feste Werte, NIE ein Dunkel-Override. Wer `--gw-*` ändert, rechnet mit (Prüfung «Schrift auf Gewerkfarbe hält 3:1»).
 - **Farbe: Programmpunkt wählbar, Gewerk nicht:** `slot` am Vorgang (null = erbt Bühne), zehn Töne + Schraffur (`slotAus`/`hueVon`), nie eine freie Farbe.
 - **Farbplätze je EBENE** (`freeSlot(state, art)`); `slotsExhausted` gegen die Bänder der AKTIVEN Ebene, nie `gewerke.length`.
 - **Balkenbeschriftung nicht entfernen** (sekundäre Kodierung). **Schraffur = Gewerk-Identität** (Platz 9–16), nicht Status.
 - **Themes: Gestaltung in `styles/themes/`, Geometrie in `base.css`;** kein Theme definiert Gewerk-Farben neu; jedes braucht beide Dunkel-Scopes (`@media prefers-color-scheme` **und** `:root[data-theme="dark"]`). `docs/themes.md`.
 - **`bz-bereit` braucht KEINE Theme-Anpassung** (`outline: dashed currentColor`), steht nicht in `needed`; wie `is-estimated`.
-- **Was `tabIndex` trägt, reagiert auf Enter UND Leertaste** (`bindMark` in gantt.js, EINE Stelle; Space mit `preventDefault()`; auch Meilenstein-Rauten; Prüfung in `verify-edit.mjs`).
+- **Per Klick Auswählbares gehört in die Tab-Reihenfolge, und was `tabIndex` trägt, reagiert auf Enter UND Leertaste** (`bindMark` in gantt.js, EINE Stelle; Space mit `preventDefault()`; auch Meilenstein-Rauten; Prüfung in `verify-edit.mjs`).
 - **Beschriftung läuft nie über den nächsten Balken** (`updateLabels()`, `data-next`; `verify-klassentreffen.mjs`).
 - **Eine Reihenfolge für beide Ansichten: `byStart`** (Start, Ende, Titel). **Verknüpfungs-Picker sucht** (`candidateGroups`, schedule.js); lange Listen nie als `<select>`.
 - **Achsen-Ticks und Bänder auf `T1` klemmen;** ein Kalendertag füllt bei jeder Breite die Breite.
@@ -105,18 +107,19 @@ node tools/verify-sync.mjs
 
 ## Showablauf und Ebenen
 
-- **`js/ebene.js` ist die einzige Stelle, die die zwei Ebenen kennt.** Bauzeitenplan = GEWERKE, Showablauf = BÜHNEN (Gewerk mit `art:'buehne'`). Gantt, Tabelle, Druck FRAGEN (`sichtGewerke`/`sichtTasks`/`amTag`). Ohne `art` = Gewerk. **Ein Gewerk wird nie nachträglich zur Bühne.**
+- **`js/ebene.js` ist die einzige Stelle, die die zwei Ebenen kennt.** Bauzeitenplan = GEWERKE, Showablauf = BÜHNEN (Gewerk mit `art:'buehne'`). Gantt, Tabelle, Druck FRAGEN (`sichtGewerke`/`sichtTasks`/`amTag`). Ohne `art` = Gewerk.
+- Kein zweiter Store, kein zweites Undo, keine zweite Persistenz. **Ein Gewerk wird nie nachträglich zur Bühne.**
 - **Der ZEITEINTRAG trägt den Abschnitt** (`abschnitt: 'setup'|'show'`, fehlt = `show`; `imAbschnitt` filtert). **`sichtGewerke` filtert NICHT.** Zeitfenster je Ansicht: `programmFenster`.
 - **Soundcheck = ZEITEINTRAG im Setup** mit `fuer: <taskId>` (Text-id).
 - **Der Showablauf ist tagesbezogen;** Gantt und Tabelle bekommen DENSELBEN Tag.
 - **Neue Vorgänge landen dort, wo man HINSCHAUT:** `defaultStart()` (table.js) schließt an den letzten Eintrag des gezeigten Tages UND Abschnitts an (`addRow` gibt ihn mit), leerer Tag = 08:00.
-- **Kein Typ steht doppelt** (`typHinweis`, ebene.js).
+- **Kein Typ steht doppelt** (`typHinweis`, ebene.js: normalisiert, in beide Richtungen verglichen).
 - **Der Umschalter bleibt** Bauzeitenplan · Setup · Show; eigene Abschnitte zählen über `abschnittOf` zu Show, die Tabelle meldet den Wechsel (`waehleAbschnitt` → `onHinweis`).
 
 ## Druck
 
 - **Die Tagesblätter sind eine eigene Seite** (`print.html` + `js/print.js` + `styles/print.css`, A3 quer je Tag): **Auswahl → Zeitfenster → Blatt**, Fenster gemeinsam; Zuschnitt `tagesScheiben`; über Mitternacht = beide Blätter.
-- **Auf dem Blatt steht kein Text IM Balken** (Namensspalte). Schriftgrößen an der Zeilenhöhe (`--pr-titel`/`--pr-notiz`).
+- **Auf dem Blatt steht kein Text IM Balken** (Namensspalte). Schriftgrößen an der Zeilenhöhe (`--pr-titel`/`--pr-notiz`); die Notizzeile fällt weg, bevor sie unlesbar wird, statt die Zeile darüber anzuschneiden.
 - **Running-Order-Blatt kennt den Abschnitt** (Setup · Show · beides; `?abschnitt=`); Bauzeitenplan-Blätter zeigen nie Bühnen.
 - **Running-Order-Blatt = LISTE** (`roBlatt`), leere Felder als Linie, Zeilenhöhe GEWICHTET (Umbau 0,62).
 - **`Element.append()` gibt `undefined` zurück:** erst füllen, dann anhängen.
@@ -139,14 +142,14 @@ node tools/verify-sync.mjs
 - **Umgezogene Knöpfe behalten ids und Handler** (`#export`, `#import`, `#new-proj`, `#proj-menu`, `#add-gewerk` in `[data-ein="baender"]`, `#theme-toggle`; je Reiter eine `.ei-sec` mit `data-ein-tab`).
 - **Verwalten-Kästen von außen:** `table.openVerwalten(opt, ankerEl)`, `table.openNeuFragen(...)`.
 - **Personal und Maschinen in DERSELBEN Verwalten-Liste** (`tb-verw-kind`, 👤/⚙); Anlegen getrennt («+ Personal»/«+ Maschine»).
-- **Niemals `window.prompt`/`confirm`/`alert`.** Bestätigung: `askDialog({title, message, buttons})` (app.js; `null` bei Abbruch). Namenseingabe: `tb-neuart` (`neuFragen`, table.js; `cmd` oder `buildCmd(wert, kompakt)`).
+- **Niemals `window.prompt`/`confirm`/`alert`.** Bestätigung: `askDialog({title, message, buttons})` (app.js; `null` bei Abbruch). Namenseingabe: `tb-neuart` (`neuFragen`, table.js; `cmd` setzt den Namen als `label`, `buildCmd(wert, kompakt)` wenn er anderswo im Befehl steht).
 
 ## Personal und Maschinen
 
 - **Zuweisung = `{rid, n, von, bis}`** in `t.res`; `null` = ganzer Vorgang, gesetzt innerhalb der Vorgangsdauer (`setTaskRes`). Bezeichnungen in `project.ressourcen` (`kind: 'personal'|'maschine'`, im Export), Verwaltung über `addRessource` + die drei Auswahlbefehle.
 - **Keine eingebauten Bezeichnungen;** `res` MUSS durch `addTask`.
 - **Bereitstellung = normaler Vorgang** mit `bereitstellung: true` (POOL, `res` = Angebot). `addDep` lehnt ihn als Quelle UND Ziel ab; `findConflicts`/kritischer Pfad nehmen ihn aus; `setTaskField` verweigert `bereitstellung: true`, solange Verknüpfungen bestehen.
-- **Deckungslücke nur, wenn der Vorgang eine Zuweisung dieser Art hat** (`deckung(t, kind, state)` sonst `null`), je KIND; kein Konflikt, nicht in der Prüf-Liste (Balken `bz-bereit`, Panel).
+- **Deckungslücke nur, wenn der Vorgang eine Zuweisung dieser Art hat** (`deckung(t, kind, state)` sonst `null`), je KIND; kein Konflikt, nicht in der Prüf-Liste (Balken `bz-bereit`; im Panel als Klartext, keine Alarmfarbe).
 
 ## Sync und Offline
 
@@ -161,7 +164,7 @@ Local-first: Plan in `localStorage`; privates Repo `M4dm0nky/Bauzeitenplan-Daten
 
 ## Aus Crewplaner gelernt (für ein späteres Backend)
 
-- `project_id` & Co. als **Text**, nie Relation. E-Mails `.toLowerCase()`. API-Rules nach Coolify-Redeploy prüfen. Kein Bundle-File. Rollen über API-Rules.
+- `project_id` & Co. als **Text**, nie Relation. E-Mails `.toLowerCase()`. API-Rules nach Coolify-Redeploy prüfen. Kein Bundle-File: ES-Module mit `?v=`-Cache-Bust. Rollen serverseitig über API-Rules (UI-Verstecken ist keine Sicherheit).
 
 ## Aufbau
 
@@ -192,7 +195,7 @@ Warum was so ist: `docs/entscheidungen.md` (auch kritischer Pfad: verankerte Sen
 
 Offene Punkte: GitHub-Issues von M4dm0nky/Bauzeitenplan, keine Liste in dieser Datei.
 
-**PocketBase liegt auf Eis:** Branch `pocketbase-vorbereitung`, nicht gemergt, nicht deployt. Nur die Vorlage «festival» ist abgenommen.
+**PocketBase liegt auf Eis:** Branch `pocketbase-vorbereitung`, nicht gemergt, nicht deployt. Nur die Vorlage «festival» ist abgenommen; Tour, Corporate, Messe sind Entwürfe und beim ersten echten Einsatz zu korrigieren.
 
 ## Gestartete Prozesse IMMER wieder beenden
 Hintergrundbefehle, Server, Watcher, Builds (auch von Subagenten) beenden, sobald sie fertig sind; nach Abbruch/Timeout und am Sitzungsende auf verwaiste Prozesse prüfen. Details: `C:\Dropbox\Incomming\github\CLAUDE.md`.
