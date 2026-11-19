@@ -212,8 +212,12 @@ export function suchTreffer({ tasks = [], gewerke = [], query = '', limit = 50 }
   const gName = new Map(gewerke.map((g) => [g.id, g.name]));
   gName.set('projekt', 'Zieltermine');
   const hit = (v) => String(v || '').toLocaleLowerCase('de').includes(q);
-  const cand = tasks.filter((t) => hit(t.title) || hit(gName.get(t.gewerk)) || hit(t.notes) || hit(t.kontakt));
+  const cand = tasks.filter((t) => hit(t.title) || hit(t.notes) || hit(gName.get(t.gewerk)) || hit(t.kontakt));
   const alle = gruppiere(cand, gewerke);
+  // Vorgänge ohne (bekanntes) Gewerk nicht verschlucken — nur die Suche, der Picker bleibt.
+  const bekannt = new Set([...gewerke.map((g) => g.id), 'projekt']);
+  const lose = cand.filter((t) => !bekannt.has(t.gewerk)).sort(byStart);
+  if (lose.length) alle.push({ gewerk: { id: 'ohne', name: 'Ohne Gewerk' }, items: lose });
   let rest = limit;
   const groups = [];
   for (const g of alle) {

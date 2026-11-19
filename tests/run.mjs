@@ -302,5 +302,17 @@ check('alle in index.html verdrahteten IDs kommen in app.js vor', () => {
   return bad.length ? 'ohne Verwendung: ' + bad.join(', ') : true;
 });
 
+check('kein test()/check() nach process.exit in tests/*.test.mjs (toter Test)', () => {
+  const bad = [];
+  for (const f of readdirSync(join(root, 'tests')).filter((x) => x.endsWith('.test.mjs'))) {
+    const src = readFileSync(join(root, 'tests', f), 'utf8');
+    const i = src.lastIndexOf('process.exit');
+    if (i < 0) continue;
+    const nach = src.slice(i).split('\n').slice(1).join('\n');
+    if (/^\s*(test|check)\(/m.test(nach)) bad.push(f);
+  }
+  return bad.length ? 'Tests nach process.exit (laufen nie): ' + bad.join(', ') : true;
+});
+
 console.log(failed ? `\n✗ ${failed} Testgruppe(n) fehlgeschlagen\n` : '\n✓ Alles grün\n');
 process.exit(failed ? 1 : 0);

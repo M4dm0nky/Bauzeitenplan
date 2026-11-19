@@ -455,9 +455,6 @@ test('nach Beginn sortiert', () => {
   assert.deepEqual(r.map((x) => x.task.id), ['frueh', 'spaet']);
 });
 
-console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
-process.exit(fail ? 1 : 0);
-
 console.log('\nsuchTreffer — globale Suche');
 const stTasks = [
   { id: 'a', gewerk: 'g1', title: 'Anlieferung', notes: 'Rampe frei halten', kontakt: 'Herr Meier', start: '2026-07-13T10:00', end: '2026-07-13T12:00' },
@@ -488,3 +485,15 @@ test('leere Query liefert keine Treffer', () => {
   assert.deepEqual(st('   ').groups, []);
   assert.equal(st('').weitere, 0);
 });
+test('unbekanntes/fehlendes Gewerk: Gruppe «Ohne Gewerk» am Ende, zählt mit', () => {
+  const t = [...stTasks, { id: 'o', gewerk: 'weg', title: 'Podest alt', start: '2026-07-13T06:00', end: '2026-07-13T07:00' },
+    { id: 'n', title: 'Podest neu', start: '2026-07-13T05:00', end: '2026-07-13T06:00' }];
+  const r = suchTreffer({ tasks: t, gewerke: stGewerke, query: 'podest' });
+  assert.deepEqual(r.groups.map((g) => g.gewerk.id), ['g1', 'ohne']);
+  assert.equal(r.groups[1].gewerk.name, 'Ohne Gewerk');
+  assert.deepEqual(r.groups[1].items.map((x) => x.id), ['n', 'o']);
+  assert.equal(suchTreffer({ tasks: t, gewerke: stGewerke, query: 'podest', limit: 1 }).weitere, 2);
+});
+
+console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
+process.exit(fail ? 1 : 0);
