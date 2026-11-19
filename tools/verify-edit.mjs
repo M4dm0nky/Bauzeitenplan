@@ -932,6 +932,42 @@ await check('im Bauzeitenplan steht nichts vom Showablauf', async () => {
   return await page.locator('#zoom-stufe').isVisible() ? true : 'die Zoomstufe fehlt im Bauzeitenplan';
 });
 
+await check('die Zoomstufe ist ein App-Knopf mit Menü, auch per Tastatur', async () => {
+  const tag = await page.locator('#zoom-stufe').evaluate((n) => n.tagName);
+  if (tag === 'SELECT') return 'die Zoomstufe ist noch ein Browser-Klappmenü';
+  await page.locator('#zoom-stufe').click();
+  const n = await page.locator('.mn .mn-i').count();
+  if (n !== 4) return n + ' Menüeinträge statt 4';
+  await page.locator('.mn .mn-i', { hasText: 'Stunden' }).click();
+  await page.waitForTimeout(300);
+  if (!/Stunden/.test(await page.locator('#zoom-stufe').textContent())) return 'der Knopf zeigt die Stufe nicht';
+  const z = await page.evaluate(() => document.querySelector('.bz-scroll') && true);
+  // Tastatur: Fokus, Enter öffnet, Escape schließt.
+  await page.locator('#zoom-stufe').focus();
+  await page.keyboard.press('Enter');
+  if (await page.locator('.mn .mn-i').count() !== 4) return 'Enter öffnet das Menü nicht';
+  await page.keyboard.press('Escape');
+  if (await page.locator('.mn').count()) return 'Escape schließt das Menü nicht';
+  await page.locator('#zoom-stufe').click();
+  await page.locator('.mn .mn-i', { hasText: 'Wochen' }).click();
+  return z ? true : 'kein Gantt';
+});
+
+await check('Drucken steht in der Kopfzeile und übergibt den Modus', async () => {
+  const b = page.locator('#drucken');
+  if (!(await b.isVisible())) return 'kein Drucken-Knopf im Bauzeitenplan';
+  const u1 = await b.evaluate((n) => n.dataset.href || n.getAttribute('href') || '');
+  if (!/print\.html/.test(u1) || /ansicht=/.test(u1)) return 'Bauzeitenplan: ' + u1;
+  await page.locator('[data-ansicht="show"]').first().click().catch(() => {});
+  await page.locator('.rail-m:not(.rail-ein)').nth(1).click();
+  await page.waitForTimeout(500);
+  if (!(await b.isVisible())) return 'kein Drucken-Knopf im Showablauf';
+  const u2 = await b.evaluate((n) => n.dataset.href || n.getAttribute('href') || '');
+  await page.locator('.rail-m:not(.rail-ein)').first().click();
+  await page.waitForTimeout(400);
+  return /ansicht=(show|setup)/.test(u2) ? true : 'Showablauf: ' + u2;
+});
+
 await check('die Schiene hat genau drei Einträge — zwei Modi und das Zahnrad', async () => {
   // Sie trug in einem Zwischenstand auch die Tage. Bei einem Plan über zwei
   // Wochen waren das vierzehn Datumszeilen, die «Showablauf» und «Einrichten»

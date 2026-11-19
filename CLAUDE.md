@@ -767,7 +767,9 @@ einem Vorgang berührt werden, über Mitternacht laufende auf beiden Tagen.
 `#seg-abschnitt` außerhalb des Showablaufs aus und `.hd-zoom` außerhalb von
 Bauzeitenplan+Plan-Darstellung; `syncBuehnen()` zeigt die Bühnen-Häkchen nur im
 Showablauf. So sind aus 22 gleichzeitig sichtbaren Bedienelementen 12 im
-Bauzeitenplan und 10 im Showablauf geworden. **Nachgezählt, nicht geschätzt** —
+Bauzeitenplan und 10 im Showablauf geworden; mit dem Drucken-Knopf rechts
+(`#drucken`, beide Modi, Ziel je Modus in `data-href`) sind es 13 und 11. Die
+Zoomstufe ist ein App-Knopf mit `openMenu`, kein `<select>`. **Nachgezählt, nicht geschätzt** —
 gezählt werden die sichtbaren `button`, `input` und `select` in `.hd-bar` beim
 Klassentreffen-Plan mit einer Bühne, ohne Live und ohne offenen Konflikt. Wer
 die Zahl anzweifelt, zählt mit demselben Maß nach.

@@ -350,8 +350,7 @@ body { margin: 0; }
 .hd-zoom { display: flex; align-items: center; gap: 8px; }
 /* Die Zoomstufe als Klappmenü: vier Knöpfe kosteten ein Viertel der Leiste. */
 .tag-wahl { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.zoom-sel { display: flex; align-items: center; }
-.zoom-sel select { font: inherit; }
+.zoom-sel { min-width: 92px; white-space: nowrap; }
 /* Nur für Screenreader — das Klappmenü braucht eine Beschriftung, das Auge
    nicht: die vier Werte sagen selbst, worum es geht. */
 .vh {

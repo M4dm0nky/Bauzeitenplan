@@ -27,6 +27,7 @@ p.on('pageerror', (e) => errors.push('JS: ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
 let bad = 0;
+const zoomWahl = async (pg, z) => { await pg.click('#zoom-stufe'); await pg.locator('.mn .mn-i', { hasText: z[0].toUpperCase() + z.slice(1) }).click(); };
 const check = async (name, fn) => {
   let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
   if (r === true) console.log('  ✓ ' + name); else { console.log('  ✗ ' + name + ': ' + r); bad++; }
@@ -77,7 +78,7 @@ await check('drei Meilensteine', async () => {
   const n = await p.locator('.bz-ms').count();
   return n === 3 ? true : n + ' statt 3';
 });
-await p.selectOption('#zoom-stufe', 'stunden');
+await zoomWahl(p, 'stunden');
 await p.waitForTimeout(300);
 await p.click('#now'); await p.waitForTimeout(500);
 await p.screenshot({ path: join(here, 'shots', 'amk-aufbau.png') });
@@ -101,7 +102,7 @@ await check('Häkchen «Dauer geschätzt» ist gesetzt', async () => {
 await p.screenshot({ path: join(here, 'shots', 'amk-panel.png') });
 
 console.log('\nDIE EINE VERKNÜPFUNG AUS DEM PDF');
-await p.selectOption('#zoom-stufe', 'wochen'); await p.waitForTimeout(300);
+await zoomWahl(p, 'wochen'); await p.waitForTimeout(300);
 await check('«Leitern runter» hat zwei Vorgänger', async () => {
   const id = await p.evaluate(() => {
     const l = [...document.querySelectorAll('.bz-lab-name')].find((x) => x.textContent === 'Leitern runter');

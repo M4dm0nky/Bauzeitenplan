@@ -332,10 +332,18 @@ function mount() {
   // Die Zoomstufe ist ein Klappmenü, keine Segmentgruppe: sie wird selten
   // gewechselt und kostete als vier Knöpfe ein Viertel der Leistenbreite.
   const zsel = $('zoom-stufe');
-  const syncSeg = () => { zsel.value = gantt.zoomName; };
+  const ZOOM = { monate: 'Monate', wochen: 'Wochen', tage: 'Tage', stunden: 'Stunden' };
+  const syncSeg = () => { zsel.textContent = ZOOM[gantt.zoomName] + ' ▾'; };
   syncZoomSeg = syncSeg;
   const afterNav = () => { syncSeg(); syncTagKnopf(); };
-  zsel.onchange = () => { gantt.setZoomPreset(zsel.value); afterNav(); };
+  zsel.onclick = () => {
+    const r = zsel.getBoundingClientRect();
+    openMenu(r.left, r.bottom + 4, Object.entries(ZOOM).map(([k, label]) => ({
+      label, hint: k === gantt.zoomName ? '●' : '',
+      run: () => { gantt.setZoomPreset(k); afterNav(); },
+    })));
+  };
+  $('drucken').onclick = (e) => window.open(e.currentTarget.dataset.href, '_blank');
   $('zin').onclick = () => { gantt.zoomIn(); afterNav(); };
   $('zout').onclick = () => { gantt.zoomOut(); afterNav(); };
   $('now').onclick = () => { gantt.goToNow(); afterNav(); };
@@ -814,6 +822,9 @@ function setAnsicht(name) {
   // war — wer zuletzt im Setup stand, will nicht in der Running Order landen.
   if (ansicht !== 'bau') letzteShowAnsicht = ansicht;
   lsSchreibe('bzp_ansicht', ansicht);
+  // Drucken meint den Modus: Bauzeitenplan → Tagesblätter, sonst die Running
+  // Order mit dem aktuellen Abschnitt.
+  $('drucken').dataset.href = ansicht === 'bau' ? 'print.html' : 'print.html?ansicht=' + ansicht;
   document.querySelectorAll('button[data-ansicht]')
     .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ansicht === ansicht)));
   // Eine Bühne, die es nicht mehr gibt, darf nicht ewig ausgeblendet bleiben.

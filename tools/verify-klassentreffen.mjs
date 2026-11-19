@@ -27,6 +27,7 @@ p.on('pageerror', (e) => errors.push('JS: ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
 let bad = 0;
+const zoomWahl = async (pg, z) => { await pg.click('#zoom-stufe'); await pg.locator('.mn .mn-i', { hasText: z[0].toUpperCase() + z.slice(1) }).click(); };
 const check = async (name, fn) => {
   let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
   if (r === true) console.log('  ✓ ' + name); else { console.log('  ✗ ' + name + ': ' + r); bad++; }
@@ -72,7 +73,7 @@ await check('Besucher-Gastro, Sanitätsdienst und Crew sind in der Legende', asy
 });
 
 // Überblick über die zwei Wochen
-await p.selectOption('#zoom-stufe', 'wochen');
+await zoomWahl(p, 'wochen');
 await p.waitForTimeout(400);
 await check('Balken sind im Bild', async () => {
   const vis = await p.locator('.bz-bar').evaluateAll((ns, w) =>
@@ -155,7 +156,7 @@ await p.screenshot({ path: join(here, 'shots', 'klassentreffen-zugeklappt.png') 
 await p.locator('#fold').click();
 await p.waitForTimeout(400);
 
-await p.selectOption('#zoom-stufe', 'monate');
+await zoomWahl(p, 'monate');
 await p.waitForTimeout(400);
 await p.screenshot({ path: join(here, 'shots', 'klassentreffen-monate.png'), fullPage: false });
 

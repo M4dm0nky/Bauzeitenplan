@@ -95,7 +95,7 @@ const fingerprint = (page) => page.evaluate(() => {
   return c.backgroundColor + ' | ' + c.fontFamily;
 });
 const prints = new Map(); // Fingerabdruck → Seitenname
-const setZoom = (page, z) => page.selectOption('#zoom-stufe', z);
+const setZoom = async (page, z) => { await page.click('#zoom-stufe'); await page.locator('.mn .mn-i', { hasText: z[0].toUpperCase() + z.slice(1) }).click(); };
 
 const browser = await firefox.launch({ executablePath: exe });
 let problems = 0;
