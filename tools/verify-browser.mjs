@@ -436,6 +436,68 @@ for (const pg of PAGES) {
   await m.close();
 }
 
+// ── Handy-Kopf in allen fünf Themes, beide Modi ──────────────────────────────
+// Der Kopf belegte auf 390×844 ~470 px (Board: 574) — die Hälfte des Bildes.
+// Ziel: ≤ 300 px, ohne dass ein Bedienelement wegfällt. Themes überschreiben
+// Kopfmaße (Titelgröße, Kennzahlen, Abstände), deshalb läuft es in jedem.
+{
+  console.log('\nHANDY-KOPF (390×844, alle Themes, Bauzeitenplan + Showablauf)');
+  const HANDY_THEMES = ['callboard', ...THEMES];
+  // Was je Modus sichtbar bleiben MUSS (Zoom-Gruppe gibt es nur im Bauzeitenplan).
+  const MUSS = {
+    bau: ['#tag-wahl', '[data-view="gantt"]', '[data-view="tabelle"]', '[data-view="bedarf"]', '#zoom-stufe', '#zout', '#zin', '#now', '#fold', '#undo', '#redo', '#live', '#drucken', '#save-state'],
+    show: ['#tag-wahl', '[data-ansicht="setup"]', '[data-ansicht="show"]', '[data-view="gantt"]', '[data-view="tabelle"]', '[data-view="bedarf"]', '#undo', '#redo', '#live', '#drucken', '#save-state'],
+  };
+  for (const t of HANDY_THEMES) for (const modus of ['bau', 'show']) {
+    const m = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    const label = `${t} · ${modus === 'bau' ? 'Bauzeitenplan' : 'Showablauf'}`;
+    const mc = async (name, fn) => {
+      let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
+      if (r === true) console.log(`    ✓ ${label}: ${name}`);
+      else { console.log(`    ✗ ${label}: ${name}: ${r}`); problems++; }
+    };
+    await m.goto(BASE + '/index.html?plan=klassentreffen&ansicht=' + modus, { waitUntil: 'load', timeout: 30000 });
+    await m.waitForSelector('.bz-lab', { timeout: 20000 });
+    await m.waitForTimeout(argBase ? 1600 : 800);
+    if (t !== 'callboard') { await themeAn(m, t); await m.waitForTimeout(400); }
+    await mc('Kopf ≤ 300 px', async () => {
+      const h = await m.evaluate(() => Math.round(document.querySelector('.hd').getBoundingClientRect().bottom));
+      return h <= 300 ? true : `Kopf ${h} px hoch`;
+    });
+    await mc('Titel einzeilig, Ort ausgeblendet, Kennzahlen in einer Reihe', async () => {
+      const r = await m.evaluate(() => {
+        const t = document.querySelector('.hd-title'); const k = [...document.querySelectorAll('#kpis .kpi')];
+        const tops = new Set(k.map((n) => Math.round(n.getBoundingClientRect().top)));
+        return { th: t.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(t).lineHeight) || 0, fs: parseFloat(getComputedStyle(t).fontSize), sub: getComputedStyle(document.querySelector('.hd-sub')).display, rows: tops.size, n: k.length };
+      });
+      if (r.sub !== 'none') return 'der Ort steht noch da';
+      if (r.th > Math.max(r.lh, r.fs * 1.4) * 1.3) return `Titel läuft über mehrere Zeilen (${Math.round(r.th)} px)`;
+      if (r.n < 4) return 'zu wenige Kennzahlen: ' + r.n;
+      return r.rows === 1 ? true : `Kennzahlen in ${r.rows} Reihen`;
+    });
+    await mc('kein Bedienelement fällt weg, alle liegen im Bild, Touch-Höhe ≥ 40', async () => {
+      const bad = await m.evaluate((sel) => sel.map((s) => {
+        const n = document.querySelector(s); if (!n) return s + ' fehlt';
+        const r = n.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) return s + ' unsichtbar';
+        if (r.right > window.innerWidth + 1 || r.left < -1) return s + ' ragt aus dem Bild';
+        if (s !== '#save-state' && r.height < 39.5) return s + ' nur ' + Math.round(r.height) + ' px hoch';
+        return null;
+      }).filter(Boolean), MUSS[modus]);
+      return bad.length ? bad.join(' · ') : true;
+    });
+    await mc('Kopf läuft nicht seitlich über', async () => {
+      // Nur der Kopf: die Seitenbreite prüft der HANDY-Block oben (Festival-Vorlage);
+      // mit dem Klassentreffen-Plan stünde hier die Minimap-Jetzt-Marke (.bz-mini-now,
+      // «heute» liegt hinter dem Planende) außerhalb — vom Kopf unabhängig.
+      const r = await m.evaluate(() => { const h = document.querySelector('.hd'); return [h.scrollWidth, h.clientWidth]; });
+      return r[0] <= r[1] + 1 ? true : `Kopf ${r[0]} > ${r[1]}`;
+    });
+    await m.screenshot({ path: join(shots, `handy-kopf-${t}-${modus}.png`) });
+    await m.close();
+  }
+}
+
 await browser.close();
 if (server) server.close();
 console.log(problems ? `\n${problems} Problem(e) gefunden.\n` : `\nAlle Prüfungen bestanden (${PAGES.length} Seiten).\n`);

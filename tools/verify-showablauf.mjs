@@ -1352,6 +1352,19 @@ await check('Tages- und Bühnenwahl bleiben auf dem Handy bedienbar', async () =
     .evaluate((n) => n.getBoundingClientRect().height);
   return h >= 28 ? true : 'der Kalender-Knopf ist nur ' + Math.round(h) + ' px hoch';
 });
+await check('Handy: Kopf ≤ 300 px, und die Live-Kopfzeile überlappt ihn nicht', async () => {
+  // Live ist hier an (siehe oben). Die Live-Kopfzeile zählt nicht zum Kopf,
+  // darf aber weder in ihn hineinragen noch den Gantt überdecken.
+  const g = await p.evaluate(() => {
+    const r = (s) => { const n = document.querySelector(s); return n ? n.getBoundingClientRect() : null; };
+    const sh = document.querySelector('#showhead');
+    return { hd: r('.hd').bottom, sh: sh && !sh.hidden ? r('#showhead') : null, gantt: r('.bz').top };
+  });
+  if (!g.sh) return 'die Live-Kopfzeile ist nicht sichtbar — Prüfung ohne Gegenstand';
+  if (g.hd > 300) return 'Kopf ' + Math.round(g.hd) + ' px hoch (> 300)';
+  if (g.sh.top < g.hd - 1) return 'Live-Kopfzeile ragt in den Kopf (' + Math.round(g.sh.top) + ' < ' + Math.round(g.hd) + ')';
+  return g.gantt >= g.sh.bottom - 1 ? true : 'Live-Kopfzeile überdeckt den Gantt';
+});
 // Fürs BILD ein höheres Fenster bei gleicher Breite: bei 390×844 füllt die
 // Werkzeugzeile samt Live-Kopfzeile den Viewport, und der Ablauf — worum es hier
 // geht — bliebe unter dem Rand. Die Prüfungen oben liefen bei echter Handyhöhe.
