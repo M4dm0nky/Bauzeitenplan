@@ -373,6 +373,21 @@ test('Entwurf: Dauer setzt das Ende; unlesbare Dauer lässt den Entwurf stehen',
   assert.ok(r.fehler);
   assert.deepEqual([r.start, r.end], [E.start, E.end]);
 });
+test('Entwurf: Meilenstein ohne Termin — Start setzt auch das Ende, Leeren leert beide', () => {
+  const r = entwurfAendern({ start: null, end: null }, 'start', '2026-07-13T09:00', { milestone: true });
+  assert.deepEqual([r.start, r.end, r.fehler], ['2026-07-13T09:00', '2026-07-13T09:00', null]);
+  assert.equal(entwurfFehler(r, { milestone: true }), null);
+  const m = entwurfAendern(r, 'start', '2026-07-14T10:00', { milestone: true });
+  assert.deepEqual([m.start, m.end], ['2026-07-14T10:00', '2026-07-14T10:00']);
+  const l = entwurfAendern(r, 'start', '', { milestone: true });
+  assert.deepEqual([l.start, l.end], [null, null]);
+  const z = entwurfAendern({ start: null, end: null }, 'start', '08:30', { milestone: true, nurZeit: true, tag: '2026-07-13' });
+  assert.deepEqual([z.start, z.end], ['2026-07-13T08:30', '2026-07-13T08:30']);
+});
+test('Entwurf: nur ein leeres Feld — Meldung nennt den Ausweg «beide leeren»', () => {
+  assert.match(entwurfFehler({ start: '2026-07-13T08:00', end: null }), /beide leeren/);
+  assert.match(entwurfFehler({ start: null, end: '2026-07-13T08:00' }), /beide leeren/);
+});
 test('Entwurf: Zeitfeld ohne Datum behält den Tag, «22:00 bis 03:00» ist der Folgetag', () => {
   const r = entwurfAendern({ start: '2026-08-29T20:00', end: '2026-08-29T21:00' }, 'start', '22:00', { nurZeit: true });
   assert.deepEqual([r.start, r.end], ['2026-08-29T22:00', '2026-08-29T23:00']);

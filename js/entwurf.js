@@ -100,7 +100,7 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
     const now = lesen();
     if (!now) return;
     const basis = e || { start: now.start ?? null, end: now.end ?? null };
-    const r = entwurfAendern(basis, feld, input.value, { nurZeit, tag: tag() });
+    const r = entwurfAendern(basis, feld, input.value, { nurZeit, tag: tag(), milestone: !!now.milestone });
     fehlerEingabe = r.fehler || null;
     fehlerStore = null;
     const neu = { start: r.start, end: r.end };

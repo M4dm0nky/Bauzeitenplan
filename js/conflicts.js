@@ -163,21 +163,23 @@ export function endeNachStart(startISO, hhmm) {
  * @param {{start:?string,end:?string}} e
  * @param {'start'|'end'|'dauer'} feld
  * @param {string} wert    Feldinhalt; bei `nurZeit` «HH:MM», sonst «JJJJ-MM-TTThh:mm»
- * @param {{nurZeit?:boolean, tag?:?string}} opt  `tag` = Tag für ein Zeitfeld ohne Bezug
+ * @param {{nurZeit?:boolean, tag?:?string, milestone?:boolean}} opt  `tag` = Tag für ein Zeitfeld ohne Bezug;
+ *   `milestone`: Start setzt auch das Ende (das Ende-Feld ist bei Meilensteinen gesperrt)
  * @returns {{start:?string,end:?string,fehler:?string}} `fehler` nur bei unlesbarer
  *   EINGABE (der Entwurf bleibt dann unverändert); die Spanne prüft entwurfFehler.
  */
-export function entwurfAendern(e, feld, wert, { nurZeit = false, tag = null } = {}) {
+export function entwurfAendern(e, feld, wert, { nurZeit = false, tag = null, milestone = false } = {}) {
   const alt = { start: e.start ?? null, end: e.end ?? null };
   const unlesbar = (msg) => ({ ...alt, fehler: msg });
   const basis = alt.start || alt.end || (tag ? tag + 'T00:00' : null);
   const roh = String(wert ?? '').trim();
   if (feld === 'start') {
-    if (!roh) return { ...alt, start: null, fehler: null };
+    if (!roh) return { ...alt, start: null, end: milestone ? null : alt.end, fehler: null };
     const ns = nurZeit ? mitUhrzeit(basis, roh) : roh;
     if (!ns || Number.isNaN(toMin(ns))) return unlesbar('Start nicht lesbar.');
     let end = alt.end;
-    if (alt.start && alt.end) end = local(toDate(toMin(ns) + (toMin(alt.end) - toMin(alt.start))));
+    if (milestone) end = ns;   // ein Meilenstein hat keine Dauer: Ende = Start
+    else if (alt.start && alt.end) end = local(toDate(toMin(ns) + (toMin(alt.end) - toMin(alt.start))));
     return { start: ns, end, fehler: null };
   }
   if (feld === 'end') {
@@ -197,7 +199,10 @@ export function entwurfAendern(e, feld, wert, { nurZeit = false, tag = null } = 
 
 /** Warum der Entwurf nicht übernommen werden kann — null = gültig (auch «ohne Termin»). */
 export function entwurfFehler(e, { milestone = false } = {}) {
-  return spanFehler(e.start ?? null, e.end ?? null, { milestone });
+  const f = spanFehler(e.start ?? null, e.end ?? null, { milestone });
+  // Nur die ANZEIGE des Entwurfs nennt den Ausweg; die Store-Meldung bleibt.
+  return f === 'Start und Ende müssen gesetzt sein.'
+    ? 'Start und Ende müssen gesetzt sein — oder beide leeren für ‹ohne Termin›.' : f;
 }
 
 // ── Dauer-Kurzform ──────────────────────────────────────────────────────────
