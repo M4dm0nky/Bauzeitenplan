@@ -100,7 +100,7 @@ await check('Änderung markiert als ungesichert, dann gesichert', async () => {
 await check('Dauer-Kurzform «6h» wird übernommen', async () => {
   const d = page.locator('.tb-r .tb-dur').first();
   await d.fill('6h');
-  await d.blur();
+  await page.locator('.tb-r.is-entwurf .en-ok').click();   // Entwurf: erst ✓ speichert
   await page.waitForTimeout(300);
   const v = await page.locator('.tb-r .tb-dur').first().inputValue();
   return v === '6h' ? true : 'Wert: ' + v;
@@ -148,7 +148,7 @@ await check('Start vorziehen erzeugt einen sichtbaren Konflikt', async () => {
   const v = await start.inputValue();
   const d = new Date(v); d.setDate(d.getDate() - 3);
   await start.fill(d.toISOString().slice(0, 16));
-  await start.blur();
+  await row.locator('.en-ok').click();   // Entwurf: erst ✓ speichert
   await page.waitForTimeout(500);
   return !(await page.locator('#resolve').isHidden()) ? true : 'kein Konfliktknopf';
 });
@@ -741,7 +741,7 @@ await check('echte Dauer eintippen räumt die Schätzung ab', async () => {
   await page.waitForTimeout(400);
   const du = page.locator('.ins-f', { hasText: 'Dauer' }).locator('input').first();
   await du.fill('3h');
-  await du.blur();
+  await page.locator('.ins-termin .en-ok').click();   // Entwurf: erst ✓ speichert
   await page.waitForTimeout(500);
   const noch = await page.locator('.ins-check', { hasText: 'Dauer geschätzt' }).locator('input').isChecked();
   return !noch ? true : 'Häkchen bleibt gesetzt — der Balken bleibt gestrichelt';
@@ -752,6 +752,144 @@ await check('das Häkchen lässt sich weiterhin von Hand setzen', async () => {
   await page.waitForTimeout(400);
   return (await hk.isChecked()) ? true : 'lässt sich nicht mehr setzen';
 });
+
+console.log('\nENTWURF (Start · Ende · Dauer: erst ✓ speichert)');
+// Gespeicherter Stand ohne Umweg über die App: der Plan im localStorage.
+const stand = async () => {
+  await page.waitForTimeout(1100);   // Auto-Save nach 800 ms
+  return page.evaluate(() => {
+    const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_') && JSON.parse(localStorage.getItem(x)).project.name === 'Testprojekt Halle 7');
+    return Object.fromEntries(JSON.parse(localStorage.getItem(k)).tasks.map((t) => [t.id, [t.start, t.end]]));
+  });
+};
+const plusTag = (v) => new Date(new Date(v + ':00Z').getTime() + 86400000).toISOString().slice(0, 16);
+let enId = null, enRow = null, enV0 = null, enS0 = null;
+await check('Tabelle: Start ändern markiert die Zeile (gelb, ✓ ✗) — nichts gespeichert, nichts springt', async () => {
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(500);
+  enId = await page.evaluate(() => document.querySelector('.tb-r:not(.is-parent):not(.is-child)').dataset.id);
+  enRow = page.locator(`.tb-r[data-id="${enId}"]`);
+  enS0 = await stand();
+  enV0 = await enRow.locator('.c-start input').inputValue();
+  const reihe0 = await page.locator('.tb-r').evaluateAll((l) => l.map((r) => r.dataset.id));
+  await enRow.locator('.c-start input').fill(plusTag(enV0));
+  await page.waitForTimeout(300);
+  if (!(await enRow.evaluate((r) => r.classList.contains('is-entwurf')))) return 'Zeile nicht markiert';
+  if (!(await enRow.locator('.en-ok').isVisible()) || !(await enRow.locator('.en-no').isVisible())) return '✓/✗ nicht sichtbar';
+  const reihe1 = await page.locator('.tb-r').evaluateAll((l) => l.map((r) => r.dataset.id));
+  if (JSON.stringify(reihe0) !== JSON.stringify(reihe1)) return 'Zeile ist gesprungen';
+  const nach = await stand();
+  return JSON.stringify(nach[enId]) === JSON.stringify(enS0[enId]) ? true : 'schon gespeichert: ' + JSON.stringify(nach[enId]);
+});
+await page.screenshot({ path: join(here, 'shots', 'edit-entwurf.png') });
+await check('✓ speichert EINEN Schritt: Start geändert, Entwurf weg, ein ⌘Z stellt alles her', async () => {
+  await enRow.locator('.en-ok').click();
+  await page.waitForTimeout(300);
+  if (await page.locator('.tb-r.is-entwurf').count()) return 'Entwurf bleibt offen';
+  const nach = await stand();
+  if (nach[enId][0] !== plusTag(enV0)) return 'Start nicht gespeichert: ' + nach[enId][0];
+  await page.keyboard.press('Meta+z');
+  const zurueck = await stand();
+  return JSON.stringify(zurueck) === JSON.stringify(enS0) ? true : 'ein ⌘Z reichte nicht';
+});
+await check('Klick in eine andere Zeile verwirft den Entwurf — alter Wert, nichts gespeichert', async () => {
+  const f = page.locator(`.tb-r[data-id="${enId}"] .c-start input`);
+  await f.fill(plusTag(enV0));
+  await page.waitForTimeout(200);
+  await page.locator(`.tb-r:not([data-id="${enId}"]) .c-title input`).first().click();
+  await page.waitForTimeout(300);
+  if (await page.locator('.tb-r.is-entwurf').count()) return 'Entwurf blieb offen';
+  const v = await page.locator(`.tb-r[data-id="${enId}"] .c-start input`).inputValue();
+  if (v !== enV0) return 'Feld zeigt ' + v;
+  return JSON.stringify(await stand()) === JSON.stringify(enS0) ? true : 'gespeichert';
+});
+await check('Escape verwirft; ✗ verwirft', async () => {
+  const f = page.locator(`.tb-r[data-id="${enId}"] .c-start input`);
+  await f.fill(plusTag(enV0));
+  await f.press('Escape');
+  await page.waitForTimeout(200);
+  if (await page.locator('.tb-r.is-entwurf').count() || (await f.inputValue()) !== enV0) return 'Escape verwarf nicht';
+  await f.fill(plusTag(enV0));
+  await page.locator(`.tb-r[data-id="${enId}"] .en-no`).click();
+  await page.waitForTimeout(200);
+  if (await page.locator('.tb-r.is-entwurf').count() || (await f.inputValue()) !== enV0) return '✗ verwarf nicht';
+  return JSON.stringify(await stand()) === JSON.stringify(enS0) ? true : 'gespeichert';
+});
+await check('Enter speichert (Dauer getippt) — ein ⌘Z stellt her', async () => {
+  const d = page.locator(`.tb-r[data-id="${enId}"] .tb-dur`);
+  await d.fill('7h');
+  await d.press('Enter');
+  await page.waitForTimeout(300);
+  const nach = await stand();
+  if (page.locator('.tb-r.is-entwurf') && (await page.locator('.tb-r.is-entwurf').count())) return 'Entwurf bleibt offen';
+  if (JSON.stringify(nach[enId]) === JSON.stringify(enS0[enId])) return 'Enter speicherte nicht';
+  await page.keyboard.press('Meta+z');
+  return JSON.stringify(await stand()) === JSON.stringify(enS0) ? true : 'ein ⌘Z reichte nicht';
+});
+await check('Ein Feld leer: ✓ gesperrt, Grund steht daneben; Verwerfen räumt auf', async () => {
+  const f = page.locator(`.tb-r[data-id="${enId}"] .c-end input`);
+  await f.fill('');
+  await page.waitForTimeout(200);
+  const ok = page.locator(`.tb-r[data-id="${enId}"] .en-ok`);
+  if (!(await ok.isDisabled())) return '✓ nicht gesperrt';
+  const g = (await page.locator(`.tb-r[data-id="${enId}"] .en-grund`).textContent()).trim();
+  if (!g) return 'kein Grund sichtbar';
+  await page.locator(`.tb-r[data-id="${enId}"] .en-no`).click();
+  return JSON.stringify(await stand()) === JSON.stringify(enS0) ? true : 'gespeichert';
+});
+await check('Ende vor Start: ✓ gesperrt mit Grund (kein stilles Verwerfen)', async () => {
+  const f = page.locator(`.tb-r[data-id="${enId}"] .c-end input`);
+  const s = await page.locator(`.tb-r[data-id="${enId}"] .c-start input`).inputValue();
+  await f.fill(new Date(new Date(s + ':00Z').getTime() - 3600000).toISOString().slice(0, 16));
+  await page.waitForTimeout(200);
+  const ok = page.locator(`.tb-r[data-id="${enId}"] .en-ok`);
+  const g = (await page.locator(`.tb-r[data-id="${enId}"] .en-grund`).textContent()).trim();
+  await page.locator(`.tb-r[data-id="${enId}"] .en-no`).click();
+  return (await ok.count()) && g && !/^$/.test(g) ? true : 'kein Grund';
+});
+await check('Start und Ende leeren + ✓ = «ohne Termin» (Gantt: Kennzeichnung, kein Balken); ⌘Z holt zurück', async () => {
+  await page.locator(`.tb-r[data-id="${enId}"] .c-start input`).fill('');
+  await page.locator(`.tb-r[data-id="${enId}"] .c-end input`).fill('');
+  await page.waitForTimeout(200);
+  const ok = page.locator(`.tb-r[data-id="${enId}"] .en-ok`);
+  if (await ok.isDisabled()) return '✓ gesperrt trotz zwei leerer Felder: ' + await page.locator(`.tb-r[data-id="${enId}"] .en-grund`).textContent();
+  await ok.click();
+  const nach = await stand();
+  if (nach[enId][0] !== null || nach[enId][1] !== null) return 'nicht terminlos: ' + JSON.stringify(nach[enId]);
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(500);
+  const marke = await page.locator('.bz-lab-ohne').count();
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Meta+z');
+  if (marke < 1) return 'keine Kennzeichnung «ohne Termin»';
+  return JSON.stringify(await stand()) === JSON.stringify(enS0) ? true : 'ein ⌘Z reichte nicht';
+});
+await check('Panel: Start ändern = Entwurf (✓ ✗), ✗ verwirft, ✓ speichert EINEN Schritt', async () => {
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(400);
+  await page.locator('.bz-lab-task .bz-lab-name').first().click();
+  await page.waitForTimeout(300);
+  const id = await page.evaluate(() => document.querySelector('.bz-lab-task.is-sel, .bz-lab.is-sel')?.dataset?.id || null);
+  const s0 = await stand();
+  const st = page.locator('.ins-termin input[type=datetime-local]').first();
+  const v0 = await st.inputValue();
+  await st.fill(plusTag(v0));
+  await page.waitForTimeout(200);
+  if (!(await page.locator('.ins-termin.is-entwurf').count())) return 'Panel nicht markiert';
+  if (JSON.stringify(await stand()) !== JSON.stringify(s0)) return 'schon gespeichert';
+  await page.locator('.ins-termin .en-no').click();
+  if ((await st.inputValue()) !== v0 || await page.locator('.ins-termin.is-entwurf').count()) return '✗ verwarf nicht';
+  await st.fill(plusTag(v0));
+  await page.locator('.ins-termin .en-ok').click();
+  await page.waitForTimeout(300);
+  const s1 = await stand();
+  if (JSON.stringify(s1) === JSON.stringify(s0)) return '✓ speicherte nicht';
+  await page.keyboard.press('Meta+z');
+  return JSON.stringify(await stand()) === JSON.stringify(s0) ? true : 'ein ⌘Z reichte nicht';
+});
+await page.locator('[data-view="gantt"]').click();
+await page.waitForTimeout(300);
 
 console.log('\nGEWERKE UMSORTIEREN PER DRAG (Tabelle)');
 await check('Gewerk ganz nach oben ziehen — Farbe bleibt, ⌘Z zurück', async () => {

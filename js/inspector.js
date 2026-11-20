@@ -4,6 +4,7 @@
 // Rechtsklick-Menü und Doppelklick.
 
 import { parseDuration, fmtDuration, local, mitUhrzeit } from './conflicts.js';
+import { entwurfBinden } from './entwurf.js';
 import { toMin, toDate, computeSchedule, candidateGroups, ohneTermin } from './schedule.js';
 import { gewerkVar, gewerkTexture, hueVon, slotAus, HUES, MAX_SLOTS } from './palette.js';
 import { artOf, abschnittOf, ABSCHNITTE } from './ebene.js';
@@ -135,60 +136,42 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     root.append(field('Name', text(t.title, (v) =>
       send({ type: 'setTaskField', id: t.id, field: 'title', value: v }))));
 
-    // Start
+    // Start · Dauer · Ende: nur ein ENTWURF, bis ✓ (oder Enter) EINEN moveTask
+    // schickt — dasselbe Verhalten wie die Tabellenzeile (js/entwurf.js).
+    const terminlos = ohneTermin(t);
+    const termin = el('div', 'ins-termin');
     const st = el('input');
     st.type = 'datetime-local';
-    // Terminlos: leere Felder, kein Platzhalter. Eintragen übernimmt der
-    // Bestätigungsweg (Task 4); bis dahin verändert ein Tippen hier nichts.
-    const terminlos = ohneTermin(t);
     st.value = terminlos ? '' : toInput(t.start);
-    st.onchange = () => {
-      const now = cur(t.id);
-      if (!now) return;
-      if (!st.value || ohneTermin(now)) { st.value = ohneTermin(now) ? '' : toInput(now.start); return; }
-      const dur = toMin(now.end) - toMin(now.start);
-      send({ type: 'moveTask', id: t.id, start: st.value, end: local(toDate(toMin(st.value) + dur)) });
-    };
-    root.append(field('Start', st));
+    termin.append(field('Start', st));
 
+    const du = el('input');
+    const en = el('input');
+    en.type = 'datetime-local';
+    en.value = terminlos ? '' : toInput(t.end);
     if (!t.milestone) {
-      const du = el('input');
       du.value = terminlos ? '' : fmtDuration(toMin(t.end) - toMin(t.start));
       du.placeholder = '4h';
-      du.disabled = terminlos;
-      du.onchange = () => {
-        const now = cur(t.id);
-        if (!now || ohneTermin(now)) return;
-        const real = toMin(now.end) - toMin(now.start);
-        const m = parseDuration(du.value);
-        if (m == null || m === 0) { du.value = fmtDuration(real); du.classList.add('is-bad'); setTimeout(() => du.classList.remove('is-bad'), 900); return; }
-        if (m === real) return;
-        // Wer die Dauer eintippt, hat sie bestätigt: die Schätzmarke fällt weg.
-        // Sonst bliebe der Balken gestrichelt, obwohl die Zahl feststeht.
-        send(now.estimated
-          ? { type: 'batch', label: 'Dauer gesetzt', cmds: [
-              { type: 'setTaskField', id: t.id, field: 'end', value: local(toDate(toMin(now.start) + m)) },
-              { type: 'setTaskField', id: t.id, field: 'estimated', value: false }] }
-          : { type: 'setTaskField', id: t.id, field: 'end', value: local(toDate(toMin(now.start) + m)) });
-      };
-      root.append(field('Dauer', du, '4h · 1,5h · 90m · 2t · 1t 4h'));
-
-      const en = el('input');
-      en.type = 'datetime-local';
-      en.value = terminlos ? '' : toInput(t.end);
-      en.onchange = () => {
-        const now = cur(t.id);
-        if (!now) return;
-        if (!en.value || ohneTermin(now)) { en.value = ohneTermin(now) ? '' : toInput(now.end); return; }
-        if (en.value === toInput(now.end)) return;
-        send(now.estimated
-          ? { type: 'batch', label: 'Ende gesetzt', cmds: [
-              { type: 'setTaskField', id: t.id, field: 'end', value: en.value },
-              { type: 'setTaskField', id: t.id, field: 'estimated', value: false }] }
-          : { type: 'setTaskField', id: t.id, field: 'end', value: en.value });
-      };
-      root.append(field('Ende', en));
+      termin.append(field('Dauer', du, '4h · 1,5h · 90m · 2t · 1t 4h'));
+      termin.append(field('Ende', en));
     }
+    root.append(termin);
+    entwurfBinden({
+      start: st, ende: en, dauer: t.milestone ? null : du,
+      gruppe: [termin], markiere: termin, popIn: termin,
+      lesen: () => cur(t.id),
+      uebernehmen: ({ start, end }, beruehrt) => {
+        const now = cur(t.id);
+        // Wer Dauer oder Ende von Hand setzt, hat die Zahl bestätigt: die
+        // Schätzmarke fällt weg, sonst bliebe der Balken gestrichelt.
+        const dauerAngefasst = beruehrt.has('dauer') || beruehrt.has('end');
+        const move = { type: 'moveTask', id: t.id, start, end };
+        send(now && now.estimated && dauerAngefasst && start && end
+          ? { type: 'batch', label: 'Termin gesetzt', cmds: [move,
+              { type: 'setTaskField', id: t.id, field: 'estimated', value: false }] }
+          : move);
+      },
+    });
 
     if (!t.milestone) {
       // Zum Abhaken, sobald die echte Zahl feststeht.

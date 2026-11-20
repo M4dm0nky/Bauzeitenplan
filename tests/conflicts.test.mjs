@@ -1,4 +1,4 @@
-import { findConflicts, resolveConflictsCmd, parseDuration, fmtDuration, mitUhrzeit, endeNachStart } from '../js/conflicts.js';
+import { findConflicts, resolveConflictsCmd, parseDuration, fmtDuration, mitUhrzeit, endeNachStart, entwurfAendern, entwurfFehler } from '../js/conflicts.js';
 import { createStore } from '../js/store.js';
 import { computeSchedule } from '../js/schedule.js';
 import assert from 'node:assert/strict';
@@ -355,6 +355,46 @@ test('ein echter Konflikt bleibt neben terminlosen bestehen, und der Sammelbefeh
   const cmd = resolveConflictsCmd(s);
   assert.equal(cmd.cmds.length, 1);
   assert.ok(!cmd.cmds[0].start.includes('NaN'));
+});
+
+console.log('\nZeilen-Entwurf (reine Rechnung)');
+const E = { start: '2026-07-13T08:00', end: '2026-07-13T10:00' };
+test('Entwurf: Start ändern verschiebt das Ende mit (Dauer bleibt)', () => {
+  const r = entwurfAendern(E, 'start', '2026-07-13T09:00');
+  assert.deepEqual([r.start, r.end, r.fehler], ['2026-07-13T09:00', '2026-07-13T11:00', null]);
+});
+test('Entwurf: Ende ändern lässt den Start stehen', () => {
+  const r = entwurfAendern(E, 'end', '2026-07-13T12:00');
+  assert.deepEqual([r.start, r.end], ['2026-07-13T08:00', '2026-07-13T12:00']);
+});
+test('Entwurf: Dauer setzt das Ende; unlesbare Dauer lässt den Entwurf stehen', () => {
+  assert.equal(entwurfAendern(E, 'dauer', '3h').end, '2026-07-13T11:00');
+  const r = entwurfAendern(E, 'dauer', 'xyz');
+  assert.ok(r.fehler);
+  assert.deepEqual([r.start, r.end], [E.start, E.end]);
+});
+test('Entwurf: Zeitfeld ohne Datum behält den Tag, «22:00 bis 03:00» ist der Folgetag', () => {
+  const r = entwurfAendern({ start: '2026-08-29T20:00', end: '2026-08-29T21:00' }, 'start', '22:00', { nurZeit: true });
+  assert.deepEqual([r.start, r.end], ['2026-08-29T22:00', '2026-08-29T23:00']);
+  const n = entwurfAendern(r, 'end', '03:00', { nurZeit: true });
+  assert.equal(n.end, '2026-08-30T03:00');
+  assert.equal(entwurfFehler(n), null);
+});
+test('Entwurf: terminlose Zeile im Showablauf nimmt den gezeigten Tag', () => {
+  const r = entwurfAendern({ start: null, end: null }, 'start', '14:30', { nurZeit: true, tag: '2026-08-29' });
+  assert.equal(r.start, '2026-08-29T14:30');
+  assert.equal(r.end, null);
+});
+test('Entwurf: beide Felder leer = «ohne Termin» (gültig); eines leer = Fehler', () => {
+  const a = entwurfAendern(E, 'start', '');
+  assert.ok(entwurfFehler(a));
+  const b = entwurfAendern(a, 'end', '');
+  assert.deepEqual([b.start, b.end], [null, null]);
+  assert.equal(entwurfFehler(b), null);
+});
+test('Entwurf: Ende vor Start meldet den Grund (kein stilles Verwerfen)', () => {
+  const r = entwurfAendern(E, 'end', '2026-07-13T07:00');
+  assert.match(entwurfFehler(r), /nach dem Start/);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

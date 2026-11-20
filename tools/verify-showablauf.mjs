@@ -701,7 +701,7 @@ await check('eine Uhrzeit ändern verschiebt den Eintrag NICHT auf einen anderen
   // beim ersten Antippen einen Tag weit.
   const feld = p.locator('.tb-r .c-start input').first();
   await feld.fill('13:00');
-  await feld.press('Tab');
+  await p.locator('.tb-r.is-entwurf .en-ok').click();   // Entwurf: erst ✓ speichert
   await p.waitForTimeout(1400);
   const t = await p.evaluate(() => {
     const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
@@ -888,9 +888,16 @@ await check('EINE UHRZEIT LÄSST SICH ZIFFER FÜR ZIFFER EINTIPPEN', async () =>
   if (wert !== '09:30') return `Feld zeigt «${wert}» statt 09:30`;
   if (!drin) return 'der Fokus wurde aus dem Feld geworfen';
 
-  // Jetzt das Feld verlassen: der aufgeschobene Neuaufbau muss nachgeholt
-  // werden, und der Auto-Save (800 ms) den Stand in die Ablage schreiben.
-  await p.locator('.tb-r .c-title input').first().click();
+  // Der Entwurf baut die Tabelle nicht neu auf (der Store bleibt unberührt) —
+  // bis hierhin ist also nichts gespeichert. ✓ übernimmt, und der Auto-Save
+  // (800 ms) schreibt den Stand in die Ablage.
+  const vorher = await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const neu = (raw.tasks || []).find((t) => t.title === 'Neuer Zeiteintrag');
+    return neu ? neu.start : '(weg)';
+  });
+  if (vorher.endsWith('T09:30')) return 'schon vor ✓ gespeichert';
+  await p.locator('.tb-r.is-entwurf .en-ok').click();
   await p.waitForTimeout(1200);
   const gespeichert = await p.evaluate(() => {
     const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
@@ -900,7 +907,7 @@ await check('EINE UHRZEIT LÄSST SICH ZIFFER FÜR ZIFFER EINTIPPEN', async () =>
   if (!gespeichert.endsWith('T09:30')) return 'gespeichert wurde ' + gespeichert;
   // Und die Tabelle zeigt danach den echten Stand — nicht den aufgeschobenen.
   const nachher = await p.locator('.tb-r .c-start input').first().inputValue();
-  return nachher === '09:30' ? true : `nach dem Verlassen steht «${nachher}» im Feld`;
+  return nachher === '09:30' ? true : `nach ✓ steht «${nachher}» im Feld`;
 });
 
 await check('ein ⌘Z aus dem Feld heraus zeichnet SOFORT neu', async () => {
@@ -912,6 +919,49 @@ await check('ein ⌘Z aus dem Feld heraus zeichnet SOFORT neu', async () => {
   await p.waitForTimeout(500);
   const wert = await p.locator('.tb-r .c-start input').first().inputValue();
   return wert !== '09:30' ? true : 'die Tabelle zeigt nach dem Undo noch 09:30';
+});
+
+await check('Zeitfeld ohne Datum: Zeile verlassen verwirft den Entwurf, nichts gespeichert', async () => {
+  const stored = () => p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    return JSON.stringify((raw.tasks || []).map((t) => [t.id, t.start, t.end]));
+  });
+  await p.waitForTimeout(1000);
+  const s0 = await stored();
+  const feld = p.locator('.tb-r .c-start input').first();
+  const v0 = await feld.inputValue();
+  await feld.fill(v0 === '05:00' ? '06:00' : '05:00');
+  await p.waitForTimeout(200);
+  if (!(await p.locator('.tb-r.is-entwurf').count())) return 'Zeile nicht markiert';
+  await p.locator('.tb-r .c-title input').first().click();
+  await p.waitForTimeout(1200);
+  if (await p.locator('.tb-r.is-entwurf').count()) return 'Entwurf blieb offen';
+  if ((await p.locator('.tb-r .c-start input').first().inputValue()) !== v0) return 'Feld zeigt nicht den alten Wert';
+  return (await stored()) === s0 ? true : 'wurde gespeichert';
+});
+
+await check('«22:00 bis 03:00» meint nach ✓ den Folgetag (Start bleibt am Tag des Eintrags)', async () => {
+  const id = await p.locator('.tb-r').first().getAttribute('data-id');
+  const row = p.locator(`.tb-r[data-id="${id}"]`);
+  const tag0 = await p.evaluate((i) => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    return (raw.tasks || []).find((t) => t.id === i).start.slice(0, 10);
+  }, id);
+  await row.locator('.c-start input').fill('22:00');
+  await row.locator('.c-end input').fill('03:00');
+  await p.waitForTimeout(200);
+  if (await row.locator('.en-ok').isDisabled()) return '✓ gesperrt: ' + await row.locator('.en-grund').textContent();
+  await row.locator('.en-ok').click();
+  await p.waitForTimeout(1300);
+  const t = await p.evaluate((i) => {
+    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    return (raw.tasks || []).find((x) => x.id === i);
+  }, id);
+  const folge = new Date(new Date(tag0 + 'T00:00:00Z').getTime() + 86400000).toISOString().slice(0, 10);
+  await p.keyboard.press('Meta+z');
+  await p.waitForTimeout(500);
+  if (t.start !== tag0 + 'T22:00') return 'Start ' + t.start;
+  return t.end === folge + 'T03:00' ? true : 'Ende ' + t.end + ', erwartet ' + folge + 'T03:00';
 });
 
 await check('eine EIGENE ART lässt sich im Dropdown anlegen', async () => {

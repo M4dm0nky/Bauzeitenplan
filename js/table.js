@@ -6,7 +6,8 @@
 // Dauer als Kurzform («4h», «2t», «90m») — das Ende rechnet sich; das Ende
 // bearbeiten rechnet die Dauer zurück.
 
-import { parseDuration, fmtDuration, local, mitUhrzeit, endeNachStart } from './conflicts.js';
+import { fmtDuration, local } from './conflicts.js';
+import { entwurfBinden } from './entwurf.js';
 import { toMin, toDate, byStart, ohneTermin } from './schedule.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, toInput, STATUS } from './dom.js';
@@ -348,18 +349,6 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     sin.setAttribute('aria-label', 'Start');
     // Sammelvorgang: Start/Dauer/Ende sind die Hülle der Untervorgänge — nur lesen.
     if (isParent) { sin.disabled = true; sin.title = 'Ergibt sich aus den Untervorgängen'; }
-    commitOn(sin, () => {
-      const now = cur(t.id);
-      if (!now) return;
-      // Leer lassen heißt nicht «löschen»: das Feld zeigt wieder, was gilt.
-      if (!sin.value || ohneTermin(now)) { sin.value = ohneTermin(now) ? '' : nurZeit ? String(now.start).slice(11, 16) : toInput(now.start); return; }
-      // Nur den Zeitteil ersetzen, das Datum behalten: ein Eintrag vom Vortag
-      // ist über den Tagesfilter auch am Folgetag sichtbar und spränge sonst.
-      const start = nurZeit ? mitUhrzeit(now.start, sin.value) : sin.value;
-      if (!start || start === now.start) return;
-      const dur = toMin(now.end) - toMin(now.start);   // Dauer beibehalten
-      send({ type: 'moveTask', id: t.id, start, end: local(toDate(toMin(start) + dur)) });
-    });
     st.append(sin);
     tr.append(st);
 
@@ -369,21 +358,7 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     din.value = terminlos ? '' : fmtDuration(toMin(t.end) - toMin(t.start));
     din.placeholder = '4h';
     din.setAttribute('aria-label', 'Dauer');
-    if (t.milestone || isParent || terminlos) din.disabled = true;
-    commitOn(din, () => {
-      const now = cur(t.id);
-      if (!now || ohneTermin(now)) return;
-      const real = toMin(now.end) - toMin(now.start);
-      const m = parseDuration(din.value);
-      if (m == null || m === 0) {
-        din.value = fmtDuration(real);
-        din.classList.add('is-bad');
-        setTimeout(() => din.classList.remove('is-bad'), 900);
-        return;
-      }
-      if (m === real) return;
-      send({ type: 'setTaskField', id: t.id, field: 'end', value: local(toDate(toMin(now.start) + m)) });
-    });
+    if (t.milestone || isParent) din.disabled = true;
     du.append(din);
     tr.append(du);
 
@@ -394,17 +369,22 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     ein.value = terminlos ? '' : nurZeit ? String(t.end).slice(11, 16) : toInput(t.end);
     ein.setAttribute('aria-label', 'Ende');
     if (t.milestone || isParent) { ein.disabled = true; if (isParent) ein.title = 'Ergibt sich aus den Untervorgängen'; }
-    commitOn(ein, () => {
-      const now = cur(t.id);
-      if (!now) return;
-      if (!ein.value || ohneTermin(now)) { ein.value = ohneTermin(now) ? '' : nurZeit ? String(now.end).slice(11, 16) : toInput(now.end); return; }
-      // «22:00 bis 03:00» meint den Folgetag — sonst lehnte der Store ab.
-      const ende = nurZeit ? endeNachStart(now.start, ein.value) : ein.value;
-      if (!ende || ende === now.end) return;
-      send({ type: 'setTaskField', id: t.id, field: 'end', value: ende });
-    });
     en.append(ein);
     tr.append(en);
+
+    // Start · Dauer · Ende ändern nur einen Entwurf; ✓/Enter schickt EINEN
+    // moveTask (bei zwei leeren Feldern «ohne Termin»). Sammelvorgänge sind
+    // schreibgeschützt und haben keinen.
+    if (!isParent) {
+      en.classList.add('en-anker');
+      entwurfBinden({
+        start: sin, ende: ein, dauer: din.disabled ? null : din,
+        gruppe: [st, du, en], markiere: tr, popIn: en, nurZeit,
+        tag: () => tag || String(store.state.project.start).slice(0, 10),
+        lesen: () => cur(t.id),
+        uebernehmen: ({ start, end }) => send({ type: 'moveTask', id: t.id, start, end }),
+      });
+    }
 
     if (ebene === 'show') {
       // ── Kontakt · Anforderungen · Material ──

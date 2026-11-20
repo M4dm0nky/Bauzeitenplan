@@ -4,7 +4,7 @@
 // Liegt die früheste Lage darüber, ist eine Abhängigkeit verletzt — genau das
 // ist die ganze Prüfung.
 
-import { computeSchedule, toMin, toDate, ohneTermin } from './schedule.js';
+import { computeSchedule, toMin, toDate, ohneTermin, spanFehler } from './schedule.js';
 
 // Zwei Minuten Schlupf gegen Rundung; darunter ist es kein echter Konflikt.
 const EPS = 1;
@@ -148,6 +148,56 @@ export function endeNachStart(startISO, hhmm) {
   const d = new Date(roh);
   d.setDate(d.getDate() + 1);
   return local(d);
+}
+
+// ── Zeilen-Entwurf ──────────────────────────────────────────────────────────
+// Start, Ende und Dauer einer Zeile ändern zuerst nur einen ENTWURF; erst ✓
+// schickt EINEN moveTask. Hier die reine Rechnung dazu — der Entwurf ist
+// {start, end} (lokale Zeitstempel oder null), nie etwas anderes.
+
+/**
+ * Ein Feld des Entwurfs ändern.
+ * - start: bei vollständigem Entwurf wandert das Ende mit (Dauer bleibt).
+ * - end:   nur das Ende; ohne Datum («22:00 bis 03:00») gilt der Folgetag.
+ * - dauer: das Ende = Start + Dauer.
+ * @param {{start:?string,end:?string}} e
+ * @param {'start'|'end'|'dauer'} feld
+ * @param {string} wert    Feldinhalt; bei `nurZeit` «HH:MM», sonst «JJJJ-MM-TTThh:mm»
+ * @param {{nurZeit?:boolean, tag?:?string}} opt  `tag` = Tag für ein Zeitfeld ohne Bezug
+ * @returns {{start:?string,end:?string,fehler:?string}} `fehler` nur bei unlesbarer
+ *   EINGABE (der Entwurf bleibt dann unverändert); die Spanne prüft entwurfFehler.
+ */
+export function entwurfAendern(e, feld, wert, { nurZeit = false, tag = null } = {}) {
+  const alt = { start: e.start ?? null, end: e.end ?? null };
+  const unlesbar = (msg) => ({ ...alt, fehler: msg });
+  const basis = alt.start || alt.end || (tag ? tag + 'T00:00' : null);
+  const roh = String(wert ?? '').trim();
+  if (feld === 'start') {
+    if (!roh) return { ...alt, start: null, fehler: null };
+    const ns = nurZeit ? mitUhrzeit(basis, roh) : roh;
+    if (!ns || Number.isNaN(toMin(ns))) return unlesbar('Start nicht lesbar.');
+    let end = alt.end;
+    if (alt.start && alt.end) end = local(toDate(toMin(ns) + (toMin(alt.end) - toMin(alt.start))));
+    return { start: ns, end, fehler: null };
+  }
+  if (feld === 'end') {
+    if (!roh) return { ...alt, end: null, fehler: null };
+    const ne = nurZeit ? (alt.start ? endeNachStart(alt.start, roh) : mitUhrzeit(basis, roh)) : roh;
+    if (!ne || Number.isNaN(toMin(ne))) return unlesbar('Ende nicht lesbar.');
+    return { ...alt, end: ne, fehler: null };
+  }
+  if (feld === 'dauer') {
+    const m = parseDuration(roh);
+    if (m == null || m === 0) return unlesbar('Dauer nicht lesbar (z. B. 4h, 90m, 2t).');
+    if (!alt.start) return unlesbar('Für eine Dauer fehlt der Start.');
+    return { start: alt.start, end: local(toDate(toMin(alt.start) + m)), fehler: null };
+  }
+  return unlesbar('Unbekanntes Feld.');
+}
+
+/** Warum der Entwurf nicht übernommen werden kann — null = gültig (auch «ohne Termin»). */
+export function entwurfFehler(e, { milestone = false } = {}) {
+  return spanFehler(e.start ?? null, e.end ?? null, { milestone });
 }
 
 // ── Dauer-Kurzform ──────────────────────────────────────────────────────────
