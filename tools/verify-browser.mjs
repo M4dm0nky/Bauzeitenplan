@@ -542,7 +542,7 @@ for (const pg of PAGES) {
 
 // ── Handy-Kopf in allen fünf Themes, beide Modi ──────────────────────────────
 // Der Kopf belegte auf 390×844 ~470 px (Board: 574) — die Hälfte des Bildes.
-// Ziel: ≤ 300 px, ohne dass ein Bedienelement wegfällt. Themes überschreiben
+// Ziel: ≤ 285 px, ohne dass ein Bedienelement wegfällt. Themes überschreiben
 // Kopfmaße (Titelgröße, Kennzahlen, Abstände), deshalb läuft es in jedem.
 {
   console.log('\nHANDY-KOPF (390×844, alle Themes, Bauzeitenplan + Showablauf)');
@@ -564,9 +564,9 @@ for (const pg of PAGES) {
     await m.waitForSelector('.bz-lab', { timeout: 20000 });
     await m.waitForTimeout(argBase ? 1600 : 800);
     if (t !== 'callboard') { await themeAn(m, t); await m.waitForTimeout(400); }
-    await mc('Kopf ≤ 300 px', async () => {
+    await mc('Kopf ≤ 285 px', async () => {
       const h = await m.evaluate(() => Math.round(document.querySelector('.hd').getBoundingClientRect().bottom));
-      return h <= 300 ? true : `Kopf ${h} px hoch`;
+      return h <= 285 ? true : `Kopf ${h} px hoch`;
     });
     await mc('Titel einzeilig, Ort ausgeblendet, Kennzahlen in einer Reihe', async () => {
       const r = await m.evaluate(() => {

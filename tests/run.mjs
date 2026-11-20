@@ -148,8 +148,9 @@ check('Callboard hell ist warmes Weiß, kein Flächen-#fff — Text hält den Ko
       const k1 = kontrast(lum(ink), lum(bg)), k2 = kontrast(lum(mu), lum(bg));
       if (k1 < 7) fehler.push(`${name}: --ink auf --${f} ${k1.toFixed(2)}:1 < 7`);
       if (k2 < 4.5) fehler.push(`${name}: --muted auf --${f} ${k2.toFixed(2)}:1 < 4.5`);
-      // «◌ ohne Termin» (base.css .bz-lab-ohne, opacity .65) steht in der Seitenspalte (--panel).
-      if (f === 'panel') {
+      // «◌ ohne Termin» (base.css .bz-lab-ohne, gedämpft per opacity) steht in der
+      // Seitenspalte (--panel) und kann auf der Arbeitsfläche (--bg) landen: beide Flächen.
+      {
         const op = Number((readFileSync(join(root, 'styles/base.css'), 'utf8').match(/\.bz-lab-ohne\s*\{[^}]*opacity:\s*([\d.]+)/) || [])[1]);
         if (!op) fehler.push('.bz-lab-ohne ohne opacity gefunden');
         else { const k3 = kontrast(lum(mix(i2, bg, op)), lum(bg)); if (k3 < 4.5) fehler.push(`${name}: «ohne Termin» ${k3.toFixed(2)}:1 < 4.5`); }

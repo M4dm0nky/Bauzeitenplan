@@ -701,6 +701,58 @@ await check('das gewechselte Projekt ist danach das aktive', async () => {
   return n === 'Testprojekt Halle 7' ? true : 'nach Reload: ' + n;
 });
 
+await check('Tabelle: ein offener Entwurf überlebt keinen Projektwechsel (js/table.js leert die Entwurfs-Map)', async () => {
+  // Zeilen-Ids (t0, t1 …) wiederholen sich zwischen Projekten: ein Entwurf aus A
+  // würde sonst in der gleichnamigen Zeile von B wieder aufgehen. Der Wechsel
+  // läuft per DOM-click, damit kein focusout den Entwurf schon vorher verwirft.
+  // Projekt B ist eine KOPIE von A (gleiche Zeilen-Ids UND gleiche Zeiten) — nur
+  // dann würde die Wiederöffnungs-Regel (Zeiten stimmen) allein den Entwurf
+  // zurückholen; verhindert wird es nur durch das Leeren der Map beim Wechsel.
+  await page.evaluate(() => {
+    const idx = JSON.parse(localStorage.getItem('bzp_projects'));
+    const a = idx.find((e) => e.name === 'Testprojekt Halle 7');
+    const plan = JSON.parse(localStorage.getItem('bzp_p_' + a.id));
+    plan.project.id = 'kopie-entwurf'; plan.project.name = 'Kopie Entwurf';
+    localStorage.setItem('bzp_p_kopie-entwurf', JSON.stringify(plan));
+    localStorage.setItem('bzp_projects', JSON.stringify([...idx, { ...a, id: 'kopie-entwurf', name: 'Kopie Entwurf' }]));
+  });
+  await page.reload();
+  await page.waitForTimeout(900);
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(500);
+  const zeile = page.locator('.tb-r:not(.is-parent):not(.is-child)').first();
+  const id = await zeile.getAttribute('data-id');
+  const wert0 = await zeile.locator('.c-start input').inputValue();
+  await zeile.locator('.c-start input').fill(new Date(new Date(wert0 + ':00Z').getTime() + 86400000).toISOString().slice(0, 16));
+  await page.waitForTimeout(300);
+  if (!(await page.locator('.tb-r.is-entwurf').count())) return 'Entwurf nicht offen (Vorbedingung)';
+  const wechsle = async (name) => {
+    await page.evaluate(() => document.querySelector('#proj-menu').click());
+    await page.waitForTimeout(400);
+    await page.evaluate((n) => [...document.querySelectorAll('.dlg-open')].find((b) => b.textContent.includes(n)).click(), name);
+    await page.waitForTimeout(1000);
+  };
+  await wechsle('Kopie Entwurf');
+  const inB = await page.locator('.tb-r.is-entwurf').count();
+  await wechsle('Testprojekt Halle 7');
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(500);
+  const inA = await page.locator('.tb-r.is-entwurf').count();
+  const wertA = await page.locator(`.tb-r[data-id="${id}"] .c-start input`).inputValue();
+  const store = await page.evaluate((i) => {
+    const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_') && JSON.parse(localStorage.getItem(x)).project.name === 'Testprojekt Halle 7');
+    const t = JSON.parse(localStorage.getItem(k)).tasks.find((x) => x.id === i);
+    return t.start;
+  }, id);
+  await page.evaluate(() => {
+    localStorage.removeItem('bzp_p_kopie-entwurf');
+    localStorage.setItem('bzp_projects', JSON.stringify(JSON.parse(localStorage.getItem('bzp_projects')).filter((e) => e.id !== 'kopie-entwurf')));
+  });
+  if (inB) return 'Entwurf taucht im anderen Projekt auf (' + inB + ')';
+  if (inA) return 'Entwurf nach der Rückkehr noch offen (' + inA + ')';
+  return wertA === store.slice(0, 16) && wertA === wert0 ? true : `Feld ${wertA}, Store ${store}, vorher ${wert0}`;
+});
+
 console.log('\nPANEL-SICHTBARKEIT');
 await check('Panel bleibt in der Tabellen-Ansicht zu, auch nach einer Änderung', async () => {
   // Regression: vier Stellen schrieben #ins.hidden, und inspector.render()
