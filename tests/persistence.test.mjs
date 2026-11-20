@@ -637,5 +637,53 @@ test('Altphase mit Ende <= Start sperrt den Import nicht: sie entfällt und wird
   assert.equal(migrate(p).phases.length, 1);
 });
 
+// ── Import: kaputte Form, Ringe, Waisen, project.now ──────────────────────────
+const lade = (mut) => { const p = plan(); mut(p); return deserialize(JSON.stringify({ schema: 1, ...p })); };
+const zweiTasks = (p) => {
+  p.tasks.push({ ...p.tasks[0], id: 't2', title: 'Licht' });
+};
+
+test('deserialize: falsche Form liefert ok:false statt einer Ausnahme', () => {
+  for (const mut of [(p) => { p.tasks = 'abc'; }, (p) => { p.tasks = [null]; }, (p) => { p.project = 'x'; },
+    (p) => { p.gewerke = {}; }, (p) => { p.deps = 5; }, (p) => { p.phases = 'x'; }]) {
+    const r = lade(mut);
+    assert.equal(r.ok, false);
+    assert.match(r.error, /^Die Datei ist beschädigt: /);
+  }
+});
+
+test('deserialize: Ring in den Verknüpfungen nennt beide Titel', () => {
+  const r = lade((p) => { zweiTasks(p); p.deps = [
+    { id: 'd1', from: 't1', to: 't2', type: 'FS', lag: 0 }, { id: 'd2', from: 't2', to: 't1', type: 'FS', lag: 0 }]; });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Ring in den Verknüpfungen/);
+  assert.match(r.error, /Podest/); assert.match(r.error, /Licht/);
+});
+
+test('deserialize: unbekanntes Gewerk wird abgelehnt, «projekt» bleibt gültig', () => {
+  const r = lade((p) => { p.tasks[0].gewerk = 'nix'; });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Vorgang «Podest»: Unbekanntes Gewerk nix\./);
+  assert.equal(lade((p) => { p.tasks[0].gewerk = 'projekt'; }).ok, true);
+});
+
+test('deserialize: totes parent und parent-Kette werden abgelehnt', () => {
+  const tot = lade((p) => { p.tasks[0].parent = 'weg'; });
+  assert.equal(tot.ok, false);
+  assert.match(tot.error, /Vorgang «Podest»: Übergeordneter Vorgang nicht gefunden\./);
+  const kette = lade((p) => {
+    zweiTasks(p); p.tasks.push({ ...p.tasks[0], id: 't3', title: 'Ton' });
+    p.tasks[0].parent = null; p.tasks[1].parent = 't1'; p.tasks[2].parent = 't2';
+  });
+  assert.equal(kette.ok, false);
+  assert.match(kette.error, /nur eine Ebene/);
+  assert.equal(lade((p) => { zweiTasks(p); p.tasks[1].parent = 't1'; }).ok, true);
+});
+
+test('migrate: project.now (Demo-Uhr) fällt weg', () => {
+  const p = plan(); p.project.now = '2026-08-05T12:00';
+  assert.equal('now' in migrate(p).project, false);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

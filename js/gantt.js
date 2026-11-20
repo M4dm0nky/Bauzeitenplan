@@ -98,9 +98,7 @@ export function createGantt(root, opts = {}) {
   // ein eigener Tick. Vorher wurde NOW nur bei einer Datenänderung neu
   // berechnet: die Linie stand nach dem Laden für immer still.
   function readNow() {
-    const S0 = store.state;
-    if (S0.project.now) return toMin(S0.project.now);   // Demo-Übersteuerung
-    return toMin(local(nowInZone(S0.project.timezone)));
+    return toMin(local(nowInZone(store.state.project.timezone)));
   }
 
   // Die Uhrzeit, an der der ABLAUF gerade steht. «Was läuft im um fünf Minuten
@@ -1153,7 +1151,7 @@ export function createGantt(root, opts = {}) {
       // Bei zugeklappter Gruppe auf den Sammelbalken umlenken
       const ra = visualRow(a), rb = visualRow(b);
       if (!ra || !rb) continue;
-      const crit = SCHED.get(d.from).critical && SCHED.get(d.to).critical;
+      const crit = SCHED.get(d.from)?.critical && SCHED.get(d.to)?.critical;
       const p = svgEl('path', {
         class: 'bz-dep' + (crit ? ' is-crit' : ''),
         'marker-end': crit ? 'url(#bz-ah-c)' : 'url(#bz-ah)',

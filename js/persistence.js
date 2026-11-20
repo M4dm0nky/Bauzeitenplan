@@ -7,7 +7,7 @@
 // die Logik ohne Browser testbar bleibt.
 
 import { VERSION } from './version.js';
-import { spanFehler } from './schedule.js';
+import { spanFehler, topoSort } from './schedule.js';
 import { artAusName, istPhasenArt, phasenFehler, phaseLabel } from './phasen.js';
 
 export const SCHEMA_VERSION = 1;
@@ -65,6 +65,9 @@ export function migrate(plan) {
   p.deps ??= [];
   p.gewerke ??= [];
   p.project ??= {};
+  // Die Demo-Uhr war ein Entwicklerhaken; aus einer fremden Datei würde sie die
+  // Jetzt-Linie auf ein festes Datum nageln und den Live-Modus lahmlegen.
+  delete p.project.now;
   p.project.timezone ??= Intl.DateTimeFormat().resolvedOptions().timeZone;
   // Selbst angelegte Eintragsarten (Line-Check, Catering …). Sie stehen am
   // Projekt und reisen dadurch im Export mit, ohne dass deserialize einen
@@ -336,6 +339,8 @@ export function serialize(plan) {
 // Vorgänge fallen weg (wie bei removeTask) — sie sind Ballast, kein Datenverlust.
 function inhaltFehler(plan) {
   const ids = new Set();
+  const gewerkIds = new Set(plan.gewerke.map((g) => g.id));
+  const byId = new Map(plan.tasks.map((t) => [t.id, t]));
   const eltern = new Set(plan.tasks.map((t) => t.parent).filter(Boolean));
   for (const t of plan.tasks) {
     const name = `Vorgang «${t.title ?? t.id}»`;
@@ -345,11 +350,40 @@ function inhaltFehler(plan) {
     // tragen eine abgeleitete Hülle und dürfen null lang sein.
     const bad = spanFehler(t.start, t.end, { milestone: !!t.milestone, sammel: eltern.has(t.id) });
     if (bad) return `${name}: ${bad}`;
+    // Ohne Band im Plan (und nicht «projekt») hätte der Vorgang keine Zeile.
+    if (t.gewerk !== 'projekt' && !gewerkIds.has(t.gewerk)) return `${name}: Unbekanntes Gewerk ${t.gewerk}.`;
+    if (t.parent) {
+      const el = byId.get(t.parent);
+      if (!el) return `${name}: Übergeordneter Vorgang nicht gefunden.`;
+      if (el.parent) return `${name}: Untervorgänge gibt es nur eine Ebene tief.`;
+    }
   }
   plan.deps = plan.deps.filter((d) => ids.has(d.from) && ids.has(d.to));
+  // Ein Ring macht die Terminrechnung unmöglich (SCHED bliebe leer, der Plan
+  // ließe sich nicht zeichnen) — ablehnen, mit Titeln wie im Store.
+  try {
+    topoSort(plan.tasks.map((t) => t.id), plan.deps);
+  } catch (e) {
+    const titel = (id) => (byId.get(id) || {}).title || id;
+    return 'Ring in den Verknüpfungen: ' + (e.cycle || []).map(titel).join(' → ');
+  }
   // Phasen: ein Fehler lehnt den Import ab und nennt die Phase — dieselbe Haltung
   // wie bei Vorgängen (still reparieren hieße, ein Datum zu erfinden).
   return phasenFehler(plan.phases);
+}
+
+const istObj = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
+
+// Form VOR migrate: migrate setzt Objekte voraus und würde sonst mit einer
+// Ausnahme abbrechen, die der Aufrufer nicht erwartet.
+function formFehler(j) {
+  if (!istObj(j.project)) return 'project ist kein Objekt';
+  for (const k of ['tasks', 'gewerke', 'deps', 'phases']) {
+    if (j[k] == null) continue;
+    if (!Array.isArray(j[k])) return `${k} ist keine Liste`;
+    if (j[k].some((x) => !istObj(x))) return `Ein Eintrag in ${k} ist kein Objekt`;
+  }
+  return null;
 }
 
 export function deserialize(text, { newId = false } = {}) {
@@ -365,8 +399,15 @@ export function deserialize(text, { newId = false } = {}) {
   if (Number(j.schema) > SCHEMA_VERSION) {
     return { ok: false, error: `Die Datei stammt aus einer neueren Version (Schema ${j.schema}, hier ${SCHEMA_VERSION}). Bitte die App aktualisieren.` };
   }
-  const plan = migrate({ project: j.project, gewerke: j.gewerke, tasks: j.tasks, deps: j.deps,
-    phases: j.phases });
+  const form = formFehler(j);
+  if (form) return { ok: false, error: 'Die Datei ist beschädigt: ' + form + '.' };
+  let plan;
+  try {
+    plan = migrate({ project: j.project, gewerke: j.gewerke, tasks: j.tasks, deps: j.deps,
+      phases: j.phases });
+  } catch (e) {
+    return { ok: false, error: 'Die Datei ist beschädigt: ' + ((e && e.message) || e) + '.' };
+  }
   const bad = inhaltFehler(plan);
   if (bad) return { ok: false, error: bad };
   if (newId) plan.project.id = 'p' + Date.now().toString(36);

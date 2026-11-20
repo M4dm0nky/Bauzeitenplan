@@ -1370,7 +1370,9 @@ async function doImport(e) {
   e.target.value = '';
   // Ohne newId: die Datei bringt ihre eigene Projekt-ID mit → derselbe Plan
   // erneut geladen überschreibt sich, statt sich zu verdoppeln.
-  const r = deserialize(await f.text());
+  let r;
+  try { r = deserialize(await f.text()); }
+  catch (err) { return toast('Die Datei lässt sich nicht lesen: ' + ((err && err.message) || err), 'bad', 8000); }
   if (r.ok === false) return toast(r.error, 'bad', 8000);
   if (r.hinweis) toast(r.hinweis, 'bad', 8000);
   const name = r.plan.project.name;
