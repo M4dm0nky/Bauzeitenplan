@@ -128,7 +128,7 @@ const kanon = (v) => {
 export function gleicherPlan(a, b) {
   const teil = (p) => {
     const { quelle, ...project } = (p && p.project) || {};
-    return kanon({ project, gewerke: p && p.gewerke, tasks: p && p.tasks, deps: p && p.deps });
+    return kanon({ project, gewerke: p && p.gewerke, tasks: p && p.tasks, deps: p && p.deps, phases: (p && p.phases) || [] });   // fehlend = leer: Altstand und migrierter Plan sind gleich
   };
   return JSON.stringify(teil(a)) === JSON.stringify(teil(b));
 }

@@ -213,6 +213,14 @@ test('gleicherPlan: ein Vorgangstitel anders → false', () => {
   assert.equal(gleicherPlan(a, b), false);
 });
 
+test('gleicherPlan: nur die Phasen verschieden → false; gleiche Phasen → true', () => {
+  const ph = (ende) => [{ id: 'ph1', name: 'Aufbau', art: 'aufbau', start: '2026-07-01T06:00', end: ende }];
+  const mk = (phases) => ({ project: { id: 'p1' }, gewerke: [], tasks: [], deps: [], phases });
+  assert.equal(gleicherPlan(mk(ph('2026-07-02T06:00')), mk(ph('2026-07-03T06:00'))), false);
+  assert.equal(gleicherPlan(mk(ph('2026-07-02T06:00')), mk(ph('2026-07-02T06:00'))), true);
+  assert.equal(gleicherPlan(mk(ph('2026-07-02T06:00')), mk([])), false);
+});
+
 test('pruefe: 200 → ok; 404 → repo; 401/403 → schluessel; Netzfehler → offline', async () => {
   const mit = (status) => mk(async () => ({ ok: status < 300, status, json: async () => ({}) }));
   assert.deepEqual(await mit(200).pruefe(), { ok: true });

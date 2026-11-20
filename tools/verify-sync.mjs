@@ -390,6 +390,67 @@ try {
       finally { await schliesse(A, B); }
     }
 
+    // ─── 2b. Nur die Phasen ändern sich ─────────────────────────────────────
+    console.log('\nPHASEN ALLEIN (Abgleich sieht auch Phasenänderungen)');
+    {
+      const fake = neuerFake();
+      const mk = () => geraet(fake, BASE);
+      const A = await mk(), B = await mk();
+      const phasenEnde = (g) => g.page.evaluate(() => {
+        for (const k of Object.keys(localStorage)) {
+          if (!k.startsWith('bzp_p_')) continue;
+          const pl = JSON.parse(localStorage.getItem(k));
+          if (pl.project && pl.project.name === 'Sync-Probe') return (pl.phases || []).map((x) => x.end).join('|');
+        }
+        return null;
+      });
+      const repoEnde = () => { const e = [...fake.dateien.values()][0]; return e ? JSON.parse(e.text).phases.map((x) => x.end).join('|') : null; };
+      const plusTage = (v, n) => { const d = new Date(v + ':00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 16); };
+      const phaseAendern = async (g, tage) => {
+        const p = g.page;
+        await p.locator('#rail-ein').click();
+        await p.locator('[data-ein="phasen"]').click();
+        const bisFeld = p.locator('.ph-z').first().locator('.ph-bis');
+        await bisFeld.fill(plusTage(await bisFeld.inputValue(), tage));
+        await p.locator('.ph-z').first().locator('.en-ok').click();
+        await p.waitForTimeout(1300);
+        await einZu(g);
+      };
+      try {
+        await start(A); await legeAn(A, 'Sync-Probe');
+        await verbinden(A); await warteZustand(A, 'ok'); await einZu(A);
+        await start(B); await verbindenStill(B);
+        await start(B); await warteZustand(B, 'ok');
+        const E0 = await phasenEnde(A);
+        await check('Ausgangslage: beide Geräte tragen dieselben Phasen', async () => {
+          const b = await phasenEnde(B);
+          return E0 && E0 === b && repoEnde() === E0 ? true : `A ${E0} / B ${b} / Repo ${repoEnde()}`;
+        });
+        await phaseAendern(A, 1);
+        const EA = await phasenEnde(A);
+        await check('A: Phase geändert (Nicht-Treffer-Gegenprobe: Stand weicht ab)', async () => EA !== E0 ? true : 'unverändert ' + EA);
+        await ausloesen(A);
+        await check('A lädt die geänderte Phase hoch', async () => (await bis(async () => repoEnde() === EA, 6000)) ? true : 'Repo ' + repoEnde());
+        await ausloesen(B);
+        await check('B (unverändert) bekommt die Phase von A — ohne Dialog', async () => {
+          const ok = await bis(async () => (await phasenEnde(B)) === EA, 6000);
+          const dlg = await B.page.locator('.dlg', { hasText: 'Zwei verschiedene Fassungen' }).count();
+          return ok && !dlg ? true : `B ${await phasenEnde(B)} / Dialog ${dlg}`;
+        });
+        // Beide ändern DIESELBE Phase unterschiedlich, offline → Konflikt.
+        await A.netz(false); await B.netz(false);
+        await phaseAendern(A, 2);
+        await phaseAendern(B, 3);
+        await A.netz(true); await ausloesen(A);
+        await B.netz(true); await ausloesen(B);
+        await check('beide Phasen geändert → Konfliktdialog auf B (nur Phasen verschieden)', async () => {
+          const dlg = B.page.locator('.dlg', { hasText: 'Zwei verschiedene Fassungen' });
+          return (await bis(async () => (await dlg.count()) === 1, 6000)) ? true : 'kein Dialog';
+        });
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      finally { await schliesse(A, B); }
+    }
+
     // ─── 3. Falscher Schlüssel ──────────────────────────────────────────────
     console.log('\nFALSCHER SCHLÜSSEL');
     {
