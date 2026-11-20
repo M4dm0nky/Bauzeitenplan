@@ -244,6 +244,21 @@ export function amTag(tasks, tagISO) {
 }
 
 /**
+ * Der Showtag eines Beginns: vor 06:00 gehört ein Eintrag noch zum Vortag
+ * (ein Act um 01:00 spielt im Showtag davor). DOM-frei; gerechnet wird tageweise
+ * über Date, nie mit +1440 Minuten (Sommerzeit).
+ * @param {string} startISO «2026-08-30T01:00»
+ * @returns {string} «2026-08-29»
+ */
+export function showTagVon(startISO) {
+  const tag = String(startISO).slice(0, 10);
+  if (Number(String(startISO).slice(11, 13)) >= 6) return tag;
+  const d = new Date(tag + 'T12:00');
+  d.setDate(d.getDate() - 1);
+  return local(d).slice(0, 10);
+}
+
+/**
  * Das Fenster, in dem auf der Bühne WIRKLICH etwas läuft — auf volle Stunden
  * nach außen gerundet.
  *

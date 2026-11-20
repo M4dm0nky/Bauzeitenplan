@@ -541,6 +541,69 @@ try {
       finally { await schliesse(A, B); }
     }
 
+    // ─── 4a. Gelöscht auf B: Entwurf auf A darf nicht ins Folgeprojekt wandern ─
+    // js/app.js: lokal-loeschen öffnet rest[0] OHNE Fokuswechsel; der focusout-Pfad
+    // verwirft den Entwurf dann nicht (markiere ist abgehängt). Nur das Leeren der
+    // Entwurfs-Map in js/table.js:72 hält ihn aus der gleichnamigen Zeile des
+    // Folgeprojekts (Kopie: gleiche Ids und Zeiten) heraus.
+    console.log('\nLÖSCHEN UNTER OFFENEM ENTWURF');
+    {
+      const fake = neuerFake();
+      const mk = () => geraet(fake, BASE);
+      const A = await mk(), B = await mk();
+      try {
+        await start(A); await legeAn(A, 'Rest-Kopie');
+        await legeAn(A, 'Offen-Kopie');          // zuletzt angelegt = offen; gleiche Ids und Zeiten
+        await verbinden(A); await warteZustand(A, 'ok'); await einZu(A);
+        await start(B); await verbindenStill(B);
+        await start(B); await warteZustand(B, 'ok');
+        await check('Ausgangslage: zwei Projekte mit gleichen Ids und Zeiten, Offen-Kopie ist offen', async () => {
+          const r = await A.page.evaluate(() => {
+            const pl = (n) => { const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_') && JSON.parse(localStorage.getItem(x)).project.name === n); return JSON.parse(localStorage.getItem(k)).tasks.map((t) => [t.id, t.start, t.end].join('|')).join(';'); };
+            return { gleich: pl('Rest-Kopie') === pl('Offen-Kopie'), name: document.getElementById('proj-name').textContent };
+          });
+          return r.gleich && r.name === 'Offen-Kopie' ? true : JSON.stringify(r);
+        });
+        // B löscht das offene Projekt (online → auch im Repo).
+        {
+          const p = B.page;
+          await p.locator('#rail-ein').click(); await p.locator('[data-ein="projekt"]').click(); await p.locator('#proj-menu').click();
+          await p.locator('#dlg .dlg-row', { hasText: 'Offen-Kopie' }).locator('.dlg-del').click();
+          await p.locator('.dlg .dlg-act .btn-danger', { hasText: 'Löschen' }).click();
+          await p.waitForTimeout(700);
+          await dialogZu(B);
+        }
+        await check('B hat «Offen-Kopie» im Repo gelöscht, «Rest-Kopie» bleibt', async () =>
+          (await bis(async () => fake.namen().join() === 'Rest-Kopie', 5000)) ? true : 'Fake: ' + fake.namen().join(','));
+        // A: Entwurf in der Tabelle öffnen (Fokus bleibt im Feld), dann Abgleich.
+        await A.page.locator('[data-view="tabelle"]').click();
+        await A.page.waitForTimeout(500);
+        const feld = A.page.locator('.tb-r:not(.is-parent):not(.is-child)').first().locator('.c-start input');
+        const id = await A.page.locator('.tb-r:not(.is-parent):not(.is-child)').first().getAttribute('data-id');
+        const v0 = await feld.inputValue();
+        await feld.fill(new Date(new Date(v0 + ':00Z').getTime() + 86400000).toISOString().slice(0, 16));
+        await A.page.waitForTimeout(300);
+        if (!(await A.page.locator('.tb-r.is-entwurf').count())) throw new Error('Vorbedingung: Entwurf nicht offen');
+        await ausloesen(A);
+        await check('A: Abgleich wechselt ins Folgeprojekt — dort kein Entwurf, Feldwerte = Store', async () => {
+          const ok = await bis(async () => (await A.page.locator('#proj-name').textContent()) === 'Rest-Kopie', 8000);
+          if (!ok) return 'A wechselte nicht: ' + await A.page.locator('#proj-name').textContent();
+          // Kein Ansichtswechsel dazwischen: der würde die Tabelle neu bauen und einen
+          // fälschlich geöffneten Entwurf nebenbei wegräumen (so blieb der Fehler unsichtbar).
+          await A.page.waitForTimeout(600);
+          const offen = await A.page.locator('.tb-r.is-entwurf').count();
+          const wert = await A.page.locator(`.tb-r[data-id="${id}"] .c-start input`).inputValue();
+          const store = await A.page.evaluate((i) => {
+            const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_') && JSON.parse(localStorage.getItem(x)).project.name === 'Rest-Kopie');
+            return JSON.parse(localStorage.getItem(k)).tasks.find((t) => t.id === i).start.slice(0, 16);
+          }, id);
+          if (offen) return offen + ' Entwurf offen im Folgeprojekt';
+          return wert === store && wert === v0 ? true : `Feld ${wert}, Store ${store}, vorher ${v0}`;
+        });
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      finally { await schliesse(A, B); }
+    }
+
     // ─── 4b. Versatz und Projektwechsel ─────────────────────────────────────
     console.log('\nVERSATZ UND PROJEKTWECHSEL');
     {

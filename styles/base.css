@@ -837,7 +837,7 @@ body { margin: 0; }
 
      `order` sortiert um: im DOM steht die Dauer vor dem Namen (dort gehört sie
      nebeneinander hin), hier hinter ihn und auf eine eigene Zeile. */
-  .bz-lab-task:has(.bz-lab-dauer) {
+  .bz-lab-task:has(.bz-lab-dauer:not(:empty)) {
     flex-wrap: wrap;
     align-content: center;
     row-gap: 0;

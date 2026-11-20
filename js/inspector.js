@@ -7,7 +7,7 @@ import { parseDuration, fmtDuration, local } from './conflicts.js';
 import { entwurfBinden } from './entwurf.js';
 import { toMin, toDate, computeSchedule, candidateGroups, ohneTermin } from './schedule.js';
 import { gewerkVar, gewerkTexture, hueVon, slotAus, HUES, MAX_SLOTS } from './palette.js';
-import { artOf, abschnittOf, ABSCHNITTE } from './ebene.js';
+import { artOf, abschnittOf, ABSCHNITTE, showTagVon } from './ebene.js';
 import { fmtFloat } from './timeaxis.js';
 import { el, toInput, STATUS } from './dom.js';
 import { ressourcen, resKind, deckung, RES_KINDS } from './resources.js';
@@ -531,11 +531,13 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     box.append(wrap);
     entwurfBinden({
       start: zeit, ende, dauer, gruppe: [wrap], markiere: wrap, popIn: wrap, nurZeit: true, onHinweis,
-      // Tag: der des Soundchecks, ohne Termin der des Acts, sonst der Planbeginn.
+      // Tag: der des Soundchecks; ohne Termin der Showtag des Acts (vor 06:00 der
+      // Vortag), sonst der Planbeginn.
       tag: () => {
         const jetzt = store.state.tasks.find((x) => x.id === sc.id);
-        const q = jetzt && !ohneTermin(jetzt) ? jetzt : cur(t.id);
-        return q && !ohneTermin(q) ? String(q.start).slice(0, 10) : String(store.state.project.start).slice(0, 10);
+        if (jetzt && !ohneTermin(jetzt)) return String(jetzt.start).slice(0, 10);
+        const act = cur(t.id);
+        return act && !ohneTermin(act) ? showTagVon(act.start) : String(store.state.project.start).slice(0, 10);
       },
       lesen: () => store.state.tasks.find((x) => x.id === sc.id),
       uebernehmen: ({ start, end }) => send({ type: 'moveTask', id: sc.id, start, end }),

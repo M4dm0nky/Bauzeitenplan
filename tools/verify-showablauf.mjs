@@ -866,7 +866,7 @@ await check('Showablauf: Zeile ohne Termin beginnt bündig mit terminierten Zeil
   await p.waitForTimeout(900);
   const x = await p.evaluate(() => {
     const links = (n) => Math.round(n.getBoundingClientRect().left * 10) / 10;
-    const zeilen = [...document.querySelectorAll('.bz-lab-task')];
+    const zeilen = [...document.querySelectorAll('.bz-lab-task:not(.is-child)')];
     const ohne = zeilen.find((z) => z.classList.contains('is-ohne-termin'));
     const mit = zeilen.find((z) => z.querySelector('.bz-lab-zeit[data-at]'));
     return { ohne: ohne ? links(ohne.querySelector('.bz-lab-name')) : null, mit: mit ? links(mit.querySelector('.bz-lab-name')) : null };

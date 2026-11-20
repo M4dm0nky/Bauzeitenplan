@@ -1,4 +1,4 @@
-import { artOf, abschnittOf, imAbschnitt, sichtGewerke, sichtTasks, programmFenster, punktLabel, punktTypen, punktKompakt, typHinweis, abschnitte, abschnittLabel, ART_FUER, ABSCHNITTE, EBENEN, programmTage, amTag } from '../js/ebene.js';
+import { artOf, abschnittOf, imAbschnitt, sichtGewerke, sichtTasks, programmFenster, punktLabel, punktTypen, punktKompakt, typHinweis, abschnitte, abschnittLabel, ART_FUER, ABSCHNITTE, EBENEN, programmTage, amTag, showTagVon } from '../js/ebene.js';
 import { toMin } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
@@ -324,6 +324,15 @@ test('abschnitte(): ein terminloser Eintrag zieht die Sortierung nicht auf 1970'
   const st = { project: { abschnitte: [{ id: 'a1', label: 'A1' }, { id: 'a2', label: 'A2' }] },
     tasks: [{ ...OTe('x'), abschnitt: 'a1' }, { ...T('y', 'b0', '2026-08-29T07:00', '2026-08-29T08:00'), abschnitt: 'a2' }] };
   assert.deepEqual(abschnitte(st).slice(-2).map(([k]) => k), ['a2', 'a1']);
+});
+
+test('showTagVon: vor 06:00 gehört der Eintrag zum Vortag, ab 06:00 zum eigenen Tag', () => {
+  assert.equal(showTagVon('2026-08-30T01:00'), '2026-08-29');
+  assert.equal(showTagVon('2026-08-30T05:59'), '2026-08-29');
+  assert.equal(showTagVon('2026-08-30T06:00'), '2026-08-30');
+  assert.equal(showTagVon('2026-08-30T21:30'), '2026-08-30');
+  assert.equal(showTagVon('2026-09-01T00:30'), '2026-08-31');   // Monatsgrenze
+  assert.equal(showTagVon('2026-01-01T02:00'), '2025-12-31');   // Jahresgrenze
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

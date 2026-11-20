@@ -701,13 +701,14 @@ await check('das gewechselte Projekt ist danach das aktive', async () => {
   return n === 'Testprojekt Halle 7' ? true : 'nach Reload: ' + n;
 });
 
-await check('Tabelle: ein offener Entwurf überlebt keinen Projektwechsel (js/table.js leert die Entwurfs-Map)', async () => {
+await check('Wechsel über den Projektdialog verwirft den Entwurf', async () => {
   // Zeilen-Ids (t0, t1 …) wiederholen sich zwischen Projekten: ein Entwurf aus A
   // würde sonst in der gleichnamigen Zeile von B wieder aufgehen. Der Wechsel
   // läuft per DOM-click, damit kein focusout den Entwurf schon vorher verwirft.
   // Projekt B ist eine KOPIE von A (gleiche Zeilen-Ids UND gleiche Zeiten) — nur
   // dann würde die Wiederöffnungs-Regel (Zeiten stimmen) allein den Entwurf
-  // zurückholen; verhindert wird es nur durch das Leeren der Map beim Wechsel.
+  // zurückholen. Hier greift aber schon focusout (der Dialog nimmt den Fokus) — die
+  // Sperre für table.js:72 selbst steht in verify-sync («Löschen unter offenem Entwurf»).
   await page.evaluate(() => {
     const idx = JSON.parse(localStorage.getItem('bzp_projects'));
     const a = idx.find((e) => e.name === 'Testprojekt Halle 7');
