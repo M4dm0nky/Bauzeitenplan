@@ -185,8 +185,12 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     // fallen sichtbar weg.
     for (const [id] of [...entwuerfe]) {
       if (verbraucht.has(id)) continue;
+      const x = entwuerfe.get(id), t = cur(id);
       entwuerfe.delete(id);
-      if (!cur(id) && onHinweis) onHinweis('Entwurf verworfen: Vorgang wurde geändert');
+      // Die eigene, gelungene Übernahme (Zeile durch einen Filter ausgeblendet)
+      // ist kein Verwerfen; alles andere sagt es.
+      if (x && x.eigen && t && (t.start ?? null) === x.start && (t.end ?? null) === x.end) continue;
+      if (onHinweis) onHinweis('Entwurf verworfen: Vorgang wurde geändert');
     }
     // Der Fokus gehört weiter in das Feld, in dem der Entwurf entstand.
     if (fokusAlt && wiederoffen.has(fokusAlt.id) && /c-(start|dur|end)/.test(fokusAlt.cls)) fokusZurueck(fokusAlt);
@@ -513,12 +517,22 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
         },
         uebernehmen: ({ start, end }, beruehrt) => {
           // Vor dem Senden merken: der Store rendert beim Erfolg SOFORT neu. Ist
-          // die Übernahme dort angekommen, verwirft der Aufbau den Merker still;
-          // bei Ablehnung steht der Entwurf markiert wieder da.
+          // die Übernahme dort angekommen, verwirft der Aufbau den Merker still.
+          // Bewusst NICHT über send(): dessen Render bei Ablehnung verbrauchte den
+          // Entwurf, und ein zweiter Render ließe ihn verschwinden. Bei Ablehnung
+          // trägt der Merker den Grund, und es gibt genau EINEN Neuaufbau.
           const now = cur(t.id);
-          entwuerfe.set(t.id, { alt: { start: now ? now.start ?? null : null, end: now ? now.end ?? null : null }, start, end, beruehrt, fehler: null });
-          const r = send({ type: 'moveTask', id: t.id, start, end });
-          if (r && r.ok === false) { const x = entwuerfe.get(t.id); if (x) x.fehler = r.error; render(); }
+          const merker = { alt: { start: now ? now.start ?? null : null, end: now ? now.end ?? null : null }, start, end, beruehrt, fehler: null, eigen: true };
+          entwuerfe.set(t.id, merker);
+          const r = store.apply({ type: 'moveTask', id: t.id, start, end });
+          if (r && r.ok === false) {
+            lastError = r.error;
+            if (onConflicts) onConflicts({ error: r.error });
+            merker.fehler = r.error;
+            entwuerfe.set(t.id, merker);
+            render();
+            return { ok: false, error: r.error, gehalten: true };   // die Tabelle hält den Entwurf
+          }
           return r;
         },
       });

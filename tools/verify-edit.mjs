@@ -1851,6 +1851,82 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
   } finally { await cz.close(); }
 }
 
+console.log('\nENTWURF: DER STORE LEHNT ✓ AB (echte Tabelle, Store absichtlich widerspenstig)');
+{
+  // Ein echter Ablehnungsfall ist in der Oberfläche kaum herzustellen: jede
+  // Änderung am Vorgang baut die Tabelle vorher neu auf und verwirft den
+  // Entwurf sichtbar. Deshalb bekommt DIESE Seite einen Store, dessen moveTask
+  // auf Zuruf («window.__lehneAb») ablehnt — alles andere ist die echte App.
+  // Ohne Service Worker: dessen Abruf läuft an page.route vorbei, der Patch griffe nicht.
+  const cr = await browser.newContext({ viewport: { width: 1600, height: 950 }, serviceWorkers: 'block' });
+  await cr.route('**/js/store.js*', async (route) => {
+    const src = readFileSync(join(root, 'js/store.js'), 'utf8')
+      .replace('\n  moveTask(state, cmd) {', "\n  moveTask(state, cmd) {\n    if (globalThis.__lehneAb) return 'Test: Die Zeiten ergeben sich aus den Untervorgängen.';");
+    // «removeTask(state, cmd) {» enthält «moveTask(state, cmd) {» — deshalb mit Zeilenanfang suchen.
+    if (!src.includes('__lehneAb')) throw new Error('Store-Patch greift nicht');
+    await route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: src });
+  });
+  const pr = await cr.newPage();
+  const fehlerR = [];
+  pr.on('pageerror', (e) => fehlerR.push(e.message));
+  await pr.goto(BASE + '/index.html?plan=leer');
+  await pr.waitForTimeout(700);
+  await festivalMitDaten(pr, 'Ablehnung', { venue: 'Halle' });
+  await pr.waitForTimeout(800);
+  await pr.locator('[data-view="tabelle"]').click();
+  await pr.waitForTimeout(500);
+  const rid = await pr.evaluate(() => document.querySelector('.tb-r:not(.is-parent):not(.is-child)').dataset.id);
+  const zeile = pr.locator(`.tb-r[data-id="${rid}"]`);
+  const v0 = await zeile.locator('.c-start input').inputValue();
+  const speicher = () => pr.evaluate(() => {
+    const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_') && JSON.parse(localStorage.getItem(x)).project.name === 'Ablehnung');
+    return JSON.stringify(JSON.parse(localStorage.getItem(k)).tasks.map((t) => [t.id, t.start, t.end]));
+  });
+  const zaehle = () => pr.evaluate(() => ({ entwurf: document.querySelectorAll('.tb-r.is-entwurf').length, grund: document.querySelectorAll('.tb-entwurf-grund').length }));
+  const unrelated = async () => {   // eine fremde Änderung samt Undo → zwei Neuaufbauten
+    const t = pr.locator(`.tb-r:not([data-id="${rid}"]) .c-title input`).first();
+    await t.fill('Fremdänderung'); await t.press('Tab');
+    await pr.waitForTimeout(300);
+    await pr.keyboard.press('Meta+z');
+    await pr.waitForTimeout(400);
+  };
+  for (const weg of ['✓', 'Enter']) {
+    await check(`Ablehnung per ${weg}: Entwurf bleibt markiert mit dem Grund, ✓ gesperrt, nichts gespeichert`, async () => {
+      const s0 = await speicher();
+      await pr.evaluate(() => { globalThis.__lehneAb = true; });
+      if (weg === '✓') {
+        await zeile.locator('.c-start input').fill(plusTag(v0));
+        await pr.waitForTimeout(150);
+        await zeile.locator('.en-ok').click();
+      } else {
+        const d = zeile.locator('.tb-dur');
+        await d.fill('7h');
+        await d.press('Enter');
+      }
+      await pr.waitForTimeout(500);
+      const z = await zaehle();
+      if (z.entwurf !== 1) return z.entwurf + ' markierte Zeilen';
+      const grund = (await pr.locator('.tb-entwurf-grund td').first().textContent()) || '';
+      if (!/Untervorgängen/.test(grund)) return 'Grund fehlt: «' + grund + '»';
+      if (!(await zeile.locator('.en-ok').isDisabled())) return '✓ nicht gesperrt';
+      return (await speicher()) === s0 ? true : 'gespeichert';
+    });
+    await check(`… ✗ räumt auf, und ein späterer fremder Neuaufbau bringt den Entwurf NICHT zurück (${weg})`, async () => {
+      await zeile.locator('.en-no').click();
+      await pr.evaluate(() => { globalThis.__lehneAb = false; });
+      await pr.waitForTimeout(200);
+      let z = await zaehle();
+      if (z.entwurf || z.grund) return 'nach ✗ noch da: ' + JSON.stringify(z);
+      if ((await zeile.locator('.c-start input').inputValue()) !== v0) return 'Feld zeigt nicht den gespeicherten Wert';
+      await unrelated();
+      z = await zaehle();
+      return !z.entwurf && !z.grund ? true : 'Entwurf taucht wieder auf: ' + JSON.stringify(z);
+    });
+  }
+  await check('keine JS-Fehler im widerspenstigen Lauf', async () => (fehlerR.length ? fehlerR[0] : true));
+  await cr.close();
+}
+
 console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
 {
   const cv = await browser.newContext({ viewport: { width: 1600, height: 950 } });

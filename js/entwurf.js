@@ -78,7 +78,7 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
     if (dauer) dauer.classList.toggle('is-bad', !!fehlerEingabe);
   }
 
-  const melden = () => { if (onAendern) onAendern(e ? { ...e } : null, new Set(beruehrt), fehlerStore); };
+  const melden = () => { if (markiere.isConnected && onAendern) onAendern(e ? { ...e } : null, new Set(beruehrt), fehlerStore); };
 
   function zu() {
     e = null; fehlerEingabe = null; fehlerStore = null; beruehrt = new Set();
@@ -136,7 +136,7 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
       fertig = false;
       e = x; beruehrt = b; fehlerStore = r.error || 'Der Store hat die Änderung abgelehnt.';
       malen(null);
-      melden();
+      if (!r.gehalten) melden();   // hält der Aufrufer den Entwurf selbst, schreibt dieser Knoten nichts mehr
     }
   }
 
