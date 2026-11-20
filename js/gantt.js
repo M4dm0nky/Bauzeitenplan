@@ -1475,7 +1475,7 @@ export function createGantt(root, opts = {}) {
     const show = () => {
       tip.replaceChildren();
       const h = el('div', 'bz-tip-h');
-      if (g) { const d = el('span', 'bz-dot'); d.style.setProperty('--gw', g.light); h.append(d); }
+      if (g) { const d = el('span', 'bz-dot'); d.style.setProperty('--gw', gewerkVar(g.slot)); if (gewerkTexture(g.slot)) d.dataset.tex = '1'; h.append(d); }
       h.append(el('span', 'bz-tip-g', g ? g.name : 'Projekt'));
       tip.append(h, el('div', 'bz-tip-t', t.title));
       const dl = el('dl', 'bz-tip-dl');

@@ -478,6 +478,9 @@ function mount() {
   // ── Tastatur ──
   document.addEventListener('keydown', (e) => {
     const mod = e.metaKey || e.ctrlKey;
+    // ⌘Z in einem Feld gehört dem Browser; sonst nähme es den letzten Store-Befehl
+    // zurück und würfe die Eingabe weg.
+    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]') && e.key.toLowerCase() === 'z') return;
     if (!mod) return;
     if (e.key.toLowerCase() === 'z') {
       e.preventDefault();
@@ -1185,7 +1188,9 @@ function refreshLive() {
   $('vz-txt').hidden = !gantt.isLive;
   // planNow statt now: gezählt wird gegen den VERSCHOBENEN Plan. Wer fünf
   // Minuten angesagt hat und exakt fünf Minuten spät ist, ist im Plan.
-  const st = liveStats(store.state.tasks, gantt.liveInfo().planNow, buehnenIds(store.state));
+  // Die Leiste zählt die Sicht, wie die Show-Kopfzeile (sonst zählt sie Vorgänge,
+  // die gerade gar nicht zu sehen sind).
+  const st = liveStats(gantt.sichtbareTasks(), gantt.liveInfo().planNow, buehnenIds(store.state));
   const n = $('live-bar');
   // Im Showablauf trägt die große Kopfzeile dieselbe Aussage, nur genauer und
   // auf den Tag bezogen. Beides nebeneinander widerspräche sich sichtbar: hier

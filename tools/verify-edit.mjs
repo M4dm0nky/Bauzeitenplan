@@ -37,6 +37,12 @@ page.on('pageerror', (e) => errors.push('JS: ' + e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
 let problems = 0;
+// ⌘Z in einem fokussierten Feld gehört dem Browser (Fund 11). Wer den Store-
+// Undo prüft, löst vorher den Fokus, sonst greift der Guard in app.js.
+const undoOhneFeld = async (pg = page) => {
+  await pg.evaluate(() => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); });
+  await pg.keyboard.press('Meta+z');
+};
 const check = async (name, fn) => {
   let r;
   try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
@@ -116,14 +122,44 @@ await check('Unsinn als Dauer wird abgelehnt, alter Wert bleibt', async () => {
 await check('EIN ⌘Z nimmt genau EINE Änderung zurück', async () => {
   // Regression: 'change' + 'blur' hatten jede Änderung doppelt eingebucht —
   // ein ⌘Z bewirkte scheinbar nichts.
-  await page.keyboard.press('Meta+z');   // die Dauer 6h zurück
+  await undoOhneFeld();   // die Dauer 6h zurück
   await page.waitForTimeout(400);
   const d = await page.locator('.tb-r .tb-dur').first().inputValue();
   if (d === '6h') return 'ein ⌘Z reichte nicht — Befehl liegt doppelt auf dem Stapel';
-  await page.keyboard.press('Meta+z');   // die Umbenennung zurück
+  await undoOhneFeld();   // die Umbenennung zurück
   await page.waitForTimeout(400);
   const v = await page.locator('.tb-r .c-title input').first().inputValue();
   return v !== 'Umbenannt durch Test' ? true : 'Umbenennung nicht zurück: ' + v;
+});
+await check('⌘Z im Titelfeld nimmt keinen Store-Befehl zurück (Verschiebung bleibt)', async () => {
+  // Regression: das globale ⌘Z lief auch aus einem Textfeld heraus und machte
+  // den letzten Store-Befehl (hier das Verschieben) rückgängig. Im Feld gehört
+  // ⌘Z dem Browser.
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(400);
+  const bar = page.locator('.bz-bar[data-task]').first();
+  const id = await bar.getAttribute('data-task');
+  const vorher = await bar.getAttribute('data-from');
+  await bar.click();
+  await page.waitForTimeout(200);
+  await page.keyboard.press('Alt+ArrowRight');
+  await page.waitForTimeout(400);
+  const nach = await page.locator(`[data-task="${id}"]`).first().getAttribute('data-from');
+  if (nach === vorher) return 'Alt+→ verschob nichts (' + vorher + ')';
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(400);
+  const feld = page.locator('.tb-r .c-title input').first();
+  await feld.click();
+  await feld.press('End');
+  await feld.pressSequentially('QQ');
+  await page.keyboard.press('Meta+z');   // bewusst OHNE Fokuswechsel: ⌘Z im Feld gehört dem Browser
+  await page.waitForTimeout(400);
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(400);
+  const danach = await page.locator(`[data-task="${id}"]`).first().getAttribute('data-from');
+  await page.locator('[data-view="tabelle"]').click();   // die Folgeprüfungen erwarten die Tabelle
+  await page.waitForTimeout(300);
+  return danach === nach ? true : 'Verschiebung zurückgenommen: ' + danach + ' statt ' + nach;
 });
 await check('neuen Vorgang anlegen', async () => {
   const before = await page.locator('.tb-r').count();
@@ -168,11 +204,11 @@ await check('«Ist ok» hakt den Konflikt ab — der Konflikt-Knopf verschwindet
   return (await page.locator('#resolve').isHidden()) ? true : 'Konfliktknopf noch da';
 });
 await check('⌘Z nimmt das Abhaken zurück (Konflikt wieder da)', async () => {
-  await page.keyboard.press('Meta+z');
+  await undoOhneFeld();
   await page.waitForTimeout(400);
   return !(await page.locator('#resolve').isHidden()) ? true : 'Konflikt nicht zurück';
 });
-await page.keyboard.press('Meta+z');  // auch das Vorziehen zurück
+await undoOhneFeld();  // auch das Vorziehen zurück
 await page.waitForTimeout(400);
 
 console.log('\nPRÜF-LISTE: KRITISCH');
@@ -190,7 +226,7 @@ await check('«Gesehen» senkt die kritisch-Zahl; ⌘Z bringt sie zurück', asyn
   await page.waitForTimeout(200);
   const after = Number(await page.locator('[data-kpi="kritisch"] .kpi-v').textContent());
   if (!(after < before)) return `kritisch nicht gesunken (${before} → ${after})`;
-  await page.keyboard.press('Meta+z');
+  await undoOhneFeld();
   await page.waitForTimeout(400);
   const back = Number(await page.locator('[data-kpi="kritisch"] .kpi-v').textContent());
   return back === before ? true : `⌘Z hat kritisch nicht zurückgeholt (${after} → ${back})`;
@@ -583,7 +619,7 @@ await check('Entf entfernt die ausgewählte Verknüpfung, ⌘Z holt sie zurück'
   const weg = await pfeile();
   if (weg !== vorher - 1) return `${vorher} → ${weg} statt −1`;
   if (!(await page.locator('#ins').isHidden())) return 'das Panel zeigt noch die gelöschte Verknüpfung';
-  await page.keyboard.press('Meta+z');
+  await undoOhneFeld();
   await page.waitForTimeout(400);
   const zurueck = await pfeile();
   return zurueck === vorher ? true : `⌘Z bringt ${zurueck} statt ${vorher}`;
@@ -841,7 +877,7 @@ await check('✓ speichert EINEN Schritt: Start geändert, Entwurf weg, ein ⌘Z
   if (await page.locator('.tb-r.is-entwurf').count()) return 'Entwurf bleibt offen';
   const nach = await stand();
   if (nach[enId][0] !== plusTag(enV0)) return 'Start nicht gespeichert: ' + nach[enId][0];
-  await page.keyboard.press('Meta+z');
+  await undoOhneFeld();
   const zurueck = await stand();
   return JSON.stringify(zurueck) === JSON.stringify(enS0) ? true : 'ein ⌘Z reichte nicht';
 });
@@ -878,7 +914,7 @@ await check('Enter speichert (Dauer getippt) — ein ⌘Z stellt her', async () 
   const nach = await stand();
   if (page.locator('.tb-r.is-entwurf') && (await page.locator('.tb-r.is-entwurf').count())) return 'Entwurf bleibt offen';
   if (JSON.stringify(nach[enId]) === JSON.stringify(enS0[enId])) return 'Enter speicherte nicht';
-  await page.keyboard.press('Meta+z');
+  await undoOhneFeld();
   return JSON.stringify(await stand()) === JSON.stringify(enS0) ? true : 'ein ⌘Z reichte nicht';
 });
 await check('Ein Feld leer: ✓ gesperrt, Grund steht daneben; Verwerfen räumt auf', async () => {
@@ -921,7 +957,7 @@ await check('Start und Ende leeren + ✓ = «ohne Termin» (Gantt: Kennzeichnung
   const marke = await page.locator('.bz-lab-ohne').count();
   await page.locator('[data-view="tabelle"]').click();
   await page.waitForTimeout(300);
-  await page.keyboard.press('Meta+z');
+  await undoOhneFeld();
   if (marke < 1) return 'keine Kennzeichnung «ohne Termin»';
   return JSON.stringify(await stand()) === JSON.stringify(enS0) ? true : 'ein ⌘Z reichte nicht';
 });
@@ -1012,7 +1048,9 @@ await check('ein ⌘Z in einer ANDEREN Zeile wirft den offenen Entwurf nicht weg
   const f = page.locator(`.tb-r[data-id="${enId}"] .c-start input`);
   await f.fill(plusTag(enV0));
   await page.waitForTimeout(200);
-  await page.keyboard.press('Meta+z');      // nimmt den Titel der anderen Zeile zurück
+  // Store-Undo über den Knopf OHNE Fokuswechsel (dispatchEvent): ein echter
+  // Klick aufs Feld-Umfeld verwirft den Entwurf (Absicht), das soll dieser Check nicht prüfen.
+  await page.locator('#undo').dispatchEvent('click');
   await page.waitForTimeout(500);
   const titel = await page.locator(`.tb-r[data-id="${andere}"] .c-title input`).inputValue();
   const offen = await page.locator(`.tb-r[data-id="${enId}"].is-entwurf`).count();
@@ -1025,7 +1063,7 @@ await check('ein ⌘Z in einer ANDEREN Zeile wirft den offenen Entwurf nicht weg
   await page.locator(`.tb-r[data-id="${enId}"] .en-ok`).click();    // und lässt sich noch übernehmen
   await page.waitForTimeout(300);
   const nach = await stand();
-  await page.keyboard.press('Meta+z');
+  await undoOhneFeld();
   return nach[enId][0] === plusTag(enV0) ? true : 'Übernahme nach dem Neuaufbau: ' + nach[enId][0];
 });
 await check('hat sich der Vorgang unter dem Entwurf geändert, fällt er SICHTBAR weg (Meldung)', async () => {
@@ -1036,7 +1074,7 @@ await check('hat sich der Vorgang unter dem Entwurf geändert, fällt er SICHTBA
   const f2 = page.locator(`.tb-r[data-id="${enId}"] .c-start input`);
   await f2.fill(plusTag(plusTag(enV0)));
   await page.waitForTimeout(200);
-  await page.keyboard.press('Meta+z');      // nimmt GENAU diesen Vorgang zurück
+  await undoOhneFeld();      // nimmt GENAU diesen Vorgang zurück
   await page.waitForTimeout(500);
   const offen = await page.locator('.tb-r.is-entwurf').count();
   const toast = await page.locator('#toast').textContent();
@@ -1064,7 +1102,7 @@ await check('Panel: Start ändern = Entwurf (✓ ✗), ✗ verwirft, ✓ speiche
   await page.waitForTimeout(300);
   const s1 = await stand();
   if (JSON.stringify(s1) === JSON.stringify(s0)) return '✓ speicherte nicht';
-  await page.keyboard.press('Meta+z');
+  await undoOhneFeld();
   return JSON.stringify(await stand()) === JSON.stringify(s0) ? true : 'ein ⌘Z reichte nicht';
 });
 await check('Panel: ein Undo in der TABELLE (anderer Vorgang) wirft den offenen Panel-Entwurf nicht weg', async () => {
@@ -1088,7 +1126,7 @@ await check('Panel: ein Undo in der TABELLE (anderer Vorgang) wirft den offenen 
   await st.fill(plusTag(v0));
   await page.waitForTimeout(200);
   if (!(await page.locator('.ins-termin.is-entwurf').count())) return 'Panel-Entwurf nicht offen';
-  await page.keyboard.press('Meta+z');
+  await page.locator('#undo').dispatchEvent('click');   // Store-Undo ohne Fokuswechsel, Panel-Entwurf bleibt offen
   await page.waitForTimeout(1200);
   if ((await titel()).includes('Panel-Undo-Test')) return 'der Undo hat nicht gegriffen';
   const offen = await page.locator('.ins-termin.is-entwurf').count();
@@ -1147,7 +1185,7 @@ await check('Gewerk ganz nach oben ziehen — Farbe bleibt, ⌘Z zurück', async
     .evaluate((n) => getComputedStyle(n).backgroundColor);
   if (colorAfter !== colorBefore) return `Farbe hat sich beim Sortieren geändert: ${colorBefore} → ${colorAfter}`;
 
-  await page.keyboard.press('Meta+z');
+  await undoOhneFeld();
   await page.waitForTimeout(400);
   const undone = await names();
   if (undone.join('|') !== before.join('|')) return '⌘Z hat die Reihenfolge nicht zurückgeholt';
@@ -2076,7 +2114,7 @@ console.log('\nENTWURF: DER STORE LEHNT ✓ AB (echte Tabelle, Store absichtlich
     const t = pr.locator(`.tb-r:not([data-id="${rid}"]) .c-title input`).first();
     await t.fill('Fremdänderung'); await t.press('Tab');
     await pr.waitForTimeout(300);
-    await pr.keyboard.press('Meta+z');
+    await undoOhneFeld(pr);
     await pr.waitForTimeout(400);
   };
   for (const weg of ['✓', 'Enter']) {
@@ -2122,7 +2160,7 @@ console.log('\nENTWURF: DER STORE LEHNT ✓ AB (echte Tabelle, Store absichtlich
     await f.fill(plusTag(await f.inputValue()));
     await pr.waitForTimeout(200);
     if (!(await pr.locator(`.tb-r[data-id="${neu}"].is-entwurf`).count())) return 'Entwurf nicht offen';
-    await pr.keyboard.press('Meta+z');      // nimmt das Anlegen zurück: die Zeile gibt es nicht mehr
+    await undoOhneFeld(pr);      // nimmt das Anlegen zurück: die Zeile gibt es nicht mehr
     await pr.waitForTimeout(500);
     const da = await pr.locator(`.tb-r[data-id="${neu}"]`).count();
     const toast = (await pr.locator('#toast').textContent()) || '';
@@ -2500,7 +2538,7 @@ console.log('\nMEILENSTEIN OHNE TERMIN DATIEREN (Vorlage, Tabelle und Panel)');
     const g = await gespeichert(msIds[0]);
     if (g[0] !== '2026-12-01T09:00' || g[1] !== '2026-12-01T09:00') return 'gespeichert: ' + JSON.stringify(g);
     await mp.screenshot({ path: join(here, 'shots', 'edit-meilenstein-datiert.png') });
-    await mp.keyboard.press('Meta+z');
+    await undoOhneFeld(mp);
     const z2 = await gespeichert(msIds[0]);
     return z2[0] === null && z2[1] === null ? true : 'ein ⌘Z: ' + JSON.stringify(z2);
   });
@@ -2536,6 +2574,34 @@ console.log('\nMEILENSTEIN OHNE TERMIN DATIEREN (Vorlage, Tabelle und Panel)');
   await check('keine JS-Fehler im Meilenstein-Block', async () => (fehlerM.length ? fehlerM[0] : true));
   await cm.close();
 }
+
+console.log('\nABSCHNITT IM PANEL');
+// Das Panel zeigt das Abschnittsfeld nur bei Bühnen-Einträgen. Die Festival-
+// Vorlage hat keine Bühne, daher der Plan mit Hauptbühne (wie verify-showablauf).
+await page.goto(BASE + '/index.html?plan=klassentreffen&ansicht=show');
+await page.waitForSelector('[data-ansicht="show"][aria-pressed="true"]', { timeout: 20000 });
+await page.waitForTimeout(900);
+await check('eigener Abschnitt «Load-in» erscheint im Panel-Abschnittsfeld', async () => {
+  // Der Abschnitt wird im Showablauf-Tabellenfeld angelegt (+ Neu…); danach
+  // öffnet der Balken dieses Eintrags das Panel, das den Abschnitt gewählt zeigt.
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(400);
+  const titel = await page.locator('.tb-r .c-title input').first().inputValue();
+  await page.locator('.tb-r .c-abs select').first().selectOption('__neu__');
+  await page.waitForTimeout(400);
+  if (!(await page.locator('.tb-neuart').isVisible())) return 'kein Eingabefeld für den Abschnitt';
+  await page.locator('.tb-neuart-n').fill('Load-in');
+  await page.locator('.tb-neuart .btn-p').click();
+  await page.waitForTimeout(500);
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(400);
+  await page.locator('.bz-bar', { hasText: titel }).first().click();
+  await page.waitForTimeout(300);
+  const gewaehlt = await page.locator('#ins select')
+    .filter({ has: page.locator('option', { hasText: 'Load-in' }) })
+    .first().evaluate((s) => s.selectedOptions[0] && s.selectedOptions[0].textContent.trim());
+  return gewaehlt === 'Load-in' ? true : 'Panel-Abschnitt zeigt «' + gewaehlt + '»';
+});
 
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');

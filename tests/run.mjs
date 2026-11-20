@@ -197,6 +197,9 @@ check('Phasen-Farbe hängt an der ART: gantt.js klassiert nie nach ph.name', () 
   const s = js('gantt.js');
   return /bz-ph(ase)?-'\s*\+\s*ph\.name/.test(s) ? 'Klasse aus ph.name' : true;
 });
+check('gantt.js liest keine erfundene Gewerk-Eigenschaft (g.light)', () => {
+  return /\bg\.light\b/.test(js('gantt.js')) ? 'g.light in gantt.js' : true;
+});
 
 check('der Sync-Schlüssel (bzp_sync) kommt nie in die Plan-Schicht', () => {
   const s = readFileSync(join(root, 'js/persistence.js'), 'utf8');

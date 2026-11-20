@@ -228,8 +228,9 @@ daneben und einem Punkt am Tag, auf dem du gerade bist. Im Bauzeitenplan
 springt die Achse dorthin, im Showablauf wechselt der Showtag.
 
 Ganz unten das Zahnrad: **Einrichten** öffnet als Fenster über dem Plan, mit
-vier Reitern — Projekt (anlegen/wechseln, Export/Import, Drucken, Hell/Dunkel),
-Gewerke & Bühnen, **Personal & Maschinen**, **Arten & Abschnitte**. Der Plan
+sechs Reitern — Projekt (anlegen/wechseln, Export/Import, Drucken, Hell/Dunkel),
+Phasen, Gewerke & Bühnen, **Personal & Maschinen**, **Arten & Abschnitte**,
+Speicherort. Der Plan
 bleibt dahinter stehen; „Fertig" gibt dir genau den Ausschnitt zurück, bei dem
 du warst. Die schnellen Wege bleiben daneben bestehen — eine Bezeichnung legst
 du weiter mit „+ Neu…" im Auswahlfeld an, mitten im Tippen; Einrichten ist der

@@ -7,7 +7,7 @@ import { parseDuration, fmtDuration, local } from './conflicts.js';
 import { entwurfBinden } from './entwurf.js';
 import { toMin, toDate, computeSchedule, candidateGroups, ohneTermin } from './schedule.js';
 import { gewerkVar, gewerkTexture, hueVon, slotAus, HUES, MAX_SLOTS } from './palette.js';
-import { artOf, abschnittOf, ABSCHNITTE, showTagVon } from './ebene.js';
+import { artOf, abschnittOf, abschnitte, showTagVon } from './ebene.js';
 import { fmtFloat } from './timeaxis.js';
 import { el, toInput, STATUS } from './dom.js';
 import { ressourcen, resKind, deckung, RES_KINDS } from './resources.js';
@@ -262,10 +262,10 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
       // Setup läuft bis zum Showstart, Show danach — zwei Abläufe auf DERSELBEN
       // Bühne. Deshalb hängt der Abschnitt am Eintrag, nicht am Band.
       const asel = el('select');
-      for (const [v, label] of ABSCHNITTE) {
+      for (const [v, label] of abschnitte(store.state)) {
         const o = el('option', null, label);
         o.value = v;
-        if (v === abschnittOf(t)) o.selected = true;
+        if (v === (t.abschnitt || 'show')) o.selected = true;
         asel.append(o);
       }
       asel.onchange = () => send({ type: 'setTaskField', id: t.id, field: 'abschnitt', value: asel.value });
