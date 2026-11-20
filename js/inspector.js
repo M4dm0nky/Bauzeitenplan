@@ -22,9 +22,10 @@ const DEP_TYPES = [
 // Vorher schrieben vier Stellen an #ins.hidden — zwei hier, zwei in app.js —
 // und render() kannte die Ansicht nicht. Jede Änderung holte das Panel in der
 // Tabellen-Ansicht zurück. Ein Zustand, ein Besitzer: app.js.
-export function createInspector(root, { store, onError, onClose, onConfirm, openNeuFragen } = {}) {
+export function createInspector(root, { store, onError, onClose, onConfirm, openNeuFragen, onHinweis } = {}) {
   root.classList.add('ins');
   let sel = null;
+  let gezeigt = null;   // Stand des gezeigten Vorgangs beim Aufbau (für den Entwurf-Halter)
 
   const send = (cmd) => {
     const r = store.apply(cmd);
@@ -39,8 +40,20 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     render();
   }
 
+  // Jeder Store-Wechsel ruft render() — ein offener Entwurf (Start/Ende/Dauer)
+  // hat im Panel keinen eigenen Halter und ginge dabei still verloren. Deshalb:
+  // solange der gezeigte Vorgang UNVERÄNDERT existiert, bleibt das Panel stehen
+  // (ein ⌘Z in der Tabelle, ein Sync einer anderen Zeile). Ändert sich genau
+  // dieser Vorgang oder verschwindet er, fällt der Entwurf SICHTBAR weg —
+  // dieselbe Meldung wie in der Tabelle.
   function render() {
+    if (sel && sel.kind === 'task' && root.querySelector('.ins-termin.is-entwurf')) {
+      const t = cur(sel.id);
+      if (t && JSON.stringify(t) === gezeigt) return;
+      if (onHinweis) onHinweis('Entwurf verworfen: Vorgang wurde geändert');
+    }
     root.replaceChildren();
+    gezeigt = sel && sel.kind === 'task' && cur(sel.id) ? JSON.stringify(cur(sel.id)) : null;
     if (!sel) return;
 
     const head = el('div', 'ins-head');
@@ -159,7 +172,7 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     root.append(termin);
     entwurfBinden({
       start: st, ende: en, dauer: t.milestone ? null : du,
-      gruppe: [termin], markiere: termin, popIn: termin,
+      gruppe: [termin], markiere: termin, popIn: termin, onHinweis,
       lesen: () => cur(t.id),
       uebernehmen: ({ start, end }, beruehrt) => {
         const now = cur(t.id);

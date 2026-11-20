@@ -801,6 +801,8 @@ await check('Klick in eine andere Zeile verwirft den Entwurf — alter Wert, nic
   if (await page.locator('.tb-r.is-entwurf').count()) return 'Entwurf blieb offen';
   const v = await page.locator(`.tb-r[data-id="${enId}"] .c-start input`).inputValue();
   if (v !== enV0) return 'Feld zeigt ' + v;
+  const hinweis = (await page.locator('#toast').textContent()) || '';
+  if (!/Entwurf verworfen — ✓ oder Enter übernimmt/.test(hinweis) || !(await page.locator('#toast').isVisible())) return 'kein Hinweis beim Verlassen: «' + hinweis + '»';
   return JSON.stringify(await stand()) === JSON.stringify(enS0) ? true : 'gespeichert';
 });
 await check('Escape verwirft; ✗ verwirft', async () => {
@@ -1011,6 +1013,48 @@ await check('Panel: Start ändern = Entwurf (✓ ✗), ✗ verwirft, ✓ speiche
   if (JSON.stringify(s1) === JSON.stringify(s0)) return '✓ speicherte nicht';
   await page.keyboard.press('Meta+z');
   return JSON.stringify(await stand()) === JSON.stringify(s0) ? true : 'ein ⌘Z reichte nicht';
+});
+await check('Panel: ein Undo in der TABELLE (anderer Vorgang) wirft den offenen Panel-Entwurf nicht weg', async () => {
+  const titel = () => page.evaluate(() => {
+    const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_') && JSON.parse(localStorage.getItem(x)).project.name === 'Testprojekt Halle 7');
+    return JSON.parse(localStorage.getItem(k)).tasks.map((t) => t.title);
+  });
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(300);
+  const t = page.locator('.tb-r:not(.is-parent) .c-title input').first();
+  await t.fill('Panel-Undo-Test');
+  await t.press('Tab');
+  await page.waitForTimeout(1200);
+  if (!(await titel()).includes('Panel-Undo-Test')) return 'Umbenennung nicht angekommen';
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(400);
+  await page.locator('.bz-lab-task .bz-lab-name', { hasNotText: 'Panel-Undo-Test' }).nth(4).click();
+  await page.waitForTimeout(300);
+  const st = page.locator('.ins-termin input[type=datetime-local]').first();
+  const v0 = await st.inputValue();
+  await st.fill(plusTag(v0));
+  await page.waitForTimeout(200);
+  if (!(await page.locator('.ins-termin.is-entwurf').count())) return 'Panel-Entwurf nicht offen';
+  await page.keyboard.press('Meta+z');
+  await page.waitForTimeout(1200);
+  if ((await titel()).includes('Panel-Undo-Test')) return 'der Undo hat nicht gegriffen';
+  const offen = await page.locator('.ins-termin.is-entwurf').count();
+  const wert = await page.locator('.ins-termin input[type=datetime-local]').first().inputValue();
+  if (!offen) return 'Panel-Entwurf ist weg';
+  if (wert !== plusTag(v0)) return 'Entwurfswert ' + wert;
+  await page.locator('.ins-termin .en-no').click();   // aufräumen
+  return true;
+});
+await check('Panel: Klick aus den Feldern verwirft den Entwurf MIT Hinweis (✓ oder Enter übernimmt)', async () => {
+  const st = page.locator('.ins-termin input[type=datetime-local]').first();
+  const v0 = await st.inputValue();
+  await st.fill(plusTag(v0));
+  await page.waitForTimeout(200);
+  await page.locator('.ins-title').click();
+  await page.waitForTimeout(300);
+  const hinweis = (await page.locator('#toast').textContent()) || '';
+  if (await page.locator('.ins-termin.is-entwurf').count()) return 'Entwurf blieb offen';
+  return /Entwurf verworfen — ✓ oder Enter übernimmt/.test(hinweis) && (await page.locator('#toast').isVisible()) ? true : 'Hinweis: «' + hinweis + '»';
 });
 await page.locator('[data-view="gantt"]').click();
 await page.waitForTimeout(300);
@@ -1864,13 +1908,16 @@ console.log('\nENTWURF: DER STORE LEHNT ✓ AB (echte Tabelle, Store absichtlich
       .replace('\n  moveTask(state, cmd) {', "\n  moveTask(state, cmd) {\n    if (globalThis.__lehneAb) return 'Test: Die Zeiten ergeben sich aus den Untervorgängen.';");
     // «removeTask(state, cmd) {» enthält «moveTask(state, cmd) {» — deshalb mit Zeilenanfang suchen.
     if (!src.includes('__lehneAb')) throw new Error('Store-Patch greift nicht');
-    await route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: src });
+    // Marker IN der Seite: beweist, dass der Browser die gepatchte Fassung geladen hat.
+    await route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: 'globalThis.__storePatch = true;\n' + src });
   });
   const pr = await cr.newPage();
   const fehlerR = [];
   pr.on('pageerror', (e) => fehlerR.push(e.message));
   await pr.goto(BASE + '/index.html?plan=leer');
   await pr.waitForTimeout(700);
+  await check('Store-Patch greift in der Seite (sonst wäre jede Ablehnungsprüfung hohl)', async () =>
+    (await pr.evaluate(() => globalThis.__storePatch === true)) ? true : 'die Seite lief mit dem ungepatchten Store');
   await festivalMitDaten(pr, 'Ablehnung', { venue: 'Halle' });
   await pr.waitForTimeout(800);
   await pr.locator('[data-view="tabelle"]').click();
@@ -1923,6 +1970,24 @@ console.log('\nENTWURF: DER STORE LEHNT ✓ AB (echte Tabelle, Store absichtlich
       return !z.entwurf && !z.grund ? true : 'Entwurf taucht wieder auf: ' + JSON.stringify(z);
     });
   }
+  await check('Entwurf in einer Zeile, die danach nicht mehr gerendert wird (Anlegen rückgängig), fällt SICHTBAR weg', async () => {
+    const ids0 = await pr.locator('.tb-r').evaluateAll((l) => l.map((r) => r.dataset.id));
+    await pr.locator('.tb-add').first().click();
+    await pr.waitForTimeout(500);
+    const neu = (await pr.locator('.tb-r').evaluateAll((l) => l.map((r) => r.dataset.id))).find((i) => !ids0.includes(i));
+    if (!neu) return 'keine neue Zeile';
+    const f = pr.locator(`.tb-r[data-id="${neu}"] .c-start input`);
+    await f.fill(plusTag(await f.inputValue()));
+    await pr.waitForTimeout(200);
+    if (!(await pr.locator(`.tb-r[data-id="${neu}"].is-entwurf`).count())) return 'Entwurf nicht offen';
+    await pr.keyboard.press('Meta+z');      // nimmt das Anlegen zurück: die Zeile gibt es nicht mehr
+    await pr.waitForTimeout(500);
+    const da = await pr.locator(`.tb-r[data-id="${neu}"]`).count();
+    const toast = (await pr.locator('#toast').textContent()) || '';
+    const z = await zaehle();
+    if (da) return 'Zeile noch da — der Undo hat nicht gegriffen';
+    return !z.entwurf && !z.grund && /Entwurf verworfen/.test(toast) && (await pr.locator('#toast').isVisible()) ? true : `entwurf=${z.entwurf} grund=${z.grund} toast=«${toast}»`;
+  });
   await check('keine JS-Fehler im widerspenstigen Lauf', async () => (fehlerR.length ? fehlerR[0] : true));
   await cr.close();
 }
@@ -2250,6 +2315,84 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
   await pp.screenshot({ path: join(here, 'shots', 'phasen-tab-dunkel.png') });
   await check('keine JS-Fehler im Phasen-Block', async () => (fehlerP.length ? fehlerP[0] : true));
   await cp.close();
+}
+
+console.log('\nMEILENSTEIN OHNE TERMIN DATIEREN (Vorlage, Tabelle und Panel)');
+{
+  const cm = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const mp = await cm.newPage();
+  const fehlerM = [];
+  mp.on('pageerror', (e) => fehlerM.push(e.message));
+  await mp.goto(BASE + '/index.html?plan=leer');
+  await mp.waitForTimeout(700);
+  await mp.locator('#dlg .dlg-f input').first().fill('Meilenstein-Test');
+  await mp.locator('#dlg .dlg-act .btn-p').click();
+  await mp.waitForTimeout(900);
+  await mp.locator('[data-view="tabelle"]').click();
+  await mp.waitForTimeout(500);
+  const gespeichert = (id) => mp.evaluate(async (i) => {
+    await new Promise((r) => setTimeout(r, 1100));
+    const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_') && JSON.parse(localStorage.getItem(x)).project.name === 'Meilenstein-Test');
+    const t = JSON.parse(localStorage.getItem(k)).tasks.find((x) => x.id === i);
+    return [t.start, t.end, t.status, t.progress];
+  }, id);
+  const msIds = await mp.locator('.tb-r.is-ms').evaluateAll((l) => l.map((r) => r.dataset.id));
+  await check('Vorlage: mehrere terminlose Meilensteine in der Tabelle, Status überall «geplant»', async () => {
+    if (msIds.length < 2) return msIds.length + ' Meilensteine';
+    const st = await mp.evaluate(() => {
+      const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_'));
+      return [...new Set(JSON.parse(localStorage.getItem(k)).tasks.map((t) => t.status + ':' + t.progress))];
+    });
+    return JSON.stringify(st) === '["geplant:0"]' ? true : JSON.stringify(st);
+  });
+  await check('Tabelle: Meilenstein ohne Termin — Start tippen, ✓ aktiv, speichert Start = Ende, ein ⌘Z macht ihn wieder terminlos', async () => {
+    const z = mp.locator(`.tb-r[data-id="${msIds[0]}"]`);
+    const f = z.locator('.c-start input');
+    await f.fill('2026-12-01T09:00');
+    await mp.waitForTimeout(250);
+    if (!(await z.locator('.en-ok').isVisible())) return '✓ fehlt';
+    if (await z.locator('.en-ok').isDisabled()) return '✓ gesperrt: ' + (await mp.locator('.tb-entwurf-grund td').first().textContent());
+    await mp.screenshot({ path: join(here, 'shots', 'edit-meilenstein-entwurf.png') });
+    await z.locator('.en-ok').click();
+    await mp.waitForTimeout(300);
+    const g = await gespeichert(msIds[0]);
+    if (g[0] !== '2026-12-01T09:00' || g[1] !== '2026-12-01T09:00') return 'gespeichert: ' + JSON.stringify(g);
+    await mp.screenshot({ path: join(here, 'shots', 'edit-meilenstein-datiert.png') });
+    await mp.keyboard.press('Meta+z');
+    const z2 = await gespeichert(msIds[0]);
+    return z2[0] === null && z2[1] === null ? true : 'ein ⌘Z: ' + JSON.stringify(z2);
+  });
+  await check('Tabelle: Start wieder leeren — beide leer, ✓ aktiv (zurück zu «ohne Termin»)', async () => {
+    const z = mp.locator(`.tb-r[data-id="${msIds[0]}"]`);
+    await z.locator('.c-start input').fill('2026-12-01T09:00');
+    await z.locator('.en-ok').click();
+    await mp.waitForTimeout(300);
+    await z.locator('.c-start input').fill('');
+    await mp.waitForTimeout(250);
+    if (await z.locator('.en-ok').isDisabled()) return '✓ gesperrt beim Leeren';
+    await z.locator('.en-ok').click();
+    const g = await gespeichert(msIds[0]);
+    return g[0] === null && g[1] === null ? true : JSON.stringify(g);
+  });
+  await check('Panel: Meilenstein ohne Termin — Start setzen, ✓ speichert Start = Ende', async () => {
+    // Terminlose Zeilen haben keinen Balken: das Panel öffnet über die Beschriftung im Gantt.
+    const name = (await mp.locator(`.tb-r[data-id="${msIds[1]}"] .c-title input`).inputValue()).trim();
+    await mp.locator('[data-view="gantt"]').click();
+    await mp.waitForTimeout(500);
+    const lab = mp.locator('.bz-lab-task .bz-lab-name', { hasText: name }).first();
+    if (!(await lab.count())) return 'Beschriftung «' + name + '» nicht im Gantt';
+    await lab.click();
+    await mp.waitForTimeout(300);
+    const f = mp.locator('.ins-termin input[type=datetime-local]').first();
+    await f.fill('2026-12-02T10:30');
+    await mp.waitForTimeout(250);
+    if (await mp.locator('.ins-termin .en-ok').isDisabled()) return '✓ gesperrt: ' + (await mp.locator('.ins-termin .en-grund').textContent());
+    await mp.locator('.ins-termin .en-ok').click();
+    const g = await gespeichert(msIds[1]);
+    return g[0] === '2026-12-02T10:30' && g[1] === '2026-12-02T10:30' ? true : JSON.stringify(g);
+  });
+  await check('keine JS-Fehler im Meilenstein-Block', async () => (fehlerM.length ? fehlerM[0] : true));
+  await cm.close();
 }
 
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }

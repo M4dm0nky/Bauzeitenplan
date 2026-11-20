@@ -4,7 +4,7 @@
 // — nichts wird einsortiert, nichts liegt auf dem Undo-Stapel.
 //   ✓ oder Enter  → `uebernehmen({start, end})`: EIN Befehl, EIN Undo-Schritt
 //   ✗ oder Escape → verwerfen
-//   Fokus verlässt die drei Felder → verwerfen (wie Klick daneben)
+//   Fokus verlässt die drei Felder → verwerfen (wie Klick daneben), mit kurzem Hinweis
 // Eine ungültige Spanne sperrt ✓ und sagt neben dem Knopf, warum.
 //
 // Tabelle und Panel nutzen DASSELBE Modul; die Rechnung selbst steht DOM-frei in
@@ -30,9 +30,10 @@ import { fmtDuration, entwurfAendern, entwurfFehler } from './conflicts.js';
  *   ein beim Neuaufbau wieder zu öffnender Entwurf (die Tabelle hält ihn)
  * @param {(e:?{start:?string,end:?string}, beruehrt:Set<string>, fehler:?string) => void} o.onAendern
  *   meldet jede Änderung des Entwurfs (null = geschlossen) — der Halter überlebt damit einen Neuaufbau
+ * @param {(text:string) => void=} o.onHinweis  wird gerufen, wenn das VERLASSEN der Felder den Entwurf verwirft (nicht bei ✗/Escape)
  * @param {(text:?string) => void} o.grundAnzeige  der Grund AUSSERHALB des Kästchens (Tabelle: Zeile darunter)
  */
-export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, lesen, uebernehmen, nurZeit = false, tag = () => null, anfang = null, onAendern = null, grundAnzeige = null }) {
+export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, lesen, uebernehmen, nurZeit = false, tag = () => null, anfang = null, onAendern = null, grundAnzeige = null, onHinweis = null }) {
   let e = null;                 // Entwurf; null = keiner offen
   let beruehrt = new Set();
   let fehlerEingabe = null;     // unlesbare Eingabe (Dauer «xyz»)
@@ -191,6 +192,8 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
         const a = document.activeElement;
         if (a && gruppe.some((c) => c.contains(a))) return;
         verwerfen();
+        // Verlassen = verwerfen bleibt; aber nicht stumm (Tab aus «Ende» sah aus wie «gespeichert»).
+        if (onHinweis) onHinweis('Entwurf verworfen — ✓ oder Enter übernimmt');
       }, 0);
     });
   }

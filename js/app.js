@@ -129,7 +129,7 @@ async function openBundled(key) {
   const da = repo.list().find((p) => p.name === b.name);
   const lokal = da ? repo.load(da.id) : null;
 
-  let datei = null;
+  let datei = null, hinweis = null;
   try {
     // ?v= wie in index.html: sonst liefert Pages bis zu zehn Minuten den alten Stand.
     const res = await fetch('./' + b.file + '?v=' + VERSION, { cache: 'no-cache' });
@@ -142,6 +142,7 @@ async function openBundled(key) {
     const roh = JSON.parse(text);
     r.plan.project.quelle = { datei: b.file, version: roh.version || null, exported: roh.exported || null };
     datei = r.plan;
+    hinweis = r.hinweis || null;   // z. B. entfallene Phasen: wer die Datei übernimmt, soll es erfahren
   } catch (e) {
     if (!lokal) { toast('«' + b.name + '» konnte nicht geladen werden: ' + (e.message || e), 'bad', 8000); return false; }
   }
@@ -149,10 +150,15 @@ async function openBundled(key) {
   if (datei && neuer(datei, lokal)) {
     const offen = await open(datei);
     if (offen && lokal) toast('Neuer Stand geladen: ' + b.name);
+    if (offen && hinweis) toast(hinweis, 'bad', 8000);
     return offen;
   }
   if (lokal) return await open(lokal);
-  if (datei) return await open(datei);
+  if (datei) {
+    const offen = await open(datei);
+    if (offen && hinweis) toast(hinweis, 'bad', 8000);
+    return offen;
+  }
   return false;
 }
 
@@ -316,12 +322,13 @@ function mount() {
     onWahl: springeZu,
     blockiert: () => !!document.querySelector('.dlg:not([hidden])'),
   });
-  phasen = createPhasenEditor({ store, askDialog, onError: (msg) => toast(msg, 'bad') });
+  phasen = createPhasenEditor({ store, askDialog, onError: (msg) => toast(msg, 'bad'), onHinweis: (msg) => toast(msg) });
   phasen.mountListe($('ei-ph-liste'), $('ei-ph-add'));
   bedarf = createBedarf($('bd'), { store, onEinrichten: (tab) => openEinrichten(tab) });
   inspector = createInspector($('ins'), {
     store,
     onError: (msg) => toast(msg, 'bad'),
+    onHinweis: (msg) => toast(msg),
     onClose: () => { gantt.select(null); syncPanel(); },
     // Eigene App-Dialoge statt window.confirm/prompt — dieselben Bausteine
     // wie überall sonst (askDialog hier, der schwebende Kasten aus table.js).
@@ -698,7 +705,8 @@ async function fuehreAus(sync, a) {
     if (!ueberschreibenSicher(a.id)) { uebersprungen = true; return { ok: true }; }
     const offen = a.id === offenId();
     uebernehmen(d.plan, p.sha);
-    if (offen) toast('Neuere Fassung vom anderen Gerät geladen');
+    if (d.hinweis) toast(d.hinweis, 'bad', 8000);
+    else if (offen) toast('Neuere Fassung vom anderen Gerät geladen');
     return { ok: true };
   }
 
@@ -723,6 +731,7 @@ async function fuehreAus(sync, a) {
     const offenUngesichert = a.id === offenId() && (saveTimer || store.dirty || ungesichert);
     if (offenUngesichert || (lokal && jetzt && !gleicherPlan(lokal, jetzt))) { uebersprungen = true; return { ok: true }; }
     uebernehmen(d.plan, p.sha);
+    if (d.hinweis) toast(d.hinweis, 'bad', 8000);
     return { ok: true };
   }
   if (wahl === 'beide') {

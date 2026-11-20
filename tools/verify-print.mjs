@@ -241,6 +241,12 @@ console.log('\nVORGÄNGE OHNE TERMIN');
 {
   // Ein Plan, in dem ein Teil der Vorgänge keinen Termin hat — in beiden Ebenen.
   // Sie dürfen auf keinem Blatt stehen und nichts zu NaN machen.
+  await check('Gegenprobe: ein Plan, in dem alles einen Termin hat, druckt keinen Hinweis «ohne Termin»', async () => {
+    await p.goto(BASE + '/print.html?plan=klassentreffen');
+    await p.waitForSelector('.pr-sheet', { timeout: 15000 });
+    const k = await p.locator('.pr-fehlt').count();
+    return k === 0 ? true : k + ' Hinweise, obwohl nichts fehlt';
+  });
   const n = await p.evaluate(async () => {
     const m = await import('/js/persistence.js');
     const r = m.deserialize(await (await fetch('/klassentreffen-festival.json')).text());
@@ -260,6 +266,13 @@ console.log('\nVORGÄNGE OHNE TERMIN');
       const html = await p.locator('#sheets').innerHTML();
       if (/NaN|Invalid Date|1970/.test(t) || /NaN/.test(html)) return 'NaN/1970 im Blatt';
       return errors.length === fehler0 ? true : errors.slice(fehler0).join(' | ');
+    });
+    await check('Fußzeile (' + ebene + ') sagt, wie viele Einträge ohne Termin nicht gedruckt sind', async () => {
+      const f = await p.locator('.pr-foot .pr-fehlt').allTextContents();
+      if (!f.length) return 'kein Hinweis in der Fußzeile';
+      if (!f.every((x) => /^\d+ Eintr(ag|äge) ohne Termin nicht gedruckt$/.test(x))) return JSON.stringify(f);
+      if (ebene === 'show') await p.locator('.pr-sheet').first().screenshot({ path: join(here, 'shots', 'druck-ro-ohne-termin.png') });
+      return true;
     });
   }
 }

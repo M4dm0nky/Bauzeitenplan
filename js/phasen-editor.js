@@ -18,7 +18,7 @@ import { local } from './conflicts.js';
 import { PHASEN_ARTEN, phaseLabel, showTage } from './phasen.js';
 import { entwurfBinden } from './entwurf.js';
 
-export function createPhasenEditor({ store, askDialog, onError }) {
+export function createPhasenEditor({ store, askDialog, onError, onHinweis }) {
   const lesen = (id) => (store.state.phases || []).find((p) => p.id === id);
   let liste = null;            // Host im Einrichten-Reiter
   let kastenZu = null;         // offener Kasten
@@ -84,7 +84,7 @@ export function createPhasenEditor({ store, askDialog, onError }) {
       if (ok) senden({ type: 'removePhase', id });
     });
     entwurfBinden({
-      start: von, ende: bis, gruppe: [entw], markiere: row, popIn,
+      start: von, ende: bis, gruppe: [entw], markiere: row, popIn, onHinweis,
       lesen: () => lesen(id),
       uebernehmen: (e) => store.apply({ type: 'setPhase', id, start: e.start, end: e.end }),
     });

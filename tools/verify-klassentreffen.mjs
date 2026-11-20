@@ -189,6 +189,27 @@ await check('zweiter Aufruf öffnet die lokale Fassung', async () => {
   return (await fp.locator('#proj-name').textContent()).includes('Klassentreffen') ? true : 'Plan weg';
 });
 
+// Eine Altphase mit Ende vor Start in der mitgelieferten Datei sperrt den Start nicht,
+// und der Autostart SAGT, dass sie entfallen ist (vorher stumm).
+await check('Autostart: umgedrehte Phase in der Datei → Plan öffnet, Hinweis erscheint', async () => {
+  const c2 = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  const p2 = await c2.newPage();
+  try {
+    await c2.route('**/klassentreffen-festival.json*', async (route) => {
+      const j = JSON.parse(readFileSync(join(root, 'klassentreffen-festival.json'), 'utf8'));
+      j.phases = [...(j.phases || []), { name: 'Umgedreht', art: 'abbau', start: '2026-09-10T12:00', end: '2026-09-09T12:00' }];
+      await route.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify(j) });
+    });
+    await p2.goto('http://127.0.0.1:' + server.address().port + '/index.html');
+    await p2.waitForTimeout(1500);
+    const name = (await p2.locator('#proj-name').textContent()) || '';
+    const toast = (await p2.locator('#toast').textContent()) || '';
+    const sichtbar = await p2.locator('#toast').isVisible();
+    if (!name.includes('Klassentreffen')) return 'Plan nicht geöffnet: «' + name + '»';
+    return sichtbar && /Phase.*(nicht übernommen|wurde)/.test(toast) ? true : 'Toast: «' + toast + '» sichtbar=' + sichtbar;
+  } finally { await c2.close(); }
+});
+
 // Start an einem Tag OHNE Vorgänge mitten im Plan: der Plan öffnet nicht auf der
 // leeren Jetzt-Linie, sondern am nächsten Tag mit Vorgängen. Die Uhr steht auf
 // dem 27.08.; im Original liegt an jedem der 14 Tage etwas, also wird der 27.

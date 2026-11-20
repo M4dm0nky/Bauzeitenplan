@@ -49,6 +49,7 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
   // auf — ein ⌘Z in einer anderen Zeile, ein Sync oder ein Zug im Gantt darf
   // einen halb getippten Entwurf nicht stillschweigend wegwerfen.
   const entwuerfe = new Map();   // id → {alt:{start,end}, start, end, beruehrt, fehler}
+  let projektId = null;          // an welchem Projekt `entwuerfe` hängt
   let verbraucht = new Set();
   let wiederoffen = new Set();
 
@@ -66,6 +67,9 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
       return;
     }
     const S = store.state;
+    // Zeilen-Ids (t0, t1 …) wiederholen sich zwischen Projekten: ein Entwurf des
+    // alten Projekts würde sonst in der gleichnamigen Zeile des neuen wieder auftauchen.
+    if (projektId !== S.project.id) { entwuerfe.clear(); projektId = S.project.id; }
     const scrollTop = root.scrollTop;
     const fokusAlt = entwuerfe.size ? fokusJetzt() : null;
     verbraucht = new Set();
@@ -497,7 +501,7 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
       }
       entwurfBinden({
         start: sin, ende: ein, dauer: din.disabled ? null : din,
-        gruppe: [st, du, en, ac], markiere: tr, popIn: ac, nurZeit, anfang,
+        gruppe: [st, du, en, ac], markiere: tr, popIn: ac, nurZeit, anfang, onHinweis,
         tag: () => tag || String(store.state.project.start).slice(0, 10),
         lesen: () => cur(t.id),
         grundAnzeige: (text) => {
