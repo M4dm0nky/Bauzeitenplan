@@ -1,7 +1,7 @@
 import { TEMPLATES, planFromTemplate } from '../js/templates.js';
 import { createStore } from '../js/store.js';
 import { findConflicts } from '../js/conflicts.js';
-import { computeSchedule, toMin } from '../js/schedule.js';
+import { computeSchedule, toMin, ohneTermin } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -10,8 +10,18 @@ const test = (name, fn) => {
   catch (e) { fail++; console.log('  ✗ ' + name + '\n      ' + e.message); }
 };
 
-const LOAD_IN = '2026-09-14T06:00';
-const build = (key) => planFromTemplate(key, { name: 'Test', venue: 'Halle', loadIn: LOAD_IN, timezone: 'Europe/Berlin' });
+const VON = '2026-09-14T06:00';
+const BIS = '2026-09-20T22:00';
+const build = (key) => planFromTemplate(key, { name: 'Test', venue: 'Halle', von: VON, bis: BIS, timezone: 'Europe/Berlin' });
+// Der frühere Stand MIT Terminen: die Vorlage trägt ihre Offsets (at/dur) weiter.
+const mitTerminen = (key) => {
+  const tpl = TEMPLATES.find((t) => t.key === key);
+  const p = build(key);
+  const anchor = new Date(VON).getTime();
+  const f = (m) => { const d = new Date(anchor + m * 60000); const z = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`; };
+  p.tasks.forEach((t, i) => { t.start = f(tpl.tasks[i].at); t.end = f(tpl.tasks[i].at + tpl.tasks[i].dur); });
+  return p;
+};
 
 console.log('\nVorlagen — Grundlagen');
 test('es gibt fünf Vorlagen', () => assert.equal(TEMPLATES.length, 5));
@@ -35,35 +45,38 @@ test('keine Vorlage überschreitet 16 Gewerke', () => {
   for (const t of TEMPLATES) assert.ok(t.gewerke.length <= 16, t.key + ': ' + t.gewerke.length);
 });
 test('unbekannter Schlüssel fällt auf «leer» zurück statt zu werfen', () => {
-  const p = planFromTemplate('gibtsnicht', { name: 'X', loadIn: LOAD_IN });
+  const p = planFromTemplate('gibtsnicht', { name: 'X', von: VON, bis: BIS });
   assert.ok(p.tasks.length === 0);
 });
 
-console.log('\nVerschiebung auf das eigene Datum');
-test('Aufbaubeginn liegt genau auf dem angegebenen Datum', () => {
-  // Festival: Anlieferung Bühnenteile ist der Anker (Offset 0)
-  const p = build('festival');
-  const t = p.tasks.find((x) => x.title === 'Anlieferung Bühnenteile');
-  assert.equal(t.start, '2026-09-14T06:00');
-});
-test('Projektzeitraum umschließt alle Vorgänge', () => {
+console.log('\nVorlage legt Vorgänge OHNE Termin an');
+test('jeder Vorgang und Meilenstein hat start und end null', () => {
   for (const tpl of TEMPLATES) {
     const p = build(tpl.key);
-    if (!p.tasks.length) continue;
-    const s = Math.min(...p.tasks.map((t) => toMin(t.start)));
-    const e = Math.max(...p.tasks.map((t) => toMin(t.end)));
-    assert.ok(toMin(p.project.start) <= s, tpl.key + ': Projektstart liegt nach dem ersten Vorgang');
-    assert.ok(toMin(p.project.end) >= e, tpl.key + ': Projektende liegt vor dem letzten Vorgang');
+    for (const t of p.tasks) {
+      assert.equal(t.start, null, tpl.key + ': ' + t.title);
+      assert.equal(t.end, null, tpl.key + ': ' + t.title);
+      assert.ok(ohneTermin(t));
+    }
   }
 });
-test('relative Abstände bleiben bei anderem Datum erhalten', () => {
-  const a = planFromTemplate('festival', { name: 'A', loadIn: '2026-09-14T06:00' });
-  const b = planFromTemplate('festival', { name: 'B', loadIn: '2027-03-02T06:00' });
-  const dauer = (p, titel) => {
-    const t = p.tasks.find((x) => x.title === titel);
-    return toMin(t.end) - toMin(t.start);
-  };
-  assert.equal(dauer(a, 'Podest & Unterbau'), dauer(b, 'Podest & Unterbau'));
+test('Projektzeitraum ist Event Von/Bis aus dem Dialog', () => {
+  for (const tpl of TEMPLATES) {
+    const p = build(tpl.key);
+    assert.equal(p.project.start, VON);
+    assert.equal(p.project.end, BIS);
+  }
+});
+test('keine Vorlagen-Phasen mehr', () => {
+  for (const tpl of TEMPLATES) assert.ok(!(build(tpl.key).phases || []).length, tpl.key);
+});
+test('Meilensteine bleiben Meilensteine, Verknüpfungen bleiben erhalten', () => {
+  const p = build('festival');
+  assert.ok(p.tasks.some((t) => t.milestone));
+  assert.ok(p.deps.length > 0);
+});
+test('die «Crew»-Bezeichnung steht im Projekt', () => {
+  assert.deepEqual(build('festival').project.ressourcen.map((r) => r.id), ['crew']);
 });
 test('jedes Projekt bekommt eine eigene id', () => {
   const a = build('festival'), b = build('tour');
@@ -95,8 +108,8 @@ for (const tpl of TEMPLATES) {
     }
   });
 
-  test(`«${tpl.key}»: Ende liegt nie vor dem Start`, () => {
-    const p = build(tpl.key);
+  test(`«${tpl.key}»: Ende liegt nie vor dem Start (Offsets der Vorlage)`, () => {
+    const p = mitTerminen(tpl.key);
     for (const t of p.tasks) {
       const d = toMin(t.end) - toMin(t.start);
       if (t.milestone) assert.equal(d, 0, `Meilenstein «${t.title}» hat Dauer ${d}`);
@@ -125,7 +138,7 @@ for (const tpl of TEMPLATES) {
 
   test(`«${tpl.key}»: keine Konflikte — die Vorlage ist widerspruchsfrei`, () => {
     // Eine Vorlage, die schon rot startet, wäre eine schlechte Vorlage.
-    const p = build(tpl.key);
+    const p = mitTerminen(tpl.key);
     const c = findConflicts(p);
     assert.deepEqual(c, [], c.map((x) => {
       const t = p.tasks.find((y) => y.id === x.taskId);
@@ -140,8 +153,8 @@ test('8 Gewerke, 40 Vorgänge', () => {
   assert.equal(p.gewerke.length, 8);
   assert.equal(p.tasks.length, 40);
 });
-test('der kritische Pfad läuft über Bühne → Rigging → Ton', () => {
-  const p = build('festival');
+test('der kritische Pfad läuft über Bühne → Rigging → Ton (mit Terminen)', () => {
+  const p = mitTerminen('festival');
   const sched = computeSchedule(p.tasks, p.deps);
   const crit = p.tasks.filter((t) => sched.get(t.id).critical).map((t) => t.title);
   assert.ok(crit.includes('Podest & Unterbau'), 'Bühne fehlt');

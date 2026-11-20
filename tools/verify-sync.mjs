@@ -13,6 +13,7 @@ import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
+import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
 
 const ECHT = process.argv.includes('--echt');
@@ -136,16 +137,15 @@ const start = async (g, query = '?plan=leer') => {
   await g.page.waitForTimeout(700);
 };
 
-const legeAn = async (g, name, tpl = 'festival') => {
+const legeAn = async (g, name) => {
   const p = g.page;
   if (await p.locator('#dlg').isHidden()) {
     await p.locator('#rail-ein').click();
     await p.locator('#new-proj').click();
     await p.evaluate(() => document.getElementById('ein-zu').click());
   }
-  await p.fill('.dlg-f:first-child input', name);
-  await p.locator(`.dlg-t[data-k="${tpl}"]`).click();
-  await p.locator('.dlg-act .btn-p').click();
+  // Die Vorlage hat keine Termine mehr; der Abgleich soll einen Plan MIT Balken sehen.
+  await festivalMitDaten(p, name);
   await p.waitForTimeout(700);
 };
 
@@ -597,9 +597,7 @@ try {
       try {
         await page.goto(BASE + '/index.html?plan=leer');
         await page.waitForTimeout(500);
-        await page.fill('.dlg-f:first-child input', 'Offline-Probe');
-        await page.locator('.dlg-t[data-k="festival"]').click();
-        await page.locator('.dlg-act .btn-p').click();
+        await festivalMitDaten(page, 'Offline-Probe');
         await page.locator('.bz-bar').first().waitFor({ timeout: 8000 });
         await check('Service Worker übernimmt die Seite (controller gesetzt)', async () => {
           try { await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 15000 }); return true; }

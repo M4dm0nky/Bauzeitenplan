@@ -523,7 +523,7 @@ body { margin: 0; }
 .dlg-del { border: 0; font: inherit; cursor: pointer; padding: 0 12px; }
 .dlg-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .dlg-f { display: flex; flex-direction: column; gap: 3px; }
-.dlg-f:first-child { grid-column: 1 / -1; }
+.dlg-f:first-child, .dlg-f:nth-child(2) { grid-column: 1 / -1; }
 .dlg-f input { font: inherit; padding: 6px 8px; }
 .dlg-tpl { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; margin-top: 12px; }
 .dlg-t { text-align: left; font: inherit; cursor: pointer; padding: 9px 11px; }

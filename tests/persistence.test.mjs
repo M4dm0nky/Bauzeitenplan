@@ -605,5 +605,20 @@ test('Meilenstein ohne Termin wird importiert', () => {
   assert.equal(deserialize(serialize(p)).ok, true);
 });
 
+test('migrate: fehlende start/end-Schlüssel werden zu null (nicht undefined)', () => {
+  const p = plan();
+  delete p.tasks[0].start; delete p.tasks[0].end;
+  const m = migrate(p);
+  assert.equal(m.tasks[0].start, null);
+  assert.equal(m.tasks[0].end, null);
+});
+test('Import reicht Phasen durch (Task 5 ergänzt Datenmodell und Prüfung)', () => {
+  const p = plan();
+  p.phases = [{ name: 'Aufbau', start: '2026-09-14T06:00', end: '2026-09-16T06:00' }];
+  const back = deserialize(serialize(p));
+  assert.equal(back.ok, true);
+  assert.deepEqual(back.plan.phases, p.phases);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

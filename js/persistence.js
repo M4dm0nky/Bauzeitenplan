@@ -53,6 +53,9 @@ const readJSON = (storage, key, fallback) => {
 export function migrate(plan) {
   const p = clone(plan);
   p.tasks ??= [];
+  // Ein fehlender Schlüssel ist «ohne Termin» wie ein null — einheitlich null,
+  // damit ohneTermin() und der Rundlauf nicht zwischen undefined und null raten.
+  for (const t of p.tasks) { t.start ??= null; t.end ??= null; }
   p.deps ??= [];
   p.gewerke ??= [];
   p.project ??= {};
@@ -328,7 +331,9 @@ export function deserialize(text, { newId = false } = {}) {
   if (Number(j.schema) > SCHEMA_VERSION) {
     return { ok: false, error: `Die Datei stammt aus einer neueren Version (Schema ${j.schema}, hier ${SCHEMA_VERSION}). Bitte die App aktualisieren.` };
   }
-  const plan = migrate({ project: j.project, gewerke: j.gewerke, tasks: j.tasks, deps: j.deps });
+  const plan = migrate({ project: j.project, gewerke: j.gewerke, tasks: j.tasks, deps: j.deps,
+    // Phasen nur durchreichen (bisher verworfen); Datenmodell + Prüfung folgen in Task 5.
+    ...(Array.isArray(j.phases) ? { phases: j.phases } : {}) });
   const bad = inhaltFehler(plan);
   if (bad) return { ok: false, error: bad };
   if (newId) plan.project.id = 'p' + Date.now().toString(36);

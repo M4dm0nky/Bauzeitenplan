@@ -1442,12 +1442,17 @@ function showProjectDialog({ firstRun = false }) {
   nameIn.placeholder = 'z.B. Nordlicht Festival 2026';
   const venueIn = el('input');
   venueIn.placeholder = 'Ort (optional)';
-  const dateIn = el('input');
-  dateIn.type = 'datetime-local';
-  const d = new Date(); d.setDate(d.getDate() + 14); d.setHours(6, 0, 0, 0);
-  dateIn.value = local(d);
+  // Der Event als Zeitraum: Von/Bis. Die Vorlage bringt nur das Gerüst mit
+  // (Vorgänge ohne Termin) — wann sie liegen, trägt man danach ein.
+  const vonIn = el('input'), bisIn = el('input');
+  vonIn.type = bisIn.type = 'date';
+  vonIn.id = 'neu-von'; bisIn.id = 'neu-bis';
+  const d = new Date(); d.setDate(d.getDate() + 14);
+  vonIn.value = tagIso(d);
+  d.setDate(d.getDate() + 2);
+  bisIn.value = tagIso(d);
 
-  form.append(field('Name', nameIn), field('Ort', venueIn), field('Aufbaubeginn', dateIn));
+  form.append(field('Name', nameIn), field('Ort', venueIn), field('Von', vonIn), field('Bis', bisIn));
   box.append(form);
 
   const tpls = el('div', 'dlg-tpl');
@@ -1469,8 +1474,13 @@ function showProjectDialog({ firstRun = false }) {
   const create = el('button', 'btn btn-p', 'Projekt anlegen');
   create.onclick = async () => {
     if (!nameIn.value.trim()) { nameIn.focus(); return; }
-    if (!dateIn.value) { dateIn.focus(); return; }
-    if (await open(planFromTemplate(chosen, { name: nameIn.value.trim(), venue: venueIn.value.trim(), loadIn: dateIn.value }))) close();
+    if (!vonIn.value) { toast('Bitte «Von» eintragen.', 'bad'); vonIn.focus(); return; }
+    if (!bisIn.value) { toast('Bitte «Bis» eintragen.', 'bad'); bisIn.focus(); return; }
+    if (bisIn.value < vonIn.value) { toast('«Bis» liegt vor «Von».', 'bad'); bisIn.focus(); return; }
+    // Von = Mitternacht des ersten Tages, Bis = Mitternacht NACH dem letzten:
+    // der letzte Eventtag steht ganz im Bild.
+    const bisEnde = new Date(bisIn.value + 'T00:00'); bisEnde.setDate(bisEnde.getDate() + 1);
+    if (await open(planFromTemplate(chosen, { name: nameIn.value.trim(), venue: venueIn.value.trim(), von: vonIn.value + 'T00:00', bis: local(bisEnde) }))) close();
   };
   const imp = el('button', 'btn', 'JSON importieren');
   imp.onclick = () => $('import-file').click();
@@ -1489,6 +1499,8 @@ function showProjectDialog({ firstRun = false }) {
   function close() { dlg.hidden = true; }
   dlg.onclick = (e) => { if (e.target === dlg && !firstRun) close(); };
 }
+
+const tagIso = (d) => local(d).slice(0, 10);
 
 function field(label, input) {
   const w = el('label', 'dlg-f');

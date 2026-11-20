@@ -15,6 +15,7 @@ import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
+import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -118,9 +119,7 @@ for (const pg of PAGES) {
   if (pg.theme) { await themeAn(page, pg.theme); await page.waitForTimeout(300); }
   const fp = await fingerprint(page);
   if (pg.app && await page.locator('#dlg').isVisible()) {
-    await page.fill('.dlg-f:first-child input', 'Prüfprojekt');
-    await page.locator('.dlg-t[data-k="festival"]').click();
-    await page.locator('.dlg-act .btn-p').click();
+    await festivalMitDaten(page, 'Prüfprojekt');
     await page.waitForTimeout(900);
   }
 
@@ -347,9 +346,7 @@ for (const pg of PAGES) {
   await dark.waitForTimeout(700);
   if (pg.theme) { await themeAn(dark, pg.theme); await dark.waitForTimeout(300); }
   if (pg.app && await dark.locator('#dlg').isVisible()) {
-    await dark.fill('.dlg-f:first-child input', 'Prüfprojekt');
-    await dark.locator('.dlg-t[data-k="festival"]').click();
-    await dark.locator('.dlg-act .btn-p').click();
+    await festivalMitDaten(dark, 'Prüfprojekt');
     await dark.waitForTimeout(900);
   }
   await dark.screenshot({ path: join(shots, `${v}-dark.png`) });
@@ -376,9 +373,7 @@ for (const pg of PAGES) {
   await m.goto(PAGES[0].url, { waitUntil: 'load', timeout: 30000 });
   await m.waitForTimeout(argBase ? 1600 : 800);
   if (await m.locator('#dlg').isVisible()) {
-    await m.fill('.dlg-f:first-child input', 'Handy');
-    await m.locator('.dlg-t[data-k="festival"]').click();
-    await m.locator('.dlg-act .btn-p').click();
+    await festivalMitDaten(m, 'Handy');
     await m.waitForTimeout(900);
   }
   const mcheck = async (name, fn) => {

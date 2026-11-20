@@ -6,6 +6,7 @@ import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
+import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -56,10 +57,7 @@ await check('alle fünf Vorlagen stehen zur Wahl', async () => {
 await page.screenshot({ path: join(here, 'shots', 'edit-1-dialog.png') });
 
 console.log('\nPROJEKT ANLEGEN');
-await page.fill('.dlg-f:first-child input', 'Testprojekt Halle 7');
-await page.fill('.dlg-f:nth-child(2) input', 'Messe Hannover');
-await page.locator('.dlg-t[data-k="festival"]').click();
-await page.locator('.dlg-act .btn-p').click();
+await festivalMitDaten(page, 'Testprojekt Halle 7', { venue: 'Messe Hannover' });
 await page.waitForTimeout(900);
 
 await check('Dialog geschlossen', async () => !(await page.locator('#dlg').isVisible()) ? true : 'noch offen');
@@ -664,10 +662,7 @@ await check('zweites Projekt mit ganz anderem Zeitraum anlegen', async () => {
   await page.waitForTimeout(200);
   await page.locator('#new-proj').click();
   await page.waitForTimeout(400);
-  await page.fill('.dlg-f:first-child input', 'Weit weg 2027');
-  await page.fill('.dlg-f:nth-child(3) input', '2027-03-15T06:00');
-  await page.locator('.dlg-t[data-k="festival"]').click();
-  await page.locator('.dlg-act .btn-p').click();
+  await festivalMitDaten(page, 'Weit weg 2027', { loadIn: '2027-03-15T06:00' });
   await page.waitForTimeout(900);
   return (await page.locator('#proj-name').textContent()) === 'Weit weg 2027' ? true : 'nicht gewechselt';
 });
@@ -1060,9 +1055,7 @@ await check('Gesperrter Speicher: keine Ausnahme, Ansicht-Umschalter wechselt', 
     await p2.goto(BASE + '/index.html?plan=leer');
     await p2.waitForTimeout(900);
     if (fehler.length) return 'pageerror beim Start: ' + fehler.slice(0, 3).join(' | ');
-    await p2.fill('.dlg-f:first-child input', 'Ohne Speicher');
-    await p2.locator('.dlg-t[data-k="festival"]').click();
-    await p2.locator('.dlg-act .btn-p').click();
+    await festivalMitDaten(p2, 'Ohne Speicher');
     await p2.waitForTimeout(900);
     if (fehler.length) return 'pageerror beim Anlegen: ' + fehler.slice(0, 3).join(' | ');
     await p2.locator('.rail-m', { hasText: 'Showablauf' }).click({ timeout: 5000 });
@@ -1086,9 +1079,7 @@ await check('Voller Speicher beim Projektwechsel fragt (Abbrechen / Trotzdem wec
     await p3.goto(BASE + '/index.html?plan=leer');
     await p3.waitForTimeout(700);
     const anlegen = async (name) => {
-      await p3.fill('.dlg-f:first-child input', name);
-      await p3.locator('.dlg-t[data-k="festival"]').click();
-      await p3.locator('.dlg-act .btn-p').click();
+      await festivalMitDaten(p3, name);
       await p3.waitForTimeout(700);
     };
     await anlegen('Alpha');
@@ -1179,9 +1170,7 @@ await check('Neu angelegter Plan, dessen erstes Speichern scheitert, gilt als un
     await p4.goto(BASE + '/index.html?plan=leer');
     await p4.waitForTimeout(700);
     const anlegen = async (name) => {
-      await p4.fill('.dlg-f:first-child input', name);
-      await p4.locator('.dlg-t[data-k="festival"]').click();
-      await p4.locator('.dlg-act .btn-p').click();
+      await festivalMitDaten(p4, name);
       await p4.waitForTimeout(700);
     };
     await anlegen('Alpha');
@@ -1300,10 +1289,7 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
   try {
     await pz.goto(BASE + '/index.html?plan=leer');
     await pz.waitForTimeout(700);
-    await pz.fill('.dlg-f:first-child input', 'Zieh-Test');
-    await pz.fill('.dlg-f:nth-child(3) input', '2026-08-05T06:00');
-    await pz.locator('.dlg-t[data-k="festival"]').click();
-    await pz.locator('.dlg-act .btn-p').click();
+    await festivalMitDaten(pz, 'Zieh-Test', { loadIn: '2026-08-05T06:00' });
     await pz.waitForTimeout(900);
     // Plan präparieren: ein Sammelvorgang (Elternvorgang mit einem Kind).
     const prep = await pz.evaluate(() => {
@@ -1601,6 +1587,62 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
       return sl2 > sl ? true : 'ArrowRight ohne Alt blättert nicht mehr';
     });
   } finally { await cz.close(); }
+}
+
+console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
+{
+  const cv = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const pv = await cv.newPage();
+  const fehlerV = [];
+  pv.on('pageerror', (e) => fehlerV.push(e.message));
+  await pv.goto(BASE + '/index.html?plan=leer');
+  await pv.waitForTimeout(700);
+  await check('Dialog hat Von und Bis statt «Aufbaubeginn»', async () => {
+    const t = (await pv.locator('#dlg .dlg-f > span').allTextContents()).join('|');
+    return t === 'Name|Ort|Von|Bis' ? true : 'Felder: ' + t;
+  });
+  await check('Bis vor Von wird in der App-Oberfläche abgelehnt (kein Browser-Dialog)', async () => {
+    let nativ = false;
+    pv.once('dialog', (d) => { nativ = true; d.dismiss(); });
+    await pv.fill('.dlg-f:first-child input', 'Ohne Termine');
+    await pv.fill('#neu-von', '2027-05-10');
+    await pv.fill('#neu-bis', '2027-05-08');
+    await pv.locator('.dlg-t[data-k="festival"]').click();
+    await pv.locator('.dlg-act .btn-p').click();
+    await pv.waitForTimeout(400);
+    if (nativ) return 'natives Browser-Dialogfeld';
+    if (!(await pv.locator('#dlg').isVisible())) return 'Dialog schloss trotz Bis < Von';
+    const t = await pv.locator('#toast').textContent();
+    return /Bis/.test(t) && await pv.locator('#toast').isVisible() ? true : 'keine Meldung: ' + t;
+  });
+  await pv.fill('#neu-bis', '2027-05-12');
+  await pv.locator('.dlg-act .btn-p').click();
+  await pv.waitForTimeout(1000);
+  await check('Projekt aus der Festival-Vorlage: Vorgänge in der Seitenspalte', async () => {
+    const n = await pv.locator('.bz-lab-task, .bz-lab-serie, .bz-lab[data-task]').count();
+    const alle = await pv.locator('.bz-lab').count();
+    return alle > 30 ? true : `nur ${alle} Zeilen in der Seitenspalte (spezifisch ${n})`;
+  });
+  // Die Darstellung terminloser Vorgänge im Gantt (kein Balken, kein Absturz) ist
+  // Task 3. Bis dahin crasht layout() an SCHED.get(...) — diese drei Prüfungen
+  // stehen schon da und werden dort mit TERMINLOS_GANTT = true scharf geschaltet.
+  const TERMINLOS_GANTT = false;
+  if (TERMINLOS_GANTT) {
+  await check('… aber kein einziger Balken', async () => {
+    const n = await pv.locator('.bz-bar').count();
+    return n === 0 ? true : n + ' Balken';
+  });
+  await check('Achse zeigt den Zeitraum Von–Bis (10.–12.05.2027), nicht 1970/NaN', async () => {
+    const t = (await pv.locator('.bz-axis').textContent()) || '';
+    if (/NaN|1970|Invalid/.test(t)) return 'Achse: ' + t.slice(0, 80);
+    const info = await pv.evaluate(() => { const r = JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith('bzp_p_') && JSON.parse(localStorage.getItem(k)).project.name === 'Ohne Termine'))); return r.project; });
+    return info.start === '2027-05-10T00:00' && info.end === '2027-05-13T00:00' ? true : 'project: ' + info.start + ' – ' + info.end;
+  });
+  await check('keine JS-Fehler beim Öffnen des terminlosen Plans', async () =>
+    fehlerV.length ? fehlerV[0] : true);
+  } else console.log('  – Gantt-Darstellung ohne Termin: Task 3 (TERMINLOS_GANTT)');
+  await pv.screenshot({ path: join(here, 'shots', 'edit-terminlos.png') });
+  await cv.close();
 }
 
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }

@@ -1,14 +1,15 @@
 // ── Vorlagen ──────────────────────────────────────────────────────────────────
-// Ein neues Projekt startet aus einer Vorlage. Alle Zeiten sind RELATIV zum
-// Aufbaubeginn (`anchor`) notiert — du gibst dein Datum an, alles verschiebt
-// sich mit.
+// Ein neues Projekt startet aus einer Vorlage. Die Vorlage liefert das Gerüst
+// (Gewerke, Vorgänge, Verknüpfungen) OHNE Termine: planFromTemplate legt alle
+// Vorgänge als «ohne Termin» an. Die Zeiten `at`/`dur` unten sind relativ zum
+// Aufbaubeginn notiert und nur noch Wissen über die übliche Reihenfolge und
+// Dauer (Tests rechnen damit) — sie fließen nicht in den neuen Plan.
 //
 // ACHTUNG beim Weiterbauen: «festival» ist abgenommener Praxisstand. Die drei
 // anderen sind von mir entworfene GERÜSTE — richtige Gewerke, Phasen und
 // Schlüssel-Meilensteine, aber bewusst keine erfundenen Detailvorgänge.
 // Beim ersten echten Einsatz korrigieren, dann werden sie echt.
 
-import { local } from './conflicts.js';
 
 const H = 60, D = 1440;
 
@@ -237,20 +238,23 @@ const templateByKey = (key) => TEMPLATES.find((x) => x.key === key) || LEER;
 
 // ── Plan aus einer Vorlage bauen ────────────────────────────────────────────
 
-const shift = (anchorMs, min) => local(new Date(anchorMs + min * 60000));
-
 /**
+ * Eine Vorlage ist ein GERÜST: Gewerke, Vorgänge, Meilensteine und Verknüpfungen —
+ * aber ohne Termine (start/end null, sie landen als «ohne Termin» in der
+ * Seitenspalte) und ohne Phasen. Die Offsets `at`/`dur` der Vorlagen bleiben
+ * als Wissen stehen (Tests rechnen damit), fließen aber nicht mehr in den Plan.
+ * Der Zeitraum ist der Event: Von/Bis aus dem Neu-Dialog.
+ *
  * @param {string} key        Vorlagen-Schlüssel
- * @param {object} o          { name, venue, loadIn: 'YYYY-MM-DDTHH:mm', timezone }
+ * @param {object} o          { name, venue, von, bis: 'YYYY-MM-DDTHH:mm', timezone }
  * @returns Plan im Store-Format
  */
 // Date.now() allein reicht nicht: zwei Projekte in derselben Millisekunde
 // bekämen dieselbe id — und das zweite überschriebe das erste beim Speichern.
 let projSeq = 0;
 
-export function planFromTemplate(key, { name, venue = '', loadIn, timezone } = {}) {
+export function planFromTemplate(key, { name, venue = '', von, bis, timezone } = {}) {
   const tpl = templateByKey(key);
-  const anchor = new Date(loadIn).getTime();
   const id = 'p' + Date.now().toString(36) + (projSeq++).toString(36);
 
   const gewerke = tpl.gewerke.map((n, i) => ({ id: 'g' + i, name: n, sort: i, slot: i }));
@@ -264,8 +268,8 @@ export function planFromTemplate(key, { name, venue = '', loadIn, timezone } = {
       id: tid,
       gewerk: x.gewerk === 'projekt' ? 'projekt' : gid.get(x.gewerk),
       title: x.title,
-      start: shift(anchor, x.at),
-      end: shift(anchor, x.at + x.dur),
+      start: null,
+      end: null,
       milestone: !!x.milestone,
       progress: x.progress ?? 0,
       status: x.status || 'geplant',
@@ -287,8 +291,8 @@ export function planFromTemplate(key, { name, venue = '', loadIn, timezone } = {
       id,
       name: name || tpl.name,
       venue,
-      start: shift(anchor, -tpl.spanBefore),
-      end: shift(anchor, tpl.spanAfter),
+      start: von,
+      end: bis,
       timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
       template: tpl.key,
       // Jede Vorlage benutzt dieselbe Bezeichnung «Crew» — sie muss trotzdem im
@@ -298,6 +302,6 @@ export function planFromTemplate(key, { name, venue = '', loadIn, timezone } = {
     gewerke,
     tasks,
     deps,
-    phases: tpl.phases.map((p) => ({ name: p.name, start: shift(anchor, p.at), end: shift(anchor, p.at + p.dur) })),
+    phases: [],
   };
 }

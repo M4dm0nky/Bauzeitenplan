@@ -7,6 +7,7 @@ import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
+import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -46,10 +47,7 @@ await page.goto(BASE + '/index.html?plan=leer');
 await page.waitForTimeout(600);
 
 // Projekt anlegen: Aufbaubeginn = heute (die gestellte Uhr) minus nichts
-await page.fill('.dlg-f:first-child input', 'Live-Test');
-await page.fill('.dlg-f:nth-child(3) input', '2026-08-05T06:00');
-await page.locator('.dlg-t[data-k="festival"]').click();
-await page.locator('.dlg-act .btn-p').click();
+await festivalMitDaten(page, 'Live-Test', { loadIn: '2026-08-05T06:00' });
 await page.waitForTimeout(800);
 
 const lineX = () => page.locator('.bz-now').evaluate((n) => parseFloat(n.style.left));
@@ -426,10 +424,7 @@ async function linieBeiBetrachterZone(tz) {
   await p.clock.install({ time: BERLIN_MITTERNACHT });
   await p.goto(BASE + '/index.html?plan=leer');
   await p.waitForTimeout(600);
-  await p.fill('.dlg-f:first-child input', 'Zonen-Test');
-  await p.fill('.dlg-f:nth-child(3) input', '2026-08-05T06:00');
-  await p.locator('.dlg-t[data-k="festival"]').click();
-  await p.locator('.dlg-act .btn-p').click();
+  await festivalMitDaten(p, 'Zonen-Test', { loadIn: '2026-08-05T06:00' });
   await p.waitForTimeout(800);
   // Das Projekt erbt die Zone des Browsers — genau deshalb fällt der Fehler nie
   // auf. Hier wird sie fest auf Berlin gesetzt, damit die beiden Betrachter
