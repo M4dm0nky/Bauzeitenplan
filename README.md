@@ -90,7 +90,8 @@ zählt, wer spielt). Deine Arten gehören zum Plan und reisen im JSON-Export mit
 wer die Datei bekommt, sieht «Line-Check» und nicht bloß eine Kennung.
 
 **Soundchecks** legst du im Panel eines Acts an: ein Klick, und es entsteht ein
-eigener Zeiteintrag im Setup-Abschnitt mit Start und Dauer. Als **Balken** — nur
+eigener Zeiteintrag im Setup-Abschnitt mit Beginn, Dauer und Ende (wie überall mit
+grünem ✓ bestätigen). Als **Balken** — nur
 so siehst du, ob sich zwei Soundchecks überschneiden. Löschst du den Act, geht
 sein Soundcheck mit.
 

@@ -13,7 +13,8 @@ paths:
 - **`js/ebene.js` ist die einzige Stelle, die die zwei Ebenen kennt.** Bauzeitenplan = GEWERKE, Showablauf = BÜHNEN (Gewerk mit `art:'buehne'`). Gantt, Tabelle, Druck FRAGEN (`sichtGewerke`/`sichtTasks`/`amTag`). Ohne `art` = Gewerk.
 - Kein zweiter Store, kein zweites Undo, keine zweite Persistenz. **Ein Gewerk wird nie nachträglich zur Bühne.**
 - **Der ZEITEINTRAG trägt den Abschnitt** (`abschnitt: 'setup'|'show'`, fehlt = `show`; `imAbschnitt` filtert). **`sichtGewerke` filtert NICHT.** Zeitfenster je Ansicht: `programmFenster`.
-- **Soundcheck = ZEITEINTRAG im Setup** mit `fuer: <taskId>` (Text-id).
+- **Soundcheck = ZEITEINTRAG im Setup** mit `fuer: <taskId>` (Text-id). Seine Zeiten im Panel gehen über den Entwurf mit ✓ (`entwurf.js`). Ohne Termin gilt der Showtag des Acts: `showTagVon` (ebene.js) — Beginn vor 06:00 gehört zum Vortag.
+- **Zeilen ohne Termin im Showablauf** bekommen leere `.bz-lab-zeit`/`.bz-lab-dauer` (ohne `data-at`, `aria-hidden`), damit alle Namen auf einer Kante stehen; Handy-Selektoren prüfen `:not(:empty)`.
 - **Der Showablauf ist tagesbezogen;** Gantt und Tabelle bekommen DENSELBEN Tag.
 - **Neue Vorgänge landen dort, wo man HINSCHAUT:** `defaultStart()` (table.js) schließt an den letzten Eintrag des gezeigten Tages UND Abschnitts an (`addRow` gibt ihn mit), leerer Tag = 08:00.
 - **Kein Typ steht doppelt** (`typHinweis`, ebene.js: normalisiert, in beide Richtungen verglichen).

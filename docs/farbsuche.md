@@ -12,8 +12,11 @@ vier Theme-Oberflächen plus den Dunkelmodus.
 theoretischen Maximum (CVD ΔE 8,4 / Normalsicht 19,3). Unter diesen wurde nach
 Semantik entschieden: Bühne = Baustellen-Orange, Sanitär = Grün.
 
-Das Skript braucht den `dataviz`-Skill-Validator. Liegt der woanders, den Importpfad
-oben in der Datei anpassen.
+Seit v0.19.1 prüft `tools/farbpruefung.mjs` (im Repo): Abstand ΔE in OKLab ×100,
+Farbenblindheit nach Machado 2009 (Protan/Deutan/Tritan). Die Grenzwerte sind neu
+gewählt, das Ranking ist daher nicht 1:1 mit den Zahlen oben vergleichbar. Messung
+v0.19.1 inkl. der warmen hellen Flächen (`#EDE7DB`/`#FBF8F1`): alle 720 Anordnungen
+bestehen, Palette unverändert.
 
 ## Ergebnis
 
