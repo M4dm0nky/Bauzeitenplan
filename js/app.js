@@ -835,27 +835,41 @@ async function loescheImDatenRepo(id, sha) {
 const tabUngesichert = () => !!(saveTimer || store.dirty || ungesichert);
 let tabPruefung = false, tabNochmal = false;
 
+// Im anderen Tab gelöscht: weder Plan noch Indexeintrag. Nie wieder anlegen.
+// Ein nie gesichertes Projekt (Speicher voll) fehlt ebenfalls — das ist keine Löschung.
+function geloeschtImAnderenTab(id) {
+  if (ungesichert || repo.load(id) || repo.list().some((x) => x.id === id)) return false;
+  verworfen.add(id);
+  clearTimeout(saveTimer); saveTimer = null;
+  toast('Dieses Projekt wurde in einem anderen Tab gelöscht.', 'bad', 8000);
+  showProjectDialog({ firstRun: !repo.list().length });
+  return true;
+}
+
+// open() ersetzt den Inhalt (gleiche id, fragt nie) und sichert selbst; das
+// store.replace löst aber über das Abonnement einen 800-ms-Autosave aus. Der
+// bliebe als «ungesichert» stehen und ließe die nächste fremde Änderung
+// fälschlich als Konflikt erscheinen.
+async function uebernimm(plan) {
+  if (!(await open(plan))) return;
+  clearTimeout(saveTimer); saveTimer = null;
+}
+
 async function pruefeAndererTab() {
   if (!store) return;
   const id = offenId();
   if (verworfen.has(id)) return;
-  const plan = repo.load(id);
-  if (!plan) {
-    // Weder Plan noch Indexeintrag: im anderen Tab gelöscht. Nie wieder anlegen.
-    // Ein nie gesichertes Projekt (Speicher voll) fehlt ebenfalls — das ist keine Löschung.
-    if (ungesichert || repo.list().some((x) => x.id === id)) return;
-    verworfen.add(id);
-    clearTimeout(saveTimer); saveTimer = null;
-    toast('Dieses Projekt wurde in einem anderen Tab gelöscht.', 'bad', 8000);
-    showProjectDialog({ firstRun: !repo.list().length });
-    return;
-  }
+  const plan = repo.load(id);    // Schnappschuss: nur DIESER Stand ist «der aus dem anderen Tab»
+  if (!plan) { geloeschtImAnderenTab(id); return; }
   if (gleicherPlan(store.state, plan)) return;
   if (!tabUngesichert()) {
-    await open(plan);       // gleiche id: ersetzt den Inhalt, fragt nie
+    await uebernimm(plan);
     toast('In einem anderen Tab geändert — übernommen');
     return;
   }
+  // Der Autosave darf während der Frage nicht laufen: er schriebe meinen Stand
+  // über den fremden, bevor jemand gewählt hat. store.dirty/ungesichert bleiben.
+  clearTimeout(saveTimer); saveTimer = null;
   const wahl = await askDialog({
     title: 'Dieses Projekt wurde in einem anderen Tab geändert',
     message: [`«${plan.project.name}» wurde in einem anderen Tab gespeichert, und hier gibt es ungesicherte Änderungen.`,
@@ -866,21 +880,23 @@ async function pruefeAndererTab() {
       { label: 'Beide behalten (Kopie)', value: 'beide' },
     ],
   });
-  if (wahl === null) return;       // Abbruch: nichts passiert, der nächste Autosave gilt
-  // Während des Dialogs kann der andere Tab weitergespeichert haben.
-  const jetzt = repo.load(id) || plan;
-  if (wahl === 'fremd') { clearTimeout(saveTimer); saveTimer = null; await open(jetzt); return; }
+  // Während des Dialogs gelöscht: weder übernehmen noch neu anlegen.
+  if (geloeschtImAnderenTab(id)) return;
+  // Hat der andere Tab inzwischen weitergespeichert, kommt dessen Ereignis und
+  // die Schleife in fremderTab prüft erneut.
+  if (wahl === 'fremd') { await uebernimm(plan); return; }
   if (wahl === 'beide') {
-    const kopie = JSON.parse(JSON.stringify(jetzt));
+    const kopie = JSON.parse(JSON.stringify(plan));
     kopie.project.id = 'p' + Date.now().toString(36);
-    kopie.project.name = jetzt.project.name + ' (anderer Tab)';
+    kopie.project.name = plan.project.name + ' (anderer Tab)';
     delete kopie.project.quelle;
     const r = repo.save(kopie);
     if (!r.ok) { toast(r.error, 'bad', 8000); return; }
     toast('Der Stand aus dem anderen Tab liegt als Kopie vor.');
   }
-  clearTimeout(saveTimer); saveTimer = null;
-  await save();                    // meine / beide: mein Stand gilt, sofort
+  // «Meine behalten», «Beide» und Abbruch (null): mein Stand gilt, sofort —
+  // kein Pfad bleibt still.
+  await save();
 }
 
 // Ein Lauf zur Zeit; Ereignisse während Dialog oder Übernahme lösen genau eine

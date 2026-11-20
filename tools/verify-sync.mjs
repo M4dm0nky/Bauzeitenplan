@@ -869,7 +869,8 @@ try {
     {
       const ctx = await browser.newContext({ viewport: { width: 1500, height: 900 }, serviceWorkers: 'block' });
       const A = await ctx.newPage(), B = await ctx.newPage();
-      for (const p of [A, B]) p.on('pageerror', (e) => jsErrors.push('JS: ' + e.message));      try {
+      for (const p of [A, B]) p.on('pageerror', (e) => jsErrors.push('JS: ' + e.message));
+      try {
         await A.goto(BASE + '/index.html?plan=leer');
         await A.waitForTimeout(700);
         await festivalMitDaten(A, 'Zwei-Tabs');
@@ -905,32 +906,103 @@ try {
         });
         await check('B zeigt den eigenen Stand weiter (kein Echo zurück)', async () => (await von(B)) === (await von(A)) ? true : `B ${await von(B)}, A ${await von(A)}`);
 
-        // Konflikt: B ändert zuerst (speichert nach 800 ms), A tippt DAZWISCHEN und ist
-        // beim Eintreffen des Ereignisses noch ungesichert.
-        const stand = await speicher(A);
-        await waehle(A);
-        await B.keyboard.press('Alt+ArrowRight');
-        await B.waitForTimeout(500);
-        await A.keyboard.press('Alt+Shift+ArrowRight');
-        await check('A (ungesichert) bekommt den Dialog statt still überschrieben zu werden', async () => {
-          const ok = await bis(async () => (await A.locator('.dlg', { hasText: 'in einem anderen Tab geändert' }).count()) === 1, 4000);
-          return ok ? true : 'kein Dialog';
-        });
+        // Konflikt herstellen: A wählt den Balken, B ändert zuerst (speichert nach 800 ms),
+        // A ändert DAZWISCHEN und ist beim Eintreffen des Ereignisses noch ungesichert.
+        // Start unterscheidet die Stände: B verschiebt, A verlängert nur das Ende.
+        const dialogA = () => A.locator('.dlg', { hasText: 'in einem anderen Tab geändert' });
+        const konflikt = async () => {
+          await A.waitForTimeout(1300);   // vorige Übernahme setzt sich
+          const vorher = await speicher(A);
+          await waehle(A);
+          await waehle(B);
+          await B.keyboard.press('Alt+ArrowRight');
+          await B.waitForTimeout(500);
+          await A.keyboard.press('Alt+Shift+ArrowRight');
+          const ok = await bis(async () => (await dialogA().count()) === 1, 4000);
+          const imSpeicher = await speicher(A);       // jetzt: der Stand von B
+          return { ok, vorher, fremd: imSpeicher };
+        };
+        const imAnderen = (k) => k.fremd.s !== k.vorher.s;   // Speicher trägt wirklich B (Gegenprobe)
+
+        let k = await konflikt();
+        await check('A (ungesichert) bekommt den Dialog statt still überschrieben zu werden', async () => k.ok && imAnderen(k) ? true : `Dialog ${k.ok}, Speicher ${JSON.stringify(k.fremd)}`);
         await shot(A, 'zwei-tabs');
         await A.locator('.dlg .btn', { hasText: 'Meine behalten' }).click();
-        await check('«Meine behalten»: localStorage trägt den Stand von A (Ende länger, Start wie bei A)', async () => {
-          const ok = await bis(async () => { const s = await speicher(A); return s.e > stand.e; }, 3000);
+        await check('«Meine behalten» (sofort): localStorage trägt den Stand von A (Ende länger, Start wie bei A)', async () => {
+          const ok = await bis(async () => { const s = await speicher(A); return s.e > k.vorher.e; }, 3000);
           const s = await speicher(A);
-          return ok && s.s === stand.s ? true : `Stand ${JSON.stringify(s)}, vorher ${JSON.stringify(stand)}`;
+          return ok && s.s === k.vorher.s ? true : `Stand ${JSON.stringify(s)}, vorher ${JSON.stringify(k.vorher)}`;
         });
-        await check('nach dem Dialog bleibt kein zweiter offen', async () => { await A.waitForTimeout(600); return (await A.locator('.dlg', { hasText: 'anderen Tab' }).count()) === 0 ? true : 'Dialog steht noch'; });
+        await check('nach dem Dialog bleibt kein zweiter offen', async () => { await A.waitForTimeout(600); return (await dialogA().count()) === 0 ? true : 'Dialog steht noch'; });
+
+        // Die Frage dauert länger als der 800-ms-Autosave: der darf A's Stand nicht
+        // vor der Wahl über den von B schreiben.
+        k = await konflikt();
+        await A.waitForTimeout(1500);
+        await check('Dialog steht über den Autosave hinaus; der Speicher trägt weiter B (kein stilles Überschreiben)', async () => {
+          const s = await speicher(A);
+          return (await dialogA().count()) === 1 && s.s === k.fremd.s ? true : `Dialog ${await dialogA().count()}, Speicher ${JSON.stringify(s)}, B ${JSON.stringify(k.fremd)}`;
+        });
+        await A.locator('.dlg .btn', { hasText: 'Die aus dem anderen Tab nehmen' }).click();
+        await check('«Die aus dem anderen Tab nehmen» (spät): A zeigt B\'s Stand', async () => {
+          const ok = await bis(async () => (await von(A)) === String(k.fremd.s), 3000);
+          const s = await speicher(A);
+          return ok && s.s === k.fremd.s && s.e === k.fremd.e ? true : `A zeigt ${await von(A)}, Speicher ${JSON.stringify(s)}, B ${JSON.stringify(k.fremd)}`;
+        });
+
+        k = await konflikt();
+        await A.waitForTimeout(1500);
+        const vorKopien = await A.evaluate(() => JSON.parse(localStorage.getItem('bzp_projects')).map((x) => x.id));
+        await A.locator('.dlg .btn', { hasText: 'Beide behalten' }).click();
+        await check('«Beide behalten» (spät): Kopie «(anderer Tab)» trägt B\'s Inhalt, Original A\'s', async () => {
+          const ok = await bis(async () => (await A.evaluate(() => JSON.parse(localStorage.getItem('bzp_projects')).length)) === vorKopien.length + 1, 3000);
+          const r = await A.evaluate(([vor, id]) => {
+            const x = JSON.parse(localStorage.getItem('bzp_projects')).find((q) => !vor.includes(q.id));
+            if (!x) return null;
+            const t = JSON.parse(localStorage.getItem('bzp_p_' + x.id)).tasks.find((q) => q.id === id);
+            return { name: x.name, s: new Date(t.start).getTime() / 60000 };
+          }, [vorKopien, dachId]);
+          const mein = await speicher(A);
+          return ok && r && /\(anderer Tab\)/.test(r.name) && r.s === k.fremd.s && mein.s === k.vorher.s && mein.e > k.vorher.e ? true
+            : `Kopie ${JSON.stringify(r)}, B ${JSON.stringify(k.fremd)}, Original ${JSON.stringify(mein)}`;
+        });
+
+        // Abbruch (Esc) ist «Meine behalten», nicht Schweigen.
+        k = await konflikt();
+        await A.keyboard.press('Escape');
+        await check('Escape: A\'s Stand steht sofort im Speicher, B übernimmt ihn mit Hinweis', async () => {
+          const ok = await bis(async () => { const s = await speicher(A); return s.e > k.vorher.e; }, 3000);
+          const s = await speicher(A);
+          const toastB = await bis(async () => (await von(B)) === (await von(A)) && /anderen Tab/.test(await B.locator('#toast').textContent()), 4000);
+          return ok && s.s === k.vorher.s && toastB ? true : `Speicher ${JSON.stringify(s)}, vorher ${JSON.stringify(k.vorher)}, B übernimmt ${toastB}`;
+        });
+
+        // Ping-Pong: ein Plan im Altformat (ohne phases/abschnitt) wird beim Laden
+        // migriert; die Tabs dürfen einander danach nicht endlos neu schreiben.
+        const C = await ctx.newPage();
+        await C.goto(BASE + '/sw.js');         // Seite OHNE App: B hielte sonst den Store
+        await C.evaluate((id) => {
+          const k = localStorage.getItem('bzp_active');
+          const p = JSON.parse(localStorage.getItem('bzp_p_' + k));
+          delete p.phases;
+          for (const t of p.tasks) { delete t.abschnitt; if (t.id === id) t.title += ' alt'; }
+          localStorage.setItem('bzp_p_' + k, JSON.stringify(p));
+        }, dachId);
+        await check('Altformat-Plan: beide Tabs übernehmen ihn und danach schreibt keiner mehr (kein Ping-Pong)', async () => {
+          const zeigt = (p) => p.evaluate(() => /Traversentürme alt/.test(document.body.textContent));
+          const ok = await bis(async () => (await zeigt(A)) && (await zeigt(B)), 4000);
+          await A.waitForTimeout(1500);
+          const m1 = await C.evaluate(() => localStorage.getItem('bzp_projects'));
+          await A.waitForTimeout(2500);
+          const m2 = await C.evaluate(() => localStorage.getItem('bzp_projects'));
+          const offen = await B.locator('.dlg', { hasText: 'in einem anderen Tab geändert' }).count();
+          return ok && m1 === m2 && offen === 0 ? true : `übernommen ${ok}, Index ändert sich: ${m1 === m2 ? 'nein' : 'ja'}, Dialog in B: ${offen}`;
+        });
 
         // Gelöscht im anderen Tab: A darf es nicht wieder anlegen.
         // Von einer Seite OHNE App aus löschen: B selbst hielte das Projekt im Store
         // und legte es mit seinem nächsten Sichern wieder an.
         await B.close();
-        const C = await ctx.newPage();
-        await C.goto(BASE + '/sw.js');
         const gone = await C.evaluate(() => {
           const k = localStorage.getItem('bzp_active');
           localStorage.removeItem('bzp_p_' + k);
@@ -940,9 +1012,8 @@ try {
         await check('im anderen Tab gelöscht: A zeigt den Projektdialog statt das Projekt wieder anzulegen', async () => {
           const ok = await bis(async () => (await A.locator('#dlg').isVisible()), 3000);
           await A.waitForTimeout(1200);
-          const da = await A.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('bzp_p_')));
-          const idx = await A.evaluate(() => localStorage.getItem('bzp_projects'));
-          return ok && da.length === 0 ? true : `Dialog ${ok}, Pläne im Speicher ${da.join(',')}, Index ${idx}, gelöscht ${gone}`;
+          const da = await A.evaluate(() => Object.keys(localStorage).filter((x) => x.startsWith('bzp_p_')));
+          return ok && !da.includes('bzp_p_' + gone) ? true : `Dialog ${ok}, Pläne im Speicher ${da.join(',')}, gelöscht ${gone}`;
         });
       } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
       finally { await ctx.close(); }
