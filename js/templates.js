@@ -271,8 +271,10 @@ export function planFromTemplate(key, { name, venue = '', von, bis, timezone } =
       start: null,
       end: null,
       milestone: !!x.milestone,
-      progress: x.progress ?? 0,
-      status: x.status || 'geplant',
+      // Status setzt nur ein Mensch: ein neues Projekt startet überall «geplant»
+      // (die Demo-Werte der Vorlagen-Zeilen — «läuft», 62 % — gelten hier nicht).
+      progress: 0,
+      status: 'geplant',
       // Die Vorlagen tragen ihre Zahlen weiter als `crew` (lesbarer als
       // `res: [{...}]` in jeder Zeile) — hier einmal in eine Ressourcen-
       // Zuweisung übersetzt, mit vollem Vorgangsfenster (von/bis: null).

@@ -49,6 +49,16 @@ test('unbekannter Schlüssel fällt auf «leer» zurück statt zu werfen', () =>
   assert.ok(p.tasks.length === 0);
 });
 
+console.log('\nVorlage bringt keinen Demo-Status mit');
+test('alle Vorgänge starten «geplant» mit 0 % — Status setzt nur ein Mensch', () => {
+  for (const tpl of TEMPLATES) {
+    for (const t of build(tpl.key).tasks) {
+      assert.equal(t.status, 'geplant', tpl.key + ': ' + t.title);
+      assert.equal(t.progress, 0, tpl.key + ': ' + t.title);
+    }
+  }
+});
+
 console.log('\nVorlage legt Vorgänge OHNE Termin an');
 test('jeder Vorgang und Meilenstein hat start und end null', () => {
   for (const tpl of TEMPLATES) {
