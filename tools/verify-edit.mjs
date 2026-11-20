@@ -144,7 +144,8 @@ await check('⌘Z im Titelfeld nimmt keinen Store-Befehl zurück (Verschiebung b
   await page.waitForTimeout(200);
   await page.keyboard.press('Alt+ArrowRight');
   await page.waitForTimeout(400);
-  const nach = await page.locator(`[data-task="${id}"]`).first().getAttribute('data-from');
+  const nach = await page.locator(`.bz-bar[data-task="${id}"]`).first().getAttribute('data-from');
+  if (nach === null) return 'kein Balken gefunden';
   if (nach === vorher) return 'Alt+→ verschob nichts (' + vorher + ')';
   await page.locator('[data-view="tabelle"]').click();
   await page.waitForTimeout(400);
@@ -156,7 +157,8 @@ await check('⌘Z im Titelfeld nimmt keinen Store-Befehl zurück (Verschiebung b
   await page.waitForTimeout(400);
   await page.locator('[data-view="gantt"]').click();
   await page.waitForTimeout(400);
-  const danach = await page.locator(`[data-task="${id}"]`).first().getAttribute('data-from');
+  const danach = await page.locator(`.bz-bar[data-task="${id}"]`).first().getAttribute('data-from');
+  if (danach === null) return 'kein Balken gefunden';
   await page.locator('[data-view="tabelle"]').click();   // die Folgeprüfungen erwarten die Tabelle
   await page.waitForTimeout(300);
   return danach === nach ? true : 'Verschiebung zurückgenommen: ' + danach + ' statt ' + nach;
