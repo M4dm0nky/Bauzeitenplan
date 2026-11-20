@@ -67,3 +67,28 @@
 CHANGELOG, alle neun Prüfungen, Screenshots (neuer Plan aus Vorlage ohne Balken, Entwurf-Zeile gelb mit ✓/✗, Phasen-
 Leiste mit Show-Tag 1/2), Schlussreview, dann Versionsnummer bei Marco erfragen, live, Tag.
 
+
+## Nachtrag T7 (Marco 2026-11-20) — Reihenfolge T3 → T4 → T7 → T5 → T6
+
+### T7 Hell/Dunkel-Umschalter + warmes Hell (Nachtrag Marco 2026-11-20; läuft VOR T5, damit die Phasenfarben gleich
+auf der neuen Palette entstehen — Reihenfolge: T3 → T4 → T7 → T5 → T6)
+- **Ist:** Umschalter ☀/☾ existiert (`#theme-toggle`, index.html:241), steckt aber im Einrichten-Fenster; Handler
+  app.js:1675-1695 (`currentMode`, `paintModeToggle`, `localStorage['bzp_mode']`, `data-theme` auf `<html>`, Kopf-Script
+  index.html:8-16 gegen Aufblitzen; ohne Wahl gilt das OS). Hell in callboard.css:22-40/57-62: `--bg #F1EFE9` warm, aber
+  `--panel`/`--panel2 #FFFFFF` grellweiß → alle Flächen (Panel, Tabelle, Dialoge, Menüs, Suchliste) sind reinweiß.
+- **Umschalter sichtbar:** in die Kopfzeile rechts (`.hd-right`, neben 🖨 Drucken), Symbol ☀/☾ mit `aria-label`/`title`,
+  in beiden Modi, auf dem Handy als reines Symbol. Bleibt derselbe Knopf/Handler (umziehen, keine zweite Verdrahtung);
+  aus Einrichten entfernen. Schiene bleibt nur Modus (Regel). Knopfzahl 14/12 → 15/13 (CLAUDE.md + Zählprüfung in
+  verify-browser); Handy-Kopf ≤ 300 px muss halten.
+- **Warmes Hell (nur callboard, das ausgelieferte Theme):** alle hellen Flächen-Tokens auf warmes Weiß, kein #FFF mehr:
+  `--panel` ≈ #FBF8F1, `--panel2` ≈ #F6F1E7, `--bg` etwas tiefer/wärmer ≈ #EDE7DB, `--rule`/`--rule-2` warm getönt,
+  `--ink`/`--ink-2`/`--muted` leicht warm, Kontrast gehalten. Beide Scopes (`:root` und `[data-theme="light"]`) gleich.
+  Prüfen, dass nichts anderes reinweiß bleibt (Toast, Tooltip, Suchliste, Leer-Hinweis, Fokusringe, Eingabefelder,
+  Hinweis beim Ziehen, Einrichten-Fenster) — alles über Tokens; `color:#fff` auf Farbflächen bleibt.
+- **Messbar:** neue statische Prüfung in tests/run.mjs: im hellen Callboard kein Flächen-Token `#fff`/`#ffffff`; Text-
+  kontrast `--ink` auf `--panel`/`--bg` ≥ 7:1, `--muted` auf `--panel`/`--bg` ≥ 4.5:1 (für hell UND dunkel). Gewerk-
+  farben nicht anfassen; `tools/farbsuche.mjs` einmal mit der neuen Fläche messen und Ergebnis berichten (nur Messung).
+- Andere vier Themes unverändert (Entwürfe, nicht ausgeliefert). Druckblatt bleibt reinweiß (print.css, eigene Tokens).
+- Browser: Umschalter in der Kopfzeile schaltet hell↔dunkel und übersteht Neuladen; Screenshots hell und dunkel von
+  Bauzeitenplan, Showablauf, Tabelle, Panel, Einrichten, Suche angesehen.
+
