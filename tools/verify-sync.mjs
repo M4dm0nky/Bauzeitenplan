@@ -862,6 +862,92 @@ try {
       finally { await schliesse(A, B); }
     }
 
+    // ─── 6b. Zwei Tabs ──────────────────────────────────────────────────────
+    // Zwei Seiten in EINEM Kontext teilen localStorage; `storage` feuert nur im
+    // jeweils anderen Tab. Ohne Sync-Schlüssel: der Fehler hängt nicht am Daten-Repo.
+    console.log('\nZWEI TABS (ein Browser, ohne Sync)');
+    {
+      const ctx = await browser.newContext({ viewport: { width: 1500, height: 900 }, serviceWorkers: 'block' });
+      const A = await ctx.newPage(), B = await ctx.newPage();
+      for (const p of [A, B]) p.on('pageerror', (e) => jsErrors.push('JS: ' + e.message));      try {
+        await A.goto(BASE + '/index.html?plan=leer');
+        await A.waitForTimeout(700);
+        await festivalMitDaten(A, 'Zwei-Tabs');
+        await A.locator('.bz-bar').first().waitFor({ timeout: 8000 });
+        await A.waitForTimeout(1200);
+        await B.goto(BASE + '/index.html?plan=leer');
+        await B.locator('.bz-bar').first().waitFor({ timeout: 8000 });
+        const dachId = await A.evaluate(() => {
+          const k = localStorage.getItem('bzp_active');
+          return JSON.parse(localStorage.getItem('bzp_p_' + k)).tasks.find((t) => /Dach/.test(t.title)).id;
+        });
+        const sel = `.bz-bar[data-task="${dachId}"]`;
+        const von = (p) => p.locator(sel).getAttribute('data-from');
+        const waehle = async (p) => { await p.locator(sel).focus(); await p.keyboard.press('Enter'); };
+        const speicher = (p) => p.evaluate((id) => {
+          const k = localStorage.getItem('bzp_active');
+          const t = JSON.parse(localStorage.getItem('bzp_p_' + k)).tasks.find((x) => x.id === id);
+          return { s: new Date(t.start).getTime() / 60000, e: new Date(t.end).getTime() / 60000 };
+        }, dachId);
+        const alt = await von(A);
+        await check('beide Tabs zeigen am Anfang denselben Balken', async () => (await von(B)) === alt ? true : `A ${alt}, B ${await von(B)}`);
+
+        await waehle(B);
+        await B.keyboard.press('Alt+ArrowRight');
+        await check('B verschiebt «Dach»: A zeigt es nach dem Autosave von B (ohne Rückfrage)', async () => {
+          const ok = await bis(async () => (await von(A)) !== alt, 4000);
+          return ok ? true : `data-from in A unverändert (${alt})`;
+        });
+        await check('A: Hinweis «anderen Tab» statt Dialog', async () => {
+          const t = await A.locator('#toast').textContent();
+          const dlg = await A.locator('.dlg', { hasText: 'anderen Tab' }).count();
+          return /anderen Tab/.test(t) && dlg === 0 ? true : `Toast «${t}», Dialoge ${dlg}`;
+        });
+        await check('B zeigt den eigenen Stand weiter (kein Echo zurück)', async () => (await von(B)) === (await von(A)) ? true : `B ${await von(B)}, A ${await von(A)}`);
+
+        // Konflikt: B ändert zuerst (speichert nach 800 ms), A tippt DAZWISCHEN und ist
+        // beim Eintreffen des Ereignisses noch ungesichert.
+        const stand = await speicher(A);
+        await waehle(A);
+        await B.keyboard.press('Alt+ArrowRight');
+        await B.waitForTimeout(500);
+        await A.keyboard.press('Alt+Shift+ArrowRight');
+        await check('A (ungesichert) bekommt den Dialog statt still überschrieben zu werden', async () => {
+          const ok = await bis(async () => (await A.locator('.dlg', { hasText: 'in einem anderen Tab geändert' }).count()) === 1, 4000);
+          return ok ? true : 'kein Dialog';
+        });
+        await shot(A, 'zwei-tabs');
+        await A.locator('.dlg .btn', { hasText: 'Meine behalten' }).click();
+        await check('«Meine behalten»: localStorage trägt den Stand von A (Ende länger, Start wie bei A)', async () => {
+          const ok = await bis(async () => { const s = await speicher(A); return s.e > stand.e; }, 3000);
+          const s = await speicher(A);
+          return ok && s.s === stand.s ? true : `Stand ${JSON.stringify(s)}, vorher ${JSON.stringify(stand)}`;
+        });
+        await check('nach dem Dialog bleibt kein zweiter offen', async () => { await A.waitForTimeout(600); return (await A.locator('.dlg', { hasText: 'anderen Tab' }).count()) === 0 ? true : 'Dialog steht noch'; });
+
+        // Gelöscht im anderen Tab: A darf es nicht wieder anlegen.
+        // Von einer Seite OHNE App aus löschen: B selbst hielte das Projekt im Store
+        // und legte es mit seinem nächsten Sichern wieder an.
+        await B.close();
+        const C = await ctx.newPage();
+        await C.goto(BASE + '/sw.js');
+        const gone = await C.evaluate(() => {
+          const k = localStorage.getItem('bzp_active');
+          localStorage.removeItem('bzp_p_' + k);
+          localStorage.setItem('bzp_projects', JSON.stringify(JSON.parse(localStorage.getItem('bzp_projects')).filter((x) => x.id !== k)));
+          return k;
+        });
+        await check('im anderen Tab gelöscht: A zeigt den Projektdialog statt das Projekt wieder anzulegen', async () => {
+          const ok = await bis(async () => (await A.locator('#dlg').isVisible()), 3000);
+          await A.waitForTimeout(1200);
+          const da = await A.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('bzp_p_')));
+          const idx = await A.evaluate(() => localStorage.getItem('bzp_projects'));
+          return ok && da.length === 0 ? true : `Dialog ${ok}, Pläne im Speicher ${da.join(',')}, Index ${idx}, gelöscht ${gone}`;
+        });
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      finally { await ctx.close(); }
+    }
+
     // ─── 7. Offline-Start ───────────────────────────────────────────────────
     console.log('\nOFFLINE-START (Service Worker)');
     {

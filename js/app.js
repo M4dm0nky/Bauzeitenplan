@@ -826,6 +826,76 @@ async function loescheImDatenRepo(id, sha) {
   return false;
 }
 
+// ── Anderer Tab ─────────────────────────────────────────────────────────────
+// Zwei Tabs desselben Browsers teilen localStorage. Ohne diesen Block schreibt
+// jeder Autosave den vollen Stand und überschreibt still, was der andere Tab
+// gespeichert hat. `storage` feuert nur im ANDEREN Tab, nie im schreibenden.
+// Eigene Bedingung statt ueberschreibenSicher(): dessen dirty-Merker meint
+// «noch nicht hochgeladen» — den setzt jeder fremde Speichervorgang, auch ohne Sync.
+const tabUngesichert = () => !!(saveTimer || store.dirty || ungesichert);
+let tabPruefung = false, tabNochmal = false;
+
+async function pruefeAndererTab() {
+  if (!store) return;
+  const id = offenId();
+  if (verworfen.has(id)) return;
+  const plan = repo.load(id);
+  if (!plan) {
+    // Weder Plan noch Indexeintrag: im anderen Tab gelöscht. Nie wieder anlegen.
+    // Ein nie gesichertes Projekt (Speicher voll) fehlt ebenfalls — das ist keine Löschung.
+    if (ungesichert || repo.list().some((x) => x.id === id)) return;
+    verworfen.add(id);
+    clearTimeout(saveTimer); saveTimer = null;
+    toast('Dieses Projekt wurde in einem anderen Tab gelöscht.', 'bad', 8000);
+    showProjectDialog({ firstRun: !repo.list().length });
+    return;
+  }
+  if (gleicherPlan(store.state, plan)) return;
+  if (!tabUngesichert()) {
+    await open(plan);       // gleiche id: ersetzt den Inhalt, fragt nie
+    toast('In einem anderen Tab geändert — übernommen');
+    return;
+  }
+  const wahl = await askDialog({
+    title: 'Dieses Projekt wurde in einem anderen Tab geändert',
+    message: [`«${plan.project.name}» wurde in einem anderen Tab gespeichert, und hier gibt es ungesicherte Änderungen.`,
+      'Welche Fassung soll gelten? Nichts wird ohne deine Wahl überschrieben.'],
+    buttons: [
+      { label: 'Meine behalten', value: 'meine', primary: true },
+      { label: 'Die aus dem anderen Tab nehmen', value: 'fremd', danger: true },
+      { label: 'Beide behalten (Kopie)', value: 'beide' },
+    ],
+  });
+  if (wahl === null) return;       // Abbruch: nichts passiert, der nächste Autosave gilt
+  // Während des Dialogs kann der andere Tab weitergespeichert haben.
+  const jetzt = repo.load(id) || plan;
+  if (wahl === 'fremd') { clearTimeout(saveTimer); saveTimer = null; await open(jetzt); return; }
+  if (wahl === 'beide') {
+    const kopie = JSON.parse(JSON.stringify(jetzt));
+    kopie.project.id = 'p' + Date.now().toString(36);
+    kopie.project.name = jetzt.project.name + ' (anderer Tab)';
+    delete kopie.project.quelle;
+    const r = repo.save(kopie);
+    if (!r.ok) { toast(r.error, 'bad', 8000); return; }
+    toast('Der Stand aus dem anderen Tab liegt als Kopie vor.');
+  }
+  clearTimeout(saveTimer); saveTimer = null;
+  await save();                    // meine / beide: mein Stand gilt, sofort
+}
+
+// Ein Lauf zur Zeit; Ereignisse während Dialog oder Übernahme lösen genau eine
+// weitere Prüfung aus (das letzte gewinnt, kein zweiter Dialog).
+async function fremderTab(e) {
+  if (e.storageArea && e.storageArea !== window.localStorage) return;
+  if (e.key !== null && e.key !== 'bzp_projects' && e.key !== 'bzp_p_' + offenId()) return;
+  if (tabPruefung) { tabNochmal = true; return; }
+  tabPruefung = true;
+  try {
+    do { tabNochmal = false; await pruefeAndererTab(); } while (tabNochmal);
+  } finally { tabPruefung = false; }
+}
+window.addEventListener('storage', (e) => { fremderTab(e).catch((err) => console.error(err)); });
+
 // ── Der Tag ─────────────────────────────────────────────────────────────────
 // EIN Kalender-Knopf für beide Modi — «welcher Tag» ist dieselbe Frage, ob im
 // Bauzeitenplan oder im Showablauf; nur die Antwort wirkt verschieden (dort
