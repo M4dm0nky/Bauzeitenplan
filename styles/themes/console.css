@@ -198,14 +198,9 @@ body {
 /* ── Bänder ───────────────────────────────────────────────────────────────── */
 .bz-we { background: color-mix(in srgb, var(--rule) 32%, transparent); }
 .bz-phase { border-left: 1px solid var(--rule-2); }
-.bz-phase-aufbau { background: color-mix(in srgb, var(--accent-b) 6%, transparent); }
-.bz-phase-show { background: color-mix(in srgb, var(--accent-b) 12%, transparent); }
 .bz-axis-phase { border-bottom: 1px solid var(--rule); background: var(--panel2); }
 .bz-ph { border-left: 1px solid var(--rule-2); }
 .bz-ph-t { font-size: calc(7.5px * var(--fs)); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
-.bz-ph-aufbau { background: color-mix(in srgb, var(--accent-b) 12%, transparent); }
-.bz-ph-aufbau .bz-ph-t { color: var(--accent); }
-.bz-ph-show { background: color-mix(in srgb, var(--accent-b) 24%, transparent); }
 .bz-corner-cap { font-size: calc(7.5px * var(--fs)); letter-spacing: .13em; text-transform: uppercase; color: var(--muted); padding-left: 8px; }
 
 /* ── Pfeile ───────────────────────────────────────────────────────────────── */
@@ -399,3 +394,28 @@ kbd { font: inherit; border: 1px solid var(--rule-2); background: var(--panel2);
 .tb-ico.en-no:hover { background: color-mix(in srgb, var(--crit, #b3261e) 14%, transparent); color: var(--crit, #b3261e); }
 .en-grund, .tb-entwurf-grund td { color: var(--crit, #b3261e); }
 .tb-entwurf-grund td { background: color-mix(in srgb, var(--en, #e0a100) 24%, transparent); }
+
+/* ── Phasen: Farbe je ART (Planung · Vorbereitung · Aufbau · Show · Abbau) ───
+   Nie je Name — der ist frei. Hell: kräftige Füllung, weiße Schrift (>= 4.5:1);
+   dunkel: helle Füllung, dunkle Schrift (>= 4.5:1). tests/run.mjs rechnet beides
+   nach. Die Tönung im Zeitstrahl ist dieselbe Farbe, nur dünn. */
+:root { --ph-planung: #4B5568; --ph-vorbereitung: #0B7A75; --ph-aufbau: #A04F00; --ph-show: #7C3AA8; --ph-abbau: #B03A48; --ph-t: #FFFFFF; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --ph-planung: #9FB0CC; --ph-vorbereitung: #4FD1C5; --ph-aufbau: #F2A93B; --ph-show: #C79BF2; --ph-abbau: #F58A97; --ph-t: #10172A; } }
+:root[data-theme="dark"] { --ph-planung: #9FB0CC; --ph-vorbereitung: #4FD1C5; --ph-aufbau: #F2A93B; --ph-show: #C79BF2; --ph-abbau: #F58A97; --ph-t: #10172A; }
+:root[data-theme="light"] { --ph-planung: #4B5568; --ph-vorbereitung: #0B7A75; --ph-aufbau: #A04F00; --ph-show: #7C3AA8; --ph-abbau: #B03A48; --ph-t: #FFFFFF; }
+.bz-ph-t { font-size: calc(8.5px * var(--fs)); font-weight: 700; letter-spacing: .08em; }
+.bz-phase-planung { background: color-mix(in srgb, var(--ph-planung) 10%, transparent); }
+.bz-ph-planung { background: var(--ph-planung); }
+.bz-ph-planung .bz-ph-t { color: var(--ph-t); }
+.bz-phase-vorbereitung { background: color-mix(in srgb, var(--ph-vorbereitung) 10%, transparent); }
+.bz-ph-vorbereitung { background: var(--ph-vorbereitung); }
+.bz-ph-vorbereitung .bz-ph-t { color: var(--ph-t); }
+.bz-phase-aufbau { background: color-mix(in srgb, var(--ph-aufbau) 10%, transparent); }
+.bz-ph-aufbau { background: var(--ph-aufbau); }
+.bz-ph-aufbau .bz-ph-t { color: var(--ph-t); }
+.bz-phase-show { background: color-mix(in srgb, var(--ph-show) 10%, transparent); }
+.bz-ph-show { background: var(--ph-show); }
+.bz-ph-show .bz-ph-t { color: var(--ph-t); }
+.bz-phase-abbau { background: color-mix(in srgb, var(--ph-abbau) 10%, transparent); }
+.bz-ph-abbau { background: var(--ph-abbau); }
+.bz-ph-abbau .bz-ph-t { color: var(--ph-t); }

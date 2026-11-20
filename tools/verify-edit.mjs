@@ -2025,6 +2025,198 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
   await cv.close();
 }
 
+// ── PHASEN: Leiste, Show-Tage, Editor, «heute» ────────────────────────────────
+// Eigener Kontext mit gestellter Uhr: «heute: Show-Tag 2» ist nur prüfbar, wenn
+// die Uhr mitten in der Show steht. Die Fixture beginnt am 14.09.2026 06:00 —
+// Aufbau 14.–18.09., Show 18.09. 12:00 – 21.09. 12:00 (vier Kalendertage).
+{
+  console.log('\nPHASEN');
+  const cp = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const pp = await cp.newPage();
+  const fehlerP = [];
+  pp.on('pageerror', (e) => fehlerP.push(e.message));
+  pp.on('console', (m) => { if (m.type() === 'error') fehlerP.push('console: ' + m.text()); });
+  await pp.clock.install({ time: new Date('2026-09-19T15:00:00') });
+  await pp.goto(BASE + '/index.html?plan=leer');
+  await pp.waitForTimeout(600);
+  await festivalMitDaten(pp, 'Phasen-Test', { loadIn: '2026-09-14T06:00' });
+  await pp.waitForTimeout(1000);
+  const seg = (txt) => pp.locator('.bz-axis-phase .bz-ph', { hasText: txt });
+  const bg = (loc) => loc.first().evaluate((n) => getComputedStyle(n).backgroundColor);
+
+  await check('Leiste: Planung, Aufbau, vier einzelne Show-Tage, Abbau', async () => {
+    const t = (await pp.locator('.bz-axis-phase .bz-ph-t').allTextContents()).map((x) => x.trim());
+    const soll = ['Planung', 'Aufbau', 'Show-Tag 1', 'Show-Tag 2', 'Show-Tag 3', 'Show-Tag 4', 'Abbau'];
+    return JSON.stringify(t) === JSON.stringify(soll) ? true : JSON.stringify(t);
+  });
+  await check('jede Art hat ihre eigene Farbe in der Leiste (4 Arten → 4 verschiedene Farben)', async () => {
+    const f = new Set([await bg(seg('Planung')), await bg(seg('Aufbau')), await bg(seg('Show-Tag 1')), await bg(seg('Abbau'))]);
+    return f.size === 4 ? true : [...f].join(' | ');
+  });
+  await check('Tönung im Zeitstrahl: je Phase eine Fläche, Show anders als Aufbau', async () => {
+    const n = await pp.locator('.bz-phase').count();
+    if (n !== 4) return n + ' Flächen statt 4';
+    const a = await pp.locator('.bz-phase-aufbau').evaluate((e) => getComputedStyle(e).backgroundColor);
+    const s2 = await pp.locator('.bz-phase-show').evaluate((e) => getComputedStyle(e).backgroundColor);
+    return a !== s2 && a !== 'rgba(0, 0, 0, 0)' ? true : a + ' / ' + s2;
+  });
+  await check('Kopfzeile: «heute: Show-Tag 2» bei gestellter Uhr (19.09. 15:00)', async () => {
+    const n = pp.locator('#phase-heute');
+    if (!(await n.isVisible())) return 'unsichtbar';
+    const t = (await n.textContent()).trim();
+    return t === 'heute: Show-Tag 2' ? true : t;
+  });
+  await pp.screenshot({ path: join(here, 'shots', 'phasen-strip-hell.png'), clip: { x: 0, y: 0, width: 1600, height: 330 } });
+  await check('Kopfzeile: außerhalb jeder Phase verschwindet die Marke', async () => {
+    await pp.clock.setSystemTime(new Date('2026-12-30T10:00:00'));
+    await pp.clock.runFor('00:20');
+    await pp.waitForTimeout(300);
+    return (await pp.locator('#phase-heute').isHidden()) ? true : 'noch sichtbar: ' + (await pp.locator('#phase-heute').textContent());
+  });
+  await check('Kopfzeile: im Aufbau «heute: Aufbau»', async () => {
+    await pp.clock.setSystemTime(new Date('2026-09-15T10:00:00'));
+    await pp.clock.runFor('00:20');
+    await pp.waitForTimeout(300);
+    const t = (await pp.locator('#phase-heute').textContent()).trim();
+    return t === 'heute: Aufbau' ? true : t;
+  });
+
+  // Einrichten → Phasen
+  await pp.locator('#rail-ein').click();
+  await pp.locator('[data-ein="phasen"]').click();
+  await check('Reiter «Phasen» listet die vier Phasen', async () => {
+    const n = await pp.locator('.ph-z').count();
+    return n === 4 ? true : n + ' Zeilen';
+  });
+  await pp.screenshot({ path: join(here, 'shots', 'phasen-tab-hell.png') });
+  const zeileArt = (art) => pp.locator('.ph-z', { has: pp.locator(`select[data-art="${art}"]`) });
+  await check('+ Phase legt eine Phase einer noch unbenutzten Art an (Vorbereitung)', async () => {
+    await pp.locator('#ei-ph-add').click();
+    await pp.waitForTimeout(150);
+    return (await zeileArt('vorbereitung').count()) === 1 && (await pp.locator('.ph-z').count()) === 5 ? true : 'keine neue Zeile';
+  });
+  await check('Von/Bis: tippen ist nur ein ENTWURF (✓ ✗ erscheinen, Leiste bleibt), ✓ übernimmt', async () => {
+    const z = zeileArt('vorbereitung');
+    const x0 = await seg('Vorbereitung').first().evaluate((n) => n.style.left);
+    await z.locator('.ph-von').fill('2026-09-12T08:00');
+    await z.locator('.ph-bis').fill('2026-09-13T08:00');
+    await pp.waitForTimeout(100);
+    if (!(await z.locator('.en-ok').isVisible())) return '✓ fehlt';
+    if ((await z.evaluate((n) => n.classList.contains('is-entwurf'))) !== true) return 'Zeile nicht markiert';
+    const x1 = await seg('Vorbereitung').first().evaluate((n) => n.style.left);
+    if (x0 !== x1) return 'die Leiste hat sich schon vor ✓ bewegt';
+    await z.locator('.en-ok').click();
+    await pp.waitForTimeout(200);
+    const x2 = await seg('Vorbereitung').first().evaluate((n) => n.style.left);
+    return x2 !== x0 && (await pp.locator('.ph-z.is-entwurf').count()) === 0 ? true : `links ${x0} → ${x2}`;
+  });
+  await check('✗ verwirft den Entwurf: Feld springt zurück, nichts ändert sich', async () => {
+    const z = zeileArt('vorbereitung');
+    await z.locator('.ph-von').fill('2026-09-01T08:00');
+    await z.locator('.en-no').click();
+    await pp.waitForTimeout(100);
+    return (await z.locator('.ph-von').inputValue()) === '2026-09-12T08:00' ? true : await z.locator('.ph-von').inputValue();
+  });
+  await check('gleiche Art darf nicht überlappen: Art auf «Aufbau» wird abgelehnt, Zeile bleibt Vorbereitung', async () => {
+    const z = zeileArt('vorbereitung');
+    // Vorbereitung auf den Aufbau-Zeitraum legen, dann Art wechseln — der Wechsel selbst kollidiert.
+    await z.locator('.ph-von').fill('2026-09-15T08:00');
+    await z.locator('.ph-bis').fill('2026-09-16T08:00');
+    await z.locator('.en-ok').click();
+    await pp.waitForTimeout(150);
+    await zeileArt('vorbereitung').locator('.ph-art').selectOption('aufbau');
+    await pp.waitForTimeout(250);
+    const toast = (await pp.locator('#toast').textContent()) || '';
+    if (!/überschneid/i.test(toast)) return 'keine Ablehnung: «' + toast + '»';
+    return (await zeileArt('vorbereitung').count()) === 1 ? true : 'Art wurde trotzdem geändert';
+  });
+  await check('Löschen fragt über den App-Dialog (kein Browser-Dialog) und löscht erst nach «Löschen»', async () => {
+    let nativ = false;
+    pp.once('dialog', (d) => { nativ = true; d.dismiss(); });
+    await zeileArt('vorbereitung').locator('.ph-del').click();
+    await pp.waitForTimeout(150);
+    if (!(await pp.locator('.dlg:not([hidden]) .dlg-h', { hasText: 'Phase löschen?' }).isVisible())) return 'kein App-Dialog';
+    await pp.locator('.dlg:not([hidden]) .btn', { hasText: 'Abbrechen' }).click();
+    if ((await pp.locator('.ph-z').count()) !== 5) return 'Abbrechen hat trotzdem gelöscht';
+    await zeileArt('vorbereitung').locator('.ph-del').click();
+    await pp.locator('.dlg:not([hidden]) .btn-danger').click();
+    await pp.waitForTimeout(200);
+    if (nativ) return 'nativer Dialog';
+    return (await pp.locator('.ph-z').count()) === 4 ? true : (await pp.locator('.ph-z').count()) + ' Zeilen';
+  });
+  await pp.locator('#ein-zu').click();
+
+  // Klick auf die Leiste → derselbe Editor als Kasten
+  await check('Klick auf die Leiste öffnet den Editor als Kasten (Abbau), Bis mit ✓ ändern verkürzt den Balken', async () => {
+    const s0 = seg('Abbau').first();
+    const w0 = await s0.evaluate((n) => parseFloat(n.style.width));
+    await s0.click();
+    await pp.waitForTimeout(200);
+    const box = pp.locator('.ph-box');
+    if (!(await box.isVisible())) return 'kein Kasten';
+    if ((await box.locator('select.ph-art').inputValue()) !== 'abbau') return 'falsche Zeile im Kasten';
+    await box.locator('.ph-bis').fill('2026-09-22T12:00');   // verkürzen: Verlängern klemmt am Planende
+    await box.locator('.en-ok').click();
+    await pp.waitForTimeout(250);
+    const w1 = await seg('Abbau').first().evaluate((n) => parseFloat(n.style.width));
+    return w1 < w0 - 1 && (await pp.locator('.ph-box').isVisible()) ? true : `Breite ${w0} → ${w1}`;
+  });
+  await pp.screenshot({ path: join(here, 'shots', 'phasen-kasten-hell.png'), clip: { x: 0, y: 0, width: 1600, height: 330 } });
+  await check('Escape schließt den Kasten; Enter auf der fokussierten Leiste öffnet ihn wieder (Tastatur)', async () => {
+    await pp.keyboard.press('Escape');
+    if (await pp.locator('.ph-box').count()) return 'Kasten noch offen';
+    await seg('Aufbau').first().focus();
+    await pp.keyboard.press('Enter');
+    await pp.waitForTimeout(150);
+    if (!(await pp.locator('.ph-box').isVisible())) return 'Enter öffnet nichts';
+    await pp.keyboard.press('Escape');
+    await seg('Aufbau').first().focus();
+    await pp.keyboard.press(' ');
+    await pp.waitForTimeout(150);
+    const ok = await pp.locator('.ph-box').isVisible();
+    await pp.keyboard.press('Escape');
+    return ok ? true : 'Leertaste öffnet nichts';
+  });
+  await check('⌘Z/Undo macht die Verkürzung rückgängig (ein Schritt)', async () => {
+    const w0 = await seg('Abbau').first().evaluate((n) => parseFloat(n.style.width));
+    await pp.locator('#undo').click();
+    await pp.waitForTimeout(200);
+    const w1 = await seg('Abbau').first().evaluate((n) => parseFloat(n.style.width));
+    return w1 > w0 + 1 ? true : `Breite ${w0} → ${w1}`;
+  });
+  // Weit herauszoomen: die Leiste zeigt alle Phasen auf einmal (Planung bis Abbau).
+  await pp.clock.setSystemTime(new Date('2026-09-19T15:00:00'));
+  for (let i = 0; i < 5; i++) await pp.locator('#zout').click();
+  // Den Anfang des Aufbaus an den linken Rand der Zeitachse rücken: von dort
+  // sind Aufbau, vier Show-Tage und Abbau in einem Bild.
+  await pp.evaluate(() => {
+    const sc = document.querySelector('.bz-scroll');
+    const a = [...document.querySelectorAll('.bz-axis-phase .bz-ph')].find((n) => /Aufbau/.test(n.textContent));
+    sc.scrollLeft = parseFloat(a.style.left) - 20;
+  });
+  await pp.waitForTimeout(400);
+  await check('weit herausgezoomt: schmale Show-Tage kurz («★ 1»), breite voll («Show-Tag 3»), nichts abgeschnitten', async () => {
+    const t = (await pp.locator('.bz-axis-phase .bz-ph-t').allTextContents()).map((x) => x.trim());
+    const soll = ['★ 1', '★ 2', 'Show-Tag 3', '★ 4'];
+    const show = t.filter((x) => /Show-Tag|★/.test(x));
+    // Show-Tag 2 und 3 sind ganze Tage; Tag 1 und 4 sind halbe. Welche kurz werden, hängt am Zoom —
+    // verlangt wird nur: jedes Etikett trägt die Nummer, und kein Etikett ist abgeschnitten.
+    if (show.length !== 4 || !show.every((x, i) => x.endsWith(String(i + 1)))) return JSON.stringify(show);
+    const ab = await pp.locator('.bz-axis-phase .bz-ph').evaluateAll((ns) => ns.filter((n) => n.querySelector('.bz-ph-t').scrollWidth + 6 > n.clientWidth && n.clientWidth > 0).map((n) => n.textContent));
+    return ab.length === 0 ? true : 'abgeschnitten: ' + JSON.stringify(ab) + ' (' + JSON.stringify(soll) + ')';
+  });
+  await pp.screenshot({ path: join(here, 'shots', 'phasen-uebersicht-hell.png'), clip: { x: 0, y: 0, width: 1600, height: 330 } });
+  // Dunkel
+  await pp.locator('#theme-toggle').click();
+  await pp.waitForTimeout(300);
+  await pp.screenshot({ path: join(here, 'shots', 'phasen-strip-dunkel.png'), clip: { x: 0, y: 0, width: 1600, height: 330 } });
+  await pp.locator('#rail-ein').click();
+  await pp.locator('[data-ein="phasen"]').click();
+  await pp.screenshot({ path: join(here, 'shots', 'phasen-tab-dunkel.png') });
+  await check('keine JS-Fehler im Phasen-Block', async () => (fehlerP.length ? fehlerP[0] : true));
+  await cp.close();
+}
+
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 

@@ -159,6 +159,44 @@ check('Callboard hell ist warmes Weiß, kein Flächen-#fff — Text hält den Ko
   return fehler.length ? fehler.join(' | ') : true;
 });
 
+check('Phasen-Leiste: Schrift auf jeder Art-Farbe hält 4,5:1 — in allen fünf Themes, hell UND beide Dunkel-Scopes', () => {
+  // Die Beschriftung IST die sekundäre Kodierung der Leiste (Farbe allein trägt
+  // keine Identität) — sie muss lesbar sein. Gerechnet wird aus den Tokens,
+  // nicht aus dem Augenschein.
+  const lum = (hex) => {
+    const n = hex.replace('#', '');
+    const v = [0, 2, 4].map((i) => parseInt(n.slice(i, i + 2), 16) / 255)
+      .map((u) => (u <= 0.03928 ? u / 12.92 : ((u + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  };
+  const kontrast = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  const arten = ['planung', 'vorbereitung', 'aufbau', 'show', 'abbau'];
+  const scopes = [':root {', '@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) {', ':root[data-theme="dark"] {', ':root[data-theme="light"] {'];
+  const fehler = [];
+  for (const f of readdirSync(join(root, 'styles/themes'))) {
+    const css = readFileSync(join(root, 'styles/themes', f), 'utf8');
+    for (const sc of scopes) {
+      const i = css.lastIndexOf(sc + ' --ph-planung');
+      if (i < 0) { fehler.push(`${f}: Scope «${sc}» ohne Phasen-Tokens`); continue; }
+      const b = css.slice(i, css.indexOf('}', i));
+      const ink = (b.match(/--ph-t:\s*(#[0-9a-fA-F]{6})/) || [])[1];
+      if (!ink) { fehler.push(`${f} ${sc}: --ph-t fehlt`); continue; }
+      for (const a of arten) {
+        const c = (b.match(new RegExp('--ph-' + a + ':\\s*(#[0-9a-fA-F]{6})')) || [])[1];
+        if (!c) { fehler.push(`${f} ${sc}: --ph-${a} fehlt`); continue; }
+        const k = kontrast(lum(c), lum(ink));
+        if (k < 4.5) fehler.push(`${f} ${sc}: ${a} ${k.toFixed(2)}:1 < 4.5`);
+      }
+    }
+  }
+  return fehler.length ? fehler.join(' | ') : true;
+});
+
+check('Phasen-Farbe hängt an der ART: gantt.js klassiert nie nach ph.name', () => {
+  const s = js('gantt.js');
+  return /bz-ph(ase)?-'\s*\+\s*ph\.name/.test(s) ? 'Klasse aus ph.name' : true;
+});
+
 check('der Sync-Schlüssel (bzp_sync) kommt nie in die Plan-Schicht', () => {
   const s = readFileSync(join(root, 'js/persistence.js'), 'utf8');
   return s.includes('bzp_sync') ? 'js/persistence.js kennt den Schlüssel' : true;
@@ -190,7 +228,12 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     'sync-state',
     // Zeilen-Entwurf: gelbe Zeile, grünes ✓, rotes ✗, Grund darunter.
     // Ohne eigene Regeln verlöre ✓ gegen `.tb-ico { color: var(--muted) }`.
-    'is-entwurf', 'en-ok', 'en-no', 'en-grund'];
+    'is-entwurf', 'en-ok', 'en-no', 'en-grund',
+    // Phasen: Farbe je ART (nicht je Name) — Leiste, Tönung und Kopfzeilen-Marke
+    // lesen --ph-<art>/--ph-t aus dem Theme. Ohne sie wäre die Leiste farblos.
+    '--ph-planung', '--ph-vorbereitung', '--ph-aufbau', '--ph-show', '--ph-abbau', '--ph-t',
+    'bz-ph-planung', 'bz-ph-vorbereitung', 'bz-ph-aufbau', 'bz-ph-show', 'bz-ph-abbau',
+    'bz-phase-planung', 'bz-phase-vorbereitung', 'bz-phase-aufbau', 'bz-phase-show', 'bz-phase-abbau'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

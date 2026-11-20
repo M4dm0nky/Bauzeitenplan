@@ -11,6 +11,7 @@ import { artOf, abschnittOf, ABSCHNITTE } from './ebene.js';
 import { fmtFloat } from './timeaxis.js';
 import { el, toInput, STATUS } from './dom.js';
 import { ressourcen, resKind, deckung, RES_KINDS } from './resources.js';
+import { aufbauPhase } from './phasen.js';
 
 const DEP_TYPES = [
   ['FS', 'Ende → Start'], ['SS', 'Start → Start'],
@@ -438,7 +439,7 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     const S = store.state;
     const last = S.tasks.filter((t) => t.gewerk === gewerkId && !ohneTermin(t))
       .sort((a, b) => toMin(a.end) - toMin(b.end)).pop();
-    const ph = (S.phases || []).find((p) => /aufbau|load.?in/i.test(p.name));
+    const ph = aufbauPhase(S.phases);
     const start = last ? last.end : toInput(ph ? ph.start : S.project.start);
     const r = send({ type: 'addTask', task: { gewerk: gewerkId, title: 'Neuer Vorgang', start, end: local(toDate(toMin(start) + 120)) } });
     if (r && r.id) show({ kind: 'task', id: r.id });

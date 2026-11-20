@@ -12,6 +12,7 @@
 import { topoSort, toMin, toDate, spanFehler, ohneTermin } from './schedule.js';
 import { MAX_SLOTS } from './palette.js';
 import { local } from './conflicts.js';
+import { phaseFehler, istPhasenArt } from './phasen.js';
 
 // Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
 // Ablage die äußere Schicht — diese Abhängigkeit liefe verkehrt herum. Für eine
@@ -706,6 +707,45 @@ const HANDLERS = {
     return ok();
   },
 
+  /**
+   * Phasen: Zeiträume mit einer Funktion (Planung, Vorbereitung, Aufbau, Show,
+   * Abbau). Gleiche Art darf sich nicht überlappen; geprüft wird die ganze Phase
+   * VOR der Änderung (phaseFehler), ein Fehler hinterlässt nichts.
+   */
+  addPhase(state, cmd) {
+    const ph = cmd.phase || {};
+    const neu = {
+      id: ph.id || newId('ph'), art: ph.art, name: String(ph.name || '').trim(),
+      start: ph.start ?? null, end: ph.end ?? null,
+    };
+    state.phases ??= [];
+    if (state.phases.some((x) => x.id === neu.id)) return 'Diese id gibt es schon: ' + neu.id;
+    const bad = phaseFehler(neu, state.phases);
+    if (bad) return bad;
+    state.phases.push(neu);
+    return ok({ id: neu.id });
+  },
+
+  setPhase(state, cmd) {
+    const ph = (state.phases || []).find((x) => x.id === cmd.id);
+    if (!ph) return 'Phase nicht gefunden.';
+    const neu = { ...ph };
+    for (const f of ['art', 'name', 'start', 'end']) if (cmd[f] !== undefined) neu[f] = cmd[f];
+    if (cmd.name !== undefined) neu.name = String(cmd.name || '').trim();
+    if (!istPhasenArt(neu.art)) return 'Unbekannte Art: ' + neu.art;
+    const bad = phaseFehler(neu, state.phases.filter((x) => x.id !== ph.id));
+    if (bad) return bad;
+    Object.assign(ph, neu);
+    return ok();
+  },
+
+  removePhase(state, cmd) {
+    const i = (state.phases || []).findIndex((x) => x.id === cmd.id);
+    if (i < 0) return 'Phase nicht gefunden.';
+    state.phases.splice(i, 1);
+    return ok();
+  },
+
   setProjectField(state, cmd) {
     if (cmd.field === 'name' && !String(cmd.value || '').trim()) return 'Das Projekt braucht einen Namen.';
     if (['start', 'end'].includes(cmd.field)) {
@@ -735,6 +775,7 @@ export function createStore(initial) {
   if (!state.deps) state.deps = [];
   if (!state.tasks) state.tasks = [];
   if (!state.gewerke) state.gewerke = [];
+  if (!Array.isArray(state.phases)) state.phases = [];
   // Bestandsdaten ohne Farbplatz nachrüsten
   state.gewerke.forEach((g, i) => { if (g.slot == null) g.slot = i; });
   state.tasks.forEach((t) => {
@@ -818,6 +859,7 @@ export function createStore(initial) {
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
     replace(next) {           // Projektwechsel / Import
       state = clone(next);
+      if (!Array.isArray(state.phases)) state.phases = [];
       state.tasks.forEach((t) => {
         if (t.parent === undefined) t.parent = null;
         if (!Array.isArray(t.res)) t.res = [];

@@ -39,6 +39,7 @@ const plan = (name = 'Test') => ({
 const migriert = (p) => {
   const q = JSON.parse(JSON.stringify(p));
   q.project.ressourcen = [{ id: 'crew', label: 'Crew', kind: 'personal' }];
+  q.phases = [];   // migrate legt die Liste immer an
   for (const t of q.tasks) {
     if (!t.crew) continue;
     t.res = [{ rid: 'crew', n: t.crew, von: null, bis: null }];
@@ -612,12 +613,14 @@ test('migrate: fehlende start/end-Schlüssel werden zu null (nicht undefined)', 
   assert.equal(m.tasks[0].start, null);
   assert.equal(m.tasks[0].end, null);
 });
-test('Import reicht Phasen durch (Task 5 ergänzt Datenmodell und Prüfung)', () => {
+test('Import behält Phasen (Altform ohne art/id wird migriert)', () => {
   const p = plan();
   p.phases = [{ name: 'Aufbau', start: '2026-09-14T06:00', end: '2026-09-16T06:00' }];
   const back = deserialize(serialize(p));
   assert.equal(back.ok, true);
-  assert.deepEqual(back.plan.phases, p.phases);
+  assert.equal(back.plan.phases.length, 1);
+  assert.equal(back.plan.phases[0].art, 'aufbau');
+  assert.equal(back.plan.phases[0].start, p.phases[0].start);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

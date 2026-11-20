@@ -8,6 +8,7 @@
 
 import { VERSION } from './version.js';
 import { spanFehler } from './schedule.js';
+import { artAusName, phasenFehler } from './phasen.js';
 
 export const SCHEMA_VERSION = 1;
 
@@ -198,6 +199,24 @@ export function migrate(plan) {
     d.type ??= 'FS';
     d.lag ??= 0;
   }
+
+  // Phasen: Zeiträume mit einer FUNKTION (Planung, Vorbereitung, Aufbau, Show,
+  // Abbau). Altdaten tragen nur einen Namen — die Art wird daraus erraten, sonst
+  // 'aufbau'. Eine vorhandene Art bleibt, auch wenn der Name etwas anderes sagt.
+  // Fehlende ids werden vergeben, aus der Reihenfolge — stabil über jeden Ladevorgang.
+  // Geprüft wird hier NICHT (das macht deserialize): migrate darf nichts ablehnen.
+  p.phases = Array.isArray(p.phases) ? p.phases.filter((ph) => ph && typeof ph === 'object') : [];
+  const phIds = new Set(p.phases.map((ph) => ph.id).filter(Boolean));
+  p.phases.forEach((ph, i) => {
+    if (!ph.art) ph.art = artAusName(ph.name) || 'aufbau';
+    if (!ph.id) {
+      let id = 'ph' + (i + 1);
+      for (let k = 2; phIds.has(id); k++) id = 'ph' + (i + 1) + '-' + k;
+      ph.id = id; phIds.add(id);
+    }
+    ph.name = typeof ph.name === 'string' ? ph.name : '';
+    ph.start ??= null; ph.end ??= null;
+  });
   return p;
 }
 
@@ -315,7 +334,9 @@ function inhaltFehler(plan) {
     if (bad) return `${name}: ${bad}`;
   }
   plan.deps = plan.deps.filter((d) => ids.has(d.from) && ids.has(d.to));
-  return null;
+  // Phasen: ein Fehler lehnt den Import ab und nennt die Phase — dieselbe Haltung
+  // wie bei Vorgängen (still reparieren hieße, ein Datum zu erfinden).
+  return phasenFehler(plan.phases);
 }
 
 export function deserialize(text, { newId = false } = {}) {
@@ -332,8 +353,7 @@ export function deserialize(text, { newId = false } = {}) {
     return { ok: false, error: `Die Datei stammt aus einer neueren Version (Schema ${j.schema}, hier ${SCHEMA_VERSION}). Bitte die App aktualisieren.` };
   }
   const plan = migrate({ project: j.project, gewerke: j.gewerke, tasks: j.tasks, deps: j.deps,
-    // Phasen nur durchreichen (bisher verworfen); Datenmodell + Prüfung folgen in Task 5.
-    ...(Array.isArray(j.phases) ? { phases: j.phases } : {}) });
+    phases: j.phases });
   const bad = inhaltFehler(plan);
   if (bad) return { ok: false, error: bad };
   if (newId) plan.project.id = 'p' + Date.now().toString(36);

@@ -133,7 +133,9 @@ body { margin: 0; }
 .bz-axis-major, .bz-axis-minor { position: relative; height: 22px; }
 /* KEIN overflow:hidden hier — das macht die Ebene selbst zum Scroll-Container
    und das sticky unten klebte dann am Canvas-Rand statt am Bildschirmrand. */
-.bz-axis-phase { position: relative; height: 17px; }
+.bz-axis-phase { position: relative; height: 22px; }
+.bz-ph { cursor: pointer; }
+.bz-ph:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
 .bz-ph { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; }
 /* sticky hält den Phasennamen im Blick, solange ein Rest der Phase sichtbar ist;
    der umschließende Block begrenzt ihn automatisch auf die eigene Phase.
@@ -566,7 +568,7 @@ body { margin: 0; }
 .einrichten { display: flex; flex-direction: column; gap: 18px; }
 .ei-sec { display: flex; flex-direction: column; gap: 8px; }
 .ei-h { font: inherit; margin: 0; }
-.ein-box { width: min(780px, 100%); }
+.ein-box { width: min(880px, 100%); }
 .ein-kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 /* `width: max-content`, sonst spannt die Segmentgruppe als Blockkind des
    Fensters die volle Breite und ihre Trennfarbe steht rechts als leerer Kasten
@@ -904,3 +906,26 @@ body { margin: 0; }
 .en-ok:disabled { opacity: .4; cursor: not-allowed; }
 .en-grund { line-height: 1.25; }
 .tb-entwurf-grund td { padding: 2px 10px 4px; font-size: 12px; }
+
+/* ── Phasen: Editor und Kopfzeilen-Marke (js/phasen-editor.js) ──
+   Farben kommen als --ph-* aus den Themes; hier nur Geometrie. */
+.hd-phase {
+  align-self: flex-start; padding: 1px 9px; border-radius: 99px; font-size: 12px; font-weight: 700;
+  background: var(--ph-c, currentColor); color: var(--ph-t, #fff);
+}
+.hd-phase[hidden] { display: none; }
+.ph-liste { display: flex; flex-direction: column; gap: 8px; }
+.ph-z { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 4px 0 4px 8px; border-left: 4px solid var(--ph-aufbau, currentColor); }
+.ph-z:has(select[data-art="planung"]) { border-left-color: var(--ph-planung); }
+.ph-z:has(select[data-art="vorbereitung"]) { border-left-color: var(--ph-vorbereitung); }
+.ph-z:has(select[data-art="aufbau"]) { border-left-color: var(--ph-aufbau); }
+.ph-z:has(select[data-art="show"]) { border-left-color: var(--ph-show); }
+.ph-z:has(select[data-art="abbau"]) { border-left-color: var(--ph-abbau); }
+.ph-art, .ph-name, .ph-von, .ph-bis { font: inherit; padding: 4px 6px; }
+.ph-name { width: 9em; min-width: 0; }
+.ph-entw { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ph-pop { display: inline-flex; }
+.ph-tage { font-size: 12px; min-width: 5.5em; }
+.ph-del { font-size: 16px; padding: 3px 9px; border-radius: 4px; }
+.ph-box { min-width: 0; max-width: calc(100vw - 16px); }
+.ph-z.is-entwurf { outline: 2px solid var(--en); outline-offset: 2px; border-radius: 4px; }

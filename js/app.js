@@ -22,11 +22,13 @@ import { toMin, toDate, ohneTermin } from './schedule.js';
 import { isoWeek } from './timeaxis.js';
 import { $, el, escapeHtml } from './dom.js';
 import { VERSION } from './version.js';
+import { createPhasenEditor } from './phasen-editor.js';
+import { phasenJetzt } from './phasen.js';
 
 // Der Speicher wird in main() gesetzt. Bis dahin null — nichts greift vorher
 // darauf zu.
 let repo = null;
-let store = null, gantt = null, table = null, bedarf = null, inspector = null, rail = null, suche = null;
+let store = null, gantt = null, table = null, bedarf = null, inspector = null, rail = null, suche = null, phasen = null;
 
 // ── Darstellung ─────────────────────────────────────────────────────────────
 // Plan · Tabelle · Bedarf. Personal und Maschinen sind KEINE eigenen
@@ -262,7 +264,10 @@ function mount() {
     onSelect: (sel) => { inspector.show(sel); syncPanel(); },
     onContext: showContext,
     onError: (msg) => toast(msg, 'bad'),
-    onTick: () => refreshLive(),
+    // Klick auf die Phasen-Leiste über dem Zeitstrahl: derselbe Editor wie im
+    // Einrichten-Reiter «Phasen», als schwebender Kasten.
+    onPhase: (id, rect) => phasen.openBox(id, rect),
+    onTick: () => { refreshLive(); syncPhaseHeute(); },
     // Im Gantt vom Griff eines Balkens auf einen anderen gezogen. Immer FS —
     // den Typ stellt man danach im Panel um, dort steht die Auswahl schon.
     onLink: (from, to) => {
@@ -311,6 +316,8 @@ function mount() {
     onWahl: springeZu,
     blockiert: () => !!document.querySelector('.dlg:not([hidden])'),
   });
+  phasen = createPhasenEditor({ store, askDialog, onError: (msg) => toast(msg, 'bad') });
+  phasen.mountListe($('ei-ph-liste'), $('ei-ph-add'));
   bedarf = createBedarf($('bd'), { store, onEinrichten: (tab) => openEinrichten(tab) });
   inspector = createInspector($('ins'), {
     store,
@@ -336,6 +343,7 @@ function mount() {
   refreshLive();
 
   store.subscribe(() => {
+    phasen.refresh();
     refreshChrome();
     syncBuehnen();          // eine neue oder gelöschte Bühne gehört in die Leiste
     refreshLive();
@@ -483,6 +491,7 @@ function setEinTab(name) {
   document.querySelectorAll('[data-ein-tab]')
     .forEach((s) => { s.hidden = s.dataset.einTab !== name; });
   if (name === 'sync') paintSyncInfo();
+  if (name === 'phasen') phasen?.refresh();
 }
 
 function openEinrichten(tab = 'projekt') {
@@ -1262,6 +1271,20 @@ function setSaveState(s) {
 }
 
 // ── Kopfzeile ───────────────────────────────────────────────────────────────
+// «heute: Aufbau» / «heute: Show-Tag 2» — nur, wenn heute in einer Phase liegt.
+// Gerechnet gegen die ECHTE Uhr (liveInfo().now), nie gegen den Versatz: der
+// verschiebt den Ablauf eines Abends, nicht den Kalender.
+function syncPhaseHeute() {
+  const n = $('phase-heute');
+  if (!n || !store || !gantt) return;
+  const jetzt = phasenJetzt(store.state.phases, gantt.liveInfo().now);
+  n.hidden = !jetzt.length;
+  if (!jetzt.length) { n.textContent = ''; delete n.dataset.art; return; }
+  n.dataset.art = jetzt[0].art;
+  n.style.setProperty('--ph-c', 'var(--ph-' + jetzt[0].art + ')');
+  n.textContent = 'heute: ' + jetzt.map((x) => x.text).join(' · ');
+}
+
 function refreshChrome() {
   const S = store.state;
   $('proj-name').textContent = S.project.name;
@@ -1270,6 +1293,7 @@ function refreshChrome() {
 
   // Datumsfeld an das (evtl. neue) Projekt anpassen.
   syncTagKnopf();
+  syncPhaseHeute();
 
   const st = gantt.stats();
   $('kpis').innerHTML = [

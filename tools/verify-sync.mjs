@@ -266,6 +266,26 @@ try {
         const n = await eigeneProjekte(B);
         return n.includes(PROBE) ? true : 'Liste: ' + n.join(', ');
       });
+      await check('Phasen reisen mit: das Gerät B hat die vier Phasen von A samt Art und id (Repo → B)', async () => {
+        const von = (g) => g.page.evaluate((name) => {
+          for (const k of Object.keys(localStorage)) {
+            if (!k.startsWith('bzp_p_')) continue;
+            const pl = JSON.parse(localStorage.getItem(k));
+            if (pl.project && pl.project.name === name) return (pl.phases || []).map((p) => p.art + ':' + p.id);
+          }
+          return null;
+        }, PROBE);
+        const a = await von(A), b = await von(B);
+        if (!a || a.length !== 4) return 'A hat ' + JSON.stringify(a);
+        if (!b || b.length !== 4) return 'B hat ' + JSON.stringify(b);
+        if (!a.every((x) => /^(planung|vorbereitung|aufbau|show|abbau):.+/.test(x))) return 'ohne Art: ' + a;
+        return JSON.stringify(a) === JSON.stringify(b) ? true : a.join(',') + ' ≠ ' + b.join(',');
+      });
+      if (!ECHT) await check('Phasen stehen in der Datei im Repo (Fake), mit Art', async () => {
+        const e = [...fake.dateien].find(([pf]) => pf.startsWith('projekte/') && JSON.parse(fake.dateien.get(pf).text).project.name === PROBE);
+        const ph = e ? JSON.parse(e[1].text).phases : null;
+        return ph && ph.length === 4 && ph.every((x) => x.art && x.id) ? true : JSON.stringify(ph);
+      });
       if (!ECHT) await check('«Nur-B» steht danach im Fake (Richtung B → Repo)', async () =>
         fake.namen().includes(NURB) ? true : 'Dateien: ' + fake.namen().join(','));
       await check('A kennt «Nur-B» noch NICHT vor seinem nächsten Abgleich (Nicht-Treffer)', async () => {

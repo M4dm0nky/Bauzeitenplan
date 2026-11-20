@@ -75,6 +75,7 @@
         <div class="hd-proj">
           <h1 class="hd-title" id="proj-name">—</h1>
           <div class="hd-sub" id="proj-venue"></div>
+          <div class="hd-phase" id="phase-heute" hidden></div>
         </div>
       </div>
       <div class="kpis" id="kpis"></div>
@@ -226,6 +227,7 @@
     </div>
     <div class="seg ein-reiter" role="group" aria-label="Bereich">
       <button data-ein="projekt">Projekt</button>
+      <button data-ein="phasen">Phasen</button>
       <button data-ein="baender">Gewerke &amp; Bühnen</button>
       <button data-ein="res">Personal &amp; Maschinen</button>
       <button data-ein="arten">Arten &amp; Abschnitte</button>
@@ -241,6 +243,14 @@
           <button class="btn" id="import">Import</button>
         </div>
         <p class="ei-hint">Drucken und Hell/Dunkel stehen in der Kopfzeile.</p>
+      </div>
+
+      <div class="ei-sec" data-ein-tab="phasen" hidden>
+        <div class="ei-row">
+          <button class="btn" id="ei-ph-add">+ Phase</button>
+        </div>
+        <div class="ph-liste" id="ei-ph-liste"></div>
+        <p class="ei-hint">Planung (Büro), Vorbereitung (vor Ort), Aufbau, Show, Abbau: die Farbe in der Leiste über dem Zeitstrahl hängt an der Art, nicht am Namen. Show-Tage zählen sich selbst. Von/Bis gelten erst mit ✓. Die Leiste anklicken öffnet dieselbe Zeile.</p>
       </div>
 
       <div class="ei-sec" data-ein-tab="baender" hidden>

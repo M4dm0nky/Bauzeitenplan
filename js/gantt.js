@@ -12,6 +12,7 @@ import { sichtGewerke, programmFenster, amTag, imAbschnitt, programmTage, buehne
 import { gewerkVar, gewerkTexture, gewerkInkVar } from './palette.js';
 import { el, svgEl } from './dom.js';
 import { resLabel } from './resources.js';
+import { aufbauPhase, showTage, phaseLabel } from './phasen.js';
 
 // Summe der Personal-Zuweisungen eines Vorgangs — ersetzt die frühere blanke
 // Zahl `crew`. Maschinen zählen hier nicht mit: die Kopfzeile fragte schon
@@ -1310,18 +1311,61 @@ export function createGantt(root, opts = {}) {
   function layoutBands() {
     bandLayer.replaceChildren();
     axisPhase.replaceChildren();
-    for (const ph of (S.phases || [])) {
-      const a = x(toMin(ph.start)), b = x(toMin(ph.end));
-      // Tönung auf dem Canvas …
-      const n = el('div', 'bz-phase bz-phase-' + ph.name.toLowerCase());
-      n.style.left = a + 'px'; n.style.width = (b - a) + 'px';
-      bandLayer.append(n);
-      // … Beschriftung im Band der Achse. Der Name bleibt beim Scrollen im
-      // Blick, solange noch ein Teil der Phase sichtbar ist.
-      const p = el('div', 'bz-ph bz-ph-' + ph.name.toLowerCase());
+    // Phasen: Farbe je ART (nie je Name). Auf die dargestellte Spanne geklemmt —
+    // eine Phase, die über das Planende hinausragt, machte sonst den Scroller
+    // breiter als seinen Inhalt (derselbe Fehler wie bei den Wochenenden).
+    const klemm = (m) => Math.min(T1, Math.max(T0, m));
+    const phasen = (S.phases || []).filter((ph) => ph.start && ph.end);
+    const tage = showTage(phasen);
+    const segment = (ph, von, bis, text) => {
+      const a = x(klemm(von)), b = x(klemm(bis));
+      if (b - a <= 0) return;
+      const p = el('div', 'bz-ph bz-ph-' + ph.art);
       p.style.left = a + 'px'; p.style.width = (b - a) + 'px';
-      p.append(el('span', 'bz-ph-t', ph.name));
+      p.dataset.phase = ph.id;
+      // Ein angeschnittener Show-Tag (Beginn um 12:00, Ende um 12:00) ist zu
+      // schmal für «SHOW-TAG 3» — dann steht «★ 3» da statt eines abgeschnittenen
+      // Wortes; der Titel behält den vollen Namen.
+      const kurz = ph.art === 'show' && b - a < 92 ? text.replace(/^Show-Tag /, '★ ') : text;
+      p.append(el('span', 'bz-ph-t', kurz));
+      // Klick öffnet den Editor — und was tabIndex trägt, reagiert auch auf
+      // Enter und Leertaste (Space braucht preventDefault, sonst scrollt es).
+      p.tabIndex = 0;
+      p.setAttribute('role', 'button');
+      p.title = text + ' — bearbeiten';
+      // Der Kasten hängt am SICHTBAREN Teil der Phase: ragt sie links unter die
+      // Seitenspalte, rückte er sonst bis an den Fensterrand.
+      const auf = () => {
+        if (!O.onPhase) return;
+        const r = p.getBoundingClientRect();
+        const links = scroller.getBoundingClientRect().left + sideWNow();
+        O.onPhase(ph.id, { left: Math.max(r.left, links), right: r.right, top: r.top, bottom: r.bottom });
+      };
+      p.addEventListener('click', auf);
+      p.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); auf(); }
+      });
       axisPhase.append(p);
+    };
+    for (const ph of phasen) {
+      const von = toMin(ph.start), bis = toMin(ph.end);
+      // Tönung auf dem Canvas …
+      const a = x(klemm(von)), b = x(klemm(bis));
+      if (b - a > 0) {
+        const n = el('div', 'bz-phase bz-phase-' + ph.art);
+        n.style.left = a + 'px'; n.style.width = (b - a) + 'px';
+        bandLayer.append(n);
+      }
+      // … Beschriftung im Band der Achse. Der Name bleibt beim Scrollen im
+      // Blick, solange noch ein Teil der Phase sichtbar ist. Show-Tage stehen
+      // EINZELN da («Show-Tag 1», «Show-Tag 2» …), nicht als ein langer Block.
+      if (ph.art !== 'show') { segment(ph, von, bis, phaseLabel(ph)); continue; }
+      for (const t of tage) {
+        const d0 = toMin(t.tag + 'T00:00');
+        const d = new Date(t.tag + 'T12:00'); d.setDate(d.getDate() + 1);
+        const d1 = toMin(local(d).slice(0, 10) + 'T00:00');
+        if (Math.max(d0, von) < Math.min(d1, bis)) segment(ph, Math.max(d0, von), Math.min(d1, bis), 'Show-Tag ' + t.n);
+      }
     }
     // Wochenenden nur zeigen, wenn ein Tag überhaupt breit genug ist
     if (1440 * px >= 26) {
@@ -1693,7 +1737,7 @@ export function createGantt(root, opts = {}) {
   // Also: Vor dem Aufbau der Aufbaubeginn, nach dem Planende ebenfalls, dazwischen
   // heuteOderNaechster().
   function initialFocus() {
-    const aufbau = (S.phases || []).find((p) => /aufbau|load.?in/i.test(p.name));
+    const aufbau = aufbauPhase(S.phases);
     const spans = S.tasks.filter((t) => !t.milestone && !ohneTermin(t)).map((t) => toMin(t.start));
     const anchor = aufbau ? toMin(aufbau.start) : (spans.length ? Math.min(...spans) : NOW);
     // KEINE «läuft gerade etwas?»-Prüfung: ein 29-tägiger Planungsbalken läuft

@@ -14,6 +14,7 @@ import { el, toInput, STATUS } from './dom.js';
 import { sichtGewerke, punktTypen, abschnitte, abschnittLabel, nachSort, amTag, imAbschnitt } from './ebene.js';
 import { benutztVon } from './store.js';
 import { ressourcen, resKind } from './resources.js';
+import { aufbauPhase } from './phasen.js';
 
 // Die Spalten hängen an der Ebene (js/ebene.js). Sie stehen an EINER Stelle und
 // bestimmen zugleich die Breite der Gruppenköpfe — zwei Listen liefen sonst
@@ -614,7 +615,7 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
       // nicht am Projektanfang zwei Wochen vorher.
       if (tag) return tag + 'T08:00';
     }
-    const ph = (S.phases || []).find((p) => /aufbau|load/i.test(p.name));
+    const ph = aufbauPhase(S.phases);
     return toInput(ph ? ph.start : S.project.start);
   }
 
