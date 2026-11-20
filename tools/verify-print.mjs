@@ -22,7 +22,7 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const BASE = 'http://127.0.0.1:' + server.address().port;
 
 const b = await firefox.launch({ executablePath: exe });
-const ctx = await b.newContext({ viewport: { width: 1700, height: 1000 } });
+const ctx = await b.newContext({ viewport: { width: 1700, height: 1000 }, timezoneId: 'Europe/Berlin' });
 const p = await ctx.newPage();
 const errors = [];
 p.on('pageerror', (e) => errors.push('JS: ' + e.message));
@@ -236,6 +236,52 @@ for (const [w, h] of [[1440, 900], [1000, 800]]) {
   } finally { await kb.close(); }
 }
 await p.setViewportSize({ width: 1700, height: 1000 });
+
+console.log('\nZEITUMSTELLUNG');
+{
+  // Nachtschicht über das Ende der Sommerzeit (25.10.2026, 25 Stunden). Das Blatt
+  // muss bis an die echte Mitternacht reichen; mit «a + 1440» endete es um 23:00
+  // und die letzte Stunde stand auf keinem Blatt.
+  await p.goto(BASE + '/print.html?plan=klassentreffen');
+  await p.waitForSelector('.pr-sheet', { timeout: 15000 });
+  await p.evaluate(async () => {
+    const m = await import('/js/persistence.js');
+    const r = m.deserialize(await (await fetch('/klassentreffen-festival.json')).text());
+    const pl = r.plan;
+    const t0 = pl.tasks[0];
+    pl.tasks = [{ ...t0, id: 'zeitumstellung-nacht', title: 'Nachtschicht Zeitumstellung', start: '2026-10-25T22:00', end: '2026-10-26T02:00', milestone: false, parent: null, deps: [], fuer: null }];
+    m.createRepo(window.localStorage).save(pl);
+  });
+  const fehler0 = errors.length;
+  await p.goto(BASE + '/print.html?plan=klassentreffen');
+  await p.waitForSelector('.pr-sheet', { timeout: 15000 });
+  await p.waitForTimeout(500);
+  await check('Nachtschicht am 25.10.: Blatt 25.10. hat einen Balken bis an die rechte Kante, 26.10. ab der linken', async () => {
+    const tage = await p.locator('.pr-sheet').evaluateAll((ns) => ns.map((n) => n.dataset.tag));
+    if (tage.join() !== '2026-10-25,2026-10-26') return 'Blätter: ' + tage.join();
+    const geom = (tag, k) => p.evaluate(([tag, k]) => {
+      const sh = document.querySelector('.pr-sheet[data-tag="' + tag + '"]');
+      const bar = sh.querySelector('.pr-bar' + k);
+      const sp = bar && bar.parentElement.getBoundingClientRect();
+      const b = bar && bar.getBoundingClientRect();
+      return bar ? { l: b.left - sp.left, r: sp.right - b.right } : null;
+    }, [tag, k]);
+    const a = await geom('2026-10-25', '.is-cut-r');
+    const c = await geom('2026-10-26', '.is-cut-l');
+    if (!a) return 'am 25.10. kein rechts angeschnittener Balken';
+    if (!c) return 'am 26.10. kein links angeschnittener Balken';
+    if (a.r > 1.5) return 'Balken 25.10. endet ' + a.r.toFixed(1) + ' px vor der rechten Kante (letzte Stunde fehlt)';
+    if (c.l > 1.5) return 'Balken 26.10. beginnt ' + c.l.toFixed(1) + ' px nach der linken Kante';
+    // Die Kante allein beweist wenig (der Balken wird immer ans Fenster geklemmt).
+    // Das Fenster ist für beide Blätter gemeinsam 0–24 Uhr: die Achse des
+    // 25-Stunden-Tages muss mit dem Mitternachts-Tick enden (alt: endete bei 21).
+    const ticks = await p.locator('.pr-sheet[data-tag="2026-10-25"] .pr-tick').allTextContents();
+    if (ticks[ticks.length - 1] !== '00') return 'Zeitachse am 25.10. endet nicht an Mitternacht: ' + ticks.join('|');
+    return true;
+  });
+  await p.screenshot({ path: join(here, 'shots', 'druck-zeitumstellung.png'), fullPage: true });
+  await check('Zeitumstellung: keine JS-Fehler', async () => errors.length === fehler0 ? true : errors.slice(fehler0).join(' | '));
+}
 
 console.log('\nVORGÄNGE OHNE TERMIN');
 {

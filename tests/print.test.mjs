@@ -60,6 +60,13 @@ const ohne = (...namen) => {
 };
 const AUFBAU = tageZwischen('2026-08-21', '2026-08-28');
 
+test('Zeitumstellung: am 25.10. (25 Stunden) bleibt 12–14 Uhr 12–14, die Nacht läuft bis 24', () => {
+  const t = (id, start, end) => ({ id, title: id, start, end });
+  assert.deepEqual(fensterFuer([t('a', '2026-10-25T12:00', '2026-10-25T14:00')], ['2026-10-25']), { von: 12, bis: 14 });
+  assert.deepEqual(fensterFuer([t('n', '2026-10-25T22:00', '2026-10-26T02:00')], ['2026-10-25']), { von: 22, bis: 24 });
+  assert.deepEqual(fensterFuer([t('n', '2026-10-25T22:00', '2026-10-26T02:00')], ['2026-10-26']), { von: 0, bis: 2 });
+});
+
 test('mit allen Gewerken braucht ein Aufbautag die vollen 24 Stunden', () => {
   assert.deepEqual(fensterFuer(plan.tasks, AUFBAU), { von: 0, bis: 24 });
 });

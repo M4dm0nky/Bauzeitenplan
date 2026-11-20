@@ -12,7 +12,7 @@
 // und seriesRows (schedule.js), ticksFor/fmtDay (timeaxis.js), palette.js.
 
 import { createRepo, deserialize } from './persistence.js';
-import { tagesScheiben, seriesRows, toMin, toDate, ohneTermin } from './schedule.js';
+import { tagesScheiben, naechsterTag, seriesRows, toMin, toDate, ohneTermin } from './schedule.js';
 import { ticksFor, fmtDay } from './timeaxis.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { local } from './conflicts.js';
@@ -66,10 +66,13 @@ export function tageZwischen(vonISO, bisISO) {
 export function fensterFuer(tasks, tage) {
   let lo = 24, hi = 0, was = false;
   for (const tag of tage) {
-    const a = toMin(tag + 'T00:00');
+    // Stunden als Wanduhr (getHours), nicht als Minuten ab Tagesbeginn: am 25.10.
+    // hat der Tag 25 Stunden. Die echte Mitternacht des Folgetags zählt als 24.
+    const ende = toMin(naechsterTag(tag) + 'T00:00');
+    const uhr = (min) => { const d = toDate(min); return d.getHours() + d.getMinutes() / 60; };
     for (const s of tagesScheiben(tasks, tag)) {
-      lo = Math.min(lo, (s.von - a) / 60);
-      hi = Math.max(hi, (s.bis - a) / 60);
+      lo = Math.min(lo, uhr(s.von));
+      hi = Math.max(hi, s.bis >= ende ? 24 : uhr(s.bis));
       was = true;
     }
   }
@@ -406,9 +409,10 @@ function blatt(tag, tasks, nr, gesamt) {
   const sheet = el('section', 'pr-sheet');
   sheet.dataset.tag = tag;
   const { von: fv, bis: fb } = wahl.fenster;
-  const tagStart = toMin(tag + 'T00:00');
-  const wVon = tagStart + fv * 60;
-  const wBis = tagStart + fb * 60;
+  // Fenstergrenzen als Wanduhr dieses Kalendertags; 24 = echte Mitternacht des
+  // Folgetags (am 25.10. 25, am 29.03. 23 Stunden nach Tagesbeginn).
+  const wVon = toMin(tag + 'T' + p2(fv) + ':00');
+  const wBis = fb === 24 ? toMin(naechsterTag(tag) + 'T00:00') : toMin(tag + 'T' + p2(fb) + ':00');
   const spanne = Math.max(1, wBis - wVon);
   const pct = (min) => ((min - wVon) / spanne) * 100;
 
@@ -424,7 +428,7 @@ function blatt(tag, tasks, nr, gesamt) {
   const axis = el('div', 'pr-axis');
   axis.append(el('div', 'pr-axis-pad'));
   const scale = el('div', 'pr-axis-scale');
-  const stunden = fb - fv;
+  const stunden = fb - fv;      // Beschriftungsdichte; das Raster selbst folgt der echten Spanne
   // Bei engem Fenster jede Stunde, sonst jede zweite/dritte — sonst kleben die
   // Zahlen aneinander. ticksFor ist die eine Quelle für Ticks.
   const einheit = stunden <= 12 ? 'hour' : stunden <= 18 ? 'hour' : 'hour3';
@@ -493,7 +497,7 @@ function blatt(tag, tasks, nr, gesamt) {
   sheet.style.setProperty('--pr-bar-h', Math.min(4.4, hoehe * 0.62).toFixed(2) + 'mm');
   sheet.style.setProperty('--pr-titel', titelMM.toFixed(2) + 'mm');
   sheet.style.setProperty('--pr-notiz', notizMM.toFixed(2) + 'mm');
-  sheet.style.setProperty('--pr-grid', (100 / stunden) + '%');
+  sheet.style.setProperty('--pr-grid', (100 / (spanne / 60)) + '%');
 
   for (const z of zeilen) {
     if (z.kind === 'grp') {

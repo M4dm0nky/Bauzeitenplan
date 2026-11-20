@@ -545,6 +545,24 @@ test('seriesRows: terminlos in einer Serie belegt keine Spur', () => {
   assert.equal(r.lanes, 1);
   assert.deepEqual(r.tasks.map((v) => v.id), ['a', 'o']);
 });
+test('Zeitumstellung: der 25-Stunden-Tag (25.10.2026) verliert die letzte Stunde nicht', () => {
+  // Tagesende über den Kalender, nie a + 1440: sonst endete das Blatt um 23:00 und
+  // die Stunde bis Mitternacht stünde auf keinem Blatt.
+  const t = [ts('n', '2026-10-25T22:00', '2026-10-26T02:00')];
+  const a = tagesScheiben(t, '2026-10-25')[0];
+  const b = tagesScheiben(t, '2026-10-26')[0];
+  assert.equal(a.bis - a.von, 120);          // 22:00 → echte Mitternacht (23:00 CET)
+  assert.equal(a.schnittRechts, true);
+  assert.equal(b.bis - b.von, 120);
+  assert.equal(b.schnittLinks, true);
+  assert.equal(a.bis, b.von);                // nahtlos, nichts doppelt
+});
+test('Zeitumstellung: der 23-Stunden-Tag (29.03.2026) — 00:15 des Folgetags steht NICHT auf dem Blatt davor', () => {
+  const t = [ts('f', '2026-03-30T00:15', '2026-03-30T01:00')];
+  assert.deepEqual(tagesScheiben(t, '2026-03-29'), []);
+  assert.equal(tagesScheiben(t, '2026-03-30').length, 1);
+});
+
 test('tagesScheiben: terminlose erscheinen auf keinem Blatt', () => {
   const l = [OT('o', 'o'), { ...t('a', '2026-07-13T08:00', '2026-07-13T10:00'), title: 'a' }];
   assert.deepEqual(tagesScheiben(l, '2026-07-13').map((s) => s.task.id), ['a']);

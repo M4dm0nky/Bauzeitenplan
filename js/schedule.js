@@ -44,6 +44,19 @@ export const byStart = (a, b) => {
 };
 
 /**
+ * Der Kalendertag nach «2026-10-25» → «2026-10-26». Über den Kalender gerechnet
+ * (12:00 gegen Sommerzeit-Kanten), nie als +1440 Minuten: der 25.10.2026 hat 25,
+ * der 29.03.2026 nur 23 Stunden. (conflicts.js importiert dieses Modul, deshalb
+ * hier eigene Formatierung statt `local`.)
+ */
+export function naechsterTag(tagISO) {
+  const [y, m, d] = tagISO.split('-').map(Number);
+  const n = new Date(y, m - 1, d + 1, 12);
+  const p = (x) => String(x).padStart(2, '0');
+  return n.getFullYear() + '-' + p(n.getMonth() + 1) + '-' + p(n.getDate());
+}
+
+/**
  * Vorgänge auf einen Kalendertag zuschneiden — die Grundlage der Tagesblätter
  * (ein A3 quer je Tag). Ein Vorgang, der über Mitternacht läuft, erscheint auf
  * BEIDEN Blättern, jeweils angeschnitten; im Klassentreffen-Plan trifft das 40
@@ -59,7 +72,7 @@ export const byStart = (a, b) => {
  */
 export function tagesScheiben(tasks, tagISO) {
   const a = toMin(tagISO + 'T00:00');
-  const b = a + 1440;
+  const b = toMin(naechsterTag(tagISO) + 'T00:00');   // echte Mitternacht, nicht a + 1440
   const out = [];
   for (const t of tasks) {
     if (ohneTermin(t)) continue;        // kein Termin, auf keinem Blatt
