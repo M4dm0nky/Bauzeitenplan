@@ -1363,6 +1363,7 @@ async function doImport(e) {
   // erneut geladen überschreibt sich, statt sich zu verdoppeln.
   const r = deserialize(await f.text());
   if (r.ok === false) return toast(r.error, 'bad', 8000);
+  if (r.hinweis) toast(r.hinweis, 'bad', 8000);
   const name = r.plan.project.name;
 
   // Schon Projekte mit gleichem Namen da? Fragen, ob ersetzen (alte weg, nur

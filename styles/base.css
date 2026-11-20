@@ -133,8 +133,10 @@ body { margin: 0; }
 .bz-axis-major, .bz-axis-minor { position: relative; height: 22px; }
 /* KEIN overflow:hidden hier — das macht die Ebene selbst zum Scroll-Container
    und das sticky unten klebte dann am Canvas-Rand statt am Bildschirmrand. */
-.bz-axis-phase { position: relative; height: 22px; }
+:root { --axis-phase-h: 22px; }
+.bz-axis-phase { position: relative; height: var(--axis-phase-h); }
 .bz-ph { cursor: pointer; }
+.bz-ph.bz-ph-eng .bz-ph-t { padding: 0 2px; letter-spacing: 0; }
 .bz-ph:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
 .bz-ph { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; }
 /* sticky hält den Phasennamen im Blick, solange ein Rest der Phase sichtbar ist;
@@ -257,7 +259,9 @@ body { margin: 0; }
    width:max-content ist dabei Pflicht — sticky steht im normalen Fluss und
    würde sonst auf die 2px Breite der Linie zusammenschnurren. */
 .bz-now-flag {
-  position: sticky; top: 0; left: 0; width: max-content;
+  /* Unterhalb der Achse: die Phasen-Leiste (--axis-phase-h) samt zwei Zeitzeilen
+     à 22px sollen nicht überdeckt werden. */
+  position: sticky; top: var(--axis-h, calc(var(--axis-phase-h) + 44px)); left: 0; width: max-content;
   transform: translateX(-50%); white-space: nowrap;
 }
 
@@ -915,17 +919,24 @@ body { margin: 0; }
 }
 .hd-phase[hidden] { display: none; }
 .ph-liste { display: flex; flex-direction: column; gap: 8px; }
-.ph-z { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 4px 0 4px 8px; border-left: 4px solid var(--ph-aufbau, currentColor); }
+.ph-z { display: grid; grid-template-columns: 9em 8em minmax(0, 1fr) auto; align-items: start; gap: 6px 10px; padding: 4px 0 4px 8px; border-left: 4px solid var(--ph-aufbau, currentColor); }
+.ph-artz { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ph-z:has(select[data-art="planung"]) { border-left-color: var(--ph-planung); }
 .ph-z:has(select[data-art="vorbereitung"]) { border-left-color: var(--ph-vorbereitung); }
 .ph-z:has(select[data-art="aufbau"]) { border-left-color: var(--ph-aufbau); }
 .ph-z:has(select[data-art="show"]) { border-left-color: var(--ph-show); }
 .ph-z:has(select[data-art="abbau"]) { border-left-color: var(--ph-abbau); }
-.ph-art, .ph-name, .ph-von, .ph-bis { font: inherit; padding: 4px 6px; }
-.ph-name { width: 9em; min-width: 0; }
+.ph-art, .ph-name, .ph-von, .ph-bis { font: inherit; padding: 4px 6px; min-width: 0; }
+.ph-name { width: 100%; box-sizing: border-box; }
 .ph-entw { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .ph-pop { display: inline-flex; }
-.ph-tage { font-size: 12px; min-width: 5.5em; }
+.ph-tage { font-size: 12px; }
+.ph-tage:empty { display: none; }
 .ph-del { font-size: 16px; padding: 3px 9px; border-radius: 4px; }
 .ph-box { min-width: 0; max-width: calc(100vw - 16px); }
+.ph-box .ph-z { grid-template-columns: 9em 8em auto auto; }
+@media (max-width: 700px) {
+  .ph-z, .ph-box .ph-z { grid-template-columns: 1fr 1fr; }
+  .ph-entw { grid-column: 1 / -1; }
+}
 .ph-z.is-entwurf { outline: 2px solid var(--en); outline-offset: 2px; border-radius: 4px; }

@@ -8,7 +8,7 @@
 
 import { VERSION } from './version.js';
 import { spanFehler } from './schedule.js';
-import { artAusName, phasenFehler } from './phasen.js';
+import { artAusName, istPhasenArt, phasenFehler, phaseLabel } from './phasen.js';
 
 export const SCHEMA_VERSION = 1;
 
@@ -205,7 +205,14 @@ export function migrate(plan) {
   // 'aufbau'. Eine vorhandene Art bleibt, auch wenn der Name etwas anderes sagt.
   // Fehlende ids werden vergeben, aus der Reihenfolge — stabil über jeden Ladevorgang.
   // Geprüft wird hier NICHT (das macht deserialize): migrate darf nichts ablehnen.
-  p.phases = Array.isArray(p.phases) ? p.phases.filter((ph) => ph && typeof ph === 'object') : [];
+  // Eine Phase ohne lesbare Zeiten hat keinen Platz auf der Achse und lässt sich
+  // nicht reparieren (ein Datum zu erfinden wäre falsch): sie entfällt, und
+  // deserialize meldet es sichtbar (`hinweis`). Eine unbekannte Art wird wie bei
+  // Altdaten aus dem Namen geraten — das ist verlustfrei.
+  const zeitOk = (v) => typeof v === 'string' && v && !Number.isNaN(new Date(v).getTime());
+  p.phases = Array.isArray(p.phases)
+    ? p.phases.filter((ph) => ph && typeof ph === 'object' && zeitOk(ph.start) && zeitOk(ph.end)) : [];
+  p.phases.forEach((ph) => { if (ph.art && !istPhasenArt(ph.art)) delete ph.art; });
   const phIds = new Set(p.phases.map((ph) => ph.id).filter(Boolean));
   p.phases.forEach((ph, i) => {
     if (!ph.art) ph.art = artAusName(ph.name) || 'aufbau';
@@ -357,5 +364,12 @@ export function deserialize(text, { newId = false } = {}) {
   const bad = inhaltFehler(plan);
   if (bad) return { ok: false, error: bad };
   if (newId) plan.project.id = 'p' + Date.now().toString(36);
+  // Entfallene Phasen sichtbar machen (der Aufrufer zeigt `hinweis`).
+  const lesbar = (v) => typeof v === 'string' && v && !Number.isNaN(new Date(v).getTime());
+  const weg = (Array.isArray(j.phases) ? j.phases : []).filter((x) => !x || typeof x !== 'object' || !lesbar(x.start) || !lesbar(x.end));
+  if (weg.length) {
+    const namen = weg.filter((x) => x && typeof x === 'object').map((x) => `«${phaseLabel({ art: x.art, name: x.name })}»`).join(', ');
+    return { ok: true, plan, hinweis: `${weg.length} ${weg.length === 1 ? 'Phase' : 'Phasen'} ohne lesbare Zeiten ${weg.length === 1 ? 'wurde' : 'wurden'} nicht übernommen${namen ? ': ' + namen : ''}.` };
+  }
   return { ok: true, plan };
 }

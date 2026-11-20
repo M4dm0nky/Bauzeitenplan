@@ -73,18 +73,30 @@ test('deserialize lehnt eine Phase mit Ende vor Start ab und nennt sie', () => {
   assert.equal(r.ok, false);
   assert.match(r.error, /Hauptshow/);
 });
-test('deserialize lehnt unbekannte Art, fehlende Zeit und Überlappung gleicher Art ab', () => {
+test('deserialize: Überlappung gleicher Art lehnt den Import NICHT ab (Altpläne), showTage kommt damit klar', () => {
+  const r = deserialize(JSON.stringify(plan([
+    { name: 'Aufbau', start: '2026-09-14T06:00', end: '2026-09-18T06:00' },
+    { name: 'Load-in', start: '2026-09-16T06:00', end: '2026-09-19T06:00' },
+    { name: 'Show', start: '2026-09-18T12:00', end: '2026-09-20T12:00' },
+    { name: 'Show', start: '2026-09-19T12:00', end: '2026-09-21T12:00' },
+  ])));
+  assert.equal(r.ok, true);
+  assert.equal(r.plan.phases.length, 4);
+  assert.deepEqual(showTage(r.plan.phases).map((x) => x.n), [1, 2]);
+});
+test('deserialize: id doppelt und Ende vor Start lehnen ab; unbekannte Art wird normalisiert, Phase ohne Zeit entfällt mit Hinweis', () => {
   const eine = (ph) => deserialize(JSON.stringify(plan(ph)));
-  assert.equal(eine([{ id: 'p1', art: 'party', start: '2026-09-01T08:00', end: '2026-09-02T08:00' }]).ok, false);
-  assert.equal(eine([{ id: 'p1', art: 'show', start: null, end: null }]).ok, false);
-  assert.equal(eine([
-    { id: 'p1', art: 'show', name: 'A', start: '2026-09-01T08:00', end: '2026-09-03T08:00' },
-    { id: 'p2', art: 'show', name: 'B', start: '2026-09-02T08:00', end: '2026-09-04T08:00' },
-  ]).ok, false);
-  assert.equal(eine([
-    { id: 'p1', art: 'show', start: '2026-09-01T08:00', end: '2026-09-03T08:00' },
-    { id: 'p2', art: 'aufbau', start: '2026-09-02T08:00', end: '2026-09-04T08:00' },
-  ]).ok, true, 'verschiedene Arten dürfen sich überlappen');
+  assert.equal(eine([{ id: 'a', art: 'show', start: '2026-09-01T08:00', end: '2026-09-02T08:00' }, { id: 'a', art: 'abbau', start: '2026-09-03T08:00', end: '2026-09-04T08:00' }]).ok, false);
+  const r = eine([
+    { id: 'p1', art: 'party', name: 'Abbau', start: '2026-09-01T08:00', end: '2026-09-02T08:00' },
+    { id: 'p2', art: 'show', name: 'ohne', start: null, end: null },
+    { id: 'p3', art: 'show', name: 'kaputt', start: 'x', end: 'y' },
+  ]);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.plan.phases.map((p) => [p.id, p.art]), [['p1', 'abbau']]);
+  assert.match(r.hinweis, /2 Phasen/);
+  assert.match(r.hinweis, /ohne|kaputt/);
+  assert.equal(deserialize(serialize(r.plan)).hinweis, undefined, 'bereinigter Plan meldet nichts mehr');
 });
 
 console.log('\nPhasen: Store');
@@ -172,30 +184,26 @@ test('phaseFehler / phasenFehler nennen die Phase beim Namen', () => {
 
 console.log('\nPhasen: Show-Tage');
 const SHOW = (id, s, e) => ({ id, art: 'show', start: s, end: e });
-test('showTage zählt jeden Kalendertag der Show-Phasen fortlaufend', () => {
-  const t = showTage([SHOW('a', '2026-09-18T12:00', '2026-09-20T23:00')]);
-  assert.deepEqual(t.map((x) => [x.tag, x.n]), [['2026-09-18', 1], ['2026-09-19', 2], ['2026-09-20', 3]]);
+test('JEDE Show-Phase ist EIN Show-Tag, auch über Mitternacht (Fr 18:00–Sa 02:00, Sa 18:00–So 02:00)', () => {
+  const t = showTage([SHOW('a', '2026-09-18T18:00', '2026-09-19T02:00'), SHOW('b', '2026-09-19T18:00', '2026-09-20T02:00')]);
+  assert.deepEqual(t.map((x) => [x.phase, x.n]), [['a', 1], ['b', 2]]);
 });
-test('showTage: Ende exakt 00:00 zählt den Folgetag nicht; andere Arten zählen nicht', () => {
-  const t = showTage([SHOW('a', '2026-09-18T12:00', '2026-09-20T00:00'), { id: 'b', art: 'aufbau', start: '2026-09-10T00:00', end: '2026-09-12T00:00' }]);
-  assert.deepEqual(t.map((x) => x.tag), ['2026-09-18', '2026-09-19']);
+test('eine Phase über mehrere Kalendertage bleibt EIN Show-Tag', () => {
+  assert.deepEqual(showTage([SHOW('a', '2026-09-18T12:00', '2026-09-21T12:00')]).map((x) => [x.phase, x.n]), [['a', 1]]);
 });
-test('showTage: mehrere Show-Phasen, nach Start sortiert, durchnummeriert; geteilter Tag nur einmal', () => {
+test('Show-Phasen werden nach Start durchnummeriert, andere Arten zählen nicht', () => {
   const t = showTage([
-    SHOW('b', '2026-09-25T10:00', '2026-09-25T23:00'),
+    SHOW('c', '2026-09-25T10:00', '2026-09-25T23:00'),
+    { id: 'x', art: 'aufbau', start: '2026-09-10T00:00', end: '2026-09-12T00:00' },
     SHOW('a', '2026-09-18T12:00', '2026-09-19T12:00'),
-    SHOW('c', '2026-09-19T14:00', '2026-09-20T12:00'),
+    SHOW('b', '2026-09-19T14:00', '2026-09-20T12:00'),
   ]);
-  assert.deepEqual(t.map((x) => [x.tag, x.n, x.phase]), [['2026-09-18', 1, 'a'], ['2026-09-19', 2, 'a'], ['2026-09-20', 3, 'c'], ['2026-09-25', 4, 'b']]);
-});
-test('showTage über die Zeitumstellung (25.10.2026) liefert drei Tage, nicht vier', () => {
-  const t = showTage([SHOW('a', '2026-10-24T20:00', '2026-10-26T06:00')]);
-  assert.deepEqual(t.map((x) => x.tag), ['2026-10-24', '2026-10-25', '2026-10-26']);
+  assert.deepEqual(t.map((x) => [x.phase, x.n]), [['a', 1], ['b', 2], ['c', 3]]);
 });
 test('showTage: leer, ohne Phasen, kaputte Phase bricht nichts', () => {
   assert.deepEqual(showTage([]), []);
   assert.deepEqual(showTage(undefined), []);
-  assert.deepEqual(showTage([SHOW('a', null, null), SHOW('b', 'x', 'y')]), []);
+  assert.deepEqual(showTage([SHOW('a', null, null), SHOW('b', 'x', 'y'), SHOW('c', '2026-09-20T10:00', '2026-09-20T09:00')]), []);
 });
 
 console.log('\nPhasen: heute');
@@ -204,9 +212,15 @@ const PH = [
   { id: 'a', art: 'aufbau', name: 'Load-in', start: '2026-09-14T06:00', end: '2026-09-18T12:00' },
   SHOW('s', '2026-09-18T12:00', '2026-09-21T12:00'),
 ];
+test('phasenHeute nach Mitternacht: Sa 01:00 gehört noch zu Show-Tag 1; zweiter Abend = Show-Tag 2', () => {
+  const p = [SHOW('a', '2026-09-18T18:00', '2026-09-19T02:00'), SHOW('b', '2026-09-19T18:00', '2026-09-20T02:00')];
+  assert.deepEqual(phasenHeute(p, toMin('2026-09-19T01:00')), ['Show-Tag 1']);
+  assert.deepEqual(phasenHeute(p, toMin('2026-09-19T12:00')), []);
+  assert.deepEqual(phasenHeute(p, toMin('2026-09-19T19:00')), ['Show-Tag 2']);
+});
 test('phasenHeute: «Aufbau» mit Namen, «Show-Tag 2» nummeriert, sonst leer', () => {
   assert.deepEqual(phasenHeute(PH, toMin('2026-09-15T10:00')), ['Load-in']);
-  assert.deepEqual(phasenHeute(PH, toMin('2026-09-19T10:00')), ['Show-Tag 2']);
+  assert.deepEqual(phasenHeute(PH, toMin('2026-09-19T10:00')), ['Show-Tag 1']);
   assert.deepEqual(phasenHeute(PH, toMin('2026-10-30T10:00')), []);
   assert.deepEqual(phasenHeute(PH, toMin('2026-09-14T06:00')), ['Load-in'], 'Start zählt, Ende nicht');
   assert.deepEqual(phasenHeute([], toMin('2026-09-19T10:00')), []);

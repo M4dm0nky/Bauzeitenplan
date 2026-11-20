@@ -1311,6 +1311,8 @@ export function createGantt(root, opts = {}) {
   function layoutBands() {
     bandLayer.replaceChildren();
     axisPhase.replaceChildren();
+    // Das JETZT-Fähnchen klebt unter der Achse — ihre echte Höhe (Themes ändern Ränder).
+    root.style.setProperty('--axis-h', axis.offsetHeight + 'px');
     // Phasen: Farbe je ART (nie je Name). Auf die dargestellte Spanne geklemmt —
     // eine Phase, die über das Planende hinausragt, machte sonst den Scroller
     // breiter als seinen Inhalt (derselbe Fehler wie bei den Wochenenden).
@@ -1323,10 +1325,14 @@ export function createGantt(root, opts = {}) {
       const p = el('div', 'bz-ph bz-ph-' + ph.art);
       p.style.left = a + 'px'; p.style.width = (b - a) + 'px';
       p.dataset.phase = ph.id;
-      // Ein angeschnittener Show-Tag (Beginn um 12:00, Ende um 12:00) ist zu
-      // schmal für «SHOW-TAG 3» — dann steht «★ 3» da statt eines abgeschnittenen
-      // Wortes; der Titel behält den vollen Namen.
-      const kurz = ph.art === 'show' && b - a < 92 ? text.replace(/^Show-Tag /, '★ ') : text;
+      // Ein schmaler Show-Tag passt nicht mit «SHOW-TAG 3»: erst «TAG 3», unter
+      // 56 px «★ 3» statt eines abgeschnittenen Wortes. Der volle Name bleibt in
+      // aria-label und Titel.
+      const breit = b - a;
+      const kurz = ph.art !== 'show' || breit >= 92 ? text
+        : breit >= 56 ? text.replace(/^Show-Tag /, 'Tag ') : text.replace(/^Show-Tag /, '★ ');
+      p.setAttribute('aria-label', text);
+      if (breit < 56) p.classList.add('bz-ph-eng');
       p.append(el('span', 'bz-ph-t', kurz));
       // Klick öffnet den Editor — und was tabIndex trägt, reagiert auch auf
       // Enter und Leertaste (Space braucht preventDefault, sonst scrollt es).
@@ -1357,15 +1363,12 @@ export function createGantt(root, opts = {}) {
         bandLayer.append(n);
       }
       // … Beschriftung im Band der Achse. Der Name bleibt beim Scrollen im
-      // Blick, solange noch ein Teil der Phase sichtbar ist. Show-Tage stehen
-      // EINZELN da («Show-Tag 1», «Show-Tag 2» …), nicht als ein langer Block.
+      // Blick, solange noch ein Teil der Phase sichtbar ist. Show-Phasen tragen
+      // «Show-Tag n» (eine Phase = ein Show-Tag).
       if (ph.art !== 'show') { segment(ph, von, bis, phaseLabel(ph)); continue; }
-      for (const t of tage) {
-        const d0 = toMin(t.tag + 'T00:00');
-        const d = new Date(t.tag + 'T12:00'); d.setDate(d.getDate() + 1);
-        const d1 = toMin(local(d).slice(0, 10) + 'T00:00');
-        if (Math.max(d0, von) < Math.min(d1, bis)) segment(ph, Math.max(d0, von), Math.min(d1, bis), 'Show-Tag ' + t.n);
-      }
+      // Jede Show-Phase ist EIN Show-Tag, auch über Mitternacht hinaus.
+      const t = tage.find((x) => x.phase === ph.id);
+      segment(ph, von, bis, t ? 'Show-Tag ' + t.n : phaseLabel(ph));
     }
     // Wochenenden nur zeigen, wenn ein Tag überhaupt breit genug ist
     if (1440 * px >= 26) {

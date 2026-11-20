@@ -56,9 +56,8 @@ export function createPhasenEditor({ store, askDialog, onError }) {
     const entw = el('span', 'ph-entw');
     entw.append(von, el('span', 'ph-bis-z', '–'), bis, popIn);
 
-    const tage = showTage(store.state.phases).filter((t) => t.phase === id);
-    const tageTxt = p.art === 'show' && tage.length
-      ? (tage.length === 1 ? 'Show-Tag ' + tage[0].n : 'Show-Tag ' + tage[0].n + '–' + tage[tage.length - 1].n) : '';
+    const tag = p.art === 'show' ? showTage(store.state.phases).find((t) => t.phase === id) : null;
+    const tageTxt = tag ? 'Show-Tag ' + tag.n : '';
     const info = el('span', 'ph-tage', tageTxt);
 
     const del = el('button', 'tb-ico ph-del', '×');
@@ -66,7 +65,11 @@ export function createPhasenEditor({ store, askDialog, onError }) {
     del.title = 'Phase löschen';
     del.setAttribute('aria-label', 'Phase löschen');
 
-    row.append(art, name, entw, info, del);
+    // «Show-Tag 1–4» steht UNTER der Art: so hat die Zeile auf dem Desktop genau
+    // eine Reihe, und das × bleibt nie allein in einer eigenen Zeile.
+    const artz = el('div', 'ph-artz');
+    artz.append(art, info);
+    row.append(artz, name, entw, del);
 
     art.addEventListener('change', () => { if (art.value !== lesen(id)?.art) senden({ type: 'setPhase', id, art: art.value }); });
     name.addEventListener('change', () => { if (name.value.trim() !== (lesen(id)?.name || '')) senden({ type: 'setPhase', id, name: name.value }); });
@@ -90,6 +93,11 @@ export function createPhasenEditor({ store, askDialog, onError }) {
 
   function zeichneListe() {
     if (!liste) return;
+    // Nicht neu bauen, solange der Reiter verborgen ist (jede Store-Änderung
+    // käme sonst hier an) oder in einer Zeile ein Entwurf offen ist — er läge
+    // sonst nur im abgehängten Knoten und ginge verloren.
+    const sichtbar = !!(liste.offsetParent || liste.getClientRects().length);
+    if (liste.children.length && (!sichtbar || liste.querySelector('.is-entwurf'))) return;
     const phasen = [...(store.state.phases || [])].sort((a, b) => (toMin(a.start) - toMin(b.start)) || (toMin(a.end) - toMin(b.end)));
     liste.replaceChildren();
     if (!phasen.length) liste.append(el('p', 'ei-hint ph-leer', 'Noch keine Phasen.'));

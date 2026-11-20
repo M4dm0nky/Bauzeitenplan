@@ -9,8 +9,7 @@
 // gleichzeitig wären keine Auskunft mehr, wo man gerade ist); Phasen
 // verschiedener Arten schon (Abbau beginnt, während die Show noch läuft).
 
-import { toMin, toDate, spanFehler } from './schedule.js';
-import { local } from './conflicts.js';
+import { toMin, spanFehler } from './schedule.js';
 
 export const PHASEN_ARTEN = [
   { id: 'planung',      label: 'Planung',      icon: '✎' },
@@ -60,7 +59,12 @@ export function phaseFehler(p, andere = []) {
   return null;
 }
 
-/** Die ganze Liste prüfen (Import): id eindeutig, jede Phase gültig. */
+/**
+ * Die ganze Liste prüfen (Import): id eindeutig, Art bekannt, Spanne gültig.
+ * Die Überlappungsregel gilt NUR für Store-Befehle: Altpläne, deren Namen auf
+ * dieselbe Art geraten werden («Aufbau» + «Load-in»), dürfen sich überlappen —
+ * der Import sperrte sonst Pläne aus, die vorher funktionierten.
+ */
 export function phasenFehler(phases) {
   const ids = new Set();
   const liste = phases || [];
@@ -69,38 +73,24 @@ export function phasenFehler(phases) {
     if (!p || typeof p !== 'object') return 'Eine Phase ist kein Objekt.';
     if (ids.has(p.id)) return `Phase «${phaseLabel(p)}»: Die id ${p.id} kommt mehrfach vor.`;
     ids.add(p.id);
-    const bad = phaseFehler(p, liste.slice(0, i));
+    const bad = phaseFehler(p, []);
     if (bad) return bad;
   }
   return null;
 }
 
 /**
- * Show-Tage: jeder Kalendertag, den eine Show-Phase berührt, wird fortlaufend
- * 1, 2, 3 … gezählt — über ALLE Show-Phasen, nach Start sortiert. Ein Tag, den
- * zwei Show-Phasen teilen, zählt einmal. Ein Ende exakt um 00:00 gehört nicht
- * mehr zum Folgetag.
- * @returns {{tag:string, n:number, phase:string}[]}
+ * Show-Tage: JEDE Show-Phase ist genau EIN Show-Tag — auch wenn sie über
+ * Mitternacht in den Folgetag läuft (Fr 18:00 – Sa 02:00 ist «Show-Tag 1», nicht
+ * zwei Kalendertage). Gezählt wird nach Start, fortlaufend. Wer einen zweiten
+ * Showtag will, legt eine zweite Show-Phase an.
+ * @returns {{phase:string, n:number}[]}
  */
 export function showTage(phases) {
-  const shows = (phases || []).filter((p) => p && p.art === 'show' && p.start && p.end
+  return (phases || []).filter((p) => p && p.art === 'show' && p.start && p.end
     && !Number.isNaN(toMin(p.start)) && !Number.isNaN(toMin(p.end)) && toMin(p.end) > toMin(p.start))
-    .sort((a, b) => toMin(a.start) - toMin(b.start));
-  const gesehen = new Set();
-  const out = [];
-  for (const p of shows) {
-    const erster = local(toDate(toMin(p.start))).slice(0, 10);
-    const letzter = local(toDate(toMin(p.end) - 1)).slice(0, 10);
-    // Tagweise vorangehen statt +1440 min: der 25.10.2026 hat 25 Stunden.
-    const d = new Date(erster + 'T12:00');
-    for (let i = 0; i < 800; i++) {
-      const iso = local(d).slice(0, 10);
-      if (iso > letzter) break;
-      if (!gesehen.has(iso)) { gesehen.add(iso); out.push({ tag: iso, n: out.length + 1, phase: p.id }); }
-      d.setDate(d.getDate() + 1);
-    }
-  }
-  return out;
+    .sort((a, b) => toMin(a.start) - toMin(b.start))
+    .map((p, i) => ({ phase: p.id, n: i + 1 }));
 }
 
 /**
@@ -111,12 +101,11 @@ export function showTage(phases) {
 export function phasenJetzt(phases, nowMin) {
   if (!Number.isFinite(nowMin)) return [];
   const tage = showTage(phases);
-  const heute = local(toDate(nowMin)).slice(0, 10);
   const out = [];
   for (const p of (phases || [])) {
     if (!p || !p.start || !p.end) continue;
     if (!(toMin(p.start) <= nowMin && nowMin < toMin(p.end))) continue;
-    const t = p.art === 'show' ? tage.find((x) => x.tag === heute) : null;
+    const t = p.art === 'show' ? tage.find((x) => x.phase === p.id) : null;
     out.push({ art: p.art, text: t ? 'Show-Tag ' + t.n : phaseLabel(p), phase: p.id });
   }
   return out;

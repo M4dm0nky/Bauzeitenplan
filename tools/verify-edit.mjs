@@ -2028,7 +2028,7 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
 // ── PHASEN: Leiste, Show-Tage, Editor, «heute» ────────────────────────────────
 // Eigener Kontext mit gestellter Uhr: «heute: Show-Tag 2» ist nur prüfbar, wenn
 // die Uhr mitten in der Show steht. Die Fixture beginnt am 14.09.2026 06:00 —
-// Aufbau 14.–18.09., Show 18.09. 12:00 – 21.09. 12:00 (vier Kalendertage).
+// Aufbau 14.–18.09.; zwei Show-Phasen = zwei Showtage (Fr 18:00–Sa 02:00, Sa 18:00–So 02:00).
 {
   console.log('\nPHASEN');
   const cp = await browser.newContext({ viewport: { width: 1600, height: 950 } });
@@ -2036,17 +2036,23 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
   const fehlerP = [];
   pp.on('pageerror', (e) => fehlerP.push(e.message));
   pp.on('console', (m) => { if (m.type() === 'error') fehlerP.push('console: ' + m.text()); });
-  await pp.clock.install({ time: new Date('2026-09-19T15:00:00') });
+  await pp.clock.install({ time: new Date('2026-09-19T20:00:00') });
   await pp.goto(BASE + '/index.html?plan=leer');
   await pp.waitForTimeout(600);
-  await festivalMitDaten(pp, 'Phasen-Test', { loadIn: '2026-09-14T06:00' });
+  await festivalMitDaten(pp, 'Phasen-Test', { loadIn: '2026-09-14T06:00', phasen: [
+    { name: 'Planung', start: '2026-07-06T06:00', end: '2026-09-11T06:00' },
+    { name: 'Aufbau', start: '2026-09-14T06:00', end: '2026-09-18T06:00' },
+    { name: 'Show', start: '2026-09-18T18:00', end: '2026-09-19T02:00' },
+    { name: 'Show', start: '2026-09-19T18:00', end: '2026-09-20T02:00' },
+    { name: 'Abbau', start: '2026-09-20T02:00', end: '2026-09-22T12:00' },
+  ] });
   await pp.waitForTimeout(1000);
   const seg = (txt) => pp.locator('.bz-axis-phase .bz-ph', { hasText: txt });
   const bg = (loc) => loc.first().evaluate((n) => getComputedStyle(n).backgroundColor);
 
-  await check('Leiste: Planung, Aufbau, vier einzelne Show-Tage, Abbau', async () => {
+  await check('Leiste: Planung, Aufbau, zwei Show-Phasen = Show-Tag 1 und 2, Abbau', async () => {
     const t = (await pp.locator('.bz-axis-phase .bz-ph-t').allTextContents()).map((x) => x.trim());
-    const soll = ['Planung', 'Aufbau', 'Show-Tag 1', 'Show-Tag 2', 'Show-Tag 3', 'Show-Tag 4', 'Abbau'];
+    const soll = ['Planung', 'Aufbau', 'Show-Tag 1', 'Show-Tag 2', 'Abbau'];
     return JSON.stringify(t) === JSON.stringify(soll) ? true : JSON.stringify(t);
   });
   await check('jede Art hat ihre eigene Farbe in der Leiste (4 Arten → 4 verschiedene Farben)', async () => {
@@ -2055,12 +2061,12 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
   });
   await check('Tönung im Zeitstrahl: je Phase eine Fläche, Show anders als Aufbau', async () => {
     const n = await pp.locator('.bz-phase').count();
-    if (n !== 4) return n + ' Flächen statt 4';
+    if (n !== 5) return n + ' Flächen statt 5';
     const a = await pp.locator('.bz-phase-aufbau').evaluate((e) => getComputedStyle(e).backgroundColor);
-    const s2 = await pp.locator('.bz-phase-show').evaluate((e) => getComputedStyle(e).backgroundColor);
+    const s2 = await pp.locator('.bz-phase-show').first().evaluate((e) => getComputedStyle(e).backgroundColor);
     return a !== s2 && a !== 'rgba(0, 0, 0, 0)' ? true : a + ' / ' + s2;
   });
-  await check('Kopfzeile: «heute: Show-Tag 2» bei gestellter Uhr (19.09. 15:00)', async () => {
+  await check('Kopfzeile: «heute: Show-Tag 2» bei gestellter Uhr (19.09. 20:00)', async () => {
     const n = pp.locator('#phase-heute');
     if (!(await n.isVisible())) return 'unsichtbar';
     const t = (await n.textContent()).trim();
@@ -2084,16 +2090,35 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
   // Einrichten → Phasen
   await pp.locator('#rail-ein').click();
   await pp.locator('[data-ein="phasen"]').click();
-  await check('Reiter «Phasen» listet die vier Phasen', async () => {
+  await check('Reiter «Phasen» listet die fünf Phasen', async () => {
     const n = await pp.locator('.ph-z').count();
-    return n === 4 ? true : n + ' Zeilen';
+    return n === 5 ? true : n + ' Zeilen';
+  });
+  await check('Phasen-Reiter: je Phase EINE Reihe — Art, Name, Von–Bis, × auf einer Höhe (kein einsames ×)', async () => {
+    const r = await pp.locator('.ph-z').evaluateAll((ns) => ns.map((n) => {
+      const a = n.querySelector('.ph-art').getBoundingClientRect(), d = n.querySelector('.ph-del').getBoundingClientRect(), b = n.querySelector('.ph-bis').getBoundingClientRect();
+      return { dy: Math.abs(d.top - a.top), by: Math.abs(b.top - a.top), h: n.getBoundingClientRect().height };
+    }));
+    const schlecht = r.filter((x) => x.dy > 12 || x.by > 12);
+    return schlecht.length ? JSON.stringify(r) : true;
+  });
+  await check('Show-Tag-Notiz steht unter der Art, nicht neben dem ×', async () => {
+    const n = await pp.locator('.ph-z', { has: pp.locator('select[data-art="show"]') }).first().evaluate((z) => {
+      const t = z.querySelector('.ph-tage').getBoundingClientRect(), a = z.querySelector('.ph-art').getBoundingClientRect();
+      return { unter: t.top >= a.bottom - 1, text: z.querySelector('.ph-tage').textContent };
+    });
+    return n.unter && /^Show-Tag 1$/.test(n.text) ? true : JSON.stringify(n);
+  });
+  await check('jedes Leistenetikett trägt den vollen Text als aria-label', async () => {
+    const f = await pp.locator('.bz-axis-phase .bz-ph').evaluateAll((ns) => ns.filter((n) => !n.getAttribute('aria-label')).length);
+    return f === 0 ? true : f + ' ohne aria-label';
   });
   await pp.screenshot({ path: join(here, 'shots', 'phasen-tab-hell.png') });
   const zeileArt = (art) => pp.locator('.ph-z', { has: pp.locator(`select[data-art="${art}"]`) });
   await check('+ Phase legt eine Phase einer noch unbenutzten Art an (Vorbereitung)', async () => {
     await pp.locator('#ei-ph-add').click();
     await pp.waitForTimeout(150);
-    return (await zeileArt('vorbereitung').count()) === 1 && (await pp.locator('.ph-z').count()) === 5 ? true : 'keine neue Zeile';
+    return (await zeileArt('vorbereitung').count()) === 1 && (await pp.locator('.ph-z').count()) === 6 ? true : 'keine neue Zeile';
   });
   await check('Von/Bis: tippen ist nur ein ENTWURF (✓ ✗ erscheinen, Leiste bleibt), ✓ übernimmt', async () => {
     const z = zeileArt('vorbereitung');
@@ -2137,12 +2162,12 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
     await pp.waitForTimeout(150);
     if (!(await pp.locator('.dlg:not([hidden]) .dlg-h', { hasText: 'Phase löschen?' }).isVisible())) return 'kein App-Dialog';
     await pp.locator('.dlg:not([hidden]) .btn', { hasText: 'Abbrechen' }).click();
-    if ((await pp.locator('.ph-z').count()) !== 5) return 'Abbrechen hat trotzdem gelöscht';
+    if ((await pp.locator('.ph-z').count()) !== 6) return 'Abbrechen hat trotzdem gelöscht';
     await zeileArt('vorbereitung').locator('.ph-del').click();
     await pp.locator('.dlg:not([hidden]) .btn-danger').click();
     await pp.waitForTimeout(200);
     if (nativ) return 'nativer Dialog';
-    return (await pp.locator('.ph-z').count()) === 4 ? true : (await pp.locator('.ph-z').count()) + ' Zeilen';
+    return (await pp.locator('.ph-z').count()) === 5 ? true : (await pp.locator('.ph-z').count()) + ' Zeilen';
   });
   await pp.locator('#ein-zu').click();
 
@@ -2155,7 +2180,7 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
     const box = pp.locator('.ph-box');
     if (!(await box.isVisible())) return 'kein Kasten';
     if ((await box.locator('select.ph-art').inputValue()) !== 'abbau') return 'falsche Zeile im Kasten';
-    await box.locator('.ph-bis').fill('2026-09-22T12:00');   // verkürzen: Verlängern klemmt am Planende
+    await box.locator('.ph-bis').fill('2026-09-21T12:00');   // verkürzen: Verlängern klemmt am Planende
     await box.locator('.en-ok').click();
     await pp.waitForTimeout(250);
     const w1 = await seg('Abbau').first().evaluate((n) => parseFloat(n.style.width));
@@ -2185,25 +2210,35 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
     return w1 > w0 + 1 ? true : `Breite ${w0} → ${w1}`;
   });
   // Weit herauszoomen: die Leiste zeigt alle Phasen auf einmal (Planung bis Abbau).
-  await pp.clock.setSystemTime(new Date('2026-09-19T15:00:00'));
+  await pp.clock.setSystemTime(new Date('2026-09-19T20:00:00'));
   for (let i = 0; i < 5; i++) await pp.locator('#zout').click();
   // Den Anfang des Aufbaus an den linken Rand der Zeitachse rücken: von dort
-  // sind Aufbau, vier Show-Tage und Abbau in einem Bild.
+  // sind Aufbau, zwei Show-Tage und Abbau in einem Bild.
   await pp.evaluate(() => {
     const sc = document.querySelector('.bz-scroll');
     const a = [...document.querySelectorAll('.bz-axis-phase .bz-ph')].find((n) => /Aufbau/.test(n.textContent));
     sc.scrollLeft = parseFloat(a.style.left) - 20;
   });
   await pp.waitForTimeout(400);
-  await check('weit herausgezoomt: schmale Show-Tage kurz («★ 1»), breite voll («Show-Tag 3»), nichts abgeschnitten', async () => {
+  await check('JETZT-Fähnchen liegt UNTER der Achse (Phasen-Leiste und Datumszeilen bleiben frei)', async () => {
+    const r = await pp.evaluate(() => ({ f: document.querySelector('.bz-now-flag').getBoundingClientRect().top, a: document.querySelector('.bz-axis').getBoundingClientRect().bottom }));
+    return r.f >= r.a - 1 ? true : `Fähnchen ${r.f} < Achsenende ${r.a}`;
+  });
+  await check('weit herausgezoomt: jedes Show-Etikett trägt seine Nummer (Show-Tag/Tag/★ je nach Breite), nichts abgeschnitten', async () => {
     const t = (await pp.locator('.bz-axis-phase .bz-ph-t').allTextContents()).map((x) => x.trim());
-    const soll = ['★ 1', '★ 2', 'Show-Tag 3', '★ 4'];
-    const show = t.filter((x) => /Show-Tag|★/.test(x));
-    // Show-Tag 2 und 3 sind ganze Tage; Tag 1 und 4 sind halbe. Welche kurz werden, hängt am Zoom —
-    // verlangt wird nur: jedes Etikett trägt die Nummer, und kein Etikett ist abgeschnitten.
-    if (show.length !== 4 || !show.every((x, i) => x.endsWith(String(i + 1)))) return JSON.stringify(show);
+    const show = t.filter((x) => /Show-Tag|^Tag|★/.test(x));
+    if (show.length !== 2 || !show.every((x, i) => x.endsWith(String(i + 1)))) return JSON.stringify(t);
     const ab = await pp.locator('.bz-axis-phase .bz-ph').evaluateAll((ns) => ns.filter((n) => n.querySelector('.bz-ph-t').scrollWidth + 6 > n.clientWidth && n.clientWidth > 0).map((n) => n.textContent));
-    return ab.length === 0 ? true : 'abgeschnitten: ' + JSON.stringify(ab) + ' (' + JSON.stringify(soll) + ')';
+    return ab.length === 0 ? true : 'abgeschnitten: ' + JSON.stringify(ab);
+  });
+  await check('Sa 01:00 (nach Mitternacht) gehört noch zu «Show-Tag 1»', async () => {
+    await pp.clock.setSystemTime(new Date('2026-09-19T01:00:00'));
+    await pp.clock.runFor('00:20');
+    await pp.waitForTimeout(300);
+    const t = (await pp.locator('#phase-heute').textContent()).trim();
+    await pp.clock.setSystemTime(new Date('2026-09-19T20:00:00'));
+    await pp.clock.runFor('00:20');
+    return t === 'heute: Show-Tag 1' ? true : t;
   });
   await pp.screenshot({ path: join(here, 'shots', 'phasen-uebersicht-hell.png'), clip: { x: 0, y: 0, width: 1600, height: 330 } });
   // Dunkel
