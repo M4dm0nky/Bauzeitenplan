@@ -143,6 +143,21 @@ function feldFehler(state, t, field, value) {
 
 const UNDO_MAX = 100;
 
+// Alles, was beim Löschen von `ids` mitgehen muss: Untervorgänge (parent) UND
+// zugeordnete Einträge (fuer, der Soundcheck eines Acts). Bis zum Fixpunkt: ein
+// Soundcheck hängt am Kind-Act eines Sammelvorgangs, oder auf einer anderen
+// Bühne als sein Act — eine Stufe allein ließe Waisen mit totem parent/fuer stehen.
+function kaskadeIds(state, ids) {
+  const gone = new Set(ids);
+  for (let wuchs = true; wuchs;) {
+    wuchs = false;
+    for (const t of state.tasks) {
+      if (!gone.has(t.id) && (gone.has(t.parent) || gone.has(t.fuer))) { gone.add(t.id); wuchs = true; }
+    }
+  }
+  return gone;
+}
+
 const ok = (extra = {}) => ({ ok: true, ...extra });
 const err = (msg) => ({ ok: false, error: msg });
 
@@ -332,18 +347,7 @@ const HANDLERS = {
     // Ein Sammelvorgang nimmt seine Untervorgänge mit (Kaskade) — wie beim
     // Löschen eines Gewerks. Rückgängig über den Schnappschuss, nicht Stück für
     // Stück. Ohne die Kaskade blieben verwaiste Kinder mit totem parent zurück.
-    // Kaskade: Untervorgänge UND zugeordnete Einträge (der Soundcheck eines Acts)
-    // gehen mit. Sonst bliebe eine Waise mit totem `fuer` zurück, die niemand
-    // mehr findet — dieselbe Begründung wie bei den Untervorgängen.
-    // Bis zum Fixpunkt: ein Soundcheck (fuer) hängt am Kind-Act (parent) eines
-    // Sammelvorgangs — eine Stufe allein ließe ihn als Waise stehen.
-    const gone = new Set([cmd.id]);
-    for (let wuchs = true; wuchs;) {
-      wuchs = false;
-      for (const t of state.tasks) {
-        if (!gone.has(t.id) && (gone.has(t.parent) || gone.has(t.fuer))) { gone.add(t.id); wuchs = true; }
-      }
-    }
+    const gone = kaskadeIds(state, new Set([cmd.id]));
     state.tasks = state.tasks.filter((t) => !gone.has(t.id));
     // Verwaiste Abhängigkeiten mitnehmen: sonst zeigen Pfeile ins Leere und
     // die Terminrechnung stolpert über undefined.
@@ -432,6 +436,11 @@ const HANDLERS = {
     const d = state.deps.find((x) => x.id === cmd.id);
     if (!d) return 'Verknüpfung nicht gefunden.';
     if (cmd.field === 'type' && !['FS', 'SS', 'FF', 'SF'].includes(cmd.value)) return 'Unbekannter Verknüpfungstyp.';
+    // Nur Typ und Lag sind Sache dieses Befehls: from/to/id würden die
+    // Verknüpfung umbiegen, ohne Ring- und Bereitstellungsprüfung von addDep.
+    if (cmd.field === 'lag') {
+      if (!Number.isInteger(cmd.value)) return 'Der Versatz muss eine ganze Zahl (Minuten) sein.';
+    } else if (cmd.field !== 'type') return 'Dieses Feld lässt sich nicht ändern: ' + cmd.field;
     d[cmd.field] = cmd.value;
     return ok();
   },
@@ -461,9 +470,10 @@ const HANDLERS = {
     const i = state.gewerke.findIndex((g) => g.id === cmd.id);
     if (i < 0) return 'Gewerk nicht gefunden.';
     state.gewerke.splice(i, 1);
-    const gone = state.tasks.filter((t) => t.gewerk === cmd.id).map((t) => t.id);
-    state.tasks = state.tasks.filter((t) => t.gewerk !== cmd.id);
-    state.deps = state.deps.filter((d) => !gone.includes(d.from) && !gone.includes(d.to));
+    // Auch Soundchecks auf anderen Bühnen, deren Act hier stand (fuer-Kaskade).
+    const gone = kaskadeIds(state, new Set(state.tasks.filter((t) => t.gewerk === cmd.id).map((t) => t.id)));
+    state.tasks = state.tasks.filter((t) => !gone.has(t.id));
+    state.deps = state.deps.filter((d) => !gone.has(d.from) && !gone.has(d.to));
     return ok();
   },
 
@@ -538,7 +548,36 @@ const HANDLERS = {
       g.name = name;
       return ok();
     }
-    g[cmd.field] = cmd.value;
+    // Alles andere (id, slot, sort, …) hat eigene Wege oder gehört dem Store.
+    return 'Dieses Feld lässt sich nicht ändern: ' + cmd.field;
+  },
+
+  /**
+   * Den ganzen Plan um Tage und Minuten verschieben (Vorgänge, Zuweisungs-
+   * Fenster, Phasen, Projektrahmen) — EIN Befehl, EIN Undo-Schritt.
+   *
+   * Erst die Kalendertage, dann die Minuten: so bleibt die Wanduhrzeit über die
+   * Sommerzeit-Umstellung erhalten (wie `verschobenUm` in timeaxis.js, hier
+   * nachgebaut, weil der Kern nicht auf die Ansichtsschicht zeigt). Jeder
+   * Zeitstempel wandert einzeln; terminlose bleiben terminlos.
+   */
+  shiftPlan(state, cmd) {
+    const { tage, minuten } = cmd;
+    if (!Number.isInteger(tage) || !Number.isInteger(minuten)) return 'Tage und Minuten müssen ganze Zahlen sein.';
+    if (!tage && !minuten) return 'Nichts zu verschieben.';
+    const schieb = (iso) => {
+      if (!iso) return iso;
+      const d = new Date(toMin(iso) * 60000);
+      const t = new Date(d.getFullYear(), d.getMonth(), d.getDate() + tage, d.getHours(), d.getMinutes());
+      return local(toDate(t.getTime() / 60000 + minuten));
+    };
+    for (const t of state.tasks) {
+      t.start = schieb(t.start); t.end = schieb(t.end);
+      for (const z of t.res || []) { z.von = schieb(z.von); z.bis = schieb(z.bis); }
+    }
+    for (const ph of state.phases || []) { ph.start = schieb(ph.start); ph.end = schieb(ph.end); }
+    state.project.start = schieb(state.project.start);
+    state.project.end = schieb(state.project.end);
     return ok();
   },
 

@@ -1381,5 +1381,60 @@ test('Hülle: alle Kinder terminlos → Eltern terminlos; ein terminiertes Kind 
   assert.equal(taskById(s, 'a').start, '2026-07-15T08:00');
 });
 
+console.log('\nPrüfpaket');
+test('setDepField lehnt fremde Felder und krummen Lag ab', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setDepField', id: 'd1', field: 'from', value: 'b' }).ok, false);
+  assert.equal(s.apply({ type: 'setDepField', id: 'd1', field: 'lag', value: 1.5 }).ok, false);
+  assert.equal(s.canUndo, false);
+  assert.equal(s.apply({ type: 'setDepField', id: 'd1', field: 'lag', value: -120 }).ok, true);
+  assert.equal(s.state.deps[0].from, 'a'); assert.equal(s.canUndo, true);
+});
+test('setGewerkField schreibt nur den Namen', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setGewerkField', id: 'buehne', field: 'slot', value: 7 }).ok, false);
+  assert.equal(s.apply({ type: 'setGewerkField', id: 'buehne', field: 'id', value: 'x' }).ok, false);
+  assert.equal(s.state.gewerke[0].id, 'buehne');
+  assert.equal(s.apply({ type: 'setGewerkField', id: 'buehne', field: 'name', value: 'Hauptbühne' }).ok, true);
+});
+test('removeGewerk nimmt Soundchecks auf anderen Bühnen mit (fuer)', () => {
+  const st = seed();
+  st.gewerke.push({ id: 'b2', name: 'Bühne 2', art: 'buehne', sort: 2 });
+  const mk = (id, gewerk, fuer) => ({ id, gewerk, title: id, start: '2026-07-13T08:00', end: '2026-07-13T09:00', milestone: false, progress: 0, status: 'geplant', fuer });
+  st.tasks.push(mk('act', 'buehne', null), mk('sc', 'b2', 'act'));
+  const s = createStore(st);
+  assert.equal(s.apply({ type: 'removeGewerk', id: 'buehne' }).ok, true);
+  assert.equal(taskById(s, 'sc'), undefined);
+  assert.equal(taskById(s, 'act'), undefined);
+});
+test('shiftPlan verschiebt alles um Tage und Minuten, Uhrzeit bleibt über die Sommerzeit', () => {
+  const st = seed();
+  st.project.start = '2026-10-20T00:00'; st.project.end = '2026-10-27T00:00';
+  st.tasks[0].start = '2026-10-24T22:00'; st.tasks[0].end = '2026-10-25T04:00';
+  st.tasks[0].res = [{ rid: 'crew', n: 2, von: '2026-10-24T23:00', bis: '2026-10-25T01:00' }, { rid: 'crew', n: 1, von: null, bis: null }];
+  st.tasks[1].start = null; st.tasks[1].end = null;
+  st.phases = [{ id: 'ph1', art: 'aufbau', start: '2026-10-24T08:00', end: '2026-10-26T08:00' }];
+  const s = createStore(st);
+  assert.equal(s.apply({ type: 'shiftPlan', tage: 7, minuten: 30 }).ok, true);
+  const a = taskById(s, 'a');
+  assert.equal(a.start, '2026-10-31T22:30'); assert.equal(a.end, '2026-11-01T04:30');
+  assert.equal(a.res[0].von, '2026-10-31T23:30'); assert.equal(a.res[0].bis, '2026-11-01T01:30');
+  assert.equal(a.res[1].von, null); assert.equal(a.res[1].bis, null);
+  assert.equal(s.state.phases[0].start, '2026-10-31T08:30'); assert.equal(s.state.phases[0].end, '2026-11-02T08:30');
+  assert.equal(s.state.project.start, '2026-10-27T00:30'); assert.equal(s.state.project.end, '2026-11-03T00:30');
+  const b = taskById(s, 'b'); assert.equal(b.start, null); assert.equal(b.end, null);
+  s.undo();
+  assert.equal(taskById(s, 'a').start, '2026-10-24T22:00');
+  assert.equal(s.state.phases[0].end, '2026-10-26T08:00');
+  assert.equal(s.state.project.start, '2026-10-20T00:00');
+});
+test('shiftPlan lehnt 0/0 und Nicht-Ganzzahlen ab, ohne Undo-Eintrag', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'shiftPlan', tage: 0, minuten: 0 }).ok, false);
+  assert.equal(s.apply({ type: 'shiftPlan', tage: 1.5, minuten: 0 }).ok, false);
+  assert.equal(s.apply({ type: 'shiftPlan', tage: 1, minuten: 'x' }).ok, false);
+  assert.equal(s.canUndo, false);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);
