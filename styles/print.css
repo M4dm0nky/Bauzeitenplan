@@ -128,6 +128,8 @@
   border-top: .35mm solid var(--pr-ink); padding-top: 1.4mm; margin-top: 1.4mm;
   display: flex; gap: 4mm; align-items: baseline; font-size: 2.5mm; color: var(--pr-mute);
 }
+/* Hinweis: Einträge ohne Termin stehen auf keinem Blatt — das soll man sehen. */
+.pr-fehlt { font-weight: 700; color: var(--pr-ink); white-space: nowrap; }
 .pr-leg { display: flex; flex-wrap: wrap; gap: 1mm 3mm; flex: 1; }
 .pr-leg-i { display: flex; align-items: center; gap: 1mm; }
 .pr-leg i { width: 2.2mm; height: 2.2mm; border-radius: 50%; background: var(--gw); print-color-adjust: exact; }

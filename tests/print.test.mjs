@@ -10,7 +10,7 @@ globalThis.location = { search: '' };
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.fetch = () => Promise.reject(new Error('kein Netz im Test'));
 
-const { notizFuerDruck, tageZwischen, fensterFuer } = await import('../js/print.js');
+const { notizFuerDruck, tageZwischen, fensterFuer, ohneTerminHinweis } = await import('../js/print.js');
 const { plan } = await import('../tools/make-klassentreffen.mjs');
 import assert from 'node:assert/strict';
 
@@ -86,6 +86,20 @@ test('das Fenster gilt über ALLE gewählten Blätter, damit sie vergleichbar si
 });
 test('leere Auswahl liefert den ganzen Tag statt NaN', () => {
   assert.deepEqual(fensterFuer([], AUFBAU), { von: 0, bis: 24 });
+});
+
+console.log('\nBlätter — Einträge ohne Termin sagen, dass sie fehlen');
+test('ohneTerminHinweis zählt nur terminlose Einträge, Singular/Plural stimmen, nichts → leer', () => {
+  const mit = { id: 'a', start: '2026-07-13T08:00', end: '2026-07-13T09:00' };
+  const ohne = (id, extra = {}) => ({ id, start: null, end: null, ...extra });
+  assert.equal(ohneTerminHinweis([mit]), '');
+  assert.equal(ohneTerminHinweis([mit, ohne('b')]), '1 Eintrag ohne Termin nicht gedruckt');
+  assert.equal(ohneTerminHinweis([mit, ohne('b'), ohne('c', { milestone: true })]), '2 Einträge ohne Termin nicht gedruckt');
+});
+test('ohneTerminHinweis: Abschnitt filtert (Setup-Blatt zählt keine Show-Einträge)', () => {
+  const t = [{ id: 'a', start: null, end: null, abschnitt: 'setup' }, { id: 'b', start: null, end: null, abschnitt: 'show' }];
+  assert.equal(ohneTerminHinweis(t, 'setup'), '1 Eintrag ohne Termin nicht gedruckt');
+  assert.equal(ohneTerminHinweis(t, 'alle'), '2 Einträge ohne Termin nicht gedruckt');
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

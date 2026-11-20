@@ -111,6 +111,18 @@ async function ladePlan() {
 // Ohne Termin gehört ein Vorgang auf kein Blatt: kein Tag, keine Zeile, kein NaN.
 const gewaehlteTasks = () => PLAN.tasks.filter((t) => wahl.gewerke.has(t.gewerk) && !ohneTermin(t));
 
+/**
+ * «n Einträge ohne Termin nicht gedruckt» — oder '' , wenn keiner fehlt. Ohne
+ * Termin steht ein Vorgang auf keinem Blatt; wer das Blatt in die Hand nimmt,
+ * soll das wissen, statt die Lücke für einen leeren Tag zu halten. DOM-frei.
+ * @param {object[]} tasks  die Vorgänge der Blattauswahl (Gewerk/Bühne schon gefiltert)
+ * @param {string=} abschnitt  'setup' | 'show' | sonst alle
+ */
+export function ohneTerminHinweis(tasks, abschnitt) {
+  const n = imAbschnitt(tasks, abschnitt).filter(ohneTermin).length;
+  return n ? `${n} ${n === 1 ? 'Eintrag' : 'Einträge'} ohne Termin nicht gedruckt` : '';
+}
+
 /** Die Bänder der aktiven Ebene — Gewerke oder Bühnen. */
 const baender = () => sichtGewerke(PLAN, wahl.ebene);
 
@@ -385,6 +397,8 @@ function roFuss(b) {
   const q = PLAN.project.quelle || {};
   f.append(el('div', 'pr-leg', b.name + (absName2() ? ' · ' + absName2() : '')),
     el('div', null, 'CallBoard · v' + VERSION + (q.exported ? ' · Stand ' + q.exported.slice(0, 10) : '')));
+  const fehlt = ohneTerminHinweis(PLAN.tasks.filter((t) => t.gewerk === b.id), wahl.abschnitt);
+  if (fehlt) f.prepend(el('div', 'pr-fehlt', fehlt));
   return f;
 }
 
@@ -564,6 +578,8 @@ function fuss() {
     leg.append(s);
   }
   const q = PLAN.project.quelle || {};
+  const fehlt = ohneTerminHinweis(PLAN.tasks.filter((t) => wahl.gewerke.has(t.gewerk)));
+  if (fehlt) f.append(el('div', 'pr-fehlt', fehlt));
   f.append(leg, el('div', null, 'CallBoard · v' + VERSION + (q.exported ? ' · Stand ' + q.exported.slice(0, 10) : '')));
   return f;
 }
