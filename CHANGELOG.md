@@ -3,6 +3,15 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unveröffentlicht
+
+**Termine erst, wenn man sie weiß — und Phasen mit Funktion.**
+
+- **Vorlagen ohne erfundene Termine.** Ein neues Projekt bekommt Von/Bis für das ganze Event; die Vorgänge aus der Vorlage (Rigging, Licht …) haben keinen Termin. Sie stehen links mit «◌ ohne Termin», im Gantt ohne Balken, bis Start und Ende eingetragen sind. Konflikte, kritischer Pfad, Live, Bedarf und Druck lassen sie aus.
+- **Termine mit grünem ✓ bestätigen.** Start, Ende und Dauer werden in Tabelle und Panel erst als Entwurf eingetragen (gelb markiert); die Zeile bleibt stehen. Grünes ✓ oder Enter übernimmt und sortiert ein, rotes ✗, Escape oder das Verlassen der Felder verwirft. Ungültige Eingaben sperren ✓ und nennen den Grund — nichts wird mehr still verworfen. Beide Felder leeren + ✓ macht einen Vorgang wieder «ohne Termin». Tab ist kein ✓.
+- **Phasen-Leiste.** Datumsbereiche mit Funktion — Planung (Büro), Vorbereitung (vor Ort), Aufbau, Show, Abbau — farbig über dem Zeitstrahl und als Tönung darin. Jede Show-Phase ist ein Show-Tag (Show-Tag 1, 2 …, auch über Mitternacht). Oben steht «heute: Aufbau» bzw. «heute: Show-Tag 2». Anlegen und ändern im Einrichten-Reiter «Phasen» oder per Klick auf die Leiste, Von/Bis mit ✓. Phasen reisen jetzt auch über Export, Import und Abgleich mit (vorher gingen sie verloren).
+- **Hell und Dunkel umschalten** mit ☀/☾ oben rechts; die Wahl bleibt beim Neuladen. Das helle Design ist warmweiß statt grellweiß — Flächen, Linien und Schrift sind darauf abgestimmt; eine Prüfung hält die Lesbarkeit.
+
 ## 0.18.0 — 2026-11-20
 
 **Balken im Gantt ziehen.**
