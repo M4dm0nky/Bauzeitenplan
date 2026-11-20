@@ -310,6 +310,16 @@ export function createRepo(storage) {
       try { writeIndex(idx); } catch { /* Index ist nachrangig */ }
     },
 
+    // Das Projekt ist im Daten-Repo weg, soll aber bleiben: ohne remoteSha lädt
+    // abgleich() es wieder hoch. dirty bleibt, wie es war.
+    vergessenRemote(id) {
+      const idx = readIndex();
+      const e = idx.find((x) => x.id === id);
+      if (!e) return;
+      e.remoteSha = null;
+      try { writeIndex(idx); } catch { /* Index ist nachrangig */ }
+    },
+
     syncListe() {
       return readIndex().map((e) => ({ id: e.id, remoteSha: e.remoteSha ?? null, dirty: e.dirty ?? true }));
     },

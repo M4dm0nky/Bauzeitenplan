@@ -27,6 +27,7 @@ const fakeGithub = () => {
     const m = u.pathname.match(/^\/repos\/[^/]+\/[^/]+\/contents\/(.+)$/);
     const pfad = m ? decodeURIComponent(m[1]) : '';
     const methode = init.method || 'GET';
+    if (!m && /^\/repos\/[^/]+\/[^/]+$/.test(u.pathname)) return antwort(200, { full_name: 'x/y', private: true });   // Repo selbst sichtbar
     const gesehen = (e, p = pfad) => (init.cache === 'no-store' ? e.sha : (alt.get(p) ?? e.sha));
     if (methode === 'GET') {
       if (pfad === 'projekte') {
@@ -76,6 +77,37 @@ test('kodiere: großer Text sprengt den Stack nicht', () => {
 test('list: leeres Repo (404) → dateien []', async () => {
   const g = fakeGithub();
   assert.deepEqual(await mk(g.fetch).list(), { ok: true, dateien: [] });
+});
+
+// Fake mit Repo-Schalter: 404 des Verzeichnisses ist nur dann «leer», wenn das Repo
+// selbst erreichbar ist. Sonst wäre ein Token ohne Zugriff ein «alles gelöscht».
+const mitRepo = (fetch, repoStatus, verzeichnis) => async (url, init) => {
+  const u = new URL(url);
+  if (/^\/repos\/[^/]+\/[^/]+$/.test(u.pathname)) {
+    return { ok: repoStatus === 200, status: repoStatus, json: async () => ({}) };
+  }
+  if (verzeichnis && /\/contents\/projekte$/.test(u.pathname)) return verzeichnis;
+  return fetch(url, init);
+};
+
+test('list: 404 und Repo 404 → grund repo (kein leeres Repo)', async () => {
+  const g = fakeGithub();
+  const r = await mk(mitRepo(g.fetch, 404)).list();
+  assert.equal(r.ok, false);
+  assert.equal(r.grund, 'repo');
+});
+
+test('list: 404 und Repo 200 → dateien []', async () => {
+  const g = fakeGithub();
+  assert.deepEqual(await mk(mitRepo(g.fetch, 200)).list(), { ok: true, dateien: [] });
+});
+
+test('list: 200 ohne Array und Repo 404 → grund repo', async () => {
+  const g = fakeGithub();
+  const kaputt = { ok: true, status: 200, json: async () => ({}) };
+  const r = await mk(mitRepo(g.fetch, 404, kaputt)).list();
+  assert.equal(r.ok, false);
+  assert.equal(r.grund, 'repo');
 });
 
 test('push neu ohne sha → ok, sha gesetzt; danach list enthält {id:"p1", sha}', async () => {

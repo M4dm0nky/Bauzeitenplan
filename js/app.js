@@ -212,6 +212,7 @@ async function open(plan) {
   // Projektwechsel heißt andere id. Ein Sync-Update desselben Projekts ersetzt
   // nur den Inhalt: der Versatz gehört dem Abend, nicht dem Stand des Plans.
   const andereId = wechsel && store.state.project.id !== id;
+  verworfen.delete(id);     // wird (wieder) geöffnet, also kein Gelöschtes mehr
   if (store) {
     // Eine noch ausstehende Eingabe gehört dem bisherigen Projekt und wäre nach
     // dem Ersetzen weg (der Timer schriebe den NEUEN Plan). Deshalb sofort sichern.
@@ -455,7 +456,7 @@ function mount() {
 
   // Ungesicherte Änderungen nicht stillschweigend verlieren.
   window.addEventListener('beforeunload', (e) => {
-    if (!store || !(store.dirty || ungesichert)) return;
+    if (!store || verworfen.has(store.state.project.id) || !(store.dirty || ungesichert)) return;
     e.preventDefault();
     e.returnValue = '';
   });
@@ -683,14 +684,24 @@ async function fuehreAus(sync, a) {
   if (a.art === 'lokal-loeschen') {
     if (!ueberschreibenSicher(a.id)) { uebersprungen = true; return { ok: true }; }
     const name = (repo.list().find((x) => x.id === a.id) || {}).name || a.id;
-    const warOffen = a.id === offenId();
-    entferne(a.id);
-    toast('«' + name + '» wurde auf einem anderen Gerät gelöscht', undefined, 6000);
-    if (warOffen) {
-      const rest = repo.list();
-      const plan = rest.length && repo.load(rest[0].id);
-      if (plan) await open(plan); else showProjectDialog({ firstRun: true });
+    // Nie still löschen: «nicht im Repo» kann auch ein Fehlgriff sein (anderes
+    // Repo, zurückgesetzter Verlauf). Abbruch heißt behalten.
+    const wahl = await askDialog({
+      title: 'Im Daten-Repo gelöscht',
+      message: [`«${name}» ist im Daten-Repo nicht mehr vorhanden — vermutlich auf einem anderen Gerät gelöscht.`,
+        'Hier behalten und neu hochladen, oder auch lokal löschen?'],
+      buttons: [
+        { label: 'Behalten und neu hochladen', value: 'behalten', primary: true },
+        { label: 'Lokal löschen', value: 'loeschen', danger: true },
+      ],
+    });
+    // Der Dialog hat gewartet: inzwischen Weitergetipptes nicht mehr löschen.
+    if (wahl === 'loeschen' && ueberschreibenSicher(a.id)) {
+      if (await loescheProjekt(a.id)) toast('«' + name + '» lokal gelöscht', undefined, 6000);
+      return { ok: true };
     }
+    repo.vergessenRemote(a.id);
+    abgleichNochmal = true;
     return { ok: true };
   }
 
@@ -1248,6 +1259,34 @@ function scheduleSave() {
 }
 // Entfernt ein Projekt; ein Schreibfehler des Index wird gemeldet, ändert aber
 // den Ablauf nicht.
+// Gelöschte Projekt-ids, die noch im Store stehen (offenes Projekt ohne
+// Alternative): sichern() und beforeunload lassen sie in Ruhe.
+const verworfen = new Set();
+
+// Löscht lokal. Das OFFENE Projekt wird vorher verlassen (open() sichert das
+// bisherige und fragt bei Fehlschlag); nur wenn der Nutzer den Wechsel abbricht,
+// bleibt alles stehen. Gibt false zurück, wenn nichts gelöscht wurde.
+async function loescheProjekt(id) {
+  if (id === offenId()) {
+    const anderes = repo.list().find((x) => x.id !== id);
+    const plan = anderes && repo.load(anderes.id);
+    if (plan) {
+      // Das zu löschende Projekt nicht mehr sichern: open() würde es sonst
+      // noch einmal ablegen, bevor entferne() es entfernt.
+      verworfen.add(id);
+      if (!(await open(plan))) { verworfen.delete(id); return false; }
+    } else {
+      verworfen.add(id);
+      clearTimeout(saveTimer); saveTimer = null;
+      entferne(id);
+      showProjectDialog({ firstRun: true });
+      return true;
+    }
+  }
+  entferne(id);
+  return true;
+}
+
 function entferne(id) {
   const r = repo.remove(id);
   if (!r.ok) toast(r.error, 'bad', 8000);
@@ -1257,6 +1296,9 @@ function entferne(id) {
 // den Projektwechsel in open(). `still`: kein Toast (der Aufrufer fragt selbst).
 async function sichern({ loud = false, still = false } = {}) {
   if (!store) return { ok: true };
+  // Ein gelöschtes offenes Projekt bleibt bis zum Wechsel im Store; Speichern
+  // legte es sonst wieder an (und mit Sync auch im Daten-Repo).
+  if (verworfen.has(store.state.project.id)) { ungesichert = false; return { ok: true }; }
   // await ist für localStorage folgenlos (synchrones Objekt) und lässt den
   // PocketBase-Durchschrieb (Promise) sein Ergebnis melden.
   const r = await repo.save(store.state);
@@ -1445,8 +1487,9 @@ function showProjectDialog({ firstRun = false }) {
         });
         if (!ok) return;
         if (zurSync && !(await loescheImDatenRepo(p.id, sha))) return;
-        entferne(p.id);
-        showProjectDialog({ firstRun: repo.list().length === 0 });
+        if (!(await loescheProjekt(p.id))) return;
+        // Ohne Alternative zeigt loescheProjekt den Erststart-Dialog selbst.
+        if (repo.list().length) showProjectDialog({ firstRun: false });
       };
       row.append(b, del);
       ul.append(row);

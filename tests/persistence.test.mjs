@@ -91,6 +91,14 @@ test('Liste ist nach zuletzt geändert sortiert', () => {
   r.save(b);
   assert.deepEqual(r.list().map((x) => x.name), ['Neu', 'Alt']);
 });
+test('vergessenRemote: remoteSha null, dirty unverändert (Abgleich lädt wieder hoch)', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan());
+  r.markSynced('p1', 's1');
+  r.vergessenRemote('p1');
+  assert.deepEqual(r.syncListe(), [{ id: 'p1', remoteSha: null, dirty: false }]);
+});
+
 test('Löschen entfernt Projekt und Indexeintrag', () => {
   const r = createRepo(fakeStorage());
   r.save(plan());

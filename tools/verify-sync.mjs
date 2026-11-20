@@ -63,7 +63,7 @@ const bis = async (fn, ms = 8000) => {
 // deckt tests/sync.test.mjs ab.
 const neuerFake = () => {
   const dateien = new Map();            // Pfad → { text, sha }
-  const f = { dateien, puts: 0, deletes: 0, gets: 0, schluesselOk: true, netz: true, zaehler: 0 };
+  const f = { dateien, puts: 0, deletes: 0, gets: 0, schluesselOk: true, netz: true, repoWeg: false, zaehler: 0 };
   const b64 = (text) => Buffer.from(text, 'utf8').toString('base64').replace(/(.{60})/g, '$1\n');
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
   f.handler = async (route) => {
@@ -76,6 +76,7 @@ const neuerFake = () => {
     const m = u.pathname.match(/^\/repos\/[^/]+\/[^/]+\/contents\/(.+)$/);
     const pfad = m ? decodeURIComponent(m[1]) : '';
     const methode = req.method();
+    if (methode === 'GET' && f.repoWeg) { f.gets++; return antwort(404, { message: 'Not Found' }); }   // Token ohne Zugriff: Repo und Verzeichnis 404
     if (methode === 'GET') {
       f.gets++;
       if (!m) return antwort(200, { full_name: 'x/y', private: true });   // pruefe(): GET /repos/{repo}
@@ -214,6 +215,17 @@ const ersteZeileTitel = async (g, text) => {
   await p.waitForTimeout(1300);   // 800-ms-Speicherverzögerung + Luft
 };
 const zeilen = (g) => g.page.locator('.tb-r').count();
+
+// Der Abgleich fragt vor jedem lokalen Löschen. `label` = Knopf im Dialog.
+const repoLoeschDialog = async (g, label) => {
+  const dlg = g.page.locator('.dlg', { hasText: 'Im Daten-Repo gelöscht' });
+  if (!(await bis(async () => (await dlg.count()) > 0, 8000))) return false;
+  await dlg.locator('.dlg-act .btn', { hasText: label }).click();
+  await g.page.waitForTimeout(500);
+  return true;
+};
+const indexIds = (g) => g.page.evaluate(() => { try { return JSON.parse(localStorage.getItem('bzp_projects')).map((e) => e.id); } catch { return []; } });
+const planKeys = (g) => g.page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('bzp_p_')));
 
 const schliesse = async (...gs) => { for (const g of gs) { try { await g.ctx.close(); } catch { /* */ } } };
 
@@ -531,6 +543,8 @@ try {
         });
         await dialogZu(A);
         await ausloesen(B);
+        await check('B: fragt vor dem lokalen Löschen (Dialog «Im Daten-Repo gelöscht»)', async () =>
+          (await repoLoeschDialog(B, 'Lokal löschen')) ? true : 'kein Dialog');
         await check('B: «Löschprobe» verschwindet nach dem Abgleich, «Bleibt» bleibt', async () => {
           let n = [];
           const ok = await bis(async () => { n = await eigeneProjekte(B); return !n.includes('Löschprobe'); }, 6000);
@@ -585,6 +599,7 @@ try {
         await A.page.waitForTimeout(300);
         if (!(await A.page.locator('.tb-r.is-entwurf').count())) throw new Error('Vorbedingung: Entwurf nicht offen');
         await ausloesen(A);
+        await repoLoeschDialog(A, 'Lokal löschen');
         await check('A: Abgleich wechselt ins Folgeprojekt — dort kein Entwurf, Feldwerte = Store', async () => {
           const ok = await bis(async () => (await A.page.locator('#proj-name').textContent()) === 'Rest-Kopie', 8000);
           if (!ok) return 'A wechselte nicht: ' + await A.page.locator('#proj-name').textContent();
@@ -602,6 +617,83 @@ try {
         });
       } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
       finally { await schliesse(A, B); }
+    }
+
+    // ─── 4c. Repo-404, Datei gelöscht, gelöschtes offenes Projekt ───────────
+    console.log('\nREPO WEG, DATEI GELÖSCHT, OFFENES PROJEKT GELÖSCHT');
+    {
+      const fake = neuerFake();
+      const A = await geraet(fake, BASE);
+      try {
+        await start(A); await legeAn(A, 'S1'); await legeAn(A, 'S2');
+        await verbinden(A); await warteZustand(A, 'ok'); await einZu(A);
+        await check('Ausgangslage: S1 und S2 im Repo', async () => fake.dateien.size === 2 ? true : 'Fake ' + fake.dateien.size);
+
+        fake.repoWeg = true;
+        await ausloesen(A);
+        await check('Repo 404: Status rot mit «Repo», nichts gelöscht, kein Dialog', async () => {
+          const ok = await bis(async () => (await syncZustand(A)) === 'fehler', 6000);
+          const titel = await A.page.locator('#sync-state').getAttribute('title');
+          const n = (await indexIds(A)).length;
+          const dlg = await A.page.locator('.dlg', { hasText: 'Im Daten-Repo gelöscht' }).count();
+          return ok && /Repo/.test(titel) && n === 2 && dlg === 0 ? true : `Zustand ok=${ok}, title «${titel}», Projekte ${n}, Dialog ${dlg}`;
+        });
+        fake.repoWeg = false;
+
+        // Datei von S1 verschwindet im Repo (anderes Gerät hat gelöscht).
+        const dateiS1 = [...fake.dateien].find(([, e]) => JSON.parse(e.text).project.name === 'S1')[0];
+        fake.dateien.delete(dateiS1);
+        const putsVor = fake.puts;
+        await ausloesen(A);
+        await check('Datei gelöscht: Dialog erscheint, nichts ist lokal weg (Nicht-Treffer)', async () => {
+          const da = await repoLoeschDialog(A, 'Behalten und neu hochladen');
+          return da && (await indexIds(A)).length === 2 ? true : `Dialog ${da}`;
+        });
+        await check('«Behalten»: S1 wird erneut hochgeladen (puts+1, Datei wieder da)', async () => {
+          const ok = await bis(async () => fake.puts === putsVor + 1 && fake.namen().includes('S1'), 6000);
+          return ok ? true : `puts +${fake.puts - putsVor}, Fake ${fake.namen()}`;
+        });
+
+        // Offenes Projekt (S2) im Projektdialog löschen, S1 bleibt.
+        await warteZustand(A, 'ok');
+        const idS2 = await A.page.evaluate(() => { const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_') && JSON.parse(localStorage.getItem(x)).project.name === 'S2'); return k.slice(6); });
+        {
+          const p = A.page;
+          await p.locator('#rail-ein').click(); await p.locator('[data-ein="projekt"]').click(); await p.locator('#proj-menu').click();
+          await p.locator('#dlg .dlg-row', { hasText: 'S2' }).locator('.dlg-del').click();
+          await p.locator('.dlg .dlg-act .btn-danger', { hasText: 'Löschen' }).click();
+          await p.waitForTimeout(900);
+          await dialogZu(A);
+        }
+        await ersteZeileTitel(A, 'Nach dem Löschen');
+        await check('offenes Projekt gelöscht, zweites vorhanden: nach einer Änderung bleibt die alte id weg', async () => {
+          const ids = await indexIds(A), keys = await planKeys(A);
+          const name = await A.page.locator('#proj-name').textContent();
+          return !ids.includes(idS2) && !keys.some((k) => k.endsWith(idS2)) && name === 'S1' && !fake.namen().includes('S2') ? true : `Index ${ids}, Name ${name}, Fake ${fake.namen()}`;
+        });
+
+        // Letztes Projekt (S1, offen) löschen: Erststart-Dialog, danach neu anlegen.
+        const idS1 = (await indexIds(A))[0];
+        {
+          const p = A.page;
+          await p.locator('#rail-ein').click(); await p.locator('[data-ein="projekt"]').click(); await p.locator('#proj-menu').click();
+          await p.locator('#dlg .dlg-row', { hasText: 'S1' }).locator('.dlg-del').click();
+          await p.locator('.dlg .dlg-act .btn-danger', { hasText: 'Löschen' }).click();
+          await p.waitForTimeout(900);
+        }
+        await check('letztes Projekt gelöscht: Erststart-Dialog steht, Index leer', async () => {
+          const ids = await indexIds(A);
+          const h = await A.page.locator('#dlg .dlg-h').first().textContent();
+          return ids.length === 0 && h === 'Bauzeitenplan' ? true : `Index ${ids}, Titel ${h}`;
+        });
+        await legeAn(A, 'Neu');
+        await A.page.waitForTimeout(1200);
+        await check('nach «Projekt anlegen» ist die alte id weg, nur «Neu» steht im Index', async () => {
+          const ids = await indexIds(A);
+          return ids.length === 1 && !ids.includes(idS1) && !ids.includes(idS2) ? true : 'Index ' + ids;
+        });
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      finally { await schliesse(A); }
     }
 
     // ─── 4b. Versatz und Projektwechsel ─────────────────────────────────────

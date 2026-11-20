@@ -62,9 +62,15 @@ export function createSync({ fetch, token, repo, branch = 'main' }) {
     },
     async list() {
       const r = await rufe(url(DIR), 'GET');
-      if (r.status === 404) return { ok: true, dateien: [] };
+      // 404 und «kein Array» heißen nur dann «leeres Repo», wenn das Repo selbst
+      // erreichbar ist. Sonst (Token ohne Zugriff, Repo fehlt) hielte abgleich()
+      // alle synchronen Projekte für gelöscht.
+      if (r.status === 404 || (!r.fehler && !Array.isArray(r.json))) {
+        const p = await this.pruefe();
+        return p.ok ? { ok: true, dateien: [] } : p;
+      }
       if (r.fehler) return r.fehler;
-      const dateien = (Array.isArray(r.json) ? r.json : [])
+      const dateien = r.json
         .filter((e) => e.type === 'file' && /\.json$/.test(e.name))
         .map((e) => ({ id: e.name.replace(/\.json$/, ''), sha: e.sha }));
       return { ok: true, dateien };
