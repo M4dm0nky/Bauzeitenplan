@@ -3,6 +3,15 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## 0.19.1 — 2026-11-20
+
+**Aufräumen nach dem ersten echten Einsatz.**
+
+- **Soundcheck mit grünem ✓.** Beginn, Dauer und Ende des Soundchecks im Panel sind jetzt ein Entwurf wie überall: gelb markiert, ✓ oder Enter übernimmt, ✗, Escape oder Verlassen verwirft. Ein Soundcheck ohne Termin bei einem Act nach Mitternacht landet auf dem Showtag davor.
+- **Showablauf bündig.** Zeiteinträge ohne Termin beginnen auf derselben Kante wie die übrigen, auch auf dem Handy.
+- **Entwurf rutscht nicht ins Folgeprojekt.** Wird das offene Projekt auf einem anderen Gerät gelöscht, verwirft der Abgleich einen offenen Tabellen-Entwurf, statt ihn im nächsten Projekt wieder zu öffnen (mit Prüfung).
+- **Prüfungen nachgeschärft.** Kontrast von «◌ ohne Termin» auf beiden Flächen, Handy-Kopf ≤ 285 px, keine absoluten Importe; `tools/farbsuche.mjs` läuft wieder (eigene Farbprüfung, misst auch die warmen hellen Flächen).
+
 ## 0.19.0 — 2026-11-20
 
 **Termine erst, wenn man sie weiß — und Phasen mit Funktion.**
