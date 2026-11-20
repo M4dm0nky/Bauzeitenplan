@@ -846,6 +846,8 @@ body { margin: 0; }
   .bz-lab-task .bz-lab-zeit { width: auto; order: 0; }
   .bz-lab-task .bz-lab-name { order: 1; }
   .bz-lab-task .bz-lab-dauer { order: 2; flex-basis: 100%; width: auto; text-align: left; }
+  /* Leere Platzhalter (Zeile ohne Termin) erzeugen weder Lücke noch Leerzeile. */
+  .bz-lab-task .bz-lab-zeit:empty, .bz-lab-task .bz-lab-dauer:empty { display: none; }
 
   /* Arbeitsfläche einspaltig: das Panel ist keine Spalte mehr, sondern ein
      Overlay-Drawer von rechts. Hintergrund bringt das Theme (.ins → --panel). */

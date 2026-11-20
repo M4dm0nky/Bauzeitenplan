@@ -853,6 +853,30 @@ await check('den Soundcheck wieder entfernen räumt den Setup leer', async () =>
   return rest === 0 ? true : rest + ' Setup-Einträge übrig';
 });
 
+// ── Zeile ohne Termin: Name bündig (Issue #6) ────────────────────────────────
+await check('Showablauf: Zeile ohne Termin beginnt bündig mit terminierten Zeilen', async () => {
+  await gehe('show');
+  await p.locator('[data-view="gantt"]').click();
+  await p.waitForTimeout(800);
+  await p.locator('.bz-bar').filter({ hasText: 'SIDO' }).first().click();
+  await p.waitForTimeout(600);
+  await p.locator('#ins .ins-termin input').first().fill('');
+  await p.locator('#ins .ins-termin input').nth(2).fill('');
+  await p.locator('#ins .ins-termin .en-ok').click();
+  await p.waitForTimeout(900);
+  const x = await p.evaluate(() => {
+    const links = (n) => Math.round(n.getBoundingClientRect().left * 10) / 10;
+    const zeilen = [...document.querySelectorAll('.bz-lab-task')];
+    const ohne = zeilen.find((z) => z.classList.contains('is-ohne-termin'));
+    const mit = zeilen.find((z) => z.querySelector('.bz-lab-zeit[data-at]'));
+    return { ohne: ohne ? links(ohne.querySelector('.bz-lab-name')) : null, mit: mit ? links(mit.querySelector('.bz-lab-name')) : null };
+  });
+  await p.keyboard.press('Meta+z');
+  await p.waitForTimeout(1000);
+  if (x.ohne == null || x.mit == null) return 'Zeilen nicht gefunden: ' + JSON.stringify(x);
+  return Math.abs(x.ohne - x.mit) <= 1 ? true : 'Name beginnt bei ' + x.ohne + ' statt ' + x.mit;
+});
+
 // ── Setup-Abschnitt: anlegen und wiederfinden ───────────────────────────────
 console.log('\nSETUP-ABSCHNITT');
 

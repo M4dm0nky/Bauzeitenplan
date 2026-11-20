@@ -419,6 +419,15 @@ export function createGantt(root, opts = {}) {
           // Strich, statt eine Null zu behaupten.
           const min = toMin(r.t.end) - toMin(r.t.start);
           lab.append(el('span', 'bz-lab-dauer', r.t.milestone || min === 0 ? '—' : '(' + min + ' min)'));
+        } else if (ebene === 'show') {
+          // Ohne Termin keine Zeit — aber die Spalten bleiben stehen (leere Spannen,
+          // ohne `data-at`, daher für relabelZeiten() unsichtbar), damit der Name
+          // bündig mit den terminierten Zeilen beginnt.
+          for (const c of ['bz-lab-zeit', 'bz-lab-dauer']) {
+            const leer = el('span', c);
+            leer.setAttribute('aria-hidden', 'true');
+            lab.append(leer);
+          }
         }
         const nm = el('span', 'bz-lab-name', r.s.title);
         // Ohne Termin: die Zeile steht, aber kein Balken. Das sagt die Seitenspalte
