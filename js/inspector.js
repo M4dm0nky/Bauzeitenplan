@@ -166,7 +166,7 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
         // Schätzmarke fällt weg, sonst bliebe der Balken gestrichelt.
         const dauerAngefasst = beruehrt.has('dauer') || beruehrt.has('end');
         const move = { type: 'moveTask', id: t.id, start, end };
-        send(now && now.estimated && dauerAngefasst && start && end
+        return send(now && now.estimated && dauerAngefasst && start && end
           ? { type: 'batch', label: 'Termin gesetzt', cmds: [move,
               { type: 'setTaskField', id: t.id, field: 'estimated', value: false }] }
           : move);

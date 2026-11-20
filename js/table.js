@@ -44,6 +44,13 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
   // eigener Anzeige-Zustand — kein Store-Belang, überlebt das render() hier.
   const collapsed = new Set();
 
+  // Offene Entwürfe (Start/Ende/Dauer) je Vorgang. `render()` baut die Zeilen neu
+  // auf — ein ⌘Z in einer anderen Zeile, ein Sync oder ein Zug im Gantt darf
+  // einen halb getippten Entwurf nicht stillschweigend wegwerfen.
+  const entwuerfe = new Map();   // id → {alt:{start,end}, start, end, beruehrt, fehler}
+  let verbraucht = new Set();
+  let wiederoffen = new Set();
+
   function render() {
     // Kommt dieser Aufbau aus einem Feld, in dem gerade getippt wird? Dann
     // später — sonst reißt er dem Cursor die Eingabe weg. Siehe `commitOn`.
@@ -59,6 +66,9 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     }
     const S = store.state;
     const scrollTop = root.scrollTop;
+    const fokusAlt = entwuerfe.size ? fokusJetzt() : null;
+    verbraucht = new Set();
+    wiederoffen = new Set();
     root.replaceChildren();
 
     const table = el('table', 'tb-t');
@@ -171,6 +181,15 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     table.append(tbody);
     root.append(table);
     root.scrollTop = scrollTop;
+    // Entwürfe, deren Zeile es nicht mehr gibt (Vorgang gelöscht, ausgeblendet)
+    // fallen sichtbar weg.
+    for (const [id] of [...entwuerfe]) {
+      if (verbraucht.has(id)) continue;
+      entwuerfe.delete(id);
+      if (!cur(id) && onHinweis) onHinweis('Entwurf verworfen: Vorgang wurde geändert');
+    }
+    // Der Fokus gehört weiter in das Feld, in dem der Entwurf entstand.
+    if (fokusAlt && wiederoffen.has(fokusAlt.id) && /c-(start|dur|end)/.test(fokusAlt.cls)) fokusZurueck(fokusAlt);
   }
 
   function row(t, gewerke, opts = {}) {
@@ -372,20 +391,6 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     en.append(ein);
     tr.append(en);
 
-    // Start · Dauer · Ende ändern nur einen Entwurf; ✓/Enter schickt EINEN
-    // moveTask (bei zwei leeren Feldern «ohne Termin»). Sammelvorgänge sind
-    // schreibgeschützt und haben keinen.
-    if (!isParent) {
-      en.classList.add('en-anker');
-      entwurfBinden({
-        start: sin, ende: ein, dauer: din.disabled ? null : din,
-        gruppe: [st, du, en], markiere: tr, popIn: en, nurZeit,
-        tag: () => tag || String(store.state.project.start).slice(0, 10),
-        lesen: () => cur(t.id),
-        uebernehmen: ({ start, end }) => send({ type: 'moveTask', id: t.id, start, end }),
-      });
-    }
-
     if (ebene === 'show') {
       // ── Kontakt · Anforderungen · Material ──
       // Drei Freitexte, die beim Anlegen des Zeitstrahls direkt mitgetippt
@@ -467,6 +472,57 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     }
     ac.append(msb, del);
     tr.append(ac);
+
+    // Start · Dauer · Ende ändern nur einen Entwurf; ✓/Enter schickt EINEN
+    // moveTask (bei zwei leeren Feldern «ohne Termin»). ✓/✗ stehen in der
+    // Aktionszelle der Zeile selbst (sie ersetzen dort die Symbole), damit sie
+    // keine Nachbarzeile verdecken; der Grund einer ungültigen Spanne steht in
+    // einer Zeile direkt darunter. Sammelvorgänge sind schreibgeschützt.
+    if (!isParent) {
+      let grundZeile = null;
+      let anfang = null;
+      const alt = entwuerfe.get(t.id);
+      if (alt) {
+        entwuerfe.delete(t.id);
+        verbraucht.add(t.id);
+        const ts = t.start ?? null, te = t.end ?? null;
+        if (ts === alt.start && te === alt.end) { /* unsere eigene Übernahme ist angekommen */ }
+        else if (ts === alt.alt.start && te === alt.alt.end) { anfang = alt; wiederoffen.add(t.id); }
+        else if (onHinweis) onHinweis('Entwurf verworfen: Vorgang wurde geändert');
+      }
+      entwurfBinden({
+        start: sin, ende: ein, dauer: din.disabled ? null : din,
+        gruppe: [st, du, en, ac], markiere: tr, popIn: ac, nurZeit, anfang,
+        tag: () => tag || String(store.state.project.start).slice(0, 10),
+        lesen: () => cur(t.id),
+        grundAnzeige: (text) => {
+          if (!text) { if (grundZeile) { grundZeile.remove(); grundZeile = null; } return; }
+          if (!grundZeile) {
+            grundZeile = el('tr', 'tb-entwurf-grund');
+            const td = el('td');
+            td.colSpan = tr.children.length;
+            grundZeile.append(td);
+          }
+          grundZeile.firstChild.textContent = '⚠ ' + text;
+          if (!grundZeile.isConnected) tr.after(grundZeile);
+        },
+        onAendern: (e, beruehrt, fehler) => {
+          if (!e) { entwuerfe.delete(t.id); return; }
+          const now = cur(t.id);
+          if (now) entwuerfe.set(t.id, { alt: { start: now.start ?? null, end: now.end ?? null }, start: e.start, end: e.end, beruehrt, fehler });
+        },
+        uebernehmen: ({ start, end }, beruehrt) => {
+          // Vor dem Senden merken: der Store rendert beim Erfolg SOFORT neu. Ist
+          // die Übernahme dort angekommen, verwirft der Aufbau den Merker still;
+          // bei Ablehnung steht der Entwurf markiert wieder da.
+          const now = cur(t.id);
+          entwuerfe.set(t.id, { alt: { start: now ? now.start ?? null : null, end: now ? now.end ?? null : null }, start, end, beruehrt, fehler: null });
+          const r = send({ type: 'moveTask', id: t.id, start, end });
+          if (r && r.ok === false) { const x = entwuerfe.get(t.id); if (x) x.fehler = r.error; render(); }
+          return r;
+        },
+      });
+    }
     return tr;
   }
 

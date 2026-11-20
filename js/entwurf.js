@@ -26,12 +26,18 @@ import { fmtDuration, entwurfAendern, entwurfFehler } from './conflicts.js';
  * @param {(e:{start:?string,end:?string}, beruehrt:Set<string>) => void} o.uebernehmen
  * @param {boolean=} o.nurZeit  Felder ohne Datum («HH:MM»)
  * @param {() => ?string=} o.tag  Tag für ein Zeitfeld ohne Bezug (terminlose Zeile)
+ * @param {{start:?string,end:?string,beruehrt?:Set<string>,fehler?:?string}=} o.anfang
+ *   ein beim Neuaufbau wieder zu öffnender Entwurf (die Tabelle hält ihn)
+ * @param {(e:?{start:?string,end:?string}, beruehrt:Set<string>, fehler:?string) => void} o.onAendern
+ *   meldet jede Änderung des Entwurfs (null = geschlossen) — der Halter überlebt damit einen Neuaufbau
+ * @param {(text:?string) => void} o.grundAnzeige  der Grund AUSSERHALB des Kästchens (Tabelle: Zeile darunter)
  */
-export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, lesen, uebernehmen, nurZeit = false, tag = () => null }) {
+export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, lesen, uebernehmen, nurZeit = false, tag = () => null, anfang = null, onAendern = null, grundAnzeige = null }) {
   let e = null;                 // Entwurf; null = keiner offen
   let beruehrt = new Set();
   let fehlerEingabe = null;     // unlesbare Eingabe (Dauer «xyz»)
-  let fertig = false;           // nach ✓: späte Ereignisse des abgehängten Knotens ignorieren
+  let fehlerStore = null;       // der Store hat ✓ abgelehnt: Grund bleibt, bis man weiter editiert
+  let fertig = false;           // nach erfolgreichem ✓: späte Ereignisse des abgehängten Knotens ignorieren
 
   const pop = el('span', 'en-pop');
   pop.hidden = true;
@@ -44,7 +50,8 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
   no.setAttribute('aria-label', 'Verwerfen');
   const grund = el('span', 'en-grund');
   grund.setAttribute('role', 'status');
-  pop.append(ok, no, grund);
+  pop.append(ok, no);
+  if (!grundAnzeige) pop.append(grund);
   popIn.append(pop);
   // Der Klick auf ✓/✗ darf den Fokus nicht aus dem Feld holen: sonst feuert das
   // focusout vor dem click, und der Entwurf wäre schon verworfen.
@@ -61,19 +68,23 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
     if (dauer && eigenes !== dauer) dauer.value = dauerText(x);
     markiere.classList.toggle('is-entwurf', !!e);
     pop.hidden = !e;
-    if (!e) return;
+    if (!e) { if (grundAnzeige) grundAnzeige(null); return; }
     const now = lesen();
-    const f = fehlerEingabe || entwurfFehler(e, { milestone: !!(now && now.milestone) });
+    const f = fehlerEingabe || fehlerStore || entwurfFehler(e, { milestone: !!(now && now.milestone) });
     ok.disabled = !!f;
-    grund.textContent = f || '';
-    grund.hidden = !f;
+    ok.title = f || 'Übernehmen (Enter)';
+    if (grundAnzeige) grundAnzeige(f || null);
+    else { grund.textContent = f || ''; grund.hidden = !f; }
     if (dauer) dauer.classList.toggle('is-bad', !!fehlerEingabe);
   }
 
+  const melden = () => { if (onAendern) onAendern(e ? { ...e } : null, new Set(beruehrt), fehlerStore); };
+
   function zu() {
-    e = null; fehlerEingabe = null; beruehrt = new Set();
+    e = null; fehlerEingabe = null; fehlerStore = null; beruehrt = new Set();
     markiere.classList.remove('is-entwurf');
     pop.hidden = true;
+    if (grundAnzeige) grundAnzeige(null);
     if (dauer) dauer.classList.remove('is-bad');
   }
 
@@ -81,6 +92,7 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
     if (!e) return;
     zu();
     malen(null);
+    melden();
   }
 
   function aendern(feld, input, tippt = false) {
@@ -90,12 +102,14 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
     const basis = e || { start: now.start ?? null, end: now.end ?? null };
     const r = entwurfAendern(basis, feld, input.value, { nurZeit, tag: tag() });
     fehlerEingabe = r.fehler || null;
+    fehlerStore = null;
     const neu = { start: r.start, end: r.end };
     const gleich = neu.start === (now.start ?? null) && neu.end === (now.end ?? null);
     if (gleich && !fehlerEingabe) {
       // Wieder beim gespeicherten Stand angekommen: kein Entwurf mehr.
       zu();
       malen(input);
+      melden();
       return;
     }
     e = neu;
@@ -103,16 +117,38 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
     // Beim Tippen (`input`) bleibt der getippte Text stehen, auch wenn er
     // unterwegs noch nichts ergibt («» auf dem Weg zu «6h»).
     malen(input === dauer && fehlerEingabe && !tippt ? null : input);
+    melden();
   }
 
   function bestaetigen() {
     if (!e || fertig) return;
     const now = lesen();
-    if (fehlerEingabe || entwurfFehler(e, { milestone: !!(now && now.milestone) })) return;
-    const x = { start: e.start, end: e.end }, b = beruehrt;
-    fertig = true;
+    if (fehlerEingabe || fehlerStore || entwurfFehler(e, { milestone: !!(now && now.milestone) })) return;
+    const x = { start: e.start, end: e.end }, b = new Set(beruehrt);
     zu();
-    uebernehmen(x, b);
+    melden();
+    fertig = true;
+    const r = uebernehmen(x, b);
+    // Nur bei Erfolg ist der Entwurf erledigt. Lehnt der Store ab (Vorgang
+    // inzwischen Sammelvorgang, gelöscht …), bleibt er MARKIERT offen und
+    // nennt den Grund — kein stilles Zurückspringen auf alte Werte.
+    if (r && r.ok === false) {
+      fertig = false;
+      e = x; beruehrt = b; fehlerStore = r.error || 'Der Store hat die Änderung abgelehnt.';
+      malen(null);
+      melden();
+    }
+  }
+
+  // Ein vom Halter gemerkter Entwurf wird nach einem Neuaufbau wieder geöffnet.
+  // Gemalt wird erst im Microtask: bis dahin hängt die Zeile im DOM (der Grund
+  // darunter braucht sie als Anker).
+  if (anfang) {
+    e = { start: anfang.start ?? null, end: anfang.end ?? null };
+    beruehrt = new Set(anfang.beruehrt || []);
+    fehlerStore = anfang.fehler || null;
+    malen(null);
+    queueMicrotask(() => { if (e && !fertig) malen(null); });
   }
 
   start.addEventListener('change', () => aendern('start', start));
@@ -151,7 +187,7 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
     g.addEventListener('focusout', () => {
       if (!e) return;
       setTimeout(() => {
-        if (!e || !document.hasFocus()) return;
+        if (!e || !markiere.isConnected || !document.hasFocus()) return;
         const a = document.activeElement;
         if (a && gruppe.some((c) => c.contains(a))) return;
         verwerfen();

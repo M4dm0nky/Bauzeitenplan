@@ -889,24 +889,18 @@ body { margin: 0; }
 .bz[data-dragging] .bz-tip:not(.bz-tip-zug) { opacity: 0 !important; }
 
 /* ── Entwurf für Start · Ende · Dauer (js/entwurf.js) ──
-   Ein warmes Gelb als TÖNUNG über dem Zeilengrund — keine Theme-Farbe nötig,
-   es trägt in hell wie dunkel (wie bz-bereit: Baustein ohne eigenen Token). */
-.is-entwurf { --en: #e0a100; }
-.tb-r.is-entwurf > td { background: color-mix(in srgb, var(--en) 24%, transparent); }
-.is-entwurf input { outline: 2px solid var(--en); outline-offset: -2px; }
-.is-entwurf .tb-dur.is-bad, .is-entwurf input.is-bad { outline-color: var(--crit, red); }
+   Hier nur Geometrie und die festen Werte; Farben der Bausteine stehen in den
+   Themes (.is-entwurf, .en-ok, .en-no, .en-grund).
+   --ok/--ok-ink: ein festes Paar wie --gw-t-*: Weiß auf #1a7a46 hat 5,3:1 und
+   trägt in hell UND dunkel, braucht also keinen Dunkel-Scope. */
+:root { --en: #e0a100; --ok: #1a7a46; --ok-ink: #ffffff; }
+.tb-r.is-entwurf .c-act > :not(.en-pop) { display: none; }
 .ins-termin { display: flex; flex-direction: column; gap: 10px; border-radius: 6px; }
-.ins-termin.is-entwurf { background: color-mix(in srgb, var(--en) 18%, transparent); padding: 6px; margin: -6px; }
-.en-anker { position: relative; }
-.en-pop { display: flex; align-items: center; gap: 2px; font-size: 12px; }
-.en-anker > .en-pop {
-  position: absolute; right: 0; top: 100%; z-index: 40; width: max-content; max-width: 260px;
-  padding: 3px 6px; border: 1px solid var(--en); border-radius: 6px;
-  background: var(--panel, Canvas); color: var(--ink, CanvasText); box-shadow: 0 6px 18px -6px rgba(0,0,0,.45);
-}
+.ins-termin.is-entwurf { padding: 6px; margin: -6px; }
+.en-pop { display: flex; align-items: center; gap: 6px; font-size: 12px; flex-wrap: wrap; }
+.c-act .en-pop { justify-content: center; flex-wrap: nowrap; }
 .en-pop[hidden], .en-grund[hidden] { display: none; }
-.en-pop .tb-ico { font-size: 16px; font-weight: 700; padding: 3px 8px; border-radius: 4px; }
-.en-ok { color: #1a7a46; }
-.en-no { color: var(--crit, #b3261e); }
-.en-ok:disabled { opacity: .35; cursor: not-allowed; }
-.en-grund { margin-left: 4px; line-height: 1.25; }
+.en-pop .tb-ico { font-size: 16px; font-weight: 700; padding: 3px 9px; border-radius: 4px; min-width: 30px; }
+.en-ok:disabled { opacity: .4; cursor: not-allowed; }
+.en-grund { line-height: 1.25; }
+.tb-entwurf-grund td { padding: 2px 10px 4px; font-size: 12px; }

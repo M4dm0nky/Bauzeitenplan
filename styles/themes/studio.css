@@ -297,3 +297,15 @@ kbd {
 .sync-state[data-state="ok"] { color: var(--live-run, #1a7a46); border-color: var(--live-run, #1a7a46); }
 .sync-state[data-state="wartet"] { color: color-mix(in srgb, #e0a100 65%, var(--ink)); border-color: color-mix(in srgb, #e0a100 65%, var(--ink)); }
 .sync-state[data-state="fehler"] { color: #fff; background: var(--crit); border-color: var(--crit); }
+
+/* Entwurf für Start · Ende · Dauer (js/entwurf.js): Zeile gelb, ✓ grün, ✗ rot. */
+.tb-r.is-entwurf > td { background: color-mix(in srgb, var(--en, #e0a100) 24%, transparent); }
+.is-entwurf input { outline: 2px solid var(--en, #e0a100); outline-offset: -2px; }
+.is-entwurf input.is-bad { outline-color: var(--crit, #b3261e); }
+.ins-termin.is-entwurf { background: color-mix(in srgb, var(--en, #e0a100) 18%, transparent); }
+.tb-ico.en-ok { background: var(--ok, #1a7a46); color: var(--ok-ink, #fff); }
+.tb-ico.en-ok:hover:not(:disabled) { background: color-mix(in srgb, var(--ok, #1a7a46) 82%, #000); color: var(--ok-ink, #fff); }
+.tb-ico.en-no { color: var(--crit, #b3261e); border: 1px solid currentColor; background: transparent; }
+.tb-ico.en-no:hover { background: color-mix(in srgb, var(--crit, #b3261e) 14%, transparent); color: var(--crit, #b3261e); }
+.en-grund, .tb-entwurf-grund td { color: var(--crit, #b3261e); }
+.tb-entwurf-grund td { background: color-mix(in srgb, var(--en, #e0a100) 24%, transparent); }

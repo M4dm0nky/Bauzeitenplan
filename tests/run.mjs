@@ -145,7 +145,10 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     'rail', 'rail-m',
     // Sync-Symbol (Speicherort): grün/gelb/rot je Zustand. Ohne eigene Regeln
     // stünde es in den anderen Themes ungestaltet im Kopf.
-    'sync-state'];
+    'sync-state',
+    // Zeilen-Entwurf: gelbe Zeile, grünes ✓, rotes ✗, Grund darunter.
+    // Ohne eigene Regeln verlöre ✓ gegen `.tb-ico { color: var(--muted) }`.
+    'is-entwurf', 'en-ok', 'en-no', 'en-grund'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

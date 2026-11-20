@@ -832,8 +832,12 @@ await check('Ein Feld leer: ✓ gesperrt, Grund steht daneben; Verwerfen räumt 
   await page.waitForTimeout(200);
   const ok = page.locator(`.tb-r[data-id="${enId}"] .en-ok`);
   if (!(await ok.isDisabled())) return '✓ nicht gesperrt';
-  const g = (await page.locator(`.tb-r[data-id="${enId}"] .en-grund`).textContent()).trim();
+  const g = (await page.locator('.tb-entwurf-grund td').first().textContent()).trim();
   if (!g) return 'kein Grund sichtbar';
+  const tit = await ok.getAttribute('title');
+  if (!tit || tit.length < 8) return '✓ trägt den Grund nicht als title: ' + tit;
+  const unter = await page.evaluate((i) => document.querySelector(`.tb-r[data-id="${i}"]`).nextElementSibling.classList.contains('tb-entwurf-grund'), enId);
+  if (!unter) return 'der Grund steht nicht direkt unter der Zeile';
   await page.locator(`.tb-r[data-id="${enId}"] .en-no`).click();
   return JSON.stringify(await stand()) === JSON.stringify(enS0) ? true : 'gespeichert';
 });
@@ -843,7 +847,8 @@ await check('Ende vor Start: ✓ gesperrt mit Grund (kein stilles Verwerfen)', a
   await f.fill(new Date(new Date(s + ':00Z').getTime() - 3600000).toISOString().slice(0, 16));
   await page.waitForTimeout(200);
   const ok = page.locator(`.tb-r[data-id="${enId}"] .en-ok`);
-  const g = (await page.locator(`.tb-r[data-id="${enId}"] .en-grund`).textContent()).trim();
+  const g = (await page.locator('.tb-entwurf-grund td').first().textContent()).trim();
+  await page.screenshot({ path: join(here, 'shots', 'edit-entwurf-ungueltig.png') });
   await page.locator(`.tb-r[data-id="${enId}"] .en-no`).click();
   return (await ok.count()) && g && !/^$/.test(g) ? true : 'kein Grund';
 });
@@ -852,7 +857,7 @@ await check('Start und Ende leeren + ✓ = «ohne Termin» (Gantt: Kennzeichnung
   await page.locator(`.tb-r[data-id="${enId}"] .c-end input`).fill('');
   await page.waitForTimeout(200);
   const ok = page.locator(`.tb-r[data-id="${enId}"] .en-ok`);
-  if (await ok.isDisabled()) return '✓ gesperrt trotz zwei leerer Felder: ' + await page.locator(`.tb-r[data-id="${enId}"] .en-grund`).textContent();
+  if (await ok.isDisabled()) return '✓ gesperrt trotz zwei leerer Felder: ' + await page.locator('.tb-entwurf-grund td').first().textContent();
   await ok.click();
   const nach = await stand();
   if (nach[enId][0] !== null || nach[enId][1] !== null) return 'nicht terminlos: ' + JSON.stringify(nach[enId]);
@@ -864,6 +869,124 @@ await check('Start und Ende leeren + ✓ = «ohne Termin» (Gantt: Kennzeichnung
   await page.keyboard.press('Meta+z');
   if (marke < 1) return 'keine Kennzeichnung «ohne Termin»';
   return JSON.stringify(await stand()) === JSON.stringify(enS0) ? true : 'ein ⌘Z reichte nicht';
+});
+await check('✓/✗ verdecken nichts: am Ende-Feld der NÄCHSTEN Zeile liegt dieses Feld, nicht ✓/✗', async () => {
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(400);
+  const f = page.locator(`.tb-r[data-id="${enId}"] .c-start input`);
+  await f.fill(plusTag(enV0));
+  await page.waitForTimeout(200);
+  const r = await page.evaluate((i) => {
+    const row = document.querySelector(`.tb-r[data-id="${i}"]`);
+    const next = row.nextElementSibling;
+    if (!next || !next.classList.contains('tb-r')) return 'keine Folgezeile';
+    const feld = next.querySelector('.c-end input');
+    const b = feld.getBoundingClientRect();
+    const treffer = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+    const act = row.querySelector('.c-act');
+    const sichtbar = [...act.children].filter((c) => getComputedStyle(c).display !== 'none').map((c) => c.className);
+    return { ok: treffer === feld || feld.contains(treffer), sichtbar, popIn: !!act.querySelector('.en-pop') };
+  }, enId);
+  await page.screenshot({ path: join(here, 'shots', 'edit-entwurf-hell.png') });
+  await page.locator(`.tb-r[data-id="${enId}"] .en-no`).click();
+  if (typeof r === 'string') return r;
+  if (!r.popIn) return '✓/✗ nicht in der Aktionszelle';
+  if (r.sichtbar.length !== 1 || !/en-pop/.test(r.sichtbar[0])) return 'Aktionszelle zeigt noch andere Symbole: ' + r.sichtbar;
+  return r.ok ? true : 'das Ende-Feld der Folgezeile ist verdeckt';
+});
+await check('✓ ist GRÜN mit weißem Haken (Kontrast ≥ 3:1) — in hell UND dunkel', async () => {
+  const f = page.locator(`.tb-r[data-id="${enId}"] .c-start input`);
+  const lies = async () => page.evaluate((i) => {
+    const ok = document.querySelector(`.tb-r[data-id="${i}"] .en-ok`);
+    const cs = getComputedStyle(ok);
+    const rgb = (x) => (x.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    return { bg: rgb(cs.backgroundColor), fg: rgb(cs.color) };
+  }, enId);
+  const lum = (c) => { const [r, g, b] = c.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const kontrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const hue = ([r, g, b]) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b); if (mx === mn) return -1; const d = mx - mn; const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return (h * 60 + 360) % 360; };
+  for (const modus of ['light', 'dark']) {
+    await page.evaluate((m) => document.documentElement.setAttribute('data-theme', m), modus);
+    await f.fill(plusTag(enV0));
+    await page.waitForTimeout(250);
+    const c = await lies();
+    if (modus === 'dark') await page.screenshot({ path: join(here, 'shots', 'edit-entwurf-dunkel.png') });
+    await page.locator(`.tb-r[data-id="${enId}"] .en-no`).click();
+    const h = hue(c.bg);
+    if (h < 90 || h > 170) return modus + ': Hintergrund nicht grün (Farbton ' + Math.round(h) + ') ' + c.bg;
+    if (c.fg.some((v) => v < 240)) return modus + ': Haken nicht weiß ' + c.fg;
+    const k = kontrast(c.bg, c.fg);
+    if (k < 3) return modus + ': Kontrast ' + k.toFixed(2);
+  }
+  await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+  return true;
+});
+await check('lehnt der Store ✓ ab, bleibt der Entwurf MARKIERT offen und nennt den Grund (Controller mit echtem DOM)', async () => {
+  const r = await page.evaluate(async () => {
+    const { entwurfBinden } = await import('/js/entwurf.js');
+    const host = document.createElement('div');
+    host.innerHTML = '<div class="t"><input type="datetime-local"><input class="d"><input type="datetime-local"></div>';
+    document.body.append(host);
+    const [st, du, en] = host.querySelectorAll('input');
+    const stand = { start: '2026-07-13T08:00', end: '2026-07-13T10:00' };
+    st.value = stand.start; en.value = stand.end; du.value = '2h';
+    const grp = host.firstChild;
+    entwurfBinden({ start: st, ende: en, dauer: du, gruppe: [grp], markiere: grp, popIn: grp, lesen: () => stand,
+      uebernehmen: () => ({ ok: false, error: 'Vorgang ist inzwischen ein Sammelvorgang.' }) });
+    st.value = '2026-07-13T09:00'; st.dispatchEvent(new Event('change'));
+    grp.querySelector('.en-ok').click();
+    const out = { markiert: grp.classList.contains('is-entwurf'), grund: grp.querySelector('.en-grund')?.textContent, okGesperrt: grp.querySelector('.en-ok').disabled, startWert: st.value };
+    // und weiter editierbar
+    en.value = '2026-07-13T12:00'; en.dispatchEvent(new Event('change'));
+    out.editierbar = grp.querySelector('.en-grund').textContent === '' && !grp.querySelector('.en-ok').disabled;
+    host.remove();
+    return out;
+  });
+  if (!r.markiert) return 'Entwurf nach Ablehnung nicht mehr markiert';
+  if (!/Sammelvorgang/.test(r.grund || '')) return 'Grund fehlt: ' + r.grund;
+  if (!r.okGesperrt) return '✓ nicht gesperrt';
+  if (r.startWert !== '2026-07-13T09:00') return 'Feld zeigt ' + r.startWert;
+  return r.editierbar ? true : 'weitere Eingabe wird ignoriert';
+});
+await check('ein ⌘Z in einer ANDEREN Zeile wirft den offenen Entwurf nicht weg', async () => {
+  const andere = await page.evaluate((i) => [...document.querySelectorAll('.tb-r:not(.is-parent) .c-title input')].find((x) => x.closest('.tb-r').dataset.id !== i && x.closest('.tb-r').querySelector('.tb-ico.tb-del')).closest('.tb-r').dataset.id, enId);
+  const t = page.locator(`.tb-r[data-id="${andere}"] .c-title input`);
+  await t.fill('Entwurfstest-Titel');
+  await t.press('Tab');
+  await page.waitForTimeout(400);
+  const f = page.locator(`.tb-r[data-id="${enId}"] .c-start input`);
+  await f.fill(plusTag(enV0));
+  await page.waitForTimeout(200);
+  await page.keyboard.press('Meta+z');      // nimmt den Titel der anderen Zeile zurück
+  await page.waitForTimeout(500);
+  const titel = await page.locator(`.tb-r[data-id="${andere}"] .c-title input`).inputValue();
+  const offen = await page.locator(`.tb-r[data-id="${enId}"].is-entwurf`).count();
+  const wert = await page.locator(`.tb-r[data-id="${enId}"] .c-start input`).inputValue();
+  const fokus = await page.evaluate(() => !!document.activeElement.closest('.c-start'));
+  if (titel === 'Entwurfstest-Titel') return 'der Undo hat nicht gegriffen';
+  if (!offen) return 'Entwurf ist weg';
+  if (wert !== plusTag(enV0)) return 'Entwurfswert ' + wert;
+  if (!fokus) return 'Fokus nicht im Feld';
+  await page.locator(`.tb-r[data-id="${enId}"] .en-ok`).click();    // und lässt sich noch übernehmen
+  await page.waitForTimeout(300);
+  const nach = await stand();
+  await page.keyboard.press('Meta+z');
+  return nach[enId][0] === plusTag(enV0) ? true : 'Übernahme nach dem Neuaufbau: ' + nach[enId][0];
+});
+await check('hat sich der Vorgang unter dem Entwurf geändert, fällt er SICHTBAR weg (Meldung)', async () => {
+  const f = page.locator(`.tb-r[data-id="${enId}"] .c-start input`);
+  await f.fill(plusTag(enV0));
+  await page.locator(`.tb-r[data-id="${enId}"] .en-ok`).click();   // Schritt 1: gespeichert
+  await page.waitForTimeout(300);
+  const f2 = page.locator(`.tb-r[data-id="${enId}"] .c-start input`);
+  await f2.fill(plusTag(plusTag(enV0)));
+  await page.waitForTimeout(200);
+  await page.keyboard.press('Meta+z');      // nimmt GENAU diesen Vorgang zurück
+  await page.waitForTimeout(500);
+  const offen = await page.locator('.tb-r.is-entwurf').count();
+  const toast = await page.locator('#toast').textContent();
+  const sichtbar = await page.locator('#toast').isVisible();
+  return !offen && /Entwurf verworfen/.test(toast) && sichtbar ? true : `offen=${offen} toast=«${toast}»`;
 });
 await check('Panel: Start ändern = Entwurf (✓ ✗), ✗ verwirft, ✓ speichert EINEN Schritt', async () => {
   await page.locator('[data-view="gantt"]').click();
@@ -878,6 +1001,7 @@ await check('Panel: Start ändern = Entwurf (✓ ✗), ✗ verwirft, ✓ speiche
   await page.waitForTimeout(200);
   if (!(await page.locator('.ins-termin.is-entwurf').count())) return 'Panel nicht markiert';
   if (JSON.stringify(await stand()) !== JSON.stringify(s0)) return 'schon gespeichert';
+  await page.screenshot({ path: join(here, 'shots', 'edit-entwurf-panel.png') });
   await page.locator('.ins-termin .en-no').click();
   if ((await st.inputValue()) !== v0 || await page.locator('.ins-termin.is-entwurf').count()) return '✗ verwarf nicht';
   await st.fill(plusTag(v0));
