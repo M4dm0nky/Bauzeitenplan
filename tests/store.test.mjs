@@ -1309,5 +1309,77 @@ test('Verschieben über den Sommerzeit-Wechsel 25.10.2026 behält die Differenz 
   assert.equal(toMin(w.bis) - toMin(w.von), toMin(w0.bis) - toMin(w0.von));
 });
 
+console.log('\nOhne Termin (start und end beide null)');
+const neu = (extra = {}) => ({ type: 'addTask', task: { gewerk: 'buehne', title: 'Rigging', start: null, end: null, ...extra } });
+test('addTask: ein Vorgang ohne Termin ist erlaubt, auch als Meilenstein', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply(neu()).ok, true);
+  assert.equal(s.apply(neu({ title: 'Marke', milestone: true })).ok, true);
+  const t = s.state.tasks.at(-2);
+  assert.equal(t.start, null);
+  assert.equal(t.end, null);
+});
+test('addTask: ein einzelnes null wird abgelehnt und hinterlässt nichts', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply(neu({ start: '2026-07-13T08:00' })).ok, false);
+  assert.equal(s.apply(neu({ end: '2026-07-13T08:00' })).ok, false);
+  assert.equal(s.state.tasks.length, 2);
+  assert.equal(s.dirty, false);
+});
+test('moveTask start/end null: macht ohne Termin, EIN Befehl, ein Undo-Schritt', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'moveTask', id: 'a', start: null, end: null }).ok, true);
+  assert.equal(taskById(s, 'a').start, null);
+  assert.equal(taskById(s, 'a').end, null);
+  s.undo();
+  assert.equal(taskById(s, 'a').start, '2026-07-13T08:00');
+  assert.equal(taskById(s, 'a').end, '2026-07-13T12:00');
+});
+test('moveTask: aus «ohne Termin» einen Termin setzen', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'moveTask', id: 'a', start: null, end: null });
+  assert.equal(s.apply({ type: 'moveTask', id: 'a', start: '2026-07-14T08:00', end: '2026-07-14T09:00' }).ok, true);
+  assert.equal(taskById(s, 'a').end, '2026-07-14T09:00');
+});
+test('moveTask: ein einzelnes null wird abgelehnt', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'moveTask', id: 'a', start: null, end: '2026-07-13T12:00' }).ok, false);
+  assert.equal(taskById(s, 'a').start, '2026-07-13T08:00');
+});
+test('setTaskField: einzelnes start/end null wird abgelehnt (dafür gibt es moveTask)', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'start', value: null }).ok, false);
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'end', value: null }).ok, false);
+  assert.equal(s.dirty, false);
+});
+test('setTaskField: bei einem terminlosen Vorgang bleibt ein einzelnes Datum ungültig', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'moveTask', id: 'a', start: null, end: null });
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'start', value: '2026-07-14T08:00' }).ok, false);
+});
+test('Zuweisungsfenster: ohne Termin werden sie zu «ganzer Vorgang», ein Fenster ist dort nicht setzbar', () => {
+  const s = createStore(seed());
+  s.apply({ type: "addRessource", label: "Stagehand", kind: "personal" });
+  const rid = s.state.project.ressourcen[0].id;
+  s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 2, von: '2026-07-13T09:00', bis: '2026-07-13T10:00' } });
+  s.apply({ type: 'moveTask', id: 'a', start: null, end: null });
+  assert.deepEqual(taskById(s, 'a').res.map((z) => [z.von, z.bis]), [[null, null]]);
+  assert.equal(s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 1, von: '2026-07-13T09:00', bis: '2026-07-13T10:00' } }).ok, false);
+  assert.equal(s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 1, von: null, bis: null } }).ok, true);
+});
+test('Hülle: alle Kinder terminlos → Eltern terminlos; ein terminiertes Kind setzt die Hülle', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'addTask', task: { gewerk: 'buehne', title: 'K1', parent: 'a', start: null, end: null, id: 'k1' } });
+  assert.equal(taskById(s, 'a').start, null);
+  assert.equal(taskById(s, 'a').end, null);
+  s.apply({ type: 'addTask', task: { gewerk: 'buehne', title: 'K2', parent: 'a', start: '2026-07-15T08:00', end: '2026-07-15T10:00', id: 'k2' } });
+  assert.equal(taskById(s, 'a').start, '2026-07-15T08:00');
+  assert.equal(taskById(s, 'a').end, '2026-07-15T10:00');
+  s.apply({ type: 'moveTask', id: 'k2', start: null, end: null });
+  assert.equal(taskById(s, 'a').start, null);
+  s.undo();
+  assert.equal(taskById(s, 'a').start, '2026-07-15T08:00');
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

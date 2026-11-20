@@ -9,7 +9,7 @@
 // falsch sein. Nebenbei fällt das Zurückrollen gescheiterter Sammelbefehle
 // geschenkt ab.
 
-import { topoSort, toMin, toDate, spanFehler } from './schedule.js';
+import { topoSort, toMin, toDate, spanFehler, ohneTermin } from './schedule.js';
 import { MAX_SLOTS } from './palette.js';
 import { local } from './conflicts.js';
 
@@ -197,6 +197,12 @@ function neuerEintrag(state, { feld, eingebaut, praefix, fehlt, doppelt, label: 
 // leer wäre, wird zu `null` (= ganzer Vorgang). Meilensteine bleiben unberührt.
 function resNachziehen(t, altStart, altEnd) {
   if (t.milestone || !Array.isArray(t.res) || !t.res.length) return;
+  // Ohne Termin gibt es keinen Vorgang, in dem ein Fenster liegen könnte: alle
+  // Fenster werden zu «ganzer Vorgang». Aus «ohne Termin» heraus waren sie schon null.
+  if (ohneTermin(t) || altStart == null || altEnd == null) {
+    t.res = t.res.map((z) => ({ ...z, von: null, bis: null }));
+    return;
+  }
   const s = toMin(t.start), e = toMin(t.end);
   const delta = s - toMin(altStart);
   const gleich = e - s === toMin(altEnd) - toMin(altStart);
@@ -224,12 +230,16 @@ const hasChildren = (state, id) => state.tasks.some((t) => t.parent === id);
 function reflowParents(state) {
   for (const p of state.tasks) {
     let s = null, e = null;
+    let hatKind = false;
     for (const k of state.tasks) {
       if (k.parent !== p.id) continue;
+      hatKind = true;
+      if (ohneTermin(k)) continue;      // terminlose Kinder tragen nichts zur Hülle bei
       if (s == null || toMin(k.start) < toMin(s)) s = k.start;
       if (e == null || toMin(k.end) > toMin(e)) e = k.end;
     }
-    if (s == null) continue;          // keine Kinder → kein Sammelvorgang
+    if (!hatKind) continue;           // keine Kinder → kein Sammelvorgang
+    // Alle Kinder terminlos → s/e bleiben null → die Hülle ist selbst terminlos.
     const altStart = p.start, altEnd = p.end;
     p.start = s;
     p.end = e;
@@ -291,7 +301,7 @@ const HANDLERS = {
       .map((z) => ({ rid: z.rid, n: z.n, von: z.von ?? null, bis: z.bis ?? null }));
     state.tasks.push({
       id, gewerk, title: String(t.title).trim(),
-      start: t.start, end: t.end, milestone,
+      start: t.start ?? null, end: t.end ?? null, milestone,
       progress: t.progress ?? 0, status: t.status || 'geplant',
       notes: t.notes || '', parent,
       // Setup oder Show. MUSS hier durch: wer im Setup-Abschnitt anlegt, will
@@ -378,11 +388,14 @@ const HANDLERS = {
     if (!t) return 'Vorgang nicht gefunden.';
     // Sammelvorgänge werden nicht direkt verschoben — ihre Lage folgt den Kindern.
     if (hasChildren(state, cmd.id)) return 'Die Zeiten ergeben sich aus den Untervorgängen.';
-    const bad = checkSpan(cmd.start, cmd.end, t.milestone);
+    // start UND end beide null = «ohne Termin» (EIN Befehl, EIN Undo-Schritt).
+    // Ein einzelnes null lehnt checkSpan ab.
+    const start = cmd.start ?? null, end = cmd.end ?? null;
+    const bad = checkSpan(start, end, t.milestone);
     if (bad) return bad;
     const altStart = t.start, altEnd = t.end;
-    t.start = cmd.start;
-    t.end = cmd.end;
+    t.start = start;
+    t.end = end;
     resNachziehen(t, altStart, altEnd);
     return ok();
   },
@@ -607,6 +620,7 @@ const HANDLERS = {
       const von = v.von ?? null, bis = v.bis ?? null;
       if ((von == null) !== (bis == null)) return 'Start und Ende gehören zusammen — oder beide leer für den ganzen Vorgang.';
       if (von != null) {
+        if (ohneTermin(t)) return 'Ein Zeitfenster braucht einen Termin am Vorgang.';
         if (toMin(bis) <= toMin(von)) return 'Das Ende muss nach dem Start liegen.';
         if (toMin(von) < toMin(t.start) || toMin(bis) > toMin(t.end))
           return 'Das Zeitfenster muss innerhalb des Vorgangs liegen.';

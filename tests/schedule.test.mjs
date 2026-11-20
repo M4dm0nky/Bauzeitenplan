@@ -1,4 +1,4 @@
-import { computeSchedule, topoSort, toMin, byStart, candidateGroups, suchTreffer, seriesRows, tagesScheiben, reachable } from '../js/schedule.js';
+import { computeSchedule, topoSort, toMin, byStart, candidateGroups, suchTreffer, seriesRows, tagesScheiben, reachable, spanFehler, ohneTermin } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -493,6 +493,67 @@ test('unbekanntes/fehlendes Gewerk: Gruppe «Ohne Gewerk» am Ende, zählt mit',
   assert.equal(r.groups[1].gewerk.name, 'Ohne Gewerk');
   assert.deepEqual(r.groups[1].items.map((x) => x.id), ['n', 'o']);
   assert.equal(suchTreffer({ tasks: t, gewerke: stGewerke, query: 'podest', limit: 1 }).weitere, 2);
+});
+
+console.log('\nOhne Termin (start und end beide null)');
+const OT = (id, title, extra = {}) => ({ id, gewerk: 'g1', title, start: null, end: null, milestone: false, ...extra });
+const MT = (id, title, at) => ({ id, gewerk: 'g1', title, start: at, end: at, milestone: true });
+test('spanFehler: das Paar null/null ist gültig, auch als Meilenstein und Sammelvorgang', () => {
+  assert.equal(spanFehler(null, null), null);
+  assert.equal(spanFehler(null, null, { milestone: true }), null);
+  assert.equal(spanFehler(null, null, { sammel: true }), null);
+});
+test('spanFehler: ein einzelnes null bleibt ungültig', () => {
+  assert.ok(spanFehler(null, '2026-07-13T10:00'));
+  assert.ok(spanFehler('2026-07-13T10:00', null));
+  assert.ok(spanFehler('', ''));
+});
+test('ohneTermin: nur das Paar null/null', () => {
+  assert.equal(ohneTermin({ start: null, end: null }), true);
+  assert.equal(ohneTermin({ start: '2026-07-13T10:00', end: null }), false);
+  assert.equal(ohneTermin({ start: '2026-07-13T10:00', end: '2026-07-13T11:00' }), false);
+});
+test('byStart: terminlose ans Ende, untereinander nach Titel', () => {
+  const l = [OT('x', 'Zebra'), t('a', '2026-07-13T10:00', '2026-07-13T11:00'), OT('y', 'Anker')];
+  assert.deepEqual(l.sort(byStart).map((v) => v.id), ['a', 'y', 'x']);
+});
+test('computeSchedule: terminlose fehlen im Ergebnis, nichts wird NaN', () => {
+  const tasks = [t('a', '2026-07-13T08:00', '2026-07-13T10:00'), OT('o', 'ohne'), t('c', '2026-07-13T10:00', '2026-07-13T12:00')];
+  const deps = [{ from: 'a', to: 'o', type: 'FS', lag: 0 }, { from: 'o', to: 'c', type: 'FS', lag: 0 }];
+  const R = computeSchedule(tasks, deps);
+  assert.equal(R.has('o'), false);
+  assert.ok(Number.isFinite(R.get('a').es) && Number.isFinite(R.get('c').lf) && Number.isFinite(R.minFloat));
+  assert.equal(R.get('c').es, toMin('2026-07-13T10:00'));
+});
+test('computeSchedule: ein Ring über terminlose wird weiter erkannt', () => {
+  assert.throws(() => computeSchedule([OT('o', 'o'), OT('p', 'p')], [{ from: 'o', to: 'p' }, { from: 'p', to: 'o' }]), /Zyklus/);
+});
+test('computeSchedule: Plan ohne terminierte Vorgänge ist leer, kein Fehler', () => {
+  const R = computeSchedule([OT('o', 'o')], []);
+  assert.equal(R.size, 0);
+  assert.equal(R.minFloat, 0);
+});
+test('seriesRows: terminlose bleiben als Zeile erhalten (hinten, ohne Spur)', () => {
+  const rows = seriesRows([OT('o', 'Rigging'), t('a', '2026-07-13T08:00', '2026-07-13T10:00')].map((v, i) => ({ ...v, title: i ? 'Licht' : 'Rigging' })));
+  assert.deepEqual(rows.map((r) => r.title), ['Licht', 'Rigging']);
+  assert.equal(rows[1].lanes, 1);
+  assert.equal(rows[1].laneOf.get('o'), 0);
+});
+test('seriesRows: terminlos in einer Serie belegt keine Spur', () => {
+  const l = [{ ...t('a', '2026-07-13T08:00', '2026-07-13T10:00'), title: 'X' }, OT('o', 'X')];
+  const r = seriesRows(l)[0];
+  assert.equal(r.lanes, 1);
+  assert.deepEqual(r.tasks.map((v) => v.id), ['a', 'o']);
+});
+test('tagesScheiben: terminlose erscheinen auf keinem Blatt', () => {
+  const l = [OT('o', 'o'), { ...t('a', '2026-07-13T08:00', '2026-07-13T10:00'), title: 'a' }];
+  assert.deepEqual(tagesScheiben(l, '2026-07-13').map((s) => s.task.id), ['a']);
+});
+test('suchTreffer findet terminlose, nach den terminierten', () => {
+  const g = [{ id: 'g1', name: 'Bühne', sort: 0 }];
+  const l = [OT('o', 'Podest ohne'), { ...t('a', '2026-07-13T08:00', '2026-07-13T10:00'), gewerk: 'g1', title: 'Podest' }];
+  const r = suchTreffer({ tasks: l, gewerke: g, query: 'podest' });
+  assert.deepEqual(r.groups[0].items.map((v) => v.id), ['a', 'o']);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

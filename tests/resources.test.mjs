@@ -121,5 +121,23 @@ test('bedarfsRaster folgt einem verschobenen Vorgang', () => {
   assert.equal(slots[7].bedarf, 3);   // neues Fenster 15–16
 });
 
+console.log('\nOhne Termin');
+test('deckung: ein terminloser Vorgang sagt nichts über Deckung aus (null)', () => {
+  const t = task([{ rid: 'stagehand', n: 2, von: null, bis: null }], { start: null, end: null });
+  assert.equal(deckung(t, 'personal', state()), null);
+});
+test('bedarfsRaster: terminlose Vorgänge und Bereitstellungen tragen nichts bei, nichts wird NaN', () => {
+  const von = toMin('2026-08-30T08:00');
+  const l = [
+    task([{ rid: 'stagehand', n: 3, von: null, bis: null }], { start: null, end: null }),
+    task([{ rid: 'stagehand', n: 9, von: null, bis: null }], { start: null, end: null, bereitstellung: true }),
+    task([{ rid: 'stagehand', n: 2, von: null, bis: null }]),
+  ];
+  const r = bedarfsRaster(l, state().project.ressourcen, { kind: 'personal', von, bis: von + 600, schritt: 60 });
+  const sh = r.find((x) => x.rid === 'stagehand');
+  assert.deepEqual(sh.slots.map((s) => s.bedarf), [0, 0, 2, 2, 2, 2, 2, 2, 2, 2]);
+  assert.ok(sh.slots.every((s) => s.verfuegbar === 0 && Number.isFinite(s.frei)));
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

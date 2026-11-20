@@ -13,7 +13,7 @@
 // ganz normaler Vorgang, dessen `res` nicht Bedarf ist, sondern Angebot — der
 // Pool, aus dem andere Vorgänge ihre Zuweisung nehmen.
 
-import { toMin } from './schedule.js';
+import { toMin, ohneTermin } from './schedule.js';
 import { nachSort } from './ebene.js';
 
 export const RES_KINDS = [['personal', 'Personal'], ['maschine', 'Maschine']];
@@ -59,6 +59,8 @@ function spanne(t, z) {
  * @returns {{gedeckt:[number,number][], luecken:[number,number][], luecktMin:number}|null}
  */
 export function deckung(t, kind, state) {
+  // Ohne Termin gibt es kein Zeitfenster, über das sich Deckung sagen ließe.
+  if (ohneTermin(t)) return null;
   const zuweisungen = (t.res || []).filter((z) => resKind(z.rid, state) === kind);
   if (!zuweisungen.length) return null;
 
@@ -110,6 +112,7 @@ export function bedarfsRaster(tasks, resList, { kind, von, bis, schritt = 60 } =
   const byRid = new Map(out.map((o) => [o.rid, o]));
 
   for (const t of tasks || []) {
+    if (ohneTermin(t)) continue;        // kein Termin, kein Bedarf und kein Angebot im Raster
     for (const z of t.res || []) {
       const row = byRid.get(z.rid);
       if (!row) continue;

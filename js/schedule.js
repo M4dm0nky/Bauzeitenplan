@@ -15,7 +15,13 @@ export const toDate = (min) => new Date(min * 60000);
 // `sammel`: ein Elternvorgang trägt die abgeleitete Hülle seiner Kinder
 // (reflowParents) — sind alle Kinder Meilensteine, ist sie null lang. Dort
 // genügt Ende >= Start; die Lage ist abgeleitet, nicht eingegeben.
+//
+// «Ohne Termin»: start UND end beide null (nie nur eines) — der Vorgang steht in
+// der Liste, hat aber keinen Balken. Gilt auch für Meilensteine und Sammelvorgänge.
+export const ohneTermin = (t) => t.start == null && t.end == null;
+
 export function spanFehler(start, end, { milestone = false, sammel = false } = {}) {
+  if (start == null && end == null) return null;
   if (!start || !end) return 'Start und Ende müssen gesetzt sein.';
   const a = new Date(start).getTime(), b = new Date(end).getTime();
   if (Number.isNaN(a) || Number.isNaN(b)) return 'Ungültiges Datum.';
@@ -29,9 +35,13 @@ export function spanFehler(start, end, { milestone = false, sammel = false } = {
 // bei Gleichstand nach Ende, zuletzt nach Titel (stabil). Der EINE Vergleicher
 // für Tabelle und Gantt — sonst zeigt derselbe Plan zwei Reihenfolgen und wirkt
 // „nicht gleich". Über toMin gerechnet, nie aus Datumsziffern (Sommerzeit).
-export const byStart = (a, b) =>
-  toMin(a.start) - toMin(b.start) || toMin(a.end) - toMin(b.end)
-  || (a.title || '').localeCompare(b.title || '');
+// Terminlose (start/end null) stehen am Ende der Gruppe, untereinander nach Titel.
+export const byStart = (a, b) => {
+  const oa = ohneTermin(a), ob = ohneTermin(b);
+  if (oa || ob) return (oa - ob) || (a.title || '').localeCompare(b.title || '');
+  return toMin(a.start) - toMin(b.start) || toMin(a.end) - toMin(b.end)
+    || (a.title || '').localeCompare(b.title || '');
+};
 
 /**
  * Vorgänge auf einen Kalendertag zuschneiden — die Grundlage der Tagesblätter
@@ -52,6 +62,7 @@ export function tagesScheiben(tasks, tagISO) {
   const b = a + 1440;
   const out = [];
   for (const t of tasks) {
+    if (ohneTermin(t)) continue;        // kein Termin, auf keinem Blatt
     const s = toMin(t.start), e = toMin(t.end);
     // Meilensteine haben keine Dauer: `e > a` allein ließe eine Raute um 00:00
     // durchs Raster fallen. Deshalb der eigene Fall.
@@ -102,6 +113,8 @@ export function seriesRows(tasks) {
     const frei = [];                 // Ende je Spur, in Minuten
     const laneOf = new Map();
     for (const t of list) {
+      // Terminlose belegen keine Spur: sie haben keinen Balken, nur die Zeile.
+      if (ohneTermin(t)) { laneOf.set(t.id, 0); continue; }
       const s = toMin(t.start);
       // Ein Meilenstein hat keine Dauer. Ohne die Mindestbreite teilten sich zwei
       // Rauten am selben Termin eine Spur und lägen exakt übereinander.
@@ -111,11 +124,13 @@ export function seriesRows(tasks) {
       else frei[lane] = e;
       laneOf.set(t.id, lane);
     }
-    out.push({ title, tasks: list, lanes: frei.length, laneOf });
+    out.push({ title, tasks: list, lanes: Math.max(frei.length, 1), laneOf });
   }
   // Serien untereinander wie Einzelvorgänge: nach dem frühesten Termin.
   return out.sort((a, b) => byStart(a.tasks[0], b.tasks[0]));
 }
+// (Terminlose Serien stehen damit hinten; ein Name, der terminierte UND terminlose
+// Vorgänge hat, sortiert nach seinem frühesten terminierten.)
 
 /**
  * Alle Vorgänge, die von `startId` aus über die Verknüpfungen erreichbar sind —
@@ -282,16 +297,20 @@ export function topoSort(taskIds, deps) {
 export function computeSchedule(tasks, deps) {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const valid = deps.filter((d) => byId.has(d.from) && byId.has(d.to));
-  const order = topoSort(tasks.map((t) => t.id), valid);
+  // Ringe werden über ALLE Vorgänge erkannt (auch terminlose); gerechnet wird nur
+  // mit terminierten. Verknüpfungen von/zu einem terminlosen Vorgang zählen nicht.
+  const order = topoSort(tasks.map((t) => t.id), valid).filter((id) => !ohneTermin(byId.get(id)));
 
-  const predOf = new Map(tasks.map((t) => [t.id, []]));
-  const succOf = new Map(tasks.map((t) => [t.id, []]));
+  const termin = tasks.filter((t) => !ohneTermin(t));
+  const predOf = new Map(termin.map((t) => [t.id, []]));
+  const succOf = new Map(termin.map((t) => [t.id, []]));
   for (const d of valid) {
+    if (!predOf.has(d.to) || !predOf.has(d.from)) continue;
     predOf.get(d.to).push(d);
     succOf.get(d.from).push(d);
   }
 
-  const dur = new Map(tasks.map((t) => [t.id, toMin(t.end) - toMin(t.start)]));
+  const dur = new Map(termin.map((t) => [t.id, toMin(t.end) - toMin(t.start)]));
   const R = new Map();
 
   // ── Forward pass: früheste Lage ─────────────────────────────────────────────

@@ -4,7 +4,7 @@
 // Liegt die früheste Lage darüber, ist eine Abhängigkeit verletzt — genau das
 // ist die ganze Prüfung.
 
-import { computeSchedule, toMin, toDate } from './schedule.js';
+import { computeSchedule, toMin, toDate, ohneTermin } from './schedule.js';
 
 // Zwei Minuten Schlupf gegen Rundung; darunter ist es kein echter Konflikt.
 const EPS = 1;
@@ -46,7 +46,7 @@ export function findConflicts(state, vorab) {
     // Eine Bereitstellung ist ein Pool, kein Ablaufschritt — sie hat keine
     // Verknüpfungen (der Store lehnt sie ab) und kann folglich nie im
     // Konflikt stehen. Sie trotzdem zu prüfen wäre reine Rechenzeit.
-    if (t.bereitstellung) continue;
+    if (t.bereitstellung || ohneTermin(t)) continue;
     const r = sched.get(t.id);
     if (!r) continue;
     const planned = toMin(t.start);

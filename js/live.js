@@ -6,7 +6,7 @@
 // Deshalb wird der Status auch nie automatisch umgeschaltet — sonst sähe der
 // Plan immer nach Plan aus und das Signal «wir hängen» wäre weg.
 
-import { toMin, toDate } from './schedule.js';
+import { toMin, toDate, ohneTermin } from './schedule.js';
 import { fmtDuration, local } from './conflicts.js';
 
 // Unter dieser Schwelle ist Verzug kein Verzug, sondern Rundung. Ohne sie wäre
@@ -74,6 +74,7 @@ export function runningAt(tasks, now) {
   for (const t of tasks) {
     if (t.milestone) continue;              // hat keine Dauer, kann nicht laufen
     if (t.status === 'fertig') continue;
+    if (ohneTermin(t)) continue;            // ohne Termin läuft nichts
     const a = toMin(t.start), b = toMin(t.end);
     // Ende exklusiv: sonst leuchtet ein Vorgang noch, dessen Zeit abgelaufen ist.
     if (a <= now && now < b) out.add(t.id);
@@ -90,6 +91,7 @@ export function delaysAt(tasks, now) {
   const out = [];
   for (const t of tasks) {
     if (t.status === 'fertig') continue;    // menschliche Aussage schlägt die Uhr
+    if (ohneTermin(t)) continue;            // ohne Termin kann nichts verspätet sein
 
     if (t.milestone) {
       const by = now - toMin(t.start);
@@ -137,7 +139,7 @@ export function offeneVerspaetungen(tasks, now, showBaender = null) {
   // END» bliebe sonst für immer «überfällig». Dort gilt er wie 'start'.
   // showBaender: Menge der Band-ids (art 'buehne'); den Begriff kennt der Aufrufer
   // (ebene.js), live.js bleibt davon unabhängig.
-  const ende = new Map(tasks.map((t) => [t.id, toMin(t.end)]));
+  const ende = new Map(tasks.filter((t) => !ohneTermin(t)).map((t) => [t.id, toMin(t.end)]));
   const gewerk = new Map(tasks.map((t) => [t.id, t.gewerk]));
   const ohneRueckmeldung = (d) => d.kind === 'start'
     || (d.kind === 'meilenstein' && !!showBaender && showBaender.has(gewerk.get(d.taskId)));
@@ -148,7 +150,7 @@ export function offeneVerspaetungen(tasks, now, showBaender = null) {
 export function nextUp(tasks, now) {
   let best = null;
   for (const t of tasks) {
-    if (t.status === 'fertig') continue;
+    if (t.status === 'fertig' || ohneTermin(t)) continue;
     const a = toMin(t.start);
     if (a <= now) continue;
     if (!best || a < best.at) best = { taskId: t.id, title: t.title, at: a, inMin: a - now };

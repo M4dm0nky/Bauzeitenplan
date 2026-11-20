@@ -18,7 +18,7 @@
 // Altdaten haben kein `art`. Sie sind deshalb Gewerke, und der Bauzeitenplan
 // sieht aus wie immer.
 
-import { toMin, toDate, tagesScheiben } from './schedule.js';
+import { toMin, toDate, tagesScheiben, ohneTermin } from './schedule.js';
 import { local } from './conflicts.js';
 
 export const EBENEN = [['bau', 'Bauzeitenplan'], ['show', 'Showablauf']];
@@ -160,7 +160,7 @@ export function abschnitte(state) {
   const frueh = new Map();
   for (const t of tasks) {
     const a = t.abschnitt;
-    if (!a || a === 'setup' || a === 'show') continue;
+    if (!a || a === 'setup' || a === 'show' || ohneTermin(t)) continue;
     const m = toMin(t.start);
     if (!Number.isFinite(m)) continue;
     if (!frueh.has(a) || m < frueh.get(a)) frueh.set(a, m);
@@ -215,6 +215,7 @@ export function sichtTasks(state, ebene, aus = new Set(), abschnitt = 'alle') {
 export function programmTage(tasks) {
   const tage = new Set();
   for (const t of tasks || []) {
+    if (ohneTermin(t)) continue;
     const a = toMin(t.start), b = Math.max(toMin(t.end), a);
     // Tagweise vorangehen statt Ziffern zu addieren: über den Sommerzeit-Sprung
     // wären +1440 Minuten der falsche nächste Tag.
@@ -255,9 +256,11 @@ export function programmFenster(tasks) {
   if (!tasks || !tasks.length) return null;
   let a = Infinity, b = -Infinity;
   for (const t of tasks) {
+    if (ohneTermin(t)) continue;
     a = Math.min(a, toMin(t.start));
     b = Math.max(b, toMin(t.end));
   }
+  if (!Number.isFinite(a)) return null;   // nur terminlose: kein Fenster
   const von = Math.floor(a / 60) * 60;
   // Rechts eine halbe Stunde Luft VOR dem Aufrunden: die Beschriftung steht
   // neben dem Balken, und beim letzten Punkt des Abends (Show-Ende 21:50) liefe

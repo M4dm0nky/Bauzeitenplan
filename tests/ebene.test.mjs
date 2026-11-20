@@ -1,4 +1,4 @@
-import { artOf, abschnittOf, imAbschnitt, sichtGewerke, sichtTasks, programmFenster, punktLabel, punktTypen, punktKompakt, typHinweis, abschnitte, abschnittLabel, ART_FUER, ABSCHNITTE, EBENEN } from '../js/ebene.js';
+import { artOf, abschnittOf, imAbschnitt, sichtGewerke, sichtTasks, programmFenster, punktLabel, punktTypen, punktKompakt, typHinweis, abschnitte, abschnittLabel, ART_FUER, ABSCHNITTE, EBENEN, programmTage, amTag } from '../js/ebene.js';
 import { toMin } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
@@ -303,6 +303,24 @@ test('eine eigene Art kann zurücktreten — oder eben nicht', () => {
 test('ein unbekannter Typ tritt nicht zurück', () => {
   // Sonst schrumpfte eine Zeile, deren Art aus dem Plan gefallen ist.
   assert.equal(punktKompakt('gibtsnicht'), false);
+});
+
+console.log('\nOhne Termin');
+const OTe = (id) => ({ id, gewerk: 'b0', title: id, start: null, end: null, milestone: false, status: 'geplant' });
+test('programmTage und amTag überspringen terminlose', () => {
+  const l = [OTe('o'), S.tasks[2]];
+  assert.deepEqual(programmTage(l), ['2026-08-29']);
+  assert.deepEqual(amTag(l, '2026-08-29').map((x) => x.id), ['p0']);
+  assert.deepEqual(programmTage([OTe('o')]), []);
+});
+test('programmFenster: nur terminlose → null, sonst nur die terminierten', () => {
+  assert.equal(programmFenster([OTe('o')]), null);
+  assert.deepEqual(programmFenster([OTe('o'), S.tasks[2]]), programmFenster([S.tasks[2]]));
+});
+test('abschnitte(): ein terminloser Eintrag zieht die Sortierung nicht auf 1970', () => {
+  const st = { project: { abschnitte: [{ id: 'a1', label: 'A1' }, { id: 'a2', label: 'A2' }] },
+    tasks: [{ ...OTe('x'), abschnitt: 'a1' }, { ...T('y', 'b0', '2026-08-29T07:00', '2026-08-29T08:00'), abschnitt: 'a2' }] };
+  assert.deepEqual(abschnitte(st).slice(-2).map(([k]) => k), ['a2', 'a1']);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

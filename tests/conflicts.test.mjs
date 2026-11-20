@@ -333,5 +333,29 @@ test('über den Sommerzeit-Sprung bleibt der Folgetag der Folgetag', () => {
   assert.equal(endeNachStart('2026-10-25T22:00', '03:00'), '2026-10-26T03:00');
 });
 
+console.log('\nOhne Termin');
+test('terminlose Vorgänge brechen findConflicts nicht, Verknüpfungen zu/von ihnen zählen nicht', () => {
+  const s = seed([
+    T('a', 'g1', 'A', '2026-07-13T08:00', '2026-07-13T10:00'),
+    T('o', 'g1', 'O', null, null),
+    T('c', 'g2', 'C', '2026-07-13T09:00', '2026-07-13T11:00'),
+  ], [
+    { id: 'd1', from: 'a', to: 'o', type: 'FS', lag: 0 },
+    { id: 'd2', from: 'o', to: 'c', type: 'FS', lag: 0 },
+  ]);
+  assert.deepEqual(findConflicts(s), []);
+});
+test('ein echter Konflikt bleibt neben terminlosen bestehen, und der Sammelbefehl bleibt rechenbar', () => {
+  const s = seed([
+    T('a', 'g1', 'A', '2026-07-13T08:00', '2026-07-13T10:00'),
+    T('o', 'g1', 'O', null, null),
+    T('c', 'g2', 'C', '2026-07-13T09:00', '2026-07-13T11:00'),
+  ], [{ id: 'd1', from: 'a', to: 'c', type: 'FS', lag: 0 }, { id: 'd2', from: 'a', to: 'o', type: 'FS', lag: 0 }]);
+  assert.equal(findConflicts(s).length, 1);
+  const cmd = resolveConflictsCmd(s);
+  assert.equal(cmd.cmds.length, 1);
+  assert.ok(!cmd.cmds[0].start.includes('NaN'));
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

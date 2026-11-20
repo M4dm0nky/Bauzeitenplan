@@ -500,8 +500,8 @@ test('deserialize entfernt Verknüpfungen auf unbekannte Vorgänge', () => {
   assert.equal(r.ok, true);
   assert.deepEqual(r.plan.deps.map((d) => d.id), ['d1']);
 });
-test('deserialize lehnt fehlende Zeit ab', () => {
-  const a = deserialize(textMit((p) => { Object.assign(p.tasks[1], { milestone: true, start: null, end: null, title: 'OhneStart' }); }));
+test('deserialize lehnt eine halb fehlende Zeit ab (nur das Paar null/null ist «ohne Termin»)', () => {
+  const a = deserialize(textMit((p) => { Object.assign(p.tasks[1], { start: null, title: 'OhneStart' }); }));
   assert.equal(a.ok, false);
   assert.match(a.error, /OhneStart/);
   const b = deserialize(textMit((p) => { p.tasks[1].end = ''; p.tasks[1].title = 'OhneEnde'; }));
@@ -581,6 +581,28 @@ test('remove() meldet ok bzw. den Schreibfehler des Index', () => {
   const r = repo.remove('y');
   assert.equal(r.ok, false);
   assert.match(r.error, /Speicher/);
+});
+
+console.log('\nOhne Termin');
+test('Rundlauf: ein Vorgang ohne Termin übersteht serialize → deserialize unverändert', () => {
+  const p = plan();
+  p.tasks.push({ ...p.tasks[0], id: 't2', title: 'Rigging', start: null, end: null });
+  const back = deserialize(serialize(p));
+  assert.equal(back.ok, true);
+  const t2 = back.plan.tasks.find((t) => t.id === 't2');
+  assert.equal(t2.start, null);
+  assert.equal(t2.end, null);
+});
+test('Import: ein einzelnes null in start/end wird abgelehnt', () => {
+  const p = plan();
+  p.tasks[0].end = null;
+  const r = deserialize(JSON.stringify({ ...JSON.parse(serialize(plan())), tasks: p.tasks }));
+  assert.equal(r.ok, false);
+});
+test('Meilenstein ohne Termin wird importiert', () => {
+  const p = plan();
+  p.tasks.push({ ...p.tasks[0], id: 't3', milestone: true, start: null, end: null });
+  assert.equal(deserialize(serialize(p)).ok, true);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

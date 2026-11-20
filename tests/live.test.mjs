@@ -268,5 +268,18 @@ test('an der Zeitumstellung springt die UHRZEIT anders als die Minuten', () => {
   assert.notEqual(raus.slice(11), '02:30', 'die Wanduhr springt über die Lücke');
 });
 
+console.log('\nOhne Termin');
+const O = (id, extra = {}) => ({ id, gewerk: 'g1', title: id, start: null, end: null, milestone: false, status: 'geplant', ...extra });
+test('terminlose laufen nie, sind nie verspätet und stehen nie als nächstes an', () => {
+  const l = [O('o'), O('m', { milestone: true }), O('l', { status: 'laeuft' }), T('a', 'Jetzt', '2026-07-15T11:00', '2026-07-15T13:00', { status: 'laeuft' })];
+  assert.deepEqual([...runningAt(l, NOW)], ['a']);
+  assert.deepEqual(delaysAt(l, NOW), []);
+  assert.deepEqual(offeneVerspaetungen(l, NOW, new Set(['g1'])), []);
+  assert.equal(nextUp(l, NOW), null);
+  const st = liveStats(l, NOW);
+  assert.equal(st.running, 1);
+  assert.equal(st.late, 0);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);
