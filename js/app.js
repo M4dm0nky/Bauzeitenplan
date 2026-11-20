@@ -23,7 +23,7 @@ import { isoWeek } from './timeaxis.js';
 import { $, el, escapeHtml } from './dom.js';
 import { VERSION } from './version.js';
 import { createPhasenEditor } from './phasen-editor.js';
-import { phasenJetzt } from './phasen.js';
+import { phasenJetzt, aufbauPhase } from './phasen.js';
 
 // Der Speicher wird in main() gesetzt. Bis dahin null — nichts greift vorher
 // darauf zu.
@@ -1775,6 +1775,97 @@ function askDialog({ title, message, buttons }) {
   });
 }
 
+// ── Plan verschieben ──────────────────────────────────────────────────────────
+// Der ganze Plan wandert um Tage und Minuten (ein Befehl `shiftPlan`, ein ⌘Z).
+// Die Vorschau rechnet nach DERSELBEN Kalenderregel wie der Store (Tage über
+// new Date(y, m, d + n, hh, mm), dann Minuten) — Ziffernrechnen auf dem
+// Datumstext würde an Monatsgrenzen und Zeitumstellung falsch liegen.
+function verschobenText(iso, tage, minuten) {
+  const d = toDate(toMin(iso));
+  const n = new Date(d.getFullYear(), d.getMonth(), d.getDate() + tage, d.getHours(), d.getMinutes());
+  n.setMinutes(n.getMinutes() + minuten);
+  const p = (x) => String(x).padStart(2, '0');
+  return p(n.getDate()) + '.' + p(n.getMonth() + 1) + '.' + (minuten !== 0 ? ' ' + p(n.getHours()) + ':' + p(n.getMinutes()) : '');
+}
+
+function verschiebeText(tage, minuten) {
+  const t = Math.abs(tage), m = Math.abs(minuten);
+  const teile = [];
+  if (tage) teile.push((tage < 0 ? '−' : '') + t + (t === 1 ? ' Tag' : ' Tage'));
+  if (minuten) teile.push((minuten < 0 ? '−' : '') + m + (m === 1 ? ' Minute' : ' Minuten'));
+  return teile.join(' und ');
+}
+
+function showShiftDialog() {
+  if (!store) return;
+  const dlg = el('div', 'dlg');
+  const box = el('div', 'dlg-box');
+  box.append(el('h2', 'dlg-h', 'Plan verschieben'));
+  box.append(el('p', 'dlg-sub', 'Verschiebt alle Vorgänge, Phasen und den Projektrahmen. Negative Werte ziehen vor.'));
+
+  const form = el('div', 'dlg-form');
+  const feld = (label, cls) => {
+    const w = el('label', 'dlg-f');
+    w.append(el('span', '', label));
+    const i = el('input', cls);
+    i.type = 'number'; i.step = '1'; i.value = '0';
+    w.append(i);
+    form.append(w);
+    return i;
+  };
+  const tageI = feld('Tage', 'sv-tage');
+  const minI = feld('Minuten', 'sv-min');
+  box.append(form);
+  const vorschau = el('p', 'dlg-sub sv-vorschau');
+  box.append(vorschau);
+
+  const actions = el('div', 'dlg-act');
+  const abbr = el('button', 'btn', 'Abbrechen');
+  const ok = el('button', 'btn btn-p', 'Verschieben');
+  actions.append(abbr, ok);
+  box.append(actions);
+  dlg.append(box);
+
+  // Ganzzahl oder null: leer, Komma-/Exponentenwerte und «1.5» gelten als ungültig.
+  const zahl = (i) => (/^-?\d+$/.test(i.value.trim()) ? Number(i.value.trim()) : null);
+  const aktualisiere = () => {
+    const tage = zahl(tageI), minuten = zahl(minI);
+    const gueltig = tage !== null && minuten !== null && (tage !== 0 || minuten !== 0);
+    ok.disabled = !gueltig;
+    const S = store.state;
+    const ph = aufbauPhase(S.phases);
+    const alt = ph ? ph.start : S.project.start;
+    const was = ph ? 'Aufbaubeginn' : 'Projektbeginn';
+    vorschau.textContent = alt && tage !== null && minuten !== null
+      ? `${was} ${verschobenText(alt, 0, 0)} → ${verschobenText(alt, tage, minuten)}`
+      : '';
+  };
+  tageI.oninput = minI.oninput = aktualisiere;
+
+  const finish = () => { document.removeEventListener('keydown', onKey); dlg.remove(); };
+  const geben = () => {
+    if (ok.disabled) return;
+    const tage = zahl(tageI), minuten = zahl(minI);
+    const r = apply({ type: 'shiftPlan', tage, minuten });
+    if (r && r.ok === false) return;     // apply() hat den Grund schon gezeigt; Fenster bleibt für die Korrektur
+    finish();
+    toast(`Plan um ${verschiebeText(tage, minuten)} verschoben — ⌘Z nimmt es zurück`);
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') finish();
+    // Enter auf «Abbrechen» gehört dem Knopf, nicht dem Verschieben.
+    else if (e.key === 'Enter' && e.target !== abbr) { e.preventDefault(); geben(); }
+  };
+  abbr.onclick = finish;
+  ok.onclick = geben;
+  dlg.onclick = (e) => { if (e.target === dlg) finish(); };
+  document.addEventListener('keydown', onKey);
+  document.body.append(dlg);
+  aktualisiere();
+  tageI.focus();
+  tageI.select();
+}
+
 // ── Prüf-Liste ────────────────────────────────────────────────────────────────
 // Zeigt, WELCHE Vorgänge kritisch bzw. im Konflikt sind, und lässt je Eintrag
 // entscheiden: zeigen (auswählen + hinscrollen), lösen (früheste Lage) oder als
@@ -1890,6 +1981,7 @@ function openReview(focus) {
 $('undo').onclick = () => store && store.undo();
 $('redo').onclick = () => store && store.redo();
 $('new-proj').onclick = () => showProjectDialog({});
+$('plan-verschieben').onclick = showShiftDialog;
 
 // Import MUSS auf Modulebene verdrahtet sein, nicht in mount(): mount() läuft
 // erst, wenn ein Projekt offen ist. Beim allerersten Start gibt es keins — der

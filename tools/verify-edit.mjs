@@ -257,6 +257,58 @@ await check('Balken sind nach Neuladen wieder da', async () => {
   return n > 20 ? true : `nur ${n}`;
 });
 
+console.log('\nPLAN VERSCHIEBEN');
+await check('Plan verschieben: Tage 7 → Vorschau, Balken und Phase +7 Kalendertage, 0/0 gesperrt, ⌘Z stellt zurück', async () => {
+  const bar = () => page.locator('.bz-bar', { hasText: 'Podest' }).first().evaluate((b) => +b.dataset.from);
+  const oeffne = async () => {
+    await page.locator('#rail-ein').click();
+    await page.locator('[data-ein="projekt"]').click();
+  };
+  // Phasenbeginn aus dem Reiter «Phasen» lesen (die Achse trägt kein data-from).
+  const phase = async () => {
+    await oeffne();
+    await page.locator('[data-ein="phasen"]').click();
+    // Die Vorschau nennt den AUFBAUbeginn, also auch hier die Aufbau-Zeile.
+    const v = await page.locator('.ph-z').evaluateAll((zs) => {
+      const z = zs.find((n) => n.querySelector('.ph-art').value === 'aufbau');
+      return z ? z.querySelector('.ph-von').value : null;
+    });
+    if (!v) throw new Error('keine Aufbau-Phase');
+    await page.locator('#ein-zu').click();
+    return v;
+  };
+  const plus7 = (iso) => {
+    const d = new Date(iso); d.setDate(d.getDate() + 7);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + 'T' + iso.slice(11, 16);
+  };
+  const vor = await bar();
+  const phVor = await phase();
+  await oeffne();
+  if (!(await page.locator('#plan-verschieben').count())) return '#plan-verschieben fehlt';
+  await page.locator('#plan-verschieben').click();
+  const ok = page.locator('.dlg-box .btn-p', { hasText: 'Verschieben' });
+  if (!(await ok.isDisabled())) return '0/0 nicht gesperrt';
+  await page.locator('.dlg-box .sv-tage').fill('7');
+  const vorschau = await page.locator('.dlg-box .sv-vorschau').textContent();
+  const d7 = new Date(phVor); d7.setDate(d7.getDate() + 7);
+  const erw = String(d7.getDate()).padStart(2, '0') + '.' + String(d7.getMonth() + 1).padStart(2, '0') + '.';
+  if (!/→/.test(vorschau) || !vorschau.includes(erw)) return `Vorschau «${vorschau}» nennt ${erw} nicht`;
+  await ok.click();
+  await page.waitForTimeout(400);
+  await page.locator('#ein-zu').click();
+  await page.waitForTimeout(300);
+  const nach = await bar();
+  const soll = Math.round(new Date(new Date(vor * 60000).setDate(new Date(vor * 60000).getDate() + 7)).getTime() / 60000);
+  if (nach !== soll) return `Balken ${vor} → ${nach}, erwartet ${soll}`;
+  const phNach = await phase();
+  if (phNach !== plus7(phVor)) return `Phase ${phVor} → ${phNach}, erwartet ${plus7(phVor)}`;
+  await undoOhneFeld();
+  await page.waitForTimeout(400);
+  if ((await bar()) !== vor) return '⌘Z stellt den Balken nicht zurück';
+  const phZu = await phase();
+  return phZu === phVor ? true : `Phase nach ⌘Z ${phZu}`;
+});
+
 console.log(`\nGEWERK ${HUES + 1}–${2 * HUES} (Schraffur als zweiter Kanal)`);
 await check(`das ${HUES + 1}. Gewerk (Platz ${HUES}) bekommt Schraffur`, async () => {
   // Die ersten HUES Plätze (0…HUES-1) sind reine Farbtöne; erst Platz HUES
