@@ -905,13 +905,17 @@ async function pruefeAndererTab() {
   });
   // Während des Dialogs gelöscht: weder übernehmen noch neu anlegen.
   if (geloeschtImAnderenTab(id)) return;
-  // Hat der andere Tab inzwischen weitergespeichert, kommt dessen Ereignis und
-  // die Schleife in fremderTab prüft erneut.
-  if (wahl === 'fremd') { await uebernimm(plan); return; }
+  // Der andere Tab kann während des Dialogs weitergespeichert haben: «fremd» und
+  // «beide» nehmen den Stand von JETZT, nicht den vom Öffnen des Dialogs (der
+  // Autosave ruht, mein Stand ist noch nicht geschrieben, das Lesen ist sicher).
+  // Der Schnappschuss `plan` dient nur noch dem Dialogtext.
+  const neu = (wahl === 'fremd' || wahl === 'beide') ? repo.load(id) : null;
+  if ((wahl === 'fremd' || wahl === 'beide') && !neu) { geloeschtImAnderenTab(id); return; }
+  if (wahl === 'fremd') { await uebernimm(neu); return; }
   if (wahl === 'beide') {
-    const kopie = JSON.parse(JSON.stringify(plan));
+    const kopie = JSON.parse(JSON.stringify(neu));
     kopie.project.id = 'p' + Date.now().toString(36);
-    kopie.project.name = plan.project.name + ' (anderer Tab)';
+    kopie.project.name = neu.project.name + ' (anderer Tab)';
     delete kopie.project.quelle;
     const r = repo.save(kopie);
     if (!r.ok) { toast(r.error, 'bad', 8000); return; }

@@ -967,6 +967,21 @@ try {
             : `Kopie ${JSON.stringify(r)}, B ${JSON.stringify(k.fremd)}, Original ${JSON.stringify(mein)}`;
         });
 
+        // B speichert ein ZWEITES Mal, während der Dialog in A offen ist: «fremd»
+        // muss den neuesten Stand nehmen, nicht den vom Öffnen des Dialogs.
+        k = await konflikt();
+        await waehle(B);
+        await B.keyboard.press('Alt+ArrowRight');
+        await B.waitForTimeout(1500);        // B2 ist gespeichert, der Dialog in A steht noch
+        const b2 = await speicher(A);
+        await A.locator('.dlg .btn', { hasText: 'Die aus dem anderen Tab nehmen' }).click();
+        await check('«fremd» nach zweitem Speichern von B: A zeigt B\'s NEUESTEN Stand', async () => {
+          if (b2.s === k.fremd.s) return 'Voraussetzung fehlt: B hat kein zweites Mal gespeichert';
+          const ok = await bis(async () => (await von(A)) === String(b2.s), 3000);
+          const s = await speicher(A);
+          return ok && s.s === b2.s ? true : `A zeigt ${await von(A)}, Speicher ${JSON.stringify(s)}, B2 ${JSON.stringify(b2)}, B1 ${JSON.stringify(k.fremd)}`;
+        });
+
         // Abbruch (Esc) ist «Meine behalten», nicht Schweigen.
         k = await konflikt();
         await A.keyboard.press('Escape');
