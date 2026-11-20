@@ -3,7 +3,7 @@
 // in store.js (Befehle), schedule.js (Termine), conflicts.js (Konflikte),
 // gantt.js (Darstellung) und table.js (Eingabe).
 
-import { createStore } from './store.js';
+import { createStore, verschiebeZeit, SHIFT_MAX_TAGE, SHIFT_MAX_MIN } from './store.js';
 import { createRepo, serialize, deserialize } from './persistence.js';
 import { createSync, abgleich, gleicherPlan, SYNC_REPO } from './sync.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
@@ -554,7 +554,9 @@ $('ein-zu').onclick = closeEinrichten;
 // Klick auf die Fläche daneben schließt — wie bei den anderen Dialogen.
 $('ein-dlg').addEventListener('mousedown', (e) => { if (e.target === $('ein-dlg')) closeEinrichten(); });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !$('ein-dlg').hidden) closeEinrichten();
+  // Liegt ein sichtbarer Dialog (.dlg, ohne das Fenster selbst) darüber, gehört
+  // Escape ihm, nicht dem Fenster darunter.
+  if (e.key === 'Escape' && !$('ein-dlg').hidden && !document.querySelector('.dlg:not(#ein-dlg):not([hidden])')) closeEinrichten();
 });
 
 // ── Speicherort (GitHub-Sync) ────────────────────────────────────────────────
@@ -1777,13 +1779,10 @@ function askDialog({ title, message, buttons }) {
 
 // ── Plan verschieben ──────────────────────────────────────────────────────────
 // Der ganze Plan wandert um Tage und Minuten (ein Befehl `shiftPlan`, ein ⌘Z).
-// Die Vorschau rechnet nach DERSELBEN Kalenderregel wie der Store (Tage über
-// new Date(y, m, d + n, hh, mm), dann Minuten) — Ziffernrechnen auf dem
-// Datumstext würde an Monatsgrenzen und Zeitumstellung falsch liegen.
+// Die Vorschau ruft dieselbe Funktion wie der Store (`verschiebeZeit`) — eine
+// zweite Rechnung wiche an der Zeitumstellung ab.
 function verschobenText(iso, tage, minuten) {
-  const d = toDate(toMin(iso));
-  const n = new Date(d.getFullYear(), d.getMonth(), d.getDate() + tage, d.getHours(), d.getMinutes());
-  n.setMinutes(n.getMinutes() + minuten);
+  const n = new Date(toMin(verschiebeZeit(iso, tage, minuten)) * 60000);
   const p = (x) => String(x).padStart(2, '0');
   return p(n.getDate()) + '.' + p(n.getMonth() + 1) + '.' + (minuten !== 0 ? ' ' + p(n.getHours()) + ':' + p(n.getMinutes()) : '');
 }
@@ -1826,10 +1825,15 @@ function showShiftDialog() {
   box.append(actions);
   dlg.append(box);
 
-  // Ganzzahl oder null: leer, Komma-/Exponentenwerte und «1.5» gelten als ungültig.
-  const zahl = (i) => (/^-?\d+$/.test(i.value.trim()) ? Number(i.value.trim()) : null);
+  // Ganzzahl innerhalb der Store-Grenze oder null: leer, «1.5», Exponenten und
+  // Riesenwerte gelten als ungültig (sonst Invalid Date und «NaN.NaN.»).
+  const zahl = (i, max) => {
+    if (!/^-?\d+$/.test(i.value.trim())) return null;
+    const n = Number(i.value.trim());
+    return Math.abs(n) <= max ? n : null;
+  };
   const aktualisiere = () => {
-    const tage = zahl(tageI), minuten = zahl(minI);
+    const tage = zahl(tageI, SHIFT_MAX_TAGE), minuten = zahl(minI, SHIFT_MAX_MIN);
     const gueltig = tage !== null && minuten !== null && (tage !== 0 || minuten !== 0);
     ok.disabled = !gueltig;
     const S = store.state;
@@ -1845,7 +1849,7 @@ function showShiftDialog() {
   const finish = () => { document.removeEventListener('keydown', onKey); dlg.remove(); };
   const geben = () => {
     if (ok.disabled) return;
-    const tage = zahl(tageI), minuten = zahl(minI);
+    const tage = zahl(tageI, SHIFT_MAX_TAGE), minuten = zahl(minI, SHIFT_MAX_MIN);
     const r = apply({ type: 'shiftPlan', tage, minuten });
     if (r && r.ok === false) return;     // apply() hat den Grund schon gezeigt; Fenster bleibt für die Korrektur
     finish();

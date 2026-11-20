@@ -1,4 +1,4 @@
-import { createStore, STATUS_IDS } from '../js/store.js';
+import { createStore, STATUS_IDS, verschiebeZeit } from '../js/store.js';
 import { toMin, toDate } from '../js/schedule.js';
 import { local } from '../js/conflicts.js';
 import assert from 'node:assert/strict';
@@ -1434,6 +1434,25 @@ test('shiftPlan lehnt 0/0 und Nicht-Ganzzahlen ab, ohne Undo-Eintrag', () => {
   assert.equal(s.apply({ type: 'shiftPlan', tage: 1.5, minuten: 0 }).ok, false);
   assert.equal(s.apply({ type: 'shiftPlan', tage: 1, minuten: 'x' }).ok, false);
   assert.equal(s.canUndo, false);
+});
+test('shiftPlan lehnt Werte über der Obergrenze ab: Zustand unverändert, kein Undo', () => {
+  const s = createStore(seed());
+  const vor = JSON.stringify(s.state);
+  for (const cmd of [{ tage: 36501, minuten: 0 }, { tage: -36501, minuten: 0 }, { tage: 0, minuten: 10081 }, { tage: 1, minuten: -10081 }]) {
+    const r = s.apply({ type: 'shiftPlan', ...cmd });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /Höchstens/);
+  }
+  assert.equal(JSON.stringify(s.state), vor);
+  assert.equal(s.canUndo, false);
+  assert.equal(s.apply({ type: 'shiftPlan', tage: 36500, minuten: 10080 }).ok, true);
+});
+test('verschiebeZeit: Tage nach Wanduhr, Minuten echt (Umstellung 25./26.10.2026)', () => {
+  assert.equal(verschiebeZeit('2026-10-24T22:00', 1, 0), '2026-10-25T22:00');
+  assert.equal(verschiebeZeit('2026-10-24T22:00', 2, 0), '2026-10-26T22:00');   // 25 h dazwischen, Uhr bleibt
+  assert.equal(verschiebeZeit('2026-10-25T00:30', 0, 240), '2026-10-25T03:30');  // 4 echte Stunden = 3 Wanduhrstunden (die Stunde 02–03 gibt es zweimal)
+  assert.equal(verschiebeZeit('2026-10-25T00:30', 1, 0), '2026-10-26T00:30');
+  assert.equal(verschiebeZeit(null, 3, 3), null);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

@@ -81,6 +81,23 @@ const resBekannt = (state, id) =>
 // `tests/store.test.mjs` hält sie gegen `STATUS` aus dom.js.
 export const STATUS_IDS = ['geplant', 'laeuft', 'fertig'];
 
+// Grenzen für «Plan verschieben»: darüber entstünden ungültige Daten (Invalid
+// Date). Minuten bis eine Woche, alles Größere sind Tage.
+export const SHIFT_MAX_TAGE = 36500;
+export const SHIFT_MAX_MIN = 10080;
+
+/**
+ * Einen Zeitstempel verschieben — EINE Rechnung für Store und Vorschau.
+ * Erst Kalendertage (Wanduhrzeit bleibt über die Zeitumstellung), dann die
+ * Minuten auf dem echten Zeitstempel. Leer bleibt leer.
+ */
+export function verschiebeZeit(iso, tage, minuten) {
+  if (!iso) return iso;
+  const d = new Date(toMin(iso) * 60000);
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate() + tage, d.getHours(), d.getMinutes());
+  return local(toDate(t.getTime() / 60000 + minuten));
+}
+
 // Die Felder, die `setTaskField` schreiben darf: alles, was `migrate`
 // (persistence.js) an Vorgängen normalisiert, plus Titel, Gewerk und Zeiten.
 // NICHT dabei: `id` (Zuordnung von Verknüpfungen), `parent` (Ring-/Ebenen-
@@ -565,12 +582,9 @@ const HANDLERS = {
     const { tage, minuten } = cmd;
     if (!Number.isInteger(tage) || !Number.isInteger(minuten)) return 'Tage und Minuten müssen ganze Zahlen sein.';
     if (!tage && !minuten) return 'Nichts zu verschieben.';
-    const schieb = (iso) => {
-      if (!iso) return iso;
-      const d = new Date(toMin(iso) * 60000);
-      const t = new Date(d.getFullYear(), d.getMonth(), d.getDate() + tage, d.getHours(), d.getMinutes());
-      return local(toDate(t.getTime() / 60000 + minuten));
-    };
+    if (Math.abs(tage) > SHIFT_MAX_TAGE) return `Höchstens ${SHIFT_MAX_TAGE} Tage verschieben.`;
+    if (Math.abs(minuten) > SHIFT_MAX_MIN) return `Höchstens ${SHIFT_MAX_MIN} Minuten verschieben — größere Sprünge als Tage angeben.`;
+    const schieb = (iso) => verschiebeZeit(iso, tage, minuten);
     for (const t of state.tasks) {
       t.start = schieb(t.start); t.end = schieb(t.end);
       for (const z of t.res || []) { z.von = schieb(z.von); z.bis = schieb(z.bis); }

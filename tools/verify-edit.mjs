@@ -308,6 +308,23 @@ await check('Plan verschieben: Tage 7 → Vorschau, Balken und Phase +7 Kalender
   const phZu = await phase();
   return phZu === phVor ? true : `Phase nach ⌘Z ${phZu}`;
 });
+await check('Plan verschieben: Escape schließt nur den Dialog, Einrichten bleibt; Riesenwert sperrt den Knopf ohne NaN', async () => {
+  await page.locator('#rail-ein').click();
+  await page.locator('[data-ein="projekt"]').click();
+  await page.locator('#plan-verschieben').click();
+  const ok = page.locator('.dlg-box .btn-p', { hasText: 'Verschieben' });
+  await page.locator('.dlg-box .sv-tage').fill('99999999999');
+  if (!(await ok.isDisabled())) return 'Riesenwert nicht gesperrt';
+  if ((await page.locator('.dlg-box .sv-vorschau').textContent()).includes('NaN')) return 'NaN in der Vorschau';
+  await page.locator('.dlg-box .sv-tage').fill('36501');
+  if (!(await ok.isDisabled())) return '36501 Tage nicht gesperrt';
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  if (await page.locator('.sv-vorschau').count()) return 'Dialog noch offen';
+  if (!(await page.locator('#ein-dlg').isVisible())) return 'Escape hat auch Einrichten geschlossen';
+  await page.locator('#ein-zu').click();
+  return true;
+});
 
 console.log(`\nGEWERK ${HUES + 1}–${2 * HUES} (Schraffur als zweiter Kanal)`);
 await check(`das ${HUES + 1}. Gewerk (Platz ${HUES}) bekommt Schraffur`, async () => {
