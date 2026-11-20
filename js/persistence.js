@@ -51,6 +51,11 @@ const readJSON = (storage, key, fallback) => {
 // ── Migration ───────────────────────────────────────────────────────────────
 // Läuft bei jedem Laden. Muss mehrfach anwendbar sein, ohne etwas kaputtzumachen.
 
+// Eine Phase mit lesbaren Zeiten UND Ende nach Start hat einen Platz auf der Achse.
+const lesbarZeit = (v) => typeof v === 'string' && v && !Number.isNaN(new Date(v).getTime());
+const phaseLesbar = (ph) => !!ph && typeof ph === 'object' && lesbarZeit(ph.start) && lesbarZeit(ph.end)
+  && new Date(ph.end).getTime() > new Date(ph.start).getTime();
+
 export function migrate(plan) {
   const p = clone(plan);
   p.tasks ??= [];
@@ -209,9 +214,10 @@ export function migrate(plan) {
   // nicht reparieren (ein Datum zu erfinden wäre falsch): sie entfällt, und
   // deserialize meldet es sichtbar (`hinweis`). Eine unbekannte Art wird wie bei
   // Altdaten aus dem Namen geraten — das ist verlustfrei.
-  const zeitOk = (v) => typeof v === 'string' && v && !Number.isNaN(new Date(v).getTime());
+  // Dasselbe gilt für eine UMGEDREHTE Phase (Ende <= Start): sie sperrte sonst den
+  // ganzen Import bzw. den Sync-Download, obwohl der Rest des Plans in Ordnung ist.
   p.phases = Array.isArray(p.phases)
-    ? p.phases.filter((ph) => ph && typeof ph === 'object' && zeitOk(ph.start) && zeitOk(ph.end)) : [];
+    ? p.phases.filter((ph) => phaseLesbar(ph)) : [];
   p.phases.forEach((ph) => { if (ph.art && !istPhasenArt(ph.art)) delete ph.art; });
   const phIds = new Set(p.phases.map((ph) => ph.id).filter(Boolean));
   p.phases.forEach((ph, i) => {
@@ -365,11 +371,10 @@ export function deserialize(text, { newId = false } = {}) {
   if (bad) return { ok: false, error: bad };
   if (newId) plan.project.id = 'p' + Date.now().toString(36);
   // Entfallene Phasen sichtbar machen (der Aufrufer zeigt `hinweis`).
-  const lesbar = (v) => typeof v === 'string' && v && !Number.isNaN(new Date(v).getTime());
-  const weg = (Array.isArray(j.phases) ? j.phases : []).filter((x) => !x || typeof x !== 'object' || !lesbar(x.start) || !lesbar(x.end));
+  const weg = (Array.isArray(j.phases) ? j.phases : []).filter((x) => !phaseLesbar(x));
   if (weg.length) {
     const namen = weg.filter((x) => x && typeof x === 'object').map((x) => `«${phaseLabel({ art: x.art, name: x.name })}»`).join(', ');
-    return { ok: true, plan, hinweis: `${weg.length} ${weg.length === 1 ? 'Phase' : 'Phasen'} ohne lesbare Zeiten ${weg.length === 1 ? 'wurde' : 'wurden'} nicht übernommen${namen ? ': ' + namen : ''}.` };
+    return { ok: true, plan, hinweis: `${weg.length} ${weg.length === 1 ? 'Phase' : 'Phasen'} ohne lesbare Zeiten (oder mit Ende vor Start) ${weg.length === 1 ? 'wurde' : 'wurden'} nicht übernommen${namen ? ': ' + namen : ''}.` };
   }
   return { ok: true, plan };
 }

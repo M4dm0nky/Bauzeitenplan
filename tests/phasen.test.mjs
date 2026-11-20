@@ -67,11 +67,12 @@ test('deserialize behält Phasen samt art und id', () => {
   assert.equal(back.ok, true);
   assert.deepEqual(back.plan.phases, p.phases);
 });
-test('deserialize lehnt eine Phase mit Ende vor Start ab und nennt sie', () => {
+test('deserialize: Phase mit Ende vor Start entfällt und wird MIT Namen gemeldet — sie sperrt den Import nicht (M6)', () => {
   const p = plan([{ id: 'p1', art: 'show', name: 'Hauptshow', start: '2026-09-18T12:00', end: '2026-09-16T12:00' }]);
   const r = deserialize(JSON.stringify(p));
-  assert.equal(r.ok, false);
-  assert.match(r.error, /Hauptshow/);
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.plan.phases.length, 0);
+  assert.match(r.hinweis, /Hauptshow/);
 });
 test('deserialize: Überlappung gleicher Art lehnt den Import NICHT ab (Altpläne), showTage kommt damit klar', () => {
   const r = deserialize(JSON.stringify(plan([

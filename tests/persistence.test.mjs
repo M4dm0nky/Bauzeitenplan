@@ -622,6 +622,20 @@ test('Import behält Phasen (Altform ohne art/id wird migriert)', () => {
   assert.equal(back.plan.phases[0].art, 'aufbau');
   assert.equal(back.plan.phases[0].start, p.phases[0].start);
 });
+test('Altphase mit Ende <= Start sperrt den Import nicht: sie entfällt und wird gemeldet', () => {
+  const p = plan();
+  p.phases = [
+    { name: 'Aufbau', start: '2026-09-14T06:00', end: '2026-09-16T06:00' },
+    { name: 'Show', start: '2026-09-18T20:00', end: '2026-09-18T20:00' },
+    { name: 'Abbau', start: '2026-09-20T12:00', end: '2026-09-19T12:00' },
+  ];
+  const back = deserialize(serialize(p));
+  assert.equal(back.ok, true, back.error);
+  assert.deepEqual(back.plan.phases.map((x) => x.name), ['Aufbau']);
+  assert.match(back.hinweis, /2 Phasen/);
+  assert.match(back.hinweis, /Show/);
+  assert.equal(migrate(p).phases.length, 1);
+});
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);
