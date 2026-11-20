@@ -3,7 +3,7 @@
 // Bewusst der Weg für PRÄZISES Bearbeiten; das Schnelle läuft übers
 // Rechtsklick-Menü und Doppelklick.
 
-import { parseDuration, fmtDuration, local, mitUhrzeit } from './conflicts.js';
+import { parseDuration, fmtDuration, local } from './conflicts.js';
 import { entwurfBinden } from './entwurf.js';
 import { toMin, toDate, computeSchedule, candidateGroups, ohneTermin } from './schedule.js';
 import { gewerkVar, gewerkTexture, hueVon, slotAus, HUES, MAX_SLOTS } from './palette.js';
@@ -46,14 +46,17 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
   // (ein ⌘Z in der Tabelle, ein Sync einer anderen Zeile). Ändert sich genau
   // dieser Vorgang oder verschwindet er, fällt der Entwurf SICHTBAR weg —
   // dieselbe Meldung wie in der Tabelle.
+  // Der Stand, der das Panel trägt: der Vorgang UND sein Soundcheck (eigener Zeiteintrag).
+  const stand = (t) => JSON.stringify([t, store.state.tasks.find((x) => x.fuer === t.id) || null]);
+
   function render() {
-    if (sel && sel.kind === 'task' && root.querySelector('.ins-termin.is-entwurf')) {
+    if (sel && sel.kind === 'task' && root.querySelector('.ins-termin.is-entwurf, .ins-sc-zeile.is-entwurf')) {
       const t = cur(sel.id);
-      if (t && JSON.stringify(t) === gezeigt) return;
+      if (t && stand(t) === gezeigt) return;
       if (onHinweis) onHinweis('Entwurf verworfen: Vorgang wurde geändert');
     }
     root.replaceChildren();
-    gezeigt = sel && sel.kind === 'task' && cur(sel.id) ? JSON.stringify(cur(sel.id)) : null;
+    gezeigt = sel && sel.kind === 'task' && cur(sel.id) ? stand(cur(sel.id)) : null;
     if (!sel) return;
 
     const head = el('div', 'ins-head');
@@ -504,35 +507,39 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
       return box;
     }
 
+    // Beginn · Dauer · Ende: wie der Termin des Acts nur ein ENTWURF, bis ✓ (oder
+    // Enter) EINEN moveTask schickt (js/entwurf.js). Das Ende ist ein sichtbares
+    // Feld, weil entwurfBinden Start und Ende als Paar führt («Start · Dauer ·
+    // Ende» wie überall).
     const zeile = el('div', 'ins-row');
+    const wrap = el('div', 'ins-sc-zeile');
+    const scOhne = ohneTermin(sc);
     const zeit = el('input');
     zeit.type = 'time';
-    const scOhne = ohneTermin(sc);
     zeit.value = scOhne ? '' : String(sc.start).slice(11, 16);
     zeit.setAttribute('aria-label', 'Soundcheck-Beginn');
-    zeit.onchange = () => {
-      const jetzt = store.state.tasks.find((x) => x.id === sc.id);
-      if (!jetzt || !zeit.value || ohneTermin(jetzt)) { if (jetzt && ohneTermin(jetzt)) zeit.value = ''; return; }
-      const start = mitUhrzeit(jetzt.start, zeit.value);
-      if (!start || start === jetzt.start) return;
-      const dauer = toMin(jetzt.end) - toMin(jetzt.start);
-      send({ type: 'moveTask', id: sc.id, start, end: local(toDate(toMin(start) + dauer)) });
-    };
-
     const dauer = el('input');
     dauer.value = scOhne ? '' : fmtDuration(toMin(sc.end) - toMin(sc.start));
-    dauer.disabled = scOhne;
     dauer.placeholder = '60m';
     dauer.setAttribute('aria-label', 'Soundcheck-Dauer');
-    dauer.onchange = () => {
-      const jetzt = store.state.tasks.find((x) => x.id === sc.id);
-      if (!jetzt || ohneTermin(jetzt)) return;
-      const m = parseDuration(dauer.value);
-      if (m == null || m === 0) { dauer.value = fmtDuration(toMin(jetzt.end) - toMin(jetzt.start)); return; }
-      send({ type: 'setTaskField', id: sc.id, field: 'end', value: local(toDate(toMin(jetzt.start) + m)) });
-    };
-    zeile.append(zeit, dauer);
-    box.append(zeile);
+    const ende = el('input');
+    ende.type = 'time';
+    ende.value = scOhne ? '' : String(sc.end).slice(11, 16);
+    ende.setAttribute('aria-label', 'Soundcheck-Ende');
+    zeile.append(zeit, dauer, ende);
+    wrap.append(zeile);
+    box.append(wrap);
+    entwurfBinden({
+      start: zeit, ende, dauer, gruppe: [wrap], markiere: wrap, popIn: wrap, nurZeit: true, onHinweis,
+      // Tag: der des Soundchecks, ohne Termin der des Acts, sonst der Planbeginn.
+      tag: () => {
+        const jetzt = store.state.tasks.find((x) => x.id === sc.id);
+        const q = jetzt && !ohneTermin(jetzt) ? jetzt : cur(t.id);
+        return q && !ohneTermin(q) ? String(q.start).slice(0, 10) : String(store.state.project.start).slice(0, 10);
+      },
+      lesen: () => store.state.tasks.find((x) => x.id === sc.id),
+      uebernehmen: ({ start, end }) => send({ type: 'moveTask', id: sc.id, start, end }),
+    });
 
     const weg = el('button', 'btn btn-danger', 'Soundcheck entfernen');
     weg.type = 'button';

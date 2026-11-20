@@ -254,7 +254,7 @@ kbd { font: inherit; font-size: 10px; border: 1.5px solid var(--ink-3); backgrou
 .tb-r.is-entwurf > td { background: color-mix(in srgb, var(--en, #e0a100) 24%, transparent); }
 .is-entwurf input { outline: 2px solid var(--en, #e0a100); outline-offset: -2px; }
 .is-entwurf input.is-bad { outline-color: var(--crit, #b3261e); }
-.ins-termin.is-entwurf { background: color-mix(in srgb, var(--en, #e0a100) 18%, transparent); }
+.ins-termin.is-entwurf, .ins-sc-zeile.is-entwurf { background: color-mix(in srgb, var(--en, #e0a100) 18%, transparent); }
 .tb-ico.en-ok { background: var(--ok, #1a7a46); color: var(--ok-ink, #fff); }
 .tb-ico.en-ok:hover:not(:disabled) { background: color-mix(in srgb, var(--ok, #1a7a46) 82%, #000); color: var(--ok-ink, #fff); }
 .tb-ico.en-no { color: var(--crit, #b3261e); border: 1px solid currentColor; background: transparent; }

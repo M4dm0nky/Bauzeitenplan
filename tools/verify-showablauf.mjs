@@ -756,8 +756,8 @@ await check('er hat eine Dauer, die sich ändern lässt', async () => {
   const dauer = p.locator('#ins .ins-sc input').nth(1);
   if ((await dauer.inputValue()) !== '1h') return 'Vorgabe ist «' + (await dauer.inputValue()) + '», erwartet 1h';
   await dauer.fill('90m');
-  await dauer.press('Tab');
-  await p.waitForTimeout(900);
+  await dauer.press('Enter');          // Entwurf: Enter übernimmt (Tab würde verwerfen)
+  await p.waitForTimeout(1400);
   const min = await p.evaluate(() => {
     const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
     const sido = (raw.tasks || []).find((x) => x.title === 'SIDO');
@@ -765,6 +765,53 @@ await check('er hat eine Dauer, die sich ändern lässt', async () => {
     return sc ? (new Date(sc.end) - new Date(sc.start)) / 60000 : null;
   });
   return min === 90 ? true : min + ' Minuten statt 90';
+});
+
+// Der Soundcheck im Panel ist wie der Termin des Acts ein ENTWURF (js/entwurf.js).
+const scLesen = () => p.evaluate(() => {
+  const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+  const sido = (raw.tasks || []).find((x) => x.title === 'SIDO');
+  const sc = (raw.tasks || []).find((x) => x.fuer === (sido || {}).id);
+  return sc ? sc.start.slice(11, 16) + '-' + sc.end.slice(11, 16) : null;
+});
+
+await check('Soundcheck-Zeit ändern ist nur ein Entwurf: Store unverändert, Zeile gelb', async () => {
+  const vorher = await scLesen();
+  await p.locator('#ins .ins-sc input').first().fill('09:00');
+  await p.waitForTimeout(1500);
+  const offen = await p.locator('#ins .ins-sc-zeile.is-entwurf').count();
+  const bg = await p.locator('#ins .ins-sc-zeile').evaluate((e) => getComputedStyle(e).backgroundColor);
+  const nachher = await scLesen();
+  if (!offen) return 'Zeile nicht als Entwurf markiert';
+  if (/rgba\(0, 0, 0, 0\)|transparent/.test(bg)) return 'Zeile nicht gelb: ' + bg;
+  return nachher === vorher ? true : 'Store schon geändert: ' + vorher + ' -> ' + nachher;
+});
+
+await check('✓ verschiebt den Soundcheck in EINEM Undo-Schritt', async () => {
+  const vorher = await scLesen();
+  await p.locator('#ins .ins-sc-zeile .en-ok').click();
+  await p.waitForTimeout(1400);
+  const nach = await scLesen();
+  if (nach !== '09:00-10:30') return 'nach ✓: ' + nach + ' (erwartet 09:00-10:30)';
+  await p.locator('#ins .ins-head').click();
+  await p.keyboard.press('Meta+z');
+  await p.waitForTimeout(1400);
+  const undo = await scLesen();
+  return undo === vorher ? true : 'ein ⌘Z ergibt ' + undo + ', erwartet ' + vorher;
+});
+
+await check('Feld verlassen verwirft den Entwurf: alter Wert steht wieder da', async () => {
+  const vorher = await scLesen();
+  const zeit = p.locator('#ins .ins-sc input').first();
+  await zeit.fill('07:00');
+  await p.locator('#ins .ins-head').click();     // Fokus raus
+  await p.waitForTimeout(400);
+  const offen = await p.locator('#ins .ins-sc-zeile.is-entwurf').count();
+  const wert = await p.locator('#ins .ins-sc input').first().inputValue();
+  await p.waitForTimeout(1200);
+  if (offen) return 'Entwurf blieb offen';
+  if (wert !== vorher.slice(0, 5)) return 'Feld zeigt ' + wert + ', erwartet ' + vorher.slice(0, 5);
+  return (await scLesen()) === vorher ? true : 'Store hat sich bewegt';
 });
 
 await check('den Act löschen nimmt den Soundcheck mit', async () => {

@@ -902,7 +902,8 @@ body { margin: 0; }
 :root { --en: #e0a100; --ok: #1a7a46; --ok-ink: #ffffff; }
 .tb-r.is-entwurf .c-act > :not(.en-pop) { display: none; }
 .ins-termin { display: flex; flex-direction: column; gap: 10px; border-radius: 6px; }
-.ins-termin.is-entwurf { padding: 6px; margin: -6px; }
+.ins-termin.is-entwurf, .ins-sc-zeile.is-entwurf { padding: 6px; margin: -6px; }
+.ins-sc-zeile { display: flex; flex-direction: column; gap: 6px; border-radius: 6px; }
 .en-pop { display: flex; align-items: center; gap: 6px; font-size: 12px; flex-wrap: wrap; }
 .c-act .en-pop { justify-content: center; flex-wrap: nowrap; }
 .en-pop[hidden], .en-grund[hidden] { display: none; }
