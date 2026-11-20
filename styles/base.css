@@ -170,7 +170,7 @@ body { margin: 0; }
 .bz-lab-meta { flex: none; font-variant-numeric: tabular-nums; }
 /* Ohne Termin: Symbol + gedämpfter Text. Keine eigene Farbe — sie erbt die der
    Zeile und wird nur zurückgenommen, so braucht kein Theme einen neuen Ton. */
-.bz-lab-ohne { flex: none; white-space: nowrap; font-size: .85em; font-style: italic; opacity: .65; }
+.bz-lab-ohne { flex: none; white-space: nowrap; font-size: .85em; font-style: italic; opacity: .85; }
 .bz-sum[hidden] { display: none; }
 .bz-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--gw); }
 

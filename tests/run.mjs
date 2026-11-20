@@ -117,6 +117,48 @@ check('Schrift auf Gewerkfarbe hält 3:1 — in hell UND dunkel', () => {
   return schlecht.length ? schlecht.join(' | ') : true;
 });
 
+check('Callboard hell ist warmes Weiß, kein Flächen-#fff — Text hält den Kontrast in hell UND dunkel', () => {
+  // Marco: hell darf nicht grell sein. Alle Flächen-Tokens im hellen Callboard
+  // (beide Scopes) sind getönt; Schrift AUF Farbflächen (--on-accent) bleibt weiß.
+  const css = readFileSync(join(root, 'styles/themes/callboard.css'), 'utf8');
+  const lum = (hex) => {
+    const n = hex.replace('#', '');
+    const v = [0, 2, 4].map((i) => parseInt(n.slice(i, i + 2), 16) / 255)
+      .map((u) => (u <= 0.03928 ? u / 12.92 : ((u + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  };
+  const kontrast = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const mix = (fg, bg, a) => '#' + rgb(fg).map((c, i) => Math.round(c * a + rgb(bg)[i] * (1 - a)).toString(16).padStart(2, '0')).join('');
+  // Blöcke je Scope: :root { … } (hell), :root[data-theme="light"] { … }, :root[data-theme="dark"] { … }
+  const block = (head) => { const i = css.indexOf(head + ' {'); return i < 0 ? '' : css.slice(i, css.indexOf('}', i)); };
+  const tok = (b, n) => (b.match(new RegExp('--' + n + ':\\s*(#[0-9a-fA-F]{6})')) || [])[1];
+  const scopes = { 'hell :root': block(':root'), 'hell [data-theme=light]': block(':root[data-theme="light"]'), 'dunkel [data-theme=dark]': block(':root[data-theme="dark"]') };
+  const fehler = [];
+  for (const [name, b] of Object.entries(scopes)) {
+    const hell = name.startsWith('hell');
+    for (const f of ['bg', 'panel', 'panel2']) {
+      const v = tok(b, f);
+      if (!v) { fehler.push(`${name}: --${f} fehlt`); continue; }
+      if (hell && /^#f{6}$/i.test(v)) fehler.push(`${name}: --${f} ist reinweiß`);
+    }
+    for (const f of ['panel', 'bg']) {
+      const bg = tok(b, f), ink = tok(b, 'ink'), mu = tok(b, 'muted'), i2 = tok(b, 'ink-2');
+      if (!bg || !ink || !mu || !i2) continue;
+      const k1 = kontrast(lum(ink), lum(bg)), k2 = kontrast(lum(mu), lum(bg));
+      if (k1 < 7) fehler.push(`${name}: --ink auf --${f} ${k1.toFixed(2)}:1 < 7`);
+      if (k2 < 4.5) fehler.push(`${name}: --muted auf --${f} ${k2.toFixed(2)}:1 < 4.5`);
+      // «◌ ohne Termin» (base.css .bz-lab-ohne, opacity .65) steht in der Seitenspalte (--panel).
+      if (f === 'panel') {
+        const op = Number((readFileSync(join(root, 'styles/base.css'), 'utf8').match(/\.bz-lab-ohne\s*\{[^}]*opacity:\s*([\d.]+)/) || [])[1]);
+        if (!op) fehler.push('.bz-lab-ohne ohne opacity gefunden');
+        else { const k3 = kontrast(lum(mix(i2, bg, op)), lum(bg)); if (k3 < 4.5) fehler.push(`${name}: «ohne Termin» ${k3.toFixed(2)}:1 < 4.5`); }
+      }
+    }
+  }
+  return fehler.length ? fehler.join(' | ') : true;
+});
+
 check('der Sync-Schlüssel (bzp_sync) kommt nie in die Plan-Schicht', () => {
   const s = readFileSync(join(root, 'js/persistence.js'), 'utf8');
   return s.includes('bzp_sync') ? 'js/persistence.js kennt den Schlüssel' : true;

@@ -40,6 +40,11 @@ CSS, damit nichts aufblitzt. Ohne gespeicherte Wahl folgt die App der OS-Einstel
 (`@media (prefers-color-scheme)`). Die Verdrahtung steht in `js/app.js` (`currentMode`,
 `paintModeToggle`).
 
+Hell im ausgelieferten Theme (callboard) ist **warmes Weiß**, nie `#FFF`: `--panel #FBF8F1`,
+`--panel2 #F6F1E7`, `--bg #EDE7DB`. Eine statische Prüfung in `tests/run.mjs` sperrt reinweiße
+Flächen und hält den Textkontrast (`--ink` ≥ 7:1, `--muted` ≥ 4.5:1, «ohne Termin»-Marke ≥ 4.5:1).
+Das Druckblatt bleibt reinweiß (eigene Tokens in `print.css`).
+
 **Wichtig:** `bzp_mode` (Hell/Dunkel) ist ein **anderer** Schlüssel als `bzp_theme`
 (Theme-Familie, siehe unten). Nicht vermischen — sonst schlägt das eine das andere.
 

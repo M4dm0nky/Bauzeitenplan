@@ -24,16 +24,17 @@
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
   /* Hell = Paper */
-  --bg:      #F1EFE9;
-  --panel:   #FFFFFF;
-  --panel2:  #FFFFFF;
-  --rule:    #E7E4DC;
-  --rule-2:  #D6D9DE;
-  --ink:     #10172A;
-  --ink-2:   #3A4459;
-  --muted:   #5A6678;
-  --accent:  #10172A;   /* „Hervorhebung" — hier schlicht die Tinte (kein Gold) */
-  --accent-b:#10172A;   /* Vollfläche (aktives Segment, Primär-Knopf, Bänder)    */
+  /* Warmes Weiß (Marco): kein Flächen-#FFF — tests/run.mjs sperrt es. */
+  --bg:      #EDE7DB;
+  --panel:   #FBF8F1;
+  --panel2:  #F6F1E7;
+  --rule:    #E2DACB;
+  --rule-2:  #D2C8B6;
+  --ink:     #14182A;
+  --ink-2:   #3E4455;
+  --muted:   #575C6B;
+  --accent:  #14182A;   /* „Hervorhebung" — hier schlicht die Tinte (kein Gold) */
+  --accent-b:#14182A;   /* Vollfläche (aktives Segment, Primär-Knopf, Bänder)    */
   --on-accent:#FFFFFF;  /* Schrift AUF einer accent-Fläche                        */
   --crit:    #C1453B;
   --now:     #C1453B;
@@ -55,9 +56,9 @@
   --crit: #F2795A; --now: #F2795A;
 }
 :root[data-theme="light"] {
-  --bg: #F1EFE9; --panel: #FFFFFF; --panel2: #FFFFFF; --rule: #E7E4DC;
-  --rule-2: #D6D9DE; --ink: #10172A; --ink-2: #3A4459; --muted: #5A6678;
-  --accent: #10172A; --accent-b: #10172A; --on-accent: #FFFFFF;
+  --bg: #EDE7DB; --panel: #FBF8F1; --panel2: #F6F1E7; --rule: #E2DACB;
+  --rule-2: #D2C8B6; --ink: #14182A; --ink-2: #3E4455; --muted: #575C6B;
+  --accent: #14182A; --accent-b: #14182A; --on-accent: #FFFFFF;
   --crit: #C1453B; --now: #C1453B;
 }
 
@@ -336,10 +337,10 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .toast[data-kind="warn"] { background: var(--accent-b); color: var(--on-accent); }
 
 /* ── Panel, Menü, Live ──────────────────────────────────────────────────────── */
-:root { --live-run: #1a7a46; --sel: #10172A; }
+:root { --live-run: #1a7a46; --sel: #14182A; }
 @media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --live-run: #3fae6a; --sel: #FFFFFF; } }
 :root[data-theme="dark"] { --live-run: #3fae6a; --sel: #FFFFFF; }
-:root[data-theme="light"] { --live-run: #1a7a46; --sel: #10172A; }
+:root[data-theme="light"] { --live-run: #1a7a46; --sel: #14182A; }
 
 .ins { background: var(--panel); border-left: 1px solid var(--rule-2); padding: 12px 14px 18px; gap: 11px; }
 .ins-head { border-bottom: 1px solid var(--rule); padding-bottom: 7px; }

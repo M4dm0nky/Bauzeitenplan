@@ -1698,6 +1698,7 @@ function paintModeToggle() {
   const b = $('theme-toggle');
   b.textContent = dark ? '☀' : '☾';           // zeigt das Ziel, nicht den Ist-Zustand
   b.title = dark ? 'Auf Hell umschalten' : 'Auf Dunkel umschalten';
+  b.setAttribute('aria-label', b.title);
 }
 $('theme-toggle').onclick = () => {
   const next = currentMode() === 'dark' ? 'light' : 'dark';
