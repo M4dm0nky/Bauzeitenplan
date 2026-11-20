@@ -23,6 +23,7 @@ node tools/verify-sync.mjs  # Sync: zwei Geräte, Konflikt, Offline-Start
 - **Alle neun müssen grün sein**, bevor etwas fertig ist (parallel startbar). `verify-browser.mjs` braucht einmalig `npx playwright install firefox`.
 - **Screenshots ansehen, nicht nur die Häkchen zählen;** zu jedem behobenen Fehler eine Prüfung schreiben.
 - **Neue Bausteine gehören in die `needed`-Liste in `tests/run.mjs`.**
+- **Fertig erst mit nachgezogener Doku:** README, CHANGELOG, diese Datei, `.claude/rules/*.md`, `docs/*.md` per grep auf geänderte Funktionen/Dateien/Zahlen prüfen.
 - `grep -rn "window\.prompt\|[^.]prompt(\|confirm(\|alert(" js/*.js` muss leer bleiben (Kommentare ausgenommen).
 
 ## Deploy und Version
