@@ -315,8 +315,10 @@ body { margin: 0; }
 /* Erst beim Hinsehen. Dauerhaft wären es bei 153 Zeilen 153 Punkte im Bild.
    Der Griff wird direkt hinter seinem Balken angehängt — daher der Nachbar-Selektor. */
 .bz-link.is-on, .bz-link:hover { opacity: 1; }
-/* Ohne Zeigegerät gibt es kein Hover — dort steht der Griff immer. */
-@media (pointer: coarse) { .bz-link { opacity: 1; } }
+/* Ohne Zeigegerät gibt es kein Hover. Dauerhaft sichtbar lagen die Griffe auf der
+   Beschriftung schmaler Balken — darum nur am ausgewählten Vorgang (Antippen wählt
+   aus), auf jedem Gerät; mit Maus ist es der Griff des geöffneten Vorgangs. */
+.bz-link.is-sel { opacity: 1; }
 /* Während des Ziehens sind die übrigen Griffe nur Störung. */
 .bz[data-linking] .bz-link { opacity: 0; }
 /* Beim Balken-Ziehen bliebe der Griff am ALTEN Ende stehen und griffbereit. */

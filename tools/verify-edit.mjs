@@ -1,7 +1,7 @@
 // ── Bearbeiten im echten Browser prüfen ───────────────────────────────────────
 // Die Unit-Tests decken die Logik ab. Hier geht es um das, was nur im Browser
 // schiefgeht: Erststart, Dialog, Tippen, Speichern, Neuladen, Undo.
-import { firefox } from 'playwright-core';
+import { firefox, chromium } from 'playwright-core';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -1639,6 +1639,95 @@ await check('Leerer Bauzeitenplan: der GANTT (nicht die Tabelle) bietet EINEN Kn
     return true;
   } finally { await c6.close(); }
 });
+
+console.log('\nTOUCH: VERKNÜPFEN-GRIFF NUR AM AUSGEWÄHLTEN BALKEN (Handy 390×844)');
+{
+  // Firefox kennt hasTouch/isMobile nicht — ohne sie greift `pointer: coarse`
+  // nicht. Darum Chromium.
+  const chromExe = chromiumExe();
+  if (!chromExe) console.log('  – übersprungen: Chromium nicht installiert (npx playwright install chromium).');
+  else {
+    const cb = await chromium.launch({ executablePath: chromExe });
+    const ct = await cb.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const pt = await ct.newPage();
+    pt.on('pageerror', (e) => errors.push('JS: ' + e.message));
+    try {
+      await pt.goto(BASE + '/index.html?plan=leer');
+      await pt.waitForTimeout(700);
+      await festivalMitDaten(pt, 'Touch-Test', { loadIn: '2026-08-05T06:00' });
+      await pt.waitForTimeout(900);
+      await pt.locator('[data-view="gantt"]').tap();
+      await pt.waitForTimeout(500);
+      const sichtbar = () => pt.evaluate(() => [...document.querySelectorAll('.bz-link')]
+        .filter((h) => getComputedStyle(h).opacity !== '0').map((h) => h.dataset.linkFrom));
+      await check('Touch-Kontext ist grob (pointer: coarse)', async () =>
+        (await pt.evaluate(() => matchMedia('(pointer: coarse)').matches)) ? true : 'pointer: coarse greift nicht');
+      await check('vor der Auswahl ist kein Verknüpfen-Griff sichtbar', async () => {
+        const v = await sichtbar();
+        return v.length === 0 ? true : v.length + ' Griffe sichtbar';
+      });
+      await check('Antippen von «Podest» zeigt genau EINEN Griff, den von «Podest»', async () => {
+        const bar = pt.locator('.bz-bar', { hasText: 'Podest' }).first();
+        await bar.scrollIntoViewIfNeeded();
+        const id = await bar.evaluate((n) => n.dataset.task);
+        await bar.tap();
+        await pt.waitForTimeout(400);
+        const v = await sichtbar();
+        return v.length === 1 && v[0] === id ? true : `sichtbar: [${v}], erwartet [${id}]`;
+      });
+      await check('Beschriftung eines Balkens wird von keinem sichtbaren Griff überdeckt', async () => {
+        const r = await pt.evaluate(() => {
+          const sich = [...document.querySelectorAll('.bz-link')].filter((h) => getComputedStyle(h).opacity !== '0');
+          const kreise = sich.map((h) => {
+            const b = h.getBoundingClientRect();
+            const a = getComputedStyle(h, '::after');
+            // Sichtbarer Kreis: ::after beginnt am Balkenende (left: 100%), 10 px + 2×7 px Polster.
+            return { l: b.left, r: b.left + 24, t: b.top - 12, b: b.top + 12, id: h.dataset.linkFrom };
+          });
+          const out = [];
+          for (const t of document.querySelectorAll('.bz-bar-t')) {
+            const q = t.getBoundingClientRect();
+            if (!q.width || !q.height) continue;
+            const bar = t.closest('[data-task]');
+            for (const k of kreise) {
+              if (bar && bar.dataset.task === k.id) continue; // eigener Griff liegt neben dem Balken
+              if (q.left < k.r && q.right > k.l && q.top < k.b && q.bottom > k.t) out.push(t.textContent.trim());
+            }
+          }
+          return out;
+        });
+        return r.length === 0 ? true : 'überdeckt: ' + r.join(', ');
+      });
+      await pt.screenshot({ path: join(here, 'shots', 'touch-griff.png') });
+      await check('Panel schließen hebt die Auswahl auf — kein Griff mehr sichtbar', async () => {
+        // Auf dem Handy ragt das Panel über den Rand (× liegt nahe am Bildrand) — der
+        // Schließen-Klick ist hier nicht der Prüfgegenstand.
+        await pt.locator('.ins-x').evaluate((n) => n.click());
+        await pt.waitForTimeout(400);
+        const v = await sichtbar();
+        return v.length === 0 ? true : 'noch sichtbar: ' + v;
+      });
+      await check('Antippen eines anderen Balkens: wieder genau EIN Griff, der des angetippten', async () => {
+        // Echter Fingertipp auf einen Balken, der nicht vom Kopf verdeckt ist.
+        const ziel = await pt.evaluate(() => {
+          for (const b of document.querySelectorAll('.bz-bar')) {
+            const r = b.getBoundingClientRect();
+            const x = r.left + Math.min(r.width / 2, 20), y = r.top + r.height / 2;
+            if (x < 0 || y < 120 || x > innerWidth || y > innerHeight - 4) continue;
+            const hit = document.elementFromPoint(x, y);
+            if (hit && b.contains(hit)) return { x, y, id: b.dataset.task };
+          }
+          return null;
+        });
+        if (!ziel) return 'kein antippbarer Balken im Bild';
+        await pt.touchscreen.tap(ziel.x, ziel.y);
+        await pt.waitForTimeout(400);
+        const v = await sichtbar();
+        return v.length === 1 && v[0] === ziel.id ? true : `sichtbar: [${v}], erwartet [${ziel.id}]`;
+      });
+    } finally { await cb.close(); }
+  }
+}
 
 console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur)');
 {

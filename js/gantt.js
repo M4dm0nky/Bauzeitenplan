@@ -650,9 +650,14 @@ export function createGantt(root, opts = {}) {
     // Balken selbst.
     const an = () => h.classList.add('is-on');
     const aus = () => h.classList.remove('is-on');
-    node.addEventListener('pointerenter', an);
+    // Ein Finger «schwebt» nicht: pointerenter kommt beim Antippen, ein
+    // pointerleave erst beim nächsten Tipp woanders — der Griff bliebe an jedem
+    // einmal angetippten Balken stehen. Auf Touch zeigt ihn nur die Auswahl.
+    node.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'touch') an(); });
     node.addEventListener('pointerleave', aus);
-    node.addEventListener('focus', an);
+    // Nur Tastaturfokus: ein Fingertipp fokussiert den Balken ebenfalls und der
+    // Fokus bliebe nach dem Schließen des Panels stehen.
+    node.addEventListener('focus', () => { if (node.matches(':focus-visible')) an(); });
     node.addEventListener('blur', aus);
     h.addEventListener('pointerenter', an);
     h.addEventListener('pointerleave', aus);
@@ -1120,6 +1125,13 @@ export function createGantt(root, opts = {}) {
       const p = depLayer.querySelector('path.bz-dep[data-dep="' + selected.id + '"]');
       if (p) p.classList.add('is-sel');
       return;
+    }
+    // Auf Touch gibt es kein Hover: der Griff steht nur am ausgewählten Vorgang
+    // (CSS: `.bz-link.is-sel`). Eigene Klasse statt `is-on`, damit pointerleave/
+    // blur des Balkens ihn nicht wieder ausblenden.
+    if (selected.kind === 'task') {
+      const h = linkLayer.querySelector('.bz-link[data-link-from="' + selected.id + '"]');
+      if (h) h.classList.add('is-sel');
     }
     const key = selected.kind === 'gewerk' ? 'group:' + selected.id : 'task:' + selected.id;
     const bar = rowById.get(key);
