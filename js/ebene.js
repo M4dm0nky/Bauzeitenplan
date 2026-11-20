@@ -231,11 +231,16 @@ export function programmTage(tasks) {
   return [...tage].sort();
 }
 
-/** Die Vorgänge, die einen Kalendertag berühren. Über Mitternacht laufende zählen mit. */
+/**
+ * Die Vorgänge, die einen Kalendertag berühren. Über Mitternacht laufende zählen mit.
+ * Ohne Termin gehört ein Vorgang zu keinem Tag — und fällt deshalb auch aus keinem
+ * heraus: sonst wäre ein frisch angelegter Programmpunkt in jedem Tagesfilter
+ * unsichtbar, bevor er seinen Termin hat.
+ */
 export function amTag(tasks, tagISO) {
   if (!tagISO) return tasks;
   const drin = new Set(tagesScheiben(tasks, tagISO).map((s) => s.task.id));
-  return tasks.filter((t) => drin.has(t.id));
+  return tasks.filter((t) => drin.has(t.id) || ohneTermin(t));
 }
 
 /**

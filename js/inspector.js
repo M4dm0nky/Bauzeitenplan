@@ -4,7 +4,7 @@
 // Rechtsklick-Menü und Doppelklick.
 
 import { parseDuration, fmtDuration, local, mitUhrzeit } from './conflicts.js';
-import { toMin, toDate, computeSchedule, candidateGroups } from './schedule.js';
+import { toMin, toDate, computeSchedule, candidateGroups, ohneTermin } from './schedule.js';
 import { gewerkVar, gewerkTexture, hueVon, slotAus, HUES, MAX_SLOTS } from './palette.js';
 import { artOf, abschnittOf, ABSCHNITTE } from './ebene.js';
 import { fmtFloat } from './timeaxis.js';
@@ -138,23 +138,27 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     // Start
     const st = el('input');
     st.type = 'datetime-local';
-    st.value = toInput(t.start);
+    // Terminlos: leere Felder, kein Platzhalter. Eintragen übernimmt der
+    // Bestätigungsweg (Task 4); bis dahin verändert ein Tippen hier nichts.
+    const terminlos = ohneTermin(t);
+    st.value = terminlos ? '' : toInput(t.start);
     st.onchange = () => {
       const now = cur(t.id);
-      if (!now || !st.value) return;
+      if (!now) return;
+      if (!st.value || ohneTermin(now)) { st.value = ohneTermin(now) ? '' : toInput(now.start); return; }
       const dur = toMin(now.end) - toMin(now.start);
       send({ type: 'moveTask', id: t.id, start: st.value, end: local(toDate(toMin(st.value) + dur)) });
     };
     root.append(field('Start', st));
 
     if (!t.milestone) {
-      const durMin = toMin(t.end) - toMin(t.start);
       const du = el('input');
-      du.value = fmtDuration(durMin);
+      du.value = terminlos ? '' : fmtDuration(toMin(t.end) - toMin(t.start));
       du.placeholder = '4h';
+      du.disabled = terminlos;
       du.onchange = () => {
         const now = cur(t.id);
-        if (!now) return;
+        if (!now || ohneTermin(now)) return;
         const real = toMin(now.end) - toMin(now.start);
         const m = parseDuration(du.value);
         if (m == null || m === 0) { du.value = fmtDuration(real); du.classList.add('is-bad'); setTimeout(() => du.classList.remove('is-bad'), 900); return; }
@@ -171,10 +175,12 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
 
       const en = el('input');
       en.type = 'datetime-local';
-      en.value = toInput(t.end);
+      en.value = terminlos ? '' : toInput(t.end);
       en.onchange = () => {
         const now = cur(t.id);
-        if (!now || !en.value || en.value === toInput(now.end)) return;
+        if (!now) return;
+        if (!en.value || ohneTermin(now)) { en.value = ohneTermin(now) ? '' : toInput(now.end); return; }
+        if (en.value === toInput(now.end)) return;
         send(now.estimated
           ? { type: 'batch', label: 'Ende gesetzt', cmds: [
               { type: 'setTaskField', id: t.id, field: 'end', value: en.value },
@@ -200,8 +206,10 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     const ms = el('input');
     ms.type = 'checkbox';
     ms.checked = !!t.milestone;
+    ms.disabled = terminlos;       // erst einen Termin eintragen
     ms.onchange = () => {
       const now = cur(t.id);
+      if (!now || ohneTermin(now)) { ms.checked = !!(now && now.milestone); return; }
       send(ms.checked
         ? { type: 'batch', label: 'Zu Meilenstein', cmds: [
             { type: 'setTaskField', id: t.id, field: 'end', value: now.start },
@@ -396,6 +404,7 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     // Nach dem Anlegen baut render() den Inspector neu → das Feld ist wieder leer.
     const pickId = (id) => { if (id) send({ type: 'addDep', dep: { from: id, to: t.id, type: 'FS', lag: 0 } }); };
     const fmtWhen = (iso) => {
+      if (iso == null) return 'ohne Termin';
       const d = toDate(toMin(iso));
       const p = (n) => String(n).padStart(2, '0');
       return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '. ' + p(d.getHours()) + ':' + p(d.getMinutes());
@@ -444,7 +453,7 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
 
   function addTaskTo(gewerkId) {
     const S = store.state;
-    const last = S.tasks.filter((t) => t.gewerk === gewerkId)
+    const last = S.tasks.filter((t) => t.gewerk === gewerkId && !ohneTermin(t))
       .sort((a, b) => toMin(a.end) - toMin(b.end)).pop();
     const ph = (S.phases || []).find((p) => /aufbau|load.?in/i.test(p.name));
     const start = last ? last.end : toInput(ph ? ph.start : S.project.start);
@@ -477,9 +486,13 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
         // sonst 08:00. Ein Soundcheck läuft am Nachmittag, nicht eine Stunde vor
         // dem Auftritt — genau das kam heraus, als die Vorgabe am Act hing.
         // Dieselbe Regel wie beim «+ Zeiteintrag» in der Tabelle.
+        if (ohneTermin(t)) {   // der Act hat keinen Termin, also auch sein Soundcheck nicht
+          send({ type: 'addTask', task: { gewerk: t.gewerk, title: 'Soundcheck ' + t.title, start: null, end: null, abschnitt: 'setup', fuer: t.id } });
+          return;
+        }
         const tag = String(t.start).slice(0, 10);
         const vorher = store.state.tasks
-          .filter((x) => x.gewerk === t.gewerk && abschnittOf(x) === 'setup'
+          .filter((x) => x.gewerk === t.gewerk && abschnittOf(x) === 'setup' && !ohneTermin(x)
             && String(x.start).slice(0, 10) === tag)
           .sort((a, b) => toMin(a.start) - toMin(b.start)).pop();
         const start = vorher ? vorher.end : tag + 'T08:00';
@@ -497,11 +510,12 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     const zeile = el('div', 'ins-row');
     const zeit = el('input');
     zeit.type = 'time';
-    zeit.value = String(sc.start).slice(11, 16);
+    const scOhne = ohneTermin(sc);
+    zeit.value = scOhne ? '' : String(sc.start).slice(11, 16);
     zeit.setAttribute('aria-label', 'Soundcheck-Beginn');
     zeit.onchange = () => {
       const jetzt = store.state.tasks.find((x) => x.id === sc.id);
-      if (!jetzt || !zeit.value) return;
+      if (!jetzt || !zeit.value || ohneTermin(jetzt)) { if (jetzt && ohneTermin(jetzt)) zeit.value = ''; return; }
       const start = mitUhrzeit(jetzt.start, zeit.value);
       if (!start || start === jetzt.start) return;
       const dauer = toMin(jetzt.end) - toMin(jetzt.start);
@@ -509,12 +523,13 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     };
 
     const dauer = el('input');
-    dauer.value = fmtDuration(toMin(sc.end) - toMin(sc.start));
+    dauer.value = scOhne ? '' : fmtDuration(toMin(sc.end) - toMin(sc.start));
+    dauer.disabled = scOhne;
     dauer.placeholder = '60m';
     dauer.setAttribute('aria-label', 'Soundcheck-Dauer');
     dauer.onchange = () => {
       const jetzt = store.state.tasks.find((x) => x.id === sc.id);
-      if (!jetzt) return;
+      if (!jetzt || ohneTermin(jetzt)) return;
       const m = parseDuration(dauer.value);
       if (m == null || m === 0) { dauer.value = fmtDuration(toMin(jetzt.end) - toMin(jetzt.start)); return; }
       send({ type: 'setTaskField', id: sc.id, field: 'end', value: local(toDate(toMin(jetzt.start) + m)) });
@@ -672,6 +687,7 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     if (z.von == null) {
       const btn = el('button', 'ins-res-zeitbtn', '(ganzer Vorgang)');
       btn.title = 'Eigenes Zeitfenster für diese Zuweisung setzen';
+      if (ohneTermin(t)) { btn.disabled = true; btn.title = 'Ein Zeitfenster braucht einen Termin am Vorgang'; }
       btn.onclick = () => send({ type: 'setTaskRes', id: t.id, index: idx,
         value: { rid: z.rid, n: z.n, von: t.start, bis: t.end } });
       row.append(btn);

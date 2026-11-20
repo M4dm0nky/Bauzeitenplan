@@ -1623,11 +1623,6 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
     const alle = await pv.locator('.bz-lab').count();
     return alle > 30 ? true : `nur ${alle} Zeilen in der Seitenspalte (spezifisch ${n})`;
   });
-  // Die Darstellung terminloser Vorgänge im Gantt (kein Balken, kein Absturz) ist
-  // Task 3. Bis dahin crasht layout() an SCHED.get(...) — diese drei Prüfungen
-  // stehen schon da und werden dort mit TERMINLOS_GANTT = true scharf geschaltet.
-  const TERMINLOS_GANTT = false;
-  if (TERMINLOS_GANTT) {
   await check('… aber kein einziger Balken', async () => {
     const n = await pv.locator('.bz-bar').count();
     return n === 0 ? true : n + ' Balken';
@@ -1640,8 +1635,55 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
   });
   await check('keine JS-Fehler beim Öffnen des terminlosen Plans', async () =>
     fehlerV.length ? fehlerV[0] : true);
-  } else console.log('  – Gantt-Darstellung ohne Termin: Task 3 (TERMINLOS_GANTT)');
+  await check('Zeile ohne Termin: Kennzeichnung «ohne Termin» in der Seitenspalte', async () => {
+    const n = await pv.locator('.bz-lab-ohne').count();
+    const t = n ? await pv.locator('.bz-lab-ohne').first().textContent() : '';
+    return n > 30 && /ohne Termin/.test(t) ? true : n + ' Kennzeichnungen, «' + t + '»';
+  });
   await pv.screenshot({ path: join(here, 'shots', 'edit-terminlos.png') });
+  await check('Klick auf die Zeile öffnet das Panel mit leeren Datumsfeldern', async () => {
+    await pv.locator('.bz-lab-task .bz-lab-name').first().click();
+    await pv.waitForTimeout(300);
+    if (!(await pv.locator('#ins').isVisible())) return 'Panel bleibt zu';
+    const v = await pv.locator('#ins input[type=datetime-local]').evaluateAll((l) => l.map((i) => i.value));
+    return v.length === 2 && v.every((x) => x === '') ? true : 'Felder: ' + JSON.stringify(v);
+  });
+  await check('Tabelle: Datums- und Dauerfelder leer, kein «null»', async () => {
+    await pv.locator('[data-view="tabelle"]').click();
+    await pv.waitForTimeout(500);
+    const v = await pv.locator('.c-start input, .c-end input, .c-dur input').evaluateAll((l) => l.map((i) => i.value).filter((x) => x !== ''));
+    await pv.locator('[data-view="gantt"]').click();
+    return v.length === 0 ? true : 'nicht leer: ' + JSON.stringify(v.slice(0, 3));
+  });
+  // Gemischter Plan: drei Vorgänge bekommen einen Termin, der Rest bleibt ohne.
+  await pv.evaluate(async () => {
+    const m = await import('/js/persistence.js');
+    const repo = m.createRepo(window.localStorage);
+    const id = repo.list().find((x) => x.name === 'Ohne Termine').id;
+    const pl = repo.load(id);
+    pl.tasks.slice(0, 3).forEach((t, i) => { t.start = '2027-05-10T' + String(8 + i).padStart(2, '0') + ':00'; t.end = '2027-05-10T' + String(10 + i) + ':00'; });
+    repo.save(pl);
+  });
+  await pv.reload();
+  await pv.waitForTimeout(1200);
+  await check('Gemischter Plan: drei Balken, übrige Zeilen mit Kennzeichnung, keine JS-Fehler', async () => {
+    const bars = await pv.locator('.bz-bar, .bz-ms').count();
+    const ohne = await pv.locator('.bz-lab-ohne').count();
+    if (bars !== 3) return bars + ' Marken statt 3';
+    if (ohne < 30) return 'nur ' + ohne + ' Kennzeichnungen';
+    return fehlerV.length ? fehlerV[0] : true;
+  });
+  await check('Suche: Treffer ohne Termin zeigt «ohne Termin», Sprung wählt die Zeile', async () => {
+    const name = await pv.evaluate(() => document.querySelector('.bz-lab-ohne').closest('.bz-lab').querySelector('.bz-lab-name').textContent);
+    await pv.fill('#suche', name.slice(0, 6));
+    await pv.waitForTimeout(300);
+    const z = await pv.locator('#suche-liste .suche-z').allTextContents();
+    if (!z.includes('ohne Termin')) return 'Zeiten: ' + JSON.stringify(z.slice(0, 5));
+    await pv.keyboard.press('Enter');
+    await pv.waitForTimeout(400);
+    return fehlerV.length ? fehlerV[0] : true;
+  });
+  await pv.screenshot({ path: join(here, 'shots', 'edit-gemischt.png') });
   await cv.close();
 }
 

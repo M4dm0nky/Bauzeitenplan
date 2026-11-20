@@ -7,7 +7,7 @@
 // bearbeiten rechnet die Dauer zurück.
 
 import { parseDuration, fmtDuration, local, mitUhrzeit, endeNachStart } from './conflicts.js';
-import { toMin, toDate, byStart } from './schedule.js';
+import { toMin, toDate, byStart, ohneTermin } from './schedule.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, toInput, STATUS } from './dom.js';
 import { sichtGewerke, punktTypen, abschnitte, abschnittLabel, nachSort, amTag, imAbschnitt } from './ebene.js';
@@ -341,13 +341,18 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     const st = el('td', 'c-start');
     const sin = el('input');
     sin.type = nurZeit ? 'time' : 'datetime-local';
-    sin.value = nurZeit ? String(t.start).slice(11, 16) : toInput(t.start);
+    // Terminlos: das Feld bleibt leer (kein Platzhalter — der Spaltenkopf sagt,
+    // was hier hingehört). `String(null)` wäre sonst «null».
+    const terminlos = ohneTermin(t);
+    sin.value = terminlos ? '' : nurZeit ? String(t.start).slice(11, 16) : toInput(t.start);
     sin.setAttribute('aria-label', 'Start');
     // Sammelvorgang: Start/Dauer/Ende sind die Hülle der Untervorgänge — nur lesen.
     if (isParent) { sin.disabled = true; sin.title = 'Ergibt sich aus den Untervorgängen'; }
     commitOn(sin, () => {
       const now = cur(t.id);
-      if (!now || !sin.value) return;
+      if (!now) return;
+      // Leer lassen heißt nicht «löschen»: das Feld zeigt wieder, was gilt.
+      if (!sin.value || ohneTermin(now)) { sin.value = ohneTermin(now) ? '' : nurZeit ? String(now.start).slice(11, 16) : toInput(now.start); return; }
       // Nur den Zeitteil ersetzen, das Datum behalten: ein Eintrag vom Vortag
       // ist über den Tagesfilter auch am Folgetag sichtbar und spränge sonst.
       const start = nurZeit ? mitUhrzeit(now.start, sin.value) : sin.value;
@@ -361,14 +366,13 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     // ── Dauer ──
     const du = el('td', 'c-dur');
     const din = el('input', 'tb-dur');
-    const durMin = toMin(t.end) - toMin(t.start);
-    din.value = fmtDuration(durMin);
+    din.value = terminlos ? '' : fmtDuration(toMin(t.end) - toMin(t.start));
     din.placeholder = '4h';
     din.setAttribute('aria-label', 'Dauer');
-    if (t.milestone || isParent) din.disabled = true;
+    if (t.milestone || isParent || terminlos) din.disabled = true;
     commitOn(din, () => {
       const now = cur(t.id);
-      if (!now) return;
+      if (!now || ohneTermin(now)) return;
       const real = toMin(now.end) - toMin(now.start);
       const m = parseDuration(din.value);
       if (m == null || m === 0) {
@@ -387,12 +391,13 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     const en = el('td', 'c-end');
     const ein = el('input');
     ein.type = nurZeit ? 'time' : 'datetime-local';
-    ein.value = nurZeit ? String(t.end).slice(11, 16) : toInput(t.end);
+    ein.value = terminlos ? '' : nurZeit ? String(t.end).slice(11, 16) : toInput(t.end);
     ein.setAttribute('aria-label', 'Ende');
     if (t.milestone || isParent) { ein.disabled = true; if (isParent) ein.title = 'Ergibt sich aus den Untervorgängen'; }
     commitOn(ein, () => {
       const now = cur(t.id);
-      if (!now || !ein.value) return;
+      if (!now) return;
+      if (!ein.value || ohneTermin(now)) { ein.value = ohneTermin(now) ? '' : nurZeit ? String(now.end).slice(11, 16) : toInput(now.end); return; }
       // «22:00 bis 03:00» meint den Folgetag — sonst lehnte der Store ab.
       const ende = nurZeit ? endeNachStart(now.start, ein.value) : ein.value;
       if (!ende || ende === now.end) return;
@@ -453,6 +458,7 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     const msb = el('button', 'tb-ico' + (t.milestone ? ' is-on' : ''), '◆');
     // Ein Sammelvorgang hat eine abgeleitete Dauer und kann keine Raute sein.
     if (isParent) { msb.disabled = true; msb.title = 'Ein Vorgang mit Untervorgängen ist kein Meilenstein'; }
+    else if (terminlos) { msb.disabled = true; msb.title = 'Erst einen Termin eintragen'; }
     else msb.title = t.milestone ? 'In einen Vorgang zurückverwandeln' : 'In einen Meilenstein verwandeln';
     msb.onclick = () => {
       if (t.milestone) {
@@ -487,15 +493,18 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
   // Neuen Untervorgang unter `parentId` anlegen: schließt zeitlich an den letzten
   // vorhandenen Untervorgang an (sonst an den Elternstart), 2h Vorgabe. Vor dem
   // Anlegen aufklappen, damit das neue Kind sichtbar ist.
+  // Start + 2h Vorgabe; ohne Anschluss (null) ein Vorgang ohne Termin.
+  const spanAb = (start) => (start ? { start, end: local(toDate(toMin(start) + 120)) } : { start: null, end: null });
+
   function addSub(parentId, after) {
     const S = store.state;
     const p = S.tasks.find((t) => t.id === parentId);
     if (!p) return;
-    const start = after ? after.end : p.start;
+    const start = after && !ohneTermin(after) ? after.end : p.start;
     collapsed.delete(parentId);
     const r = send({
       type: 'addTask',
-      task: { gewerk: p.gewerk, parent: parentId, title: 'Untervorgang', start, end: local(toDate(toMin(start) + 120)) },
+      task: { gewerk: p.gewerk, parent: parentId, title: 'Untervorgang', ...spanAb(start) },
     });
     if (r && r.id) {
       requestAnimationFrame(() => {
@@ -515,13 +524,14 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     const sichtbar = sichtGewerke(store.state, ebene, ausBlend);
     if (gewerkId === 'projekt') gewerkId = sichtbar[0] && sichtbar[0].id;
     if (!gewerkId) return;
-    const start = after ? after.end : defaultStart();
+    // Hängt man an einen terminlosen Vorgang an, ist der neue auch terminlos.
+    const start = after ? (ohneTermin(after) ? null : after.end) : defaultStart();
     const r = send({
       type: 'addTask',
       task: {
         gewerk: gewerkId,
         title: ebene === 'show' ? 'Neuer Zeiteintrag' : 'Neuer Vorgang',
-        start, end: local(toDate(toMin(start) + 120)),
+        ...spanAb(start),
         // Der neue Eintrag gehört in den Abschnitt, den man gerade ansieht —
         // sonst legt man ihn im Setup an und er erscheint in der Show. Bei
         // «alle» ist Show die Vorgabe.
@@ -548,7 +558,7 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
       // nur unsichtbar, und das fühlte sich an wie «geht nicht».
       const buehnen = sichtGewerke(S, 'show', ausBlend).map((g) => g.id);
       const drin = amTag(imAbschnitt(S.tasks.filter((t) => buehnen.includes(t.gewerk)), abschnitt), tag);
-      const letzter = drin.sort(byStart).pop();
+      const letzter = drin.filter((t) => !ohneTermin(t)).sort(byStart).pop();
       if (letzter) return toInput(letzter.start);
       // Der Tag ist noch leer: morgens anfangen. Ein Setup beginnt um acht,
       // nicht am Projektanfang zwei Wochen vorher.

@@ -13,7 +13,7 @@
 // Tabellenfeld ist «/» ein Zeichen, kein Befehl.
 
 import { el } from './dom.js';
-import { suchTreffer } from './schedule.js';
+import { suchTreffer, ohneTermin } from './schedule.js';
 import { gewerkVar } from './palette.js';
 import { verschoben } from './live.js';
 
@@ -105,7 +105,7 @@ export function createSuche(input, liste, { daten, onWahl, blockiert = () => fal
         b.id = 'suche-i-' + i;
         b.tabIndex = -1;
         b.setAttribute('role', 'option');
-        b.append(el('span', 'suche-t', t.title), el('span', 'suche-z', kurz(verschoben(t.start, versatz))));
+        b.append(el('span', 'suche-t', t.title), el('span', 'suche-z', ohneTermin(t) ? 'ohne Termin' : kurz(verschoben(t.start, versatz))));
         // mousedown nähme dem Feld den Fokus — und mit ihm die Tastatur.
         b.addEventListener('mousedown', (e) => e.preventDefault());
         b.addEventListener('click', () => wahl(i));

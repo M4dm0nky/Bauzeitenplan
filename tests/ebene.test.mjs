@@ -307,10 +307,13 @@ test('ein unbekannter Typ tritt nicht zurück', () => {
 
 console.log('\nOhne Termin');
 const OTe = (id) => ({ id, gewerk: 'b0', title: id, start: null, end: null, milestone: false, status: 'geplant' });
-test('programmTage und amTag überspringen terminlose', () => {
+test('programmTage überspringt terminlose; amTag lässt sie in jedem Tag stehen', () => {
   const l = [OTe('o'), S.tasks[2]];
   assert.deepEqual(programmTage(l), ['2026-08-29']);
-  assert.deepEqual(amTag(l, '2026-08-29').map((x) => x.id), ['p0']);
+  // Ein terminloser Vorgang gehört zu keinem Tag — aber auch aus keinem heraus,
+  // sonst wäre er im Showablauf unsichtbar, bevor er seinen Termin hat.
+  assert.deepEqual(amTag(l, '2026-08-29').map((x) => x.id).sort(), ['o', 'p0']);
+  assert.deepEqual(amTag(l, '2030-01-01').map((x) => x.id), ['o']);
   assert.deepEqual(programmTage([OTe('o')]), []);
 });
 test('programmFenster: nur terminlose → null, sonst nur die terminierten', () => {

@@ -237,6 +237,33 @@ for (const [w, h] of [[1440, 900], [1000, 800]]) {
 }
 await p.setViewportSize({ width: 1700, height: 1000 });
 
+console.log('\nVORGÄNGE OHNE TERMIN');
+{
+  // Ein Plan, in dem ein Teil der Vorgänge keinen Termin hat — in beiden Ebenen.
+  // Sie dürfen auf keinem Blatt stehen und nichts zu NaN machen.
+  const n = await p.evaluate(async () => {
+    const m = await import('/js/persistence.js');
+    const r = m.deserialize(await (await fetch('/klassentreffen-festival.json')).text());
+    const pl = r.plan;
+    let c = 0;
+    pl.tasks.forEach((t, i) => { if (i % 3 === 0) { t.start = null; t.end = null; c++; } });
+    m.createRepo(window.localStorage).save(pl);
+    return c;
+  });
+  for (const [ebene, sel] of [['bau', '.pr-sheet'], ['show', '.pr-sheet']]) {
+    await check('Tagesblätter (' + ebene + ') mit ' + n + ' terminlosen Vorgängen: kein NaN, keine Ausnahme', async () => {
+      const fehler0 = errors.length;
+      await p.goto(BASE + '/print.html?plan=klassentreffen&ebene=' + ebene);
+      await p.waitForSelector(sel, { timeout: 15000 });
+      await p.waitForTimeout(500);
+      const t = await p.locator('#sheets').innerText();
+      const html = await p.locator('#sheets').innerHTML();
+      if (/NaN|Invalid Date|1970/.test(t) || /NaN/.test(html)) return 'NaN/1970 im Blatt';
+      return errors.length === fehler0 ? true : errors.slice(fehler0).join(' | ');
+    });
+  }
+}
+
 if (errors.length) { console.log('\n  ✗ Fehler:'); errors.slice(0, 5).forEach((e) => console.log('      ' + e)); bad += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 await b.close(); server.close();

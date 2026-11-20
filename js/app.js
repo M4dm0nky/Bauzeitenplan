@@ -18,7 +18,7 @@ import { createInspector } from './inspector.js';
 import { openMenu } from './menu.js';
 import { liveStats, runningAt, nextUp, offeneVerspaetungen, verschoben, versatzText } from './live.js';
 import { sichtGewerke, sichtTasks, typHinweis, programmTage, buehnenIds, abschnittOf, amTag } from './ebene.js';
-import { toMin, toDate } from './schedule.js';
+import { toMin, toDate, ohneTermin } from './schedule.js';
 import { isoWeek } from './timeaxis.js';
 import { $, el, escapeHtml } from './dom.js';
 import { VERSION } from './version.js';
@@ -947,8 +947,9 @@ function springeZu(id) {
     // der Filter den Treffer sofort wieder aus.
     ziel = abschnittOf(t) === 'setup' ? 'setup' : 'show';
     const tage = programmTage(sichtTasks(store.state, 'show'));
-    const start = String(t.start).slice(0, 10);
-    const tag = tage.includes(start) ? start
+    const start = ohneTermin(t) ? null : String(t.start).slice(0, 10);
+    // Ohne Termin gibt es keinen Tag, zu dem man springen könnte: der Tag bleibt.
+    const tag = ohneTermin(t) ? showTag : tage.includes(start) ? start
       : tage.find((d) => amTag([t], d).length) || showTag;
     showTag = tag;
     ausBlend.delete(t.gewerk);               // abgehakte Bühne: Treffer zeigen
@@ -1182,7 +1183,8 @@ function showContext(sel, x, y) {
         toast('Vorgang dupliziert — ohne Verknüpfungen.');
       }
     } },
-    { label: t.milestone ? 'In Vorgang zurückverwandeln' : 'Zu Meilenstein machen', run: () => {
+    { label: t.milestone ? 'In Vorgang zurückverwandeln' : 'Zu Meilenstein machen',
+      disabled: ohneTermin(t), run: () => {
       apply(t.milestone
         ? { type: 'batch', label: 'Meilenstein aufheben', cmds: [
             { type: 'setTaskField', id: t.id, field: 'end', value: local(toDate(toMin(t.start) + 120)) },

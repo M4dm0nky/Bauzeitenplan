@@ -5,7 +5,7 @@
 // Das Raster im Canvas ist ein CSS-Gradient (kostenlos, beliebig breit); nur die
 // Beschriftungen im Viewport landen im DOM und werden beim Scrollen recycelt.
 
-import { computeSchedule, toMin, toDate, byStart, seriesRows, reachable } from './schedule.js';
+import { computeSchedule, toMin, toDate, byStart, seriesRows, reachable, ohneTermin } from './schedule.js';
 import { findConflicts, local } from './conflicts.js';
 import { runningAt, offeneVerspaetungen, verschoben } from './live.js';
 import { sichtGewerke, programmFenster, amTag, imAbschnitt, programmTage, buehnenIds } from './ebene.js';
@@ -261,13 +261,16 @@ export function createGantt(root, opts = {}) {
       // eine frisch angelegte Bühne hat noch nichts, und wäre sie unsichtbar,
       // wäre «+ Bühne» ein Klick ins Nichts.
       if (!tasks.length && ebene !== 'show') continue;
-      const spans = tasks.filter((t) => !t.milestone);
+      // Terminlose haben weder Balken noch Lage: sie zählen weder zur Hülle des
+      // Bandes noch zu den Marken im zugeklappten Zustand.
+      const datiert = tasks.filter((t) => !ohneTermin(t));
+      const spans = datiert.filter((t) => !t.milestone);
       // Ohne Vorgänge gäbe Math.min(...[]) Infinity — der Sammelbalken zöge
       // sich über die ganze Achse.
-      const gStart = tasks.length ? Math.min(...tasks.map((t) => toMin(t.start))) : T0;
-      const gEnd = tasks.length ? Math.max(...tasks.map((t) => toMin(t.end))) : T0;
+      const gStart = datiert.length ? Math.min(...datiert.map((t) => toMin(t.start))) : T0;
+      const gEnd = datiert.length ? Math.max(...datiert.map((t) => toMin(t.end))) : T0;
       const done = tasks.filter((t) => t.status === 'fertig').length;
-      rows.push({ kind: 'group', g, y, h: O.groupH, gStart, gEnd, tasks, done, spans });
+      rows.push({ kind: 'group', g, y, h: O.groupH, gStart, gEnd, tasks, done, spans, ohneSum: !datiert.length });
       y += O.groupH;
       if (!collapsed.has(g.id)) {
         // Bauzeitenplan: eine Zeile je VORGANGSNAME, ein Balken je Termin.
@@ -299,7 +302,7 @@ export function createGantt(root, opts = {}) {
     // Projekt-Meilensteine (gewerk 'projekt') als eigene Zeile ganz unten.
     // Sie gehören zum Bauzeitenplan; im Showablauf hat der Tag seine eigenen
     // Marken (Doors, Show-Ende) und der Zielmeilenstein wäre hier nur Ballast.
-    const proj = VT.filter((t) => t.gewerk === 'projekt').sort(byStart);
+    const proj = VT.filter((t) => t.gewerk === 'projekt' && !ohneTermin(t)).sort(byStart);
     if (proj.length) {
       rows.push({ kind: 'projekt', tasks: proj, y, h: O.groupH });
       y += O.groupH;
@@ -399,7 +402,8 @@ export function createGantt(root, opts = {}) {
         // schon der Ablaufplan und man liest ihn, ohne nach rechts zu den Balken
         // zu schauen. Im Bauzeitenplan wäre sie falsch: dort trägt eine Zeile
         // mehrere Termine, und einer davon stünde stellvertretend für alle.
-        if (ebene === 'show') {
+        const ohneT = ohneTermin(r.t);
+        if (ebene === 'show' && !ohneT) {
           // Mit dem Versatz gerechnet: stünde hier 20:00, während der Balken
           // daneben auf 20:05 liegt, widerspräche sich das Blatt selbst — und
           // die verschobene Uhrzeit ist ja gerade das, was man wissen will.
@@ -416,8 +420,16 @@ export function createGantt(root, opts = {}) {
           lab.append(el('span', 'bz-lab-dauer', r.t.milestone || min === 0 ? '—' : '(' + min + ' min)'));
         }
         const nm = el('span', 'bz-lab-name', r.s.title);
+        // Ohne Termin: die Zeile steht, aber kein Balken. Das sagt die Seitenspalte
+        // selbst — Symbol plus gedämpfter Text, keine neue Farbe.
+        if (ohneT) lab.classList.add('is-ohne-termin');
         nm.title = alle.length > 1 ? r.s.title + ' — ' + alle.length + ' Termine' : r.s.title;
         lab.append(nm);
+        if (ohneT) {
+          const ot = el('span', 'bz-lab-ohne', '◌ ohne Termin');
+          ot.title = 'Noch kein Termin — im Panel oder in der Tabelle eintragen';
+          lab.append(ot);
+        }
         const conf = konflikte.length ? CONFLICTS.get(konflikte[0].id) : null;
         if (conf) {
           const c = el('span', 'bz-conf-tag', '!');
@@ -464,6 +476,7 @@ export function createGantt(root, opts = {}) {
         sum.style.setProperty('--gw', gewerkVar(r.g.slot));
         if (gewerkTexture(r.g.slot)) sum.dataset.tex = '1';
         sum.dataset.from = r.gStart; sum.dataset.to = r.gEnd;
+        if (r.ohneSum) sum.hidden = true;     // kein einziger Termin im Band
         sum.append(el('span', 'bz-sum-cap bz-sum-cap-l'), el('span', 'bz-sum-cap bz-sum-cap-r'));
         track.append(sum);
         rowById.set('group:' + r.g.id, sum);
@@ -499,7 +512,7 @@ export function createGantt(root, opts = {}) {
         const naechster = new Map();
         {
           const letzte = new Map();
-          for (const t of r.s.tasks) {          // bereits nach Start sortiert
+          for (const t of r.s.tasks.filter((x) => !ohneTermin(x))) {          // bereits nach Start sortiert
             const l = r.s.laneOf.get(t.id) || 0;
             const v = letzte.get(l);
             if (v) naechster.set(v.id, toMin(t.start));
@@ -507,6 +520,7 @@ export function createGantt(root, opts = {}) {
           }
         }
         for (const t of r.s.tasks) {
+          if (ohneTermin(t)) continue;          // keine Marke, kein Griff, kein Pfeilanker
           const lane = r.s.laneOf.get(t.id) || 0;
           const s = SCHED.get(t.id) || { critical: false, float: 0 };
           if (t.milestone) {
@@ -1067,8 +1081,12 @@ export function createGantt(root, opts = {}) {
     select({ kind: 'task', id: taskId });
     // Tagesansicht: den Tag des Vorgangs voll aufziehen, sonst wäre der Maßstab
     // nach einem Sprung verschoben. Sonst nur hinscrollen.
-    if (zoomMode === 'tage') fitDay(local(toDate(toMin(t.start))).slice(0, 10));
-    else centerOn(toMin(t.start));
+    // Ohne Termin gibt es nichts anzuspringen: die Zeile wird gezeigt, der Tag
+    // und die Achse bleiben, wo sie sind.
+    if (!ohneTermin(t)) {
+      if (zoomMode === 'tage') fitDay(local(toDate(toMin(t.start))).slice(0, 10));
+      else centerOn(toMin(t.start));
+    }
     zeigeZeile(taskId);
   }
 
@@ -1121,7 +1139,7 @@ export function createGantt(root, opts = {}) {
 
     for (const d of S.deps) {
       const a = byId.get(d.from), b = byId.get(d.to);
-      if (!a || !b) continue;
+      if (!a || !b || ohneTermin(a) || ohneTermin(b)) continue;
       // Bei zugeklappter Gruppe auf den Sammelbalken umlenken
       const ra = visualRow(a), rb = visualRow(b);
       if (!ra || !rb) continue;
@@ -1445,7 +1463,7 @@ export function createGantt(root, opts = {}) {
     for (const g of VG) {
       const lane = el('div', 'bz-mini-lane');
       lane.style.setProperty('--gw', gewerkVar(g.slot));
-      for (const t of VT.filter((x) => x.gewerk === g.id && !x.milestone)) {
+      for (const t of VT.filter((x) => x.gewerk === g.id && !x.milestone && !ohneTermin(x))) {
         const m = el('div', 'bz-mini-b');
         // Eigene Farbe auch in der Karte — sonst zeigt sie einen anderen Abend
         // als der Plan darüber.
@@ -1626,6 +1644,7 @@ export function createGantt(root, opts = {}) {
     const gewerkVon = new Map();
     for (const t of VT) {
       // Vorgang mit Dauer, der um 00:00 endet, gehört nicht mehr zu diesem Tag
+      if (ohneTermin(t)) continue;
       const a = toMin(t.start), e = toMin(t.end);
       if (a < d1 && (e > d0 || (e === a && a >= d0))) gewerkVon.set(t.id, t.gewerk);
     }
@@ -1675,7 +1694,7 @@ export function createGantt(root, opts = {}) {
   // heuteOderNaechster().
   function initialFocus() {
     const aufbau = (S.phases || []).find((p) => /aufbau|load.?in/i.test(p.name));
-    const spans = S.tasks.filter((t) => !t.milestone).map((t) => toMin(t.start));
+    const spans = S.tasks.filter((t) => !t.milestone && !ohneTermin(t)).map((t) => toMin(t.start));
     const anchor = aufbau ? toMin(aufbau.start) : (spans.length ? Math.min(...spans) : NOW);
     // KEINE «läuft gerade etwas?»-Prüfung: ein 29-tägiger Planungsbalken läuft
     // zwar, ist aber kein Geschehen — die Ansicht öffnete dann mit einem

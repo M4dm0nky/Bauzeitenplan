@@ -12,7 +12,7 @@
 // und seriesRows (schedule.js), ticksFor/fmtDay (timeaxis.js), palette.js.
 
 import { createRepo, deserialize } from './persistence.js';
-import { tagesScheiben, seriesRows, toMin, toDate } from './schedule.js';
+import { tagesScheiben, seriesRows, toMin, toDate, ohneTermin } from './schedule.js';
 import { ticksFor, fmtDay } from './timeaxis.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { local } from './conflicts.js';
@@ -108,7 +108,8 @@ async function ladePlan() {
   throw new Error('Kein Projekt in diesem Browser. Öffne zuerst die App.');
 }
 
-const gewaehlteTasks = () => PLAN.tasks.filter((t) => wahl.gewerke.has(t.gewerk));
+// Ohne Termin gehört ein Vorgang auf kein Blatt: kein Tag, keine Zeile, kein NaN.
+const gewaehlteTasks = () => PLAN.tasks.filter((t) => wahl.gewerke.has(t.gewerk) && !ohneTermin(t));
 
 /** Die Bänder der aktiven Ebene — Gewerke oder Bühnen. */
 const baender = () => sichtGewerke(PLAN, wahl.ebene);
