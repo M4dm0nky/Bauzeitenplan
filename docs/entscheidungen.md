@@ -948,7 +948,7 @@ prüft das.
 ### Der Start fragt, die JSON bleibt die Wahrheit.
 
 `openBundled` holt `klassentreffen-festival.json` (`BUNDLED` in app.js). Neuer
-Planstand = Datei austauschen und pushen, sonst nichts. Ob die Datei neuer ist,
+Planstand = Datei austauschen und pushen; ist die lokale Fassung verändert, fragt die App (siehe unten). Ob die Datei neuer ist,
 entscheidet der `exported`-Stempel aus `serialize()`, mitgeführt in
 `project.quelle`; nicht erreichbar → lokal.
 
@@ -975,6 +975,28 @@ ohne Stempel. **`?plan=leer`** öffnet weiter keinen mitgelieferten Plan: aktive
 sonst der Dialog. Das gehört dazu, weil `verify-edit`, `verify-live` und
 `verify-sync` damit das Neuladen prüfen; im leeren Browser (Erststart von
 `verify-browser`, `verify-edit`, `verify-live`, `verify-amk`) zeigt es den Dialog.
+
+**Warum im Repo nur nach Rückfrage gelöscht wird:** Fehlt ein Projekt im Daten-Repo,
+hieß das bisher «auf einem anderen Gerät gelöscht» und entfernte es lokal still. Eine
+Antwort ohne Liste oder ein 404 der Liste ist aber auch ein kaputtes Repo, und das
+wäre Datenverlust. Jetzt fragt `askDialog` («Lokal löschen» oder «Behalten und neu
+hochladen»), und das offene Projekt wird erst nach dem Wechsel gelöscht.
+
+**Warum zwei Tabs gefragt werden:** Zwei Tabs auf demselben Projekt überschrieben sich
+gegenseitig. Ändert ein anderer Tab den Plan, übernimmt der offene Tab den Stand, wenn
+er selbst nichts Ungesichertes hat. Sonst fragt er («Übernehmen», «Meine behalten»,
+«Kopie»). Abbrechen heißt «Meine behalten», und das automatische Speichern pausiert
+während der Frage, damit nichts im Hintergrund überschrieben wird.
+
+**Warum «Plan verschieben» über den Kalender rechnet:** Tage zu addieren ging als
+`+ 1440` Minuten schief, sobald eine Zeitumstellung dazwischen lag. Tage werden jetzt
+über den Kalender verschoben, die Uhrzeit bleibt je Zeitstempel als Wanduhrzeit, der
+Rest kommt in echten Minuten dazu. Grenzen: |Tage| ≤ 36 500, |Minuten| ≤ 10 080, damit
+keine ungültigen Daten entstehen. Ein Befehl im Store ist ein ⌘Z.
+
+**Warum ⌘Z im Textfeld dem Feld gehört:** Die App hat ⌘Z global abgefangen, auch
+mitten im Tippen. Jetzt bleibt es im Feld beim Browser. Den Undo des Plans erreicht man
+über den ↺-Knopf oder nach dem Verlassen des Feldes.
 
 ### Was der erste Start braucht, gehört auf Modulebene — nicht in `mount()`.
 

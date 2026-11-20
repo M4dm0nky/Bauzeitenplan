@@ -313,7 +313,8 @@ body { margin: 0; }
   cursor: crosshair;
 }
 /* Erst beim Hinsehen. Dauerhaft wären es bei 153 Zeilen 153 Punkte im Bild.
-   Der Griff wird direkt hinter seinem Balken angehängt — daher der Nachbar-Selektor. */
+   Der Griff hängt am Balken; sichtbar wird er am ausgewählten Vorgang (is-sel, von
+   paintSelection gesetzt) und beim Hover. */
 .bz-link.is-on, .bz-link:hover { opacity: 1; }
 /* Ohne Zeigegerät gibt es kein Hover. Dauerhaft sichtbar lagen die Griffe auf der
    Beschriftung schmaler Balken — darum nur am ausgewählten Vorgang (Antippen wählt

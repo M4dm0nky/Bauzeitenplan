@@ -173,6 +173,13 @@ sonst drucken die Balken weiß.
 Rechner — und sie sind weg. Es gibt kein Backend und keine Anmeldung: der
 **JSON-Export ist die einzige Sicherung**. Nutze ihn.
 
+**Daten-Repo und zwei Tabs.** Ist ein Projekt im GitHub-Daten-Repo (Einrichten →
+Speicherort) nicht mehr vorhanden, fragt die App, bevor sie es lokal löscht: «Lokal
+löschen» oder «Behalten und neu hochladen». Ist das Repo selbst nicht erreichbar,
+wird nichts gelöscht. Öffnest du denselben Plan in zwei Tabs, fragt der andere Tab
+bei einer Änderung, wenn er selbst Ungesichertes hat («Übernehmen», «Meine behalten»,
+«Kopie»); Abbrechen behält deinen Stand.
+
 **Live-Modus** für den Aufbau: Zeitlinie läuft mit, Ansicht folgt, laufende
 Vorgänge leuchten, Verzug wird benannt («sollte seit 20m laufen»). Der Status
 wird dabei **nie** automatisch gesetzt — sonst sähe der Plan immer nach Plan aus
@@ -236,6 +243,12 @@ du warst. Die schnellen Wege bleiben daneben bestehen — eine Bezeichnung legst
 du weiter mit „+ Neu…" im Auswahlfeld an, mitten im Tippen; Einrichten ist der
 Weg zum Aufräumen danach.
 
+**Plan verschieben:** Einrichten → Projekt → «Plan verschieben…». Der ganze Plan
+(Vorgänge, Phasen, Rahmen) rutscht um Tage und Stunden:Minuten, negative Werte ziehen
+vor. Die Tage zählen über den Kalender, die Uhrzeit bleibt, auch über die Zeitumstellung.
+Eine Vorschau zeigt den neuen Aufbaubeginn; Grenzen sind 36 500 Tage und 10 080 Minuten.
+Ein `⌘Z` nimmt das Verschieben zurück.
+
 Daneben die Arbeitsleiste, jetzt kurz: im Showablauf Tag · Setup/Show ·
 Plan/Tabelle/Bedarf · Bühnen · Undo · Prüfen · Live mit Versatz, im
 Bauzeitenplan Tag · Plan/Tabelle/Bedarf plus die Zeitwerkzeuge (Zoomstufe,
@@ -248,7 +261,7 @@ Heute, Zuklappen).
 | `⌘`/`Ctrl` + Mausrad | zoomt am Cursor — der Zeitpunkt unter der Maus bleibt stehen |
 | `⇧` + Mausrad | scrollt seitwärts |
 | `←` `→` | blättern · `H` springt zu heute |
-| `⌘Z` / `⇧⌘Z` | rückgängig / wiederholen |
+| `⌘Z` / `⇧⌘Z` | rückgängig / wiederholen (im Textfeld gehört `⌘Z` dem Feld; den Plan über ↺ zurücksetzen) |
 | Minimap unten | Fenster ziehen, um über Monate zu navigieren |
 
 **Tabelle** (der schnelle Weg rein): `Enter` legt eine Zeile darunter an,

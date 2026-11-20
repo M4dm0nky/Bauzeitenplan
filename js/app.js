@@ -108,9 +108,9 @@ const startAnsicht = () => {
 // mitschreibt: ist der in der Datei neuer als der zuletzt geladene, gilt sie als
 // neuer Stand — trägt die lokale Kopie eigene Änderungen, wird gefragt (openBundled).
 //
-// `?plan=leer` überspringt das und zeigt den Projektdialog — für eigene Projekte
-// und für die Erststart-Prüfungen (verify-edit, verify-live, verify-amk), die
-// genau diesen Dialog brauchen.
+// `?plan=leer` überspringt das und öffnet das aktive (sonst erste) eigene Projekt,
+// nur ohne Projekt kommt der Projektdialog — die Prüfwerkzeuge (verify-edit,
+// verify-live, verify-amk) hängen am Neuladen dieses Verhaltens.
 const BUNDLED = {
   klassentreffen: { file: 'klassentreffen-festival.json', name: 'Klassentreffen Festival 2026' },
   amk: { file: 'amk-singleshow.json', name: 'AMK Singleshow' },
@@ -209,9 +209,6 @@ async function boot() {
 
 async function bootLokal() {
   const wunsch = new URLSearchParams(location.search).get('plan');
-  // Im PocketBase-Modus KEIN Autostart: open() schriebe den mitgelieferten Plan
-  // über repo.save() in die Instanz — jeder Anmeldung ein Beispielprojekt.
-  // Dort entscheidet die Mitgliedschaft, was jemand sieht, nicht eine Datei.
   // Direktlink: wer ?plan=<key> aufruft, will genau diesen Plan.
   if (wunsch && wunsch !== 'leer' && await openBundled(wunsch)) return;
 

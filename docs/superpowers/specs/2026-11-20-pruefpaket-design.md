@@ -59,7 +59,7 @@ Weg» umgeht.
 | 9 | Druck am Tag der Zeitumstellung. | `tagesScheiben`: Tagesende = Mitternacht des Folgetags über den Kalender. `print.js`: Fenstergrenzen über `toMin(tag + 'T' + hh + ':00')` bzw. Folgetag-Mitternacht für 24; `fensterFuer` liest Stunden über `getHours()` des lokalen Datums; Ticks und Balken bleiben zueinander konsistent (beide in Minuten). Prüfung: Nachtschicht 22:00–02:00 am 25.10.2026 steht vollständig auf beiden Blättern. |
 | 10 | `project.now` friert die Uhr ein. | Übersteuerung in `gantt.js` entfernen; `migrate` löscht `project.now`. Kein Prüfwerkzeug braucht es (`page.clock`). |
 | 11 | ⌘Z im Tabellenfeld. | Globaler keydown in app.js überspringt ⌘Z/⇧⌘Z, wenn `e.target` in `input, textarea, select, [contenteditable]` steht (⌘S bleibt global). |
-| 12 | Touch-Griffe über der Beschriftung. | CSS-Regel `pointer: coarse → opacity 1` entfällt. Stattdessen setzt `paintSelection()` `is-on` am Griff des ausgewählten Vorgangs (und nimmt es bei allen anderen weg): auf Touch tippt man den Balken an, dann erscheint der Griff. Maus-Verhalten (hover/focus) bleibt. |
+| 12 | Touch-Griffe über der Beschriftung. | CSS-Regel `pointer: coarse → opacity 1` entfällt. Stattdessen setzt `paintSelection()` `is-sel` am Griff des ausgewählten Vorgangs (und nimmt es bei allen anderen weg): auf Touch tippt man den Balken an, dann erscheint der Griff. Maus-Verhalten (hover/focus) bleibt. |
 | 13 | Panel kennt nur Setup/Show. | `inspector.js` baut das Abschnittsfeld aus `abschnitte(store.state)` wie `table.js`, gewählt ist `t.abschnitt || 'show'`. |
 | 14 | Live-Leiste zählt Show-Einträge. | `refreshLive` rechnet über `gantt.sichtbareTasks()`. |
 | 15 | Tooltip-Farbpunkt. | `gewerkVar(g.slot)` (+ Schraffur wie überall). |
