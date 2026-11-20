@@ -1,4 +1,4 @@
-import { validate } from '/private/tmp/claude-501/bundled-skills/2.1.210/c7ba277b215052fb2181b7c448b6d181/dataviz/scripts/validate_palette.js';
+import { validate } from './farbpruefung.mjs';
 
 // Gewerk-Zeilenreihenfolge ist FIX (chronologisch nach typischem Load-In).
 // Gesucht: welche Hue auf welches Gewerk, so dass benachbarte Zeilen maximal
@@ -25,6 +25,8 @@ const SURFACES = {
   studio:    '#faf9f6',
   console:   '#f6f3ec',
   board:     '#ffffff',
+  callboardBg:    '#EDE7DB',
+  callboardPanel: '#FBF8F1',
 };
 
 function* perms(arr) {

@@ -442,5 +442,17 @@ check('kein test()/check() nach process.exit in tests/*.test.mjs (toter Test)', 
   return bad.length ? 'Tests nach process.exit (laufen nie): ' + bad.join(', ') : true;
 });
 
+check('Keine absoluten Import-Pfade in tools/*.mjs und js/*.js', () => {
+  // Ein Import aus «/private/tmp/…» o. ä. bricht auf jedem anderen Rechner (Issue #4).
+  const dateien = [
+    ...readdirSync(join(root, 'tools')).filter((x) => x.endsWith('.mjs')).map((x) => 'tools/' + x),
+    ...readdirSync(join(root, 'js')).filter((x) => x.endsWith('.js')).map((x) => 'js/' + x),
+  ];
+  // Nur statische Importe am Zeilenanfang; `await import('/js/…')` in page.evaluate läuft im Browser gegen den Server und ist ok.
+  const re = /^\s*(?:import\b[^;'"]*?\bfrom|import|export\b[^;'"]*?\bfrom)\s*['"]\//m;
+  const bad = dateien.filter((f) => re.test(readFileSync(join(root, f), 'utf8')));
+  return bad.length ? 'absoluter Import in: ' + bad.join(', ') : true;
+});
+
 console.log(failed ? `\n✗ ${failed} Testgruppe(n) fehlgeschlagen\n` : '\n✓ Alles grün\n');
 process.exit(failed ? 1 : 0);
