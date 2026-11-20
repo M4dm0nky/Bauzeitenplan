@@ -945,17 +945,36 @@ Farbe gehört dem Gewerk, nicht
 seiner Position; sonst färbt sich beim Sortieren der halbe Plan um. Ein Test
 prüft das.
 
-### Der Autostart lädt die JSON, die JSON ist die Wahrheit.
+### Der Start fragt, die JSON bleibt die Wahrheit.
 
-`boot()` holt beim
-Start `klassentreffen-festival.json` (`BUNDLED`/`START` in app.js). Neuer Planstand
-= Datei austauschen und pushen, sonst nichts. Ob nachgeladen wird, entscheidet der
-`exported`-Stempel aus `serialize()`, mitgeführt in `project.quelle`: Datei neuer →
-Datei gewinnt, gleich → lokale Fassung bleibt (sonst verlöre der Betrachter bei
-jedem Laden seine Änderungen), nicht erreichbar → lokal. **`?plan=leer` schaltet
-den Autostart ab** — ohne diesen Schalter hätten `verify-browser`, `verify-edit`,
-`verify-live` und `verify-amk` keinen Erststart-Dialog mehr, an dem sie alle hängen.
-Wer am Autostart dreht, muss die vier Werkzeuge mitdenken.
+`openBundled` holt `klassentreffen-festival.json` (`BUNDLED` in app.js). Neuer
+Planstand = Datei austauschen und pushen, sonst nichts. Ob die Datei neuer ist,
+entscheidet der `exported`-Stempel aus `serialize()`, mitgeführt in
+`project.quelle`; nicht erreichbar → lokal.
+
+**Warum jetzt ein Dialog statt Autostart:** `bootLokal` öffnete bei jedem Aufruf
+ohne `?plan=` den Klassentreffen-Plan und ignorierte das aktive Projekt — ein
+Live-Monitor mit eigenem Projekt zeigte nach dem Neustart den falschen Plan. Jetzt
+fragt der Projektdialog (zuletzt geöffnete nach `modified`, mitgelieferte Pläne,
+Neu, Import). Direkt öffnen nur `?plan=<key>` (wer den Link schickt, will genau
+diesen Plan) und der Live-Monitor.
+
+**Warum die Live-Ausnahme:** Nach einem Stromausfall klickt am Monitor niemand
+einen Dialog weg. War beim letzten Lauf Live an (`bzp_live === '1'`) und lässt
+sich das aktive Projekt laden, wird es ohne Dialog geöffnet. Fehlt eines von
+beidem, fragt der Dialog.
+
+**Warum beim neuen Planstand gefragt wird:** «Datei neuer → Datei gewinnt» ersetzte
+die lokale Fassung ohne Rückfrage — Änderungen des Betrachters waren still weg.
+Jetzt fragt `askDialog` («Zwei Fassungen»), aber nur, wenn die Datei neuer ist UND
+die lokale Fassung inhaltlich abweicht (`gleicherPlan`, Stempel zählen nicht):
+«Neuen Stand nehmen» (wie früher), «Meine behalten» (Stempel der Datei wird
+übernommen, sonst fragte jeder Start erneut), «Beide behalten (Kopie)» (lokale
+Fassung als «… (lokal vor Update)» unter neuer id). Abbruch = «Meine behalten»
+ohne Stempel. **`?plan=leer`** öffnet weiter keinen mitgelieferten Plan: aktives (sonst erstes) Projekt,
+sonst der Dialog. Das gehört dazu, weil `verify-edit`, `verify-live` und
+`verify-sync` damit das Neuladen prüfen; im leeren Browser (Erststart von
+`verify-browser`, `verify-edit`, `verify-live`, `verify-amk`) zeigt es den Dialog.
 
 ### Was der erste Start braucht, gehört auf Modulebene — nicht in `mount()`.
 

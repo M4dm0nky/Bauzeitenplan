@@ -205,6 +205,25 @@ await check('Live-Zustand überlebt das Neuladen', async () => {
   const p = await page.locator('#live').getAttribute('aria-pressed');
   return p === 'true' ? true : 'nach Reload aus';
 });
+await check('Live-Monitor ohne Kennung: kein Projektdialog, aktives Projekt offen, Live an', async () => {
+  await page.goto(BASE + '/index.html');
+  await page.waitForTimeout(1000);
+  if (!(await page.locator('#dlg').isHidden())) return 'Projektdialog im Weg';
+  const name = (await page.locator('#proj-name').textContent()) || '';
+  if (!name.includes('Live-Test')) return 'falsches Projekt: «' + name + '»';
+  const p = await page.locator('#live').getAttribute('aria-pressed');
+  return p === 'true' ? true : 'Live aus';
+});
+await check('Live aus + ohne Kennung: Projektdialog statt stillem Öffnen', async () => {
+  await page.evaluate(() => localStorage.setItem('bzp_live', '0'));
+  await page.goto(BASE + '/index.html');
+  await page.waitForTimeout(1000);
+  const sichtbar = await page.locator('#dlg').isVisible();
+  await page.evaluate(() => localStorage.setItem('bzp_live', '1'));
+  await page.goto(BASE + '/index.html?plan=leer');
+  await page.waitForTimeout(800);
+  return sichtbar ? true : 'kein Dialog';
+});
 console.log('\nVERSATZ — die Ansage vom Pult');
 // Der ganze Zweck: der ABLAUF rutscht, die UHR bleibt stehen. Beides wird
 // getrennt gemessen, denn nur zusammen ist die Aussage richtig — ein Bild, in

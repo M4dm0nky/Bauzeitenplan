@@ -131,24 +131,28 @@ den **Abschnitt**: ein Setup-Blatt für die Crew am Vormittag, ein Show-Blatt f�
 den Abend, oder beides auf einem. Kopf und Fuß nennen ihn, damit ein abgelegtes
 Blatt sich selbst erklärt.
 
-**Weitergeben: einfach die Adresse schicken.** Wer
-[die Seite](https://m4dm0nky.github.io/Bauzeitenplan/) öffnet, sieht den
-Klassentreffen-Plan **sofort** — kein Import, keine Datei im Anhang. Die App holt
-ihn beim Start aus `klassentreffen-festival.json`.
+**Weitergeben: einfach die Adresse schicken.** Der
+Direktlink [`?plan=klassentreffen`](https://m4dm0nky.github.io/Bauzeitenplan/?plan=klassentreffen)
+öffnet den Klassentreffen-Plan **sofort** — kein Import, keine Datei im Anhang. Die
+App holt ihn aus `klassentreffen-festival.json`. Ohne `?plan=` fragt beim Start der
+Projektdialog (zuletzt geöffnete Projekte, mitgelieferte Pläne, Neu, Import); nur
+ein Live-Monitor, bei dem Live an war, öffnet das aktive Projekt ohne Dialog.
 
 **Neuer Planstand? Nur die JSON austauschen.** Kommt V08, V09 …, wird die Datei
-neu gebaut und gepusht — jeder Betrachter zieht sie beim nächsten Laden von
-selbst nach. Erkannt wird das am `exported`-Stempel: ist der in der Datei neuer
-als der zuletzt geladene, gewinnt die Datei. Ist er gleich, bleibt die lokale
-Fassung stehen, damit eigene Änderungen nicht verlorengehen.
+neu gebaut und gepusht — jeder Betrachter bekommt sie beim nächsten Öffnen.
+Erkannt wird das am `exported`-Stempel: ist der in der Datei neuer als der zuletzt
+geladene und hat die lokale Fassung eigene Änderungen, fragt die App («Zwei
+Fassungen»: neuen Stand nehmen, meine behalten, beide behalten als Kopie). Ohne
+eigene Änderungen oder bei gleichem Stempel passiert nichts Überraschendes.
 
 ```bash
 node tools/make-klassentreffen.mjs   # JSON aus der Quelle neu bauen
 git commit -am "Plan auf V08" && git push origin main
 ```
 
-`?plan=amk` öffnet stattdessen den AMK-Plan, **`?plan=leer`** überspringt den
-Autostart und zeigt den Projektdialog für eigene Projekte. Beide Pläne stehen
+`?plan=amk` öffnet stattdessen den AMK-Plan, **`?plan=leer`** öffnet
+keinen mitgelieferten Plan: das aktive (sonst erste) Projekt, sonst der Projektdialog für eigene
+Projekte. Beide Pläne stehen
 auch im Dialog unter „Mitgelieferte Pläne".
 
 **Drucken: ein A3 quer je Tag.** Der Knopf **Drucken** im Kopf öffnet
@@ -290,7 +294,7 @@ node tools/verify-edit.mjs    # Bearbeiten: anlegen, tippen, Undo, Konflikte, Pa
 node tools/verify-live.mjs    # Live-Modus mit gestellter Uhr (page.clock)
 node tools/verify-amk.mjs     # AMK-Plan importieren und prüfen
 node tools/verify-print.mjs   # Tagesblätter: Zuschnitt, Filter, Maßstab, PDF
-node tools/verify-klassentreffen.mjs  # V07-Plan + Autostart über die Adresse
+node tools/verify-klassentreffen.mjs  # V07-Plan + Startdialog + Direktlink
 node tools/verify-showablauf.mjs      # Showablauf: Ebene, Bühnen, Live-Kopfzeile, Blatt
 node tools/make-amk.mjs       # amk-singleshow.json aus den PDF-Daten neu bauen
 

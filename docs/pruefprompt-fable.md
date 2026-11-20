@@ -34,7 +34,7 @@ Du prüfst den Bauzeitenplan auf Herz und Nieren. ZUERST NUR LESEN UND AUSPROBIE
     node tools/verify-print.mjs
     node tools/verify-showablauf.mjs
     node tools/verify-sync.mjs
-  `?plan=leer` schaltet den Autostart des mitgelieferten Plans ab.
+  Ohne `?plan=` fragt der Projektdialog; `?plan=<key>` öffnet direkt; `?plan=leer` öffnet keinen mitgelieferten Plan (aktives/erstes Projekt, sonst Dialog).
 
 ## Vorgehen – in getrennten Durchgängen, nicht alles auf einmal
 1. Überblick: Aufbau, Datenfluss (Store → Render), wo der Zustand lebt, welche

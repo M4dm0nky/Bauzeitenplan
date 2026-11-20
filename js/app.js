@@ -98,28 +98,28 @@ const startAnsicht = () => {
 };
 
 // ── Mitgelieferte Pläne ─────────────────────────────────────────────────────
-// Der Plan liegt als JSON neben der App und wird beim Start automatisch geholt.
-// Wer die Adresse aufruft, sieht ihn sofort — kein Import, keine Datei im Anhang.
+// Der Plan liegt als JSON neben der App. `?plan=<key>` holt und öffnet ihn
+// direkt — kein Import, keine Datei im Anhang. Ohne Kennung fragt der
+// Projektdialog (bootLokal).
 //
 // DIE DATEI IM REPO IST DIE WAHRHEIT. Kommt ein neuer Stand (V08, V09 …), wird
-// nur die JSON ausgetauscht und gepusht; jeder Betrachter zieht sie beim nächsten
-// Laden von selbst nach. Erkannt wird das am `exported`-Stempel, den serialize()
-// mitschreibt: ist der in der Datei neuer als der zuletzt geladene, gewinnt die
-// Datei. Sonst bliebe die lokale Kopie ewig stehen und niemand merkte es.
+// nur die JSON ausgetauscht und gepusht; jeder Betrachter bekommt sie beim
+// nächsten Öffnen. Erkannt wird das am `exported`-Stempel, den serialize()
+// mitschreibt: ist der in der Datei neuer als der zuletzt geladene, gilt sie als
+// neuer Stand — trägt die lokale Kopie eigene Änderungen, wird gefragt (openBundled).
 //
 // `?plan=leer` überspringt das und zeigt den Projektdialog — für eigene Projekte
 // und für die Erststart-Prüfungen (verify-edit, verify-live, verify-amk), die
 // genau diesen Dialog brauchen.
-const START = 'klassentreffen';
 const BUNDLED = {
   klassentreffen: { file: 'klassentreffen-festival.json', name: 'Klassentreffen Festival 2026' },
   amk: { file: 'amk-singleshow.json', name: 'AMK Singleshow' },
 };
 
 /**
- * Mitgelieferten Plan öffnen. Die Datei gewinnt, wenn sie neuer ist als die
- * lokale Kopie; sonst wird die lokale geöffnet (die kann Änderungen des
- * Betrachters tragen). Ist die Datei nicht erreichbar — offline, `file://` —
+ * Mitgelieferten Plan öffnen. Ist die Datei neuer als die lokale Kopie und die
+ * lokale unverändert, gewinnt die Datei; weicht die lokale ab, fragt ein Dialog.
+ * Sonst wird die lokale geöffnet (die kann Änderungen des Betrachters tragen). Ist die Datei nicht erreichbar — offline, `file://` —
  * bleibt es bei der lokalen Kopie.
  * @returns {Promise<boolean>} ob der Plan offen ist (false: nicht gefunden oder Wechsel abgebrochen)
  */
@@ -148,6 +148,34 @@ async function openBundled(key) {
   }
 
   if (datei && neuer(datei, lokal)) {
+    // Die Datei ersetzt nur still, was nichts Eigenes trägt. Hat der Betrachter
+    // lokal etwas geändert, geht das mit «Neuen Stand nehmen» verloren — also
+    // fragen. Gleicher Inhalt (nur der Stempel ist neuer) ist kein Verlust.
+    if (lokal && !gleicherPlan(lokal, datei)) {
+      const wahl = await askDialog({
+        title: 'Zwei Fassungen',
+        message: [`Zu «${b.name}» liegt ein neuer Stand vor, und deine lokale Fassung weicht davon ab.`,
+          'Der neue Stand ersetzt die lokale Fassung. Du kannst sie auch behalten oder als Kopie sichern.'],
+        buttons: [
+          { label: 'Meine behalten', value: 'meine' },
+          { label: 'Beide behalten (Kopie)', value: 'beide' },
+          { label: 'Neuen Stand nehmen', value: 'neu', primary: true },
+        ],
+      });
+      if (wahl === 'beide') {
+        const kopie = JSON.parse(JSON.stringify(lokal));
+        kopie.project.id = 'p' + Date.now().toString(36);
+        kopie.project.name = lokal.project.name + ' (lokal vor Update)';
+        delete kopie.project.quelle;      // die Kopie ist kein Planstand der Datei
+        const r = repo.save(kopie);
+        if (!r.ok) { toast(r.error, 'bad', 8000); return false; }
+      } else if (wahl !== 'neu') {
+        // Abbruch (null) wie «Meine behalten», aber ohne Stempel: dann fragt der
+        // nächste Start erneut. Mit Stempel gilt der Stand als gesehen.
+        if (wahl === 'meine') lokal.project.quelle = { ...datei.project.quelle };
+        return await open(lokal);
+      }
+    }
     const offen = await open(datei);
     if (offen && lokal) toast('Neuer Stand geladen: ' + b.name);
     if (offen && hinweis) toast(hinweis, 'bad', 8000);
@@ -184,18 +212,24 @@ async function bootLokal() {
   // Im PocketBase-Modus KEIN Autostart: open() schriebe den mitgelieferten Plan
   // über repo.save() in die Instanz — jeder Anmeldung ein Beispielprojekt.
   // Dort entscheidet die Mitgliedschaft, was jemand sieht, nicht eine Datei.
-  if (wunsch !== 'leer' && await openBundled(wunsch || START)) return;
+  // Direktlink: wer ?plan=<key> aufruft, will genau diesen Plan.
+  if (wunsch && wunsch !== 'leer' && await openBundled(wunsch)) return;
 
+  // Ein Live-Monitor startet nach Stromausfall von selbst: niemand klickt dort
+  // einen Dialog weg, und das zuletzt offene Projekt ist das richtige.
   const activeId = repo.getActive();
-  const plan = activeId && repo.load(activeId);
-  if (plan) { await open(plan); return; }
-
-  const list = repo.list();
-  if (list.length) {
-    const first = repo.load(list[0].id);
-    if (first) { await open(first); return; }
+  const aktiv = activeId && repo.load(activeId);
+  if (lsLies('bzp_live') === '1' && aktiv && await open(aktiv)) return;
+  // `?plan=leer` heißt nur «ohne mitgelieferten Plan» und behält das Verhalten,
+  // an dem die Prüfwerkzeuge beim Neuladen hängen (verify-edit, verify-sync):
+  // aktives, sonst erstes Projekt öffnet; der Dialog kommt, wenn keines da ist.
+  if (wunsch === 'leer') {
+    const erstes = aktiv || (repo.list().length ? repo.load(repo.list()[0].id) : null);
+    if (erstes && await open(erstes)) return;
   }
-  showProjectDialog({ firstRun: true });
+
+  // Sonst entscheidet der Mensch: zuletzt geöffnete, mitgelieferte Pläne, Neu, Import.
+  showProjectDialog({ firstRun: !store });
 }
 
 // Liefert true, wenn das Projekt offen ist, false nach «Abbrechen» im
@@ -1461,10 +1495,13 @@ function showProjectDialog({ firstRun = false }) {
 
   const box = el('div', 'dlg-box');
   box.append(el('h2', 'dlg-h', firstRun ? 'Bauzeitenplan' : 'Projekte'));
-  if (firstRun) box.append(el('p', 'dlg-sub', 'Leg ein Projekt an — aus einer Vorlage oder leer. Alles bleibt in diesem Browser; sichere regelmäßig per Export.'));
+  const list = repo.list();
+  if (firstRun) box.append(el('p', 'dlg-sub', list.length
+    ? 'Öffne ein Projekt, einen mitgelieferten Plan oder leg ein neues an. Alles bleibt in diesem Browser; sichere regelmäßig per Export.'
+    : 'Leg ein Projekt an — aus einer Vorlage oder leer. Alles bleibt in diesem Browser; sichere regelmäßig per Export.'));
 
   // Bestehende Projekte
-  const list = repo.list();
+
   if (list.length) {
     box.append(el('h3', 'dlg-h3', 'Öffnen'));
     const ul = el('div', 'dlg-list');
