@@ -315,9 +315,12 @@ export function createRepo(storage) {
     vergessenRemote(id) {
       const idx = readIndex();
       const e = idx.find((x) => x.id === id);
-      if (!e) return;
+      if (!e) return { ok: false, error: 'Projekt nicht in der Liste.' };
       e.remoteSha = null;
-      try { writeIndex(idx); } catch { /* Index ist nachrangig */ }
+      // Anders als markSynced nicht nachrangig: gelingt es nicht, fragt der
+      // nächste Abgleich dieselbe Frage erneut.
+      try { writeIndex(idx); } catch (err) { return { ok: false, error: speicherFehler(err) }; }
+      return { ok: true };
     },
 
     syncListe() {

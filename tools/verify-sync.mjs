@@ -696,6 +696,44 @@ try {
       finally { await schliesse(A); }
     }
 
+    // ─── 4d. Offenes Projekt löschen scheitert im Repo (offline) ────────────
+    // Der Wechsel in open() kann nicht abbrechen (das zu löschende Projekt wird
+    // nicht mehr gesichert); scheitern kann das Löschen im Daten-Repo. Dann darf
+    // weder das Repo noch das lokale Projekt etwas verlieren, und der nächste
+    // Abgleich darf keinen «Im Daten-Repo gelöscht»-Dialog zeigen.
+    console.log('\nOFFENES PROJEKT: LÖSCHEN IM REPO SCHEITERT');
+    {
+      const fake = neuerFake();
+      const A = await geraet(fake, BASE);
+      try {
+        await start(A); await legeAn(A, 'T1'); await legeAn(A, 'T2');
+        await verbinden(A); await warteZustand(A, 'ok'); await einZu(A);
+        const vor = { puts: fake.puts, deletes: fake.deletes };
+        await A.netz(false);
+        {
+          const p = A.page;
+          await p.locator('#rail-ein').click(); await p.locator('[data-ein="projekt"]').click(); await p.locator('#proj-menu').click();
+          await p.locator('#dlg .dlg-row', { hasText: 'T2' }).locator('.dlg-del').click();
+          await p.locator('.dlg .dlg-act .btn-danger', { hasText: 'Löschen' }).click();
+          await p.waitForTimeout(900);
+        }
+        await check('offline: Repo unverändert (2 Dateien, keine DELETEs/PUTs), beide Projekte lokal da', async () => {
+          const ids = await indexIds(A);
+          return fake.dateien.size === 2 && fake.deletes === vor.deletes && fake.puts === vor.puts && ids.length === 2 ? true
+            : `Fake ${fake.dateien.size}, deletes +${fake.deletes - vor.deletes}, puts +${fake.puts - vor.puts}, Index ${ids.length}`;
+        });
+        await dialogZu(A);
+        await A.netz(true);
+        await ausloesen(A);
+        await check('danach online: kein Dialog «Im Daten-Repo gelöscht» (Nicht-Treffer), Zustand ok', async () => {
+          const r = await warteZustand(A, 'ok');
+          const dlg = await A.page.locator('.dlg', { hasText: 'Im Daten-Repo gelöscht' }).count();
+          return r === true && dlg === 0 && (await indexIds(A)).length === 2 ? true : `${r}, Dialog ${dlg}`;
+        });
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      finally { await schliesse(A); }
+    }
+
     // ─── 4b. Versatz und Projektwechsel ─────────────────────────────────────
     console.log('\nVERSATZ UND PROJEKTWECHSEL');
     {

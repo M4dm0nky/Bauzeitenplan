@@ -651,7 +651,7 @@ async function abgleichenEinmal(k) {
   const l = await sync.list();
   if (!l.ok) return syncScheitert(l);
   let problem = null, abbruch = false;
-  for (const a of abgleich(repo.syncListe(), l.dateien)) {
+  for (const a of abgleich(repo.syncListe().filter((x) => !verworfen.has(x.id)), l.dateien)) {
     const r = await fuehreAus(sync, a);
     if (r && r.ok === false) {
       problem = problem || r;
@@ -734,7 +734,9 @@ async function fuehreAus(sync, a) {
       if (await loescheProjekt(a.id)) toast('«' + name + '» lokal gelöscht', undefined, 6000);
       return { ok: true };
     }
-    repo.vergessenRemote(a.id);
+    // Nur bei Erfolg nachlaufen: sonst käme derselbe Dialog in jedem Durchlauf.
+    const v = repo.vergessenRemote(a.id);
+    if (!v.ok) { toast(v.error || 'Konnte nicht vermerken, dass das Projekt neu hochgeladen werden soll.', 'bad', 8000); return { ok: true }; }
     abgleichNochmal = true;
     return { ok: true };
   }
@@ -1299,24 +1301,31 @@ const verworfen = new Set();
 
 // Löscht lokal. Das OFFENE Projekt wird vorher verlassen (open() sichert das
 // bisherige und fragt bei Fehlschlag); nur wenn der Nutzer den Wechsel abbricht,
-// bleibt alles stehen. Gibt false zurück, wenn nichts gelöscht wurde.
-async function loescheProjekt(id) {
+// bleibt alles stehen. `vorEntfernen` (async, true = weiter) läuft NACH dem
+// Verlassen und VOR dem lokalen Entfernen: der Dialog löscht darin im Daten-Repo,
+// damit ein abgebrochener Wechsel nichts im Repo anrichtet. Gibt false zurück,
+// wenn nichts gelöscht wurde.
+async function loescheProjekt(id, vorEntfernen) {
+  // Während des Löschens kein Abgleich über diese id (der Wechsel startet einen):
+  // die Datei kann im Repo schon weg sein, das Projekt ist aber gewollt gelöscht.
+  verworfen.add(id);
+  const weiter = async () => !vorEntfernen || vorEntfernen();
   if (id === offenId()) {
     const anderes = repo.list().find((x) => x.id !== id);
     const plan = anderes && repo.load(anderes.id);
     if (plan) {
       // Das zu löschende Projekt nicht mehr sichern: open() würde es sonst
       // noch einmal ablegen, bevor entferne() es entfernt.
-      verworfen.add(id);
       if (!(await open(plan))) { verworfen.delete(id); return false; }
     } else {
-      verworfen.add(id);
+      if (!(await weiter())) { verworfen.delete(id); return false; }
       clearTimeout(saveTimer); saveTimer = null;
       entferne(id);
       showProjectDialog({ firstRun: true });
       return true;
     }
   }
+  if (!(await weiter())) { verworfen.delete(id); return false; }
   entferne(id);
   return true;
 }
@@ -1523,8 +1532,7 @@ function showProjectDialog({ firstRun = false }) {
           buttons: [{ label: 'Abbrechen', value: false }, { label: 'Löschen', value: true, danger: true }],
         });
         if (!ok) return;
-        if (zurSync && !(await loescheImDatenRepo(p.id, sha))) return;
-        if (!(await loescheProjekt(p.id))) return;
+        if (!(await loescheProjekt(p.id, () => !zurSync || loescheImDatenRepo(p.id, sha)))) return;
         // Ohne Alternative zeigt loescheProjekt den Erststart-Dialog selbst.
         if (repo.list().length) showProjectDialog({ firstRun: false });
       };

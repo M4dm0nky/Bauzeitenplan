@@ -99,6 +99,14 @@ test('vergessenRemote: remoteSha null, dirty unverändert (Abgleich lädt wieder
   assert.deepEqual(r.syncListe(), [{ id: 'p1', remoteSha: null, dirty: false }]);
 });
 
+test('vergessenRemote: unbekannte id → ok false, Index unverändert', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan());
+  assert.equal(r.vergessenRemote('gibtsnicht').ok, false);
+  assert.equal(r.vergessenRemote('p1').ok, true);
+  assert.equal(r.syncListe().length, 1);
+});
+
 test('Löschen entfernt Projekt und Indexeintrag', () => {
   const r = createRepo(fakeStorage());
   r.save(plan());
