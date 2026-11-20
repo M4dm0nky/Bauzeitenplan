@@ -121,9 +121,12 @@ const BUNDLED = {
  * lokale unverändert, gewinnt die Datei; weicht die lokale ab, fragt ein Dialog.
  * Sonst wird die lokale geöffnet (die kann Änderungen des Betrachters tragen). Ist die Datei nicht erreichbar — offline, `file://` —
  * bleibt es bei der lokalen Kopie.
+ * `still` (Live-Monitor): nie ein Dialog. Lokal unverändert → neuer Stand still;
+ * lokal anders → lokale Fassung bleibt (ohne Stempel, der nächste normale Start
+ * fragt) und ein Hinweis erscheint.
  * @returns {Promise<boolean>} ob der Plan offen ist (false: nicht gefunden oder Wechsel abgebrochen)
  */
-async function openBundled(key) {
+async function openBundled(key, { still = false } = {}) {
   const b = BUNDLED[key];
   if (!b) { toast('Unbekannter Plan: ' + key, 'bad', 6000); return false; }
   const da = repo.list().find((p) => p.name === b.name);
@@ -151,6 +154,12 @@ async function openBundled(key) {
     // Die Datei ersetzt nur still, was nichts Eigenes trägt. Hat der Betrachter
     // lokal etwas geändert, geht das mit «Neuen Stand nehmen» verloren — also
     // fragen. Gleicher Inhalt (nur der Stempel ist neuer) ist kein Verlust.
+    if (lokal && !gleicherPlan(lokal, datei) && still) {
+      // Am Monitor klickt niemand einen Dialog weg: lokal behalten, ohne Stempel.
+      const offen = await open(lokal);
+      if (offen) toast('Neuer Planstand liegt vor — lokale Fassung behalten', 'bad', 8000);
+      return offen;
+    }
     if (lokal && !gleicherPlan(lokal, datei)) {
       const wahl = await askDialog({
         title: 'Zwei Fassungen',
@@ -190,6 +199,13 @@ async function openBundled(key) {
   return false;
 }
 
+// Schlüssel des mitgelieferten Plans, aus dem dieses Projekt stammt (sonst null).
+function bundledKey(plan) {
+  const datei = plan.project.quelle && plan.project.quelle.datei;
+  const e = Object.entries(BUNDLED).find(([, b]) => b.file === datei && b.name === plan.project.name);
+  return e ? e[0] : null;
+}
+
 // Ist die Datei neuer als die lokale Kopie? Ohne lokale Kopie: ja. Ohne Stempel
 // auf einer der beiden Seiten: ja — dann ist die Datei die verlässlichere Quelle.
 function neuer(datei, lokal) {
@@ -210,13 +226,18 @@ async function boot() {
 async function bootLokal() {
   const wunsch = new URLSearchParams(location.search).get('plan');
   // Direktlink: wer ?plan=<key> aufruft, will genau diesen Plan.
-  if (wunsch && wunsch !== 'leer' && await openBundled(wunsch)) return;
+  const live = lsLies('bzp_live') === '1';
+  if (wunsch && wunsch !== 'leer' && await openBundled(wunsch, { still: live })) return;
 
   // Ein Live-Monitor startet nach Stromausfall von selbst: niemand klickt dort
-  // einen Dialog weg, und das zuletzt offene Projekt ist das richtige.
+  // einen Dialog weg, und das zuletzt offene Projekt ist das richtige. Stammt es
+  // aus einer mitgelieferten Datei, kommt ein neuer Planstand trotzdem still an.
   const activeId = repo.getActive();
   const aktiv = activeId && repo.load(activeId);
-  if (lsLies('bzp_live') === '1' && aktiv && await open(aktiv)) return;
+  if (live && aktiv) {
+    const key = bundledKey(aktiv);
+    if (key ? await openBundled(key, { still: true }) : await open(aktiv)) return;
+  }
   // `?plan=leer` heißt nur «ohne mitgelieferten Plan» und behält das Verhalten,
   // an dem die Prüfwerkzeuge beim Neuladen hängen (verify-edit, verify-sync):
   // aktives, sonst erstes Projekt öffnet; der Dialog kommt, wenn keines da ist.
@@ -1609,7 +1630,14 @@ function showProjectDialog({ firstRun = false }) {
       const b = el('button', 'dlg-open');
       b.append(el('span', 'dlg-open-n', p.name));
       b.append(el('span', 'dlg-open-m', (p.venue ? p.venue + ' · ' : '') + 'geändert ' + new Date(p.modified).toLocaleString('de-DE')));
-      b.onclick = async () => { const pl = repo.load(p.id); if (pl && await open(pl)) close(); };
+      b.onclick = async () => {
+        const pl = repo.load(p.id);
+        if (!pl) return;
+        // Ein Projekt aus einer mitgelieferten Datei geht durch dieselbe Prüfung
+        // wie der Direktlink, sonst bliebe ein neuer Planstand für immer unbemerkt.
+        const key = bundledKey(pl);
+        if (key ? await openBundled(key) : await open(pl)) close();
+      };
       const del = el('button', 'dlg-del', '×');
       del.title = 'Projekt löschen';
       del.onclick = async () => {

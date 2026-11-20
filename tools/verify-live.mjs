@@ -425,6 +425,52 @@ await check('Live ausschalten räumt die Marken weg', async () => {
   return n === 0 ? true : `${n} Marken bleiben stehen`;
 });
 
+console.log('\nLIVE-MONITOR UND NEUER PLANSTAND IN DER DATEI');
+// Am Monitor klickt niemand einen Dialog weg: neuer Planstand kommt still an,
+// hat jemand lokal etwas geändert, bleibt die lokale Fassung (Toast statt Dialog).
+async function liveMitAelterem(lokalGeaendert, adresse) {
+  const c = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const p = await c.newPage();
+  await p.goto(BASE + '/index.html?plan=klassentreffen');
+  await p.waitForTimeout(1500);
+  await p.evaluate((geaendert) => {
+    const q = JSON.parse(localStorage.getItem('bzp_projects'))[0];
+    const plan = JSON.parse(localStorage.getItem('bzp_p_' + q.id));
+    // Unverändert: nur der Stempel altert, der Inhalt gleicht der Datei.
+    if (geaendert) plan.tasks[0].title = 'LOKAL GEÄNDERT';
+    plan.project.quelle = { ...(plan.project.quelle || {}), exported: '2000-01-01T00:00:00.000Z' };
+    localStorage.setItem('bzp_p_' + q.id, JSON.stringify(plan));
+    localStorage.setItem('bzp_live', '1');
+  }, lokalGeaendert);
+  await p.goto(BASE + adresse);
+  await p.waitForTimeout(1500);
+  const r = {
+    dialog: await p.locator('.dlg h2', { hasText: 'Zwei Fassungen' }).count(),
+    titel: await p.evaluate(() => { const q = JSON.parse(localStorage.getItem('bzp_projects'))[0]; return JSON.parse(localStorage.getItem('bzp_p_' + q.id)).tasks[0].title; }),
+    stempel: await p.evaluate(() => { const q = JSON.parse(localStorage.getItem('bzp_projects'))[0]; return JSON.parse(localStorage.getItem('bzp_p_' + q.id)).project.quelle.exported; }),
+    toast: (await p.locator('#toast').textContent()) || '',
+    offen: (await p.locator('#proj-name').textContent()) || '',
+  };
+  await c.close();
+  return r;
+}
+for (const adresse of ['/index.html', '/index.html?plan=klassentreffen']) {
+  const wie = adresse.includes('plan=') ? '?plan= bei Live an' : 'nackte Adresse bei Live an';
+  const u = await liveMitAelterem(false, adresse);
+  await check(wie + ', lokal unverändert + ältere Fassung: neuer Stand, kein Dialog', async () => {
+    if (u.dialog) return 'Dialog';
+    if (!u.offen.includes('Klassentreffen')) return 'nicht offen: ' + u.offen;
+    return /behalten/.test(u.toast) ? 'Hinweis «behalten» trotz unverändert' : true;
+  });
+  const g = await liveMitAelterem(true, adresse);
+  await check(wie + ', lokal geändert: kein Dialog, lokaler Stand bleibt, Toast', async () => {
+    if (g.dialog) return 'Dialog';
+    if (g.titel !== 'LOKAL GEÄNDERT') return 'Titel: ' + g.titel;
+    if (g.stempel !== '2000-01-01T00:00:00.000Z') return 'Stempel wurde nachgezogen';
+    return /lokale Fassung behalten/.test(g.toast) ? true : 'Toast: «' + g.toast + '»';
+  });
+}
+
 console.log('\nDIE LINIE ZEIGT DIE PROJEKT-ZEITZONE, NICHT DIE DES BETRACHTERS');
 // nowInZone() rechnet «jetzt» in die Projekt-Zeitzone um. Scheitert das Parsen,
 // fällt es stumm auf die LOKALE Zeit zurück — und niemand sieht es, weil das

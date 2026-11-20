@@ -325,6 +325,41 @@ console.log('\nNEUER PLANSTAND IN DER DATEI');
   await c3.close();
 }
 
+// Die Projektzeile unter «Öffnen» geht durch dieselbe Prüfung wie der Direktlink:
+// sonst bliebe ein neuer Planstand für jeden unbemerkt, der sein Projekt dort öffnet.
+console.log('\nPROJEKTZEILE: PLANSTAND WIRD GEPRÜFT');
+{
+  const zeile = async (geaendert) => {
+    const c = await b.newContext({ viewport: { width: 1600, height: 950 } });
+    const pg = await c.newPage();
+    await pg.goto(BASEURL + '?plan=klassentreffen');
+    await pg.waitForTimeout(1500);
+    await pg.evaluate((g) => {
+      const q = JSON.parse(localStorage.getItem('bzp_projects'))[0];
+      const plan = JSON.parse(localStorage.getItem('bzp_p_' + q.id));
+      if (g) plan.tasks[0].title = 'LOKAL GEÄNDERT';
+      plan.project.quelle = { ...(plan.project.quelle || {}), exported: '2000-01-01T00:00:00.000Z' };
+      localStorage.setItem('bzp_p_' + q.id, JSON.stringify(plan));
+    }, geaendert);
+    await pg.goto(BASEURL);
+    await pg.waitForTimeout(1200);
+    await pg.locator('#dlg .dlg-open', { hasText: 'geändert' }).first().click();
+    await pg.waitForTimeout(1500);
+    const r = {
+      zwei: await pg.locator('.dlg h2', { hasText: 'Zwei Fassungen' }).count(),
+      offen: (await pg.locator('#proj-name').textContent()) || '',
+    };
+    await c.close();
+    return r;
+  };
+  const g = await zeile(true);
+  await check('Projektzeile, lokal geändert + neuere Datei: Dialog «Zwei Fassungen»', async () =>
+    g.zwei ? true : 'kein Dialog, geöffnet: ' + g.offen);
+  const u = await zeile(false);
+  await check('Projektzeile, lokal unverändert + ältere Fassung: öffnet ohne Dialog', async () =>
+    !u.zwei && u.offen.includes('Klassentreffen') ? true : 'Dialog: ' + u.zwei + ', offen: ' + u.offen);
+}
+
 // Start an einem Tag OHNE Vorgänge mitten im Plan: der Plan öffnet nicht auf der
 // leeren Jetzt-Linie, sondern am nächsten Tag mit Vorgängen. Die Uhr steht auf
 // dem 27.08.; im Original liegt an jedem der 14 Tage etwas, also wird der 27.
