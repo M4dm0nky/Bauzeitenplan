@@ -163,6 +163,26 @@ await check('⌘Z im Titelfeld nimmt keinen Store-Befehl zurück (Verschiebung b
   await page.waitForTimeout(300);
   return danach === nach ? true : 'Verschiebung zurückgenommen: ' + danach + ' statt ' + nach;
 });
+await check('⌘Z nach Gewerk-Wechsel in der Auswahlliste (Fokus bleibt im select) nimmt den Wechsel zurück', async () => {
+  // Nur echte Texteingabe gehört dem Browser; ein select hat dort kein Undo.
+  const id = await page.locator('.tb-r:has(.c-gw select)').first().getAttribute('data-id');
+  const zeile = () => page.locator(`.tb-r[data-id="${id}"] .c-gw select`);
+  const sel = zeile();
+  const vorher = await sel.inputValue();
+  const anders = await sel.evaluate((s, v) => [...s.options].map((o) => o.value).find((x) => x !== v), vorher);
+  if (!anders) return 'kein zweites Gewerk zur Auswahl';
+  await sel.selectOption(anders);
+  await page.waitForTimeout(500);
+  const neu = zeile();
+  if ((await neu.inputValue()) !== anders) return 'Wechsel kam nicht an';
+  await neu.focus();
+  const fokus = await page.evaluate(() => document.activeElement && document.activeElement.tagName);
+  if (fokus !== 'SELECT') return 'Voraussetzung fehlt: Fokus liegt auf ' + fokus;
+  await page.keyboard.press('Meta+z');
+  await page.waitForTimeout(500);
+  const danach = await zeile().inputValue();
+  return danach === vorher ? true : `Gewerk ${vorher} → ${anders} → ${danach} (⌘Z im select ohne Wirkung)`;
+});
 await check('neuen Vorgang anlegen', async () => {
   const before = await page.locator('.tb-r').count();
   await page.locator('.tb-add').first().click();
@@ -307,6 +327,37 @@ await check('Plan verschieben: Tage 7 → Vorschau, Balken und Phase +7 Kalender
   if ((await bar()) !== vor) return '⌘Z stellt den Balken nicht zurück';
   const phZu = await phase();
   return phZu === phVor ? true : `Phase nach ⌘Z ${phZu}`;
+});
+await check('Plan verschieben: Feld «Stunden:Minuten» nimmt h:mm und reine Minuten, Vorschau und Sperre rechnen gleich', async () => {
+  await page.locator('#rail-ein').click();
+  await page.locator('[data-ein="projekt"]').click();
+  await page.locator('#plan-verschieben').click();
+  const ok = page.locator('.dlg-box .btn-p', { hasText: 'Verschieben' });
+  const min = page.locator('.dlg-box .sv-min');
+  if ((await min.getAttribute('type')) !== 'text') return 'Feld ist kein Textfeld (Doppelpunkt unmöglich)';
+  if (!(await page.locator('.dlg-box', { hasText: 'Stunden:Minuten' }).count())) return 'Beschriftung «Stunden:Minuten» fehlt';
+  const vor = async (w) => { await min.fill(w); return (await page.locator('.dlg-box .sv-vorschau').textContent()).trim(); };
+  const uhr = (v) => { const m = v.match(/(\d\d):(\d\d)$/); return m ? +m[1] * 60 + +m[2] : null; };
+  const p30 = await vor('0:30'), pm30 = await vor('30');
+  if (p30 !== pm30) return `«0:30» «${p30}» ≠ «30» «${pm30}»`;
+  if (await ok.isDisabled()) return '0:30 gesperrt';
+  if ((await vor('1:30')) !== (await vor('90'))) return '1:30 und 90 rechnen verschieden';
+  const pn = await vor('-30');
+  if ((await vor('-0:30')) !== pn) return '-0:30 und -30 rechnen verschieden';
+  if (uhr(p30) === null || uhr(pn) === null) return `keine Uhrzeit in der Vorschau: «${p30}» / «${pn}»`;
+  if ((((uhr(p30) - uhr(pn)) % 1440) + 1440) % 1440 !== 60) return `+30 und −30 liegen nicht 60 Minuten auseinander: «${p30}» / «${pn}»`;
+  for (const schlecht of ['1:75', '1:5', 'abc', '1:30:00', ':30']) {
+    await min.fill(schlecht);
+    if (!(await ok.isDisabled())) return `«${schlecht}» nicht gesperrt`;
+  }
+  await min.fill('-30');
+  await ok.click();
+  await page.waitForTimeout(300);
+  const toast = await page.locator('#toast').textContent();
+  await page.locator('#ein-zu').click();
+  await undoOhneFeld();
+  await page.waitForTimeout(300);
+  return /30 Minuten/.test(toast) && /−/.test(toast) ? true : 'Hinweis «' + toast + '»';
 });
 await check('Plan verschieben: Escape schließt nur den Dialog, Einrichten bleibt; Riesenwert sperrt den Knopf ohne NaN', async () => {
   await page.locator('#rail-ein').click();

@@ -97,6 +97,10 @@ const startAnsicht = () => {
   return 'bau';
 };
 
+// Eingabetypen, in denen ⌘Z dem Browser gehört (Tastatur-Undo im Feld).
+const TEXT_EINGABEN = new Set(['text', 'search', 'url', 'tel', 'email', 'password', 'number',
+  'date', 'time', 'datetime-local', 'month', 'week']);
+
 // ── Mitgelieferte Pläne ─────────────────────────────────────────────────────
 // Der Plan liegt als JSON neben der App. `?plan=<key>` holt und öffnet ihn
 // direkt — kein Import, keine Datei im Anhang. Ohne Kennung fragt der
@@ -498,7 +502,12 @@ function mount() {
     const mod = e.metaKey || e.ctrlKey;
     // ⌘Z in einem Feld gehört dem Browser; sonst nähme es den letzten Store-Befehl
     // zurück und würfe die Eingabe weg.
-    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]') && e.key.toLowerCase() === 'z') return;
+    // Nur echte Texteingabe: in select, Checkbox und Co. hat der Browser kein Undo,
+    // dort soll ⌘Z weiter den Store-Befehl zurücknehmen (Tastaturbedienung der Tabelle).
+    const ziel = e.target.closest ? e.target : null;
+    const eingabe = ziel && (ziel.closest('textarea, [contenteditable]:not([contenteditable="false"])')
+      || (ziel.closest('input') && TEXT_EINGABEN.has((ziel.closest('input').type || 'text').toLowerCase())));
+    if (eingabe && e.key.toLowerCase() === 'z') return;
     if (!mod) return;
     if (e.key.toLowerCase() === 'z') {
       e.preventDefault();
@@ -1832,17 +1841,20 @@ function showShiftDialog() {
   box.append(el('p', 'dlg-sub', 'Verschiebt alle Vorgänge, Phasen und den Projektrahmen. Negative Werte ziehen vor.'));
 
   const form = el('div', 'dlg-form');
-  const feld = (label, cls) => {
+  const feld = (label, cls, text) => {
     const w = el('label', 'dlg-f');
     w.append(el('span', '', label));
     const i = el('input', cls);
-    i.type = 'number'; i.step = '1'; i.value = '0';
+    // Stunden:Minuten braucht einen Doppelpunkt, den ein number-Feld nicht trägt.
+    if (text) { i.type = 'text'; i.setAttribute('inputmode', 'numeric'); i.placeholder = 'h:mm oder Minuten'; }
+    else { i.type = 'number'; i.step = '1'; }
+    i.value = '0';
     w.append(i);
     form.append(w);
     return i;
   };
   const tageI = feld('Tage', 'sv-tage');
-  const minI = feld('Minuten', 'sv-min');
+  const minI = feld('Stunden:Minuten', 'sv-min', true);
   box.append(form);
   const vorschau = el('p', 'dlg-sub sv-vorschau');
   box.append(vorschau);
@@ -1861,8 +1873,17 @@ function showShiftDialog() {
     const n = Number(i.value.trim());
     return Math.abs(n) <= max ? n : null;
   };
+  // Stunden:Minuten: «h:mm», «-h:mm» oder reine Minuten («90», «-30»); in Minuten
+  // umgerechnet, der Store bleibt bei {tage, minuten}. Minutenteil immer zweistellig.
+  const hm = (i, max) => {
+    const w = i.value.trim();
+    const m = /^(-?)(\d+):([0-5]\d)$/.exec(w);
+    if (!m) return zahl(i, max);
+    const n = (m[1] ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3]));
+    return Math.abs(n) <= max ? n : null;
+  };
   const aktualisiere = () => {
-    const tage = zahl(tageI, SHIFT_MAX_TAGE), minuten = zahl(minI, SHIFT_MAX_MIN);
+    const tage = zahl(tageI, SHIFT_MAX_TAGE), minuten = hm(minI, SHIFT_MAX_MIN);
     const gueltig = tage !== null && minuten !== null && (tage !== 0 || minuten !== 0);
     ok.disabled = !gueltig;
     const S = store.state;
@@ -1878,7 +1899,7 @@ function showShiftDialog() {
   const finish = () => { document.removeEventListener('keydown', onKey); dlg.remove(); };
   const geben = () => {
     if (ok.disabled) return;
-    const tage = zahl(tageI, SHIFT_MAX_TAGE), minuten = zahl(minI, SHIFT_MAX_MIN);
+    const tage = zahl(tageI, SHIFT_MAX_TAGE), minuten = hm(minI, SHIFT_MAX_MIN);
     const r = apply({ type: 'shiftPlan', tage, minuten });
     if (r && r.ok === false) return;     // apply() hat den Grund schon gezeigt; Fenster bleibt für die Korrektur
     finish();
