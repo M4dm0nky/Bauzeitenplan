@@ -3,7 +3,7 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
-## Unveröffentlicht
+## 0.19.0 — 2026-11-20
 
 **Termine erst, wenn man sie weiß — und Phasen mit Funktion.**
 
