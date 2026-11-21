@@ -131,6 +131,14 @@ export function bedarfsRaster(tasks, resList, { kind, von, bis, schritt = 60 } =
     while (i < n - 1 && grenzen[i + 1] <= m) i++;
     return i;
   };
+  // Scheibe des (exklusiven) Endes m: endet ein Vorgang genau auf einer Grenze, gehört er
+  // noch zur Scheibe davor. Ein Abzug wie `m - 1e-9` wirkt bei Epochenminuten (~3e7) nicht
+  // (Gleitkomma-Schritt ~3,7e-9), daher ein echtes «kleiner als».
+  const scheibeBis = (m) => {
+    let i = 0;
+    while (i < n - 1 && grenzen[i + 1] < m) i++;
+    return i;
+  };
   const liste = kind ? resList.filter((r) => r.kind === kind) : resList;
   const out = liste.map((r) => ({
     rid: r.id, label: r.label,
@@ -148,7 +156,7 @@ export function bedarfsRaster(tasks, resList, { kind, von, bis, schritt = 60 } =
       if (b <= a) continue;
       const i0 = grenzen ? scheibe(a) : Math.max(0, Math.floor((a - von) / schritt));
       // Ende exklusiv: b selbst gehört noch nicht in die Scheibe
-      const i1 = grenzen ? scheibe(b - 1e-9) : Math.min(n - 1, Math.ceil((b - von) / schritt) - 1);
+      const i1 = grenzen ? scheibeBis(b) : Math.min(n - 1, Math.ceil((b - von) / schritt) - 1);
       for (let i = i0; i <= i1; i++) {
         if (t.bereitstellung) row.slots[i].verfuegbar += z.n;
         else row.slots[i].bedarf += z.n;

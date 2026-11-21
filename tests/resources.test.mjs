@@ -149,6 +149,19 @@ test('rasterGrenzen mit «tag»: gleiche Uhrzeit am Folgetag, 24.→25.10. = 150
   assert.equal(g[1] - g[0], 1500);   // 24.→25.10. überspannt die Umstellung (03:00 → 02:00)
   assert.equal(g[2] - g[1], 1440);
 });
+test('rasterGrenzen: von === bis → nur [von]; Zahl-Schritt 60 = von + i*60', () => {
+  const v = toMin('2026-10-24T08:00');
+  assert.deepEqual(rasterGrenzen(v, v, 'tag'), [v]);
+  assert.deepEqual(rasterGrenzen(v, v + 180, 60), [v, v + 60, v + 120, v + 180]);
+});
+for (const [name, bereit] of [['Bedarf', false], ['Bereitstellung', true]]) {
+  test('bedarfsRaster «tag»: ' + name + ', der genau auf der Tagesgrenze endet, zählt nicht im Folgetag', () => {
+    const t = { id: 't', start: '2026-10-24T10:00', end: '2026-10-25T00:00', res: [{ rid: 'r1', n: 2 }], ...(bereit ? { bereitstellung: true } : {}) };
+    const [row] = bedarfsRaster([t], [{ id: 'r1', label: 'R', kind: 'personal' }],
+      { kind: 'personal', von: toMin('2026-10-24T00:00'), bis: toMin('2026-10-28T00:00'), schritt: 'tag' });
+    assert.deepEqual(row.slots.map((s) => (bereit ? s.verfuegbar : s.bedarf)), [2, 0, 0, 0]);
+  });
+}
 test('bedarfsRaster «tag»: Bedarf um 23:30 am 26.10. landet in Scheibe 2, nicht 3', () => {
   const t = { id: 't', start: '2026-10-26T23:30', end: '2026-10-26T23:45', res: [{ rid: 'r1', n: 2 }] };
   const [row] = bedarfsRaster([t], [{ id: 'r1', label: 'R', kind: 'personal' }],
