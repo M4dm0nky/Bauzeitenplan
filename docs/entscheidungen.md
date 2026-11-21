@@ -984,8 +984,8 @@ hochladen»), und das offene Projekt wird erst nach dem Wechsel gelöscht.
 
 **Warum zwei Tabs gefragt werden:** Zwei Tabs auf demselben Projekt überschrieben sich
 gegenseitig. Ändert ein anderer Tab den Plan, übernimmt der offene Tab den Stand, wenn
-er selbst nichts Ungesichertes hat. Sonst fragt er («Übernehmen», «Meine behalten»,
-«Kopie»). Abbrechen heißt «Meine behalten», und das automatische Speichern pausiert
+er selbst nichts Ungesichertes hat. Sonst fragt er («Meine behalten», «Die aus dem
+anderen Tab nehmen», «Beide behalten (Kopie)»). Abbrechen heißt «Meine behalten», und das automatische Speichern pausiert
 während der Frage, damit nichts im Hintergrund überschrieben wird.
 
 **Warum «Plan verschieben» über den Kalender rechnet:** Tage zu addieren ging als

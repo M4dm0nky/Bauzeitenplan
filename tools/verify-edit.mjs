@@ -37,6 +37,7 @@ page.on('pageerror', (e) => errors.push('JS: ' + e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
 let problems = 0;
+let skipped = 0;   // ehrlich zählen: «bestanden» heißt nicht «alles geprüft»
 // ⌘Z in einem fokussierten Feld gehört dem Browser (Fund 11). Wer den Store-
 // Undo prüft, löst vorher den Fokus, sonst greift der Guard in app.js.
 const undoOhneFeld = async (pg = page) => {
@@ -1805,7 +1806,7 @@ console.log('\nTOUCH: VERKNÜPFEN-GRIFF NUR AM AUSGEWÄHLTEN BALKEN (Handy 390×
   // Firefox kennt hasTouch/isMobile nicht — ohne sie greift `pointer: coarse`
   // nicht. Darum Chromium.
   const chromExe = chromiumExe();
-  if (!chromExe) console.log('  – übersprungen: Chromium nicht installiert (npx playwright install chromium).');
+  if (!chromExe) { skipped++; console.log('  – übersprungen: Chromium nicht installiert (npx playwright install chromium).'); }
   else {
     const cb = await chromium.launch({ executablePath: chromExe });
     const ct = await cb.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -1826,6 +1827,22 @@ console.log('\nTOUCH: VERKNÜPFEN-GRIFF NUR AM AUSGEWÄHLTEN BALKEN (Handy 390×
         const v = await sichtbar();
         return v.length === 0 ? true : v.length + ' Griffe sichtbar';
       });
+      await check('unsichtbare Griffe fangen auf Touch keine Fingertipps (Treffer am Kreis ist nicht der Griff)', async () => {
+        const r = await pt.evaluate(() => {
+          let geprueft = 0; const faenger = [];
+          for (const h of document.querySelectorAll('.bz-link:not(.is-sel)')) {
+            const b = h.getBoundingClientRect();
+            const x = b.left + (h.classList.contains('bz-link-ms') ? 9 : 0) + 12, y = b.top;
+            if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
+            geprueft++;
+            const hit = document.elementFromPoint(x, y);
+            if (hit && hit.closest('.bz-link')) faenger.push(h.dataset.linkFrom);
+          }
+          return { geprueft, faenger };
+        });
+        if (r.geprueft < 1) return 'Voraussetzung: nur ' + r.geprueft + ' Griffe im Bild geprüft';
+        return r.faenger.length === 0 ? true : r.faenger.length + ' unsichtbare Griffe fangen Tipps';
+      });
       await check('Antippen von «Podest» zeigt genau EINEN Griff, den von «Podest»', async () => {
         const bar = pt.locator('.bz-bar', { hasText: 'Podest' }).first();
         await bar.scrollIntoViewIfNeeded();
@@ -1837,26 +1854,39 @@ console.log('\nTOUCH: VERKNÜPFEN-GRIFF NUR AM AUSGEWÄHLTEN BALKEN (Handy 390×
       });
       await check('Beschriftung eines Balkens wird von keinem sichtbaren Griff überdeckt', async () => {
         const r = await pt.evaluate(() => {
-          const sich = [...document.querySelectorAll('.bz-link')].filter((h) => getComputedStyle(h).opacity !== '0');
+          // Sichtbar = weder visibility:hidden noch opacity:0 (so wie es der Finger sieht).
+          const sich = [...document.querySelectorAll('.bz-link')].filter((h) => {
+            const c = getComputedStyle(h);
+            return c.visibility !== 'hidden' && c.opacity !== '0';
+          });
+          // Der Kreis ist das ::after: Box aus seinen echten berechneten Werten
+          // (left, top, Größe + Polster, translate), nicht aus einer festen Annahme.
           const kreise = sich.map((h) => {
             const b = h.getBoundingClientRect();
             const a = getComputedStyle(h, '::after');
-            // Sichtbarer Kreis: ::after beginnt am Balkenende (left: 100%), 10 px + 2×7 px Polster.
-            return { l: b.left, r: b.left + 24, t: b.top - 12, b: b.top + 12, id: h.dataset.linkFrom };
+            const m = new DOMMatrix(a.transform === 'none' ? undefined : a.transform);
+            const pad = parseFloat(a.paddingLeft) || 0;
+            const w = parseFloat(a.width) + 2 * pad, hh = parseFloat(a.height) + 2 * pad;
+            const l = b.left + parseFloat(a.left) + m.e, t = b.top + parseFloat(a.top) + m.f;
+            return { l, r: l + w, t, b: t + hh, id: h.dataset.linkFrom };
           });
           const out = [];
+          let beschriftungen = 0;
           for (const t of document.querySelectorAll('.bz-bar-t')) {
             const q = t.getBoundingClientRect();
             if (!q.width || !q.height) continue;
+            beschriftungen++;
             const bar = t.closest('[data-task]');
             for (const k of kreise) {
-              if (bar && bar.dataset.task === k.id) continue; // eigener Griff liegt neben dem Balken
+              if (bar && bar.dataset.task === k.id) continue; // der eigene Griff liegt neben dem Balken
               if (q.left < k.r && q.right > k.l && q.top < k.b && q.bottom > k.t) out.push(t.textContent.trim());
             }
           }
-          return out;
+          return { out, griffe: kreise.length, beschriftungen };
         });
-        return r.length === 0 ? true : 'überdeckt: ' + r.join(', ');
+        if (r.griffe !== 1) return 'Voraussetzung: ' + r.griffe + ' sichtbare Griffe statt 1';
+        if (r.beschriftungen < 2) return 'Voraussetzung: keine Beschriftungen zum Vergleich';
+        return r.out.length === 0 ? true : 'überdeckt: ' + r.out.join(', ');
       });
       await pt.screenshot({ path: join(here, 'shots', 'touch-griff.png') });
       await check('Panel schließen hebt die Auswahl auf — kein Griff mehr sichtbar', async () => {
@@ -2730,5 +2760,5 @@ else console.log('\n  ✓ keine JS-Fehler');
 
 await browser.close();
 server.close();
-console.log(problems ? `\n${problems} Problem(e).\n` : '\nAlle Prüfungen bestanden.\n');
+console.log(problems ? `\n${problems} Problem(e).\n` : `\nAlle Prüfungen bestanden${skipped ? `, ${skipped} übersprungen` : ''}.\n`);
 process.exit(problems ? 1 : 0);

@@ -139,11 +139,15 @@ Projektdialog (zuletzt geöffnete Projekte, mitgelieferte Pläne, Neu, Import); 
 ein Live-Monitor, bei dem Live an war, öffnet das aktive Projekt ohne Dialog.
 
 **Neuer Planstand? Nur die JSON austauschen.** Kommt V08, V09 …, wird die Datei
-neu gebaut und gepusht — jeder Betrachter bekommt sie beim nächsten Öffnen.
+neu gebaut und gepusht — jeder Betrachter bekommt sie beim nächsten Öffnen des
+Plans über den Direktlink, «Mitgelieferte Pläne» oder seine Projektzeile; am
+Live-Monitor kommt sie still an.
 Erkannt wird das am `exported`-Stempel: ist der in der Datei neuer als der zuletzt
 geladene und hat die lokale Fassung eigene Änderungen, fragt die App («Zwei
 Fassungen»: neuen Stand nehmen, meine behalten, beide behalten als Kopie). Ohne
-eigene Änderungen oder bei gleichem Stempel passiert nichts Überraschendes.
+eigene Änderungen oder bei gleichem Stempel passiert nichts Überraschendes. Am
+Live-Monitor (Live an) fragt sie nie: Ohne eigene Änderungen kommt der neue Stand
+still, mit eigenen bleibt die lokale Fassung und ein Hinweis erscheint.
 
 ```bash
 node tools/make-klassentreffen.mjs   # JSON aus der Quelle neu bauen
@@ -177,8 +181,10 @@ Rechner — und sie sind weg. Es gibt kein Backend und keine Anmeldung: der
 Speicherort) nicht mehr vorhanden, fragt die App, bevor sie es lokal löscht: «Lokal
 löschen» oder «Behalten und neu hochladen». Ist das Repo selbst nicht erreichbar,
 wird nichts gelöscht. Öffnest du denselben Plan in zwei Tabs, fragt der andere Tab
-bei einer Änderung, wenn er selbst Ungesichertes hat («Übernehmen», «Meine behalten»,
-«Kopie»); Abbrechen behält deinen Stand.
+bei einer Änderung, wenn er selbst Ungesichertes hat («Meine behalten», «Die aus dem
+anderen Tab nehmen», «Beide behalten (Kopie)»); Abbrechen behält deinen Stand. Nach
+der Wahl gilt der Stand des anderen Tabs von jetzt, auch wenn er während der Frage
+weitergespeichert hat.
 
 **Live-Modus** für den Aufbau: Zeitlinie läuft mit, Ansicht folgt, laufende
 Vorgänge leuchten, Verzug wird benannt («sollte seit 20m laufen»). Der Status
@@ -244,8 +250,8 @@ du weiter mit „+ Neu…" im Auswahlfeld an, mitten im Tippen; Einrichten ist d
 Weg zum Aufräumen danach.
 
 **Plan verschieben:** Einrichten → Projekt → «Plan verschieben…». Der ganze Plan
-(Vorgänge, Phasen, Rahmen) rutscht um Tage und Stunden:Minuten, negative Werte ziehen
-vor. Die Tage zählen über den Kalender, die Uhrzeit bleibt, auch über die Zeitumstellung.
+(Vorgänge, Phasen, Rahmen) rutscht um Tage und Stunden:Minuten (`1:30`, `-0:30` oder reine Minuten wie `90`),
+negative Werte ziehen vor. Die Tage zählen über den Kalender, die Uhrzeit bleibt, auch über die Zeitumstellung.
 Eine Vorschau zeigt den neuen Aufbaubeginn; Grenzen sind 36 500 Tage und 10 080 Minuten.
 Ein `⌘Z` nimmt das Verschieben zurück.
 

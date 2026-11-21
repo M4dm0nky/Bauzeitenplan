@@ -320,6 +320,13 @@ body { margin: 0; }
    Beschriftung schmaler Balken — darum nur am ausgewählten Vorgang (Antippen wählt
    aus), auf jedem Gerät; mit Maus ist es der Griff des geöffneten Vorgangs. */
 .bz-link.is-sel { opacity: 1; }
+/* Auf Touch fängt der unsichtbare Kreis (opacity 0) sonst weiter Fingertipps 24 px
+   neben dem Balkenende und startet das Verknüpfen statt den Nachbarn zu treffen.
+   visibility:hidden nimmt ihn aus der Trefferprüfung; der gewählte Balken behält ihn.
+   is-on (Hover/Fokus) reicht hier nicht, sonst bliebe der Kreis nach Fokus tippbar. */
+@media (pointer: coarse) {
+  .bz-link:not(.is-sel) { visibility: hidden; }
+}
 /* Während des Ziehens sind die übrigen Griffe nur Störung. */
 .bz[data-linking] .bz-link { opacity: 0; }
 /* Beim Balken-Ziehen bliebe der Griff am ALTEN Ende stehen und griffbereit. */

@@ -9,22 +9,22 @@ nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
 - **Löschen im Daten-Repo fragt nach.** Ein Projekt, das im Repo fehlt, wird lokal nur nach Rückfrage entfernt («Lokal löschen» oder «Behalten und neu hochladen»). Eine leere oder fehlerhafte Antwort des Repos gilt nicht mehr als leeres Repo.
 - **Gelöschtes offenes Projekt kehrt nicht zurück.** Wird das gerade offene Projekt gelöscht, öffnet die App zuerst ein anderes oder zeigt den Projektdialog; es schreibt sich nicht wieder hin.
-- **Zwei Tabs überschreiben sich nicht mehr.** Ändert ein anderer Tab dasselbe Projekt, übernimmt die App den neuen Stand oder fragt nach («Übernehmen», «Meine behalten», «Kopie»). Abbrechen behält den eigenen Stand, und das automatische Speichern pausiert während der Frage.
+- **Zwei Tabs überschreiben sich nicht mehr.** Ändert ein anderer Tab dasselbe Projekt, übernimmt die App den neuen Stand oder fragt nach («Meine behalten», «Die aus dem anderen Tab nehmen», «Beide behalten (Kopie)»). Abbrechen behält den eigenen Stand, und das automatische Speichern pausiert während der Frage.
 - **Start zeigt den Projektdialog.** Beim Start öffnet die App keinen Plan mehr still. Der Projektdialog erscheint, außer man öffnet direkt über `?plan=<key>` oder der Live-Monitor war zuletzt eingeschaltet.
-- **Neuer Planstand wird erst erfragt.** Hat die mitgelieferte Datei einen neueren Stand und weicht er vom lokalen Plan ab, fragt die App, ob der neue Stand genommen, der eigene behalten oder eine Kopie angelegt werden soll.
+- **Neuer Planstand wird erst erfragt.** Hat die mitgelieferte Datei einen neueren Stand und weicht er vom lokalen Plan ab, fragt die App, ob der neue Stand genommen, der eigene behalten oder eine Kopie angelegt werden soll. Das gilt auch beim Öffnen über die Projektzeile; am Live-Monitor fragt die App nie (still neu oder lokal behalten mit Hinweis).
 - **Ringe im Import lähmen die App nicht mehr.** Eine Datei mit zirkulären Abhängigkeiten wird mit einer Meldung abgelehnt, die die beteiligten Vorgänge nennt.
 - **Kaputte Dateien werden abgelehnt.** Fehlen Pflichtteile oder sind sie falsch aufgebaut, zeigt der Import eine Meldung statt abzustürzen. Im Abgleich betrifft das nur das eine Projekt, die übrigen laufen weiter.
 - **Unbekannte Gewerke und tote Verweise werden abgelehnt.** Ein Vorgang mit einem Gewerk, das es nicht gibt, oder mit einem nicht vorhandenen Übergeordneten wird beim Import mit Hinweis abgewiesen.
-- **Druck am Tag der Zeitumstellung.** Tagesgrenzen werden über den Kalender berechnet; die Nachtschicht in der Nacht zur Umstellung steht vollständig auf dem Blatt, keine Stunde geht verloren.
+- **Druck am Tag der Zeitumstellung.** Tagesgrenzen werden über den Kalender berechnet; in der Nacht 24./25.10. (25-Stunden-Tag) ging die letzte Stunde des Tages verloren, jetzt steht sie auf dem Blatt.
 - **Projekt-Uhrzeit friert nicht mehr ein.** Eine alte Festlegung der Uhr im Projekt wird entfernt, die Zeitlinie läuft wieder mit der echten Uhr.
-- **⌘Z im Textfeld gehört dem Feld.** Im Tabellenfeld rückgängig machen die Schrift, der Plan wird über den ↺-Knopf oder nach dem Verlassen des Feldes zurückgesetzt.
+- **⌘Z im Textfeld gehört dem Feld, in Auswahllisten und Häkchen nicht.** Im Tabellenfeld rückgängig machen die Schrift, der Plan wird über den ↺-Knopf oder nach dem Verlassen des Feldes zurückgesetzt.
 - **Touch-Griffe liegen nicht mehr über der Beschriftung.** Auf dem Handy erscheint der Verknüpfen-Griff nur am ausgewählten Balken.
-- **Panel kennt alle Abschnitte.** Das Seitenpanel zeigt das Abschnittsfeld wie die Tabelle, auch für den Showablauf.
+- **Panel kennt alle Abschnitte.** Das Seitenpanel zeigt das Abschnittsfeld wie die Tabelle, auch für den Showablauf; eigene Abschnitte (z. B. «Load-in») erscheinen jetzt im Panel.
 - **Live-Leiste zählt nur sichtbare Einträge.** Einträge aus anderen Ansichten fließen nicht mehr in die Zählung ein.
 - **Tooltip mit richtiger Farbe.** Der Farbpunkt im Tooltip zeigt Farbe und Schraffur des Gewerks.
 - **Eingaben werden geprüft.** Typ und Verzögerung einer Verknüpfung sowie der Name eines Gewerks werden nur mit gültigen Werten übernommen, alles andere wird abgewiesen.
 - **Gewerk löschen entfernt Abhängigkeiten.** Mit einem Gewerk verschwinden auch die Vorgänge, die daran hängen, wie beim Löschen eines Vorgangs.
-- **Plan verschieben.** Unter Einrichten → Projekt verschiebt der Knopf «Plan verschieben…» den ganzen Plan um Tage und Minuten, Tage über den Kalender, die Uhrzeit bleibt. Ein ⌘Z macht es rückgängig, die Grenzen liegen bei 36 500 Tagen und 10 080 Minuten.
+- **Plan verschieben.** Unter Einrichten → Projekt verschiebt der Knopf «Plan verschieben…» den ganzen Plan um Tage und Stunden:Minuten (`h:mm`, `-h:mm` oder reine Minuten), Tage über den Kalender, die Uhrzeit bleibt. Ein ⌘Z macht es rückgängig, die Grenzen liegen bei 36 500 Tagen und 10 080 Minuten.
 - **Doku stimmt wieder.** README und Regeln nennen die sechs Reiter und das neue Startverhalten.
 
 ## 0.19.1 — 2026-11-20
