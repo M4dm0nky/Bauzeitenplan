@@ -75,4 +75,4 @@
 
 ### Task 4: Volllauf und Abnahme (Controller)
 
-- `node tests/run.mjs`, alle acht `tools/verify-*.mjs`; Screenshots ansehen; Final-Review über den Branch; dann Versionsfrage an Marco.
+- `node tests/run.mjs`, alle acht `tools/verify-*.mjs` plus `tests/run.mjs`; Screenshots ansehen; Final-Review über den Branch; dann Versionsfrage an Marco.

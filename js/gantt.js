@@ -1449,7 +1449,7 @@ export function createGantt(root, opts = {}) {
       const startMin = Math.round(t.t.getTime() / 60000);
       const endMin = startMin + majSpan(sc.major, t.t);
       if (startMin >= T1 || endMin <= T0) continue;
-      // Beidseitig auf die Planspanne geklemmt: ein Tagesbalken ist 1440 min
+      // Beidseitig auf die Planspanne geklemmt: ein Tagesbalken ist einen Kalendertag
       // breit, auch wenn davon nur zehn Minuten in die Ansicht fallen. Ohne die
       // Klemmung säße sein mittiges Label außerhalb des Bildes.
       const links = Math.max(T0, startMin);

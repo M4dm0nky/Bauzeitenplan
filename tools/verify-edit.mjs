@@ -2780,7 +2780,9 @@ console.log('\nZEITUMSTELLUNG');
     const last = gw[gw.length - 1];
     pl.tasks.push(vor('zumstellung', last, '2026-10-25T23:30', '2026-10-25T23:45'));
     pl.tasks.push(vor('znach', gw[0], '2026-10-26T10:00', '2026-10-26T11:00'));
-    m.createRepo(window.localStorage).save(pl);
+    const repo = m.createRepo(window.localStorage);
+    repo.save(pl);
+    repo.setActive(pl.project.id);   // sonst lädt ?plan=leer ein anderes «erstes» Projekt
     return { id: last.id, n: gw.length };
   });
   await page.goto(BASE + '/index.html?plan=leer&ansicht=bau');
@@ -2804,6 +2806,7 @@ console.log('\nZEITUMSTELLUNG');
     return true;
   });
   await check('Tagessprung auf den 25.10. scrollt zur Gruppenzeile des Vorgangs um 23:30', async () => {
+    await springe('25.10.');   // der Check erbt den Sprung nicht vom vorigen
     // Die letzte Gruppe kann nicht bis unter die Achse scrollen (Ende des Inhalts): geprüft wird,
     // dass ihre Zeile im Bild steht (vorher lag sie ~1300 px darunter, außerhalb).
     const r = await page.evaluate((id) => {
@@ -2822,7 +2825,7 @@ console.log('\nZEITUMSTELLUNG');
     await page.evaluate(async () => {
       const m = await import('/js/persistence.js');
       const repo = m.createRepo(window.localStorage);
-      const pl = repo.load(repo.list()[0].id);
+      const pl = repo.load(repo.getActive());
       const arten = ['planung', 'vorbereitung', 'aufbau', 'show', 'abbau'];
       pl.phases = arten.map((art, i) => ({ id: 'zp' + i, art, start: '2026-10-23T0' + i + ':00', end: art === 'aufbau' ? '2026-10-24T18:00' : '2026-10-23T0' + i + ':30' }));
       repo.save(pl);

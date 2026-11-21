@@ -996,7 +996,7 @@ während der Frage, damit nichts im Hintergrund überschrieben wird.
 Rest kommt in echten Minuten dazu. Grenzen: |Tage| ≤ 36 500, |Minuten| ≤ 10 080, damit
 keine ungültigen Daten entstehen. Ein Befehl im Store ist ein ⌘Z.
 
-**Warum auch Gantt, Bedarf und Phasen über den Kalender rechnen:** Der Druck (`naechsterTag`, v0.20.0) war der erste Fund derselben Klasse. Vier weitere Stellen rechneten Tage mit Minuten: der Tagessprung im Gantt (`zeigeBalkenDesTages`), das Datumsband in der Achse (`majSpan`, `majBack`), das Tagesraster der Bedarfsansicht und «+ Phase» (Ende am gleichen Wandzeitpunkt des Folgetags, `verschiebeZeit`). Jetzt liefern `naechsteMitternacht` (timeaxis.js) und `rasterGrenzen(…, 'tag')` (resources.js) die Tagesgrenzen, so dass der 25. Oktober 2026 mit 25 Stunden stimmt. Die Stundenraster im Showablauf bleiben in Minuten.
+**Warum auch Gantt, Bedarf und Phasen über den Kalender rechnen:** Der Druck (`naechsterTag`, v0.20.0) war der erste Fund derselben Klasse. Vier weitere Stellen rechneten Tage mit Minuten: der Tagessprung im Gantt (`zeigeBalkenDesTages`), das Datumsband in der Achse (`majSpan`, `majBack`), das Tagesraster der Bedarfsansicht und «+ Phase» (Ende zur gleichen Uhrzeit des Folgetags, `verschiebeZeit`). Jetzt liefern `naechsteMitternacht` (timeaxis.js) und `rasterGrenzen(…, 'tag')` (resources.js) die Tagesgrenzen, so dass der 25. Oktober 2026 mit 25 Stunden stimmt. Die Stundenraster im Showablauf bleiben in Minuten.
 
 **Warum ⌘Z im Textfeld dem Feld gehört:** Die App hat ⌘Z global abgefangen, auch
 mitten im Tippen. Jetzt bleibt es im Feld beim Browser. Den Undo des Plans erreicht man
