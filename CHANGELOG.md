@@ -3,7 +3,7 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
-## Unreleased — Prüfpaket
+## 0.20.0 — 2026-11-21
 
 **Prüfpaket: 19 Funde aus dem Fable-Durchgang behoben.**
 
