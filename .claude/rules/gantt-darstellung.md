@@ -12,6 +12,7 @@ paths:
 - **Per Klick Auswählbares gehört in die Tab-Reihenfolge, und was `tabIndex` trägt, reagiert auf Enter UND Leertaste** (`bindMark` in gantt.js, EINE Stelle; Space mit `preventDefault()`; auch Meilenstein-Rauten; Prüfung in `verify-edit.mjs`).
 - **Beschriftung läuft nie über den nächsten Balken** (`updateLabels()`, `data-next`; `verify-klassentreffen.mjs`).
 - **Achsen-Ticks und Bänder auf `T1` klemmen;** ein Kalendertag füllt bei jeder Breite die Breite.
+- **Tagesband und Tagesgrenzen über `naechsteMitternacht` (timeaxis.js), nie `+1440`;** der Tag hat bei der Zeitumstellung 23 oder 25 Stunden. `majBack` (1500 / 10140 / 44700) hält eine Stunde Reserve für den 25-Stunden-Tag.
 - **`O.onView` meldet jedes Selbst-Einpassen;** kein `requestAnimationFrame` raten; der ResizeObserver merkt auch Breite **0**.
 - **Ein leeres Band ist nur im Bauzeitenplan unsichtbar;** `Math.min(...[])` = `Infinity`, Hülle fällt auf `T0`.
 - **Bauzeitenplan: eine Zeile je VORGANGSNAME, ein Balken je Termin** (`seriesRows`; 353 Vorgänge = **153 Zeilen**). Überlappung → **Spuren** (`--lane`, `rowH × lanes`). Marken gelten je Zeile, Umbenennen die Serie. **Die Tabelle bleibt flach.**

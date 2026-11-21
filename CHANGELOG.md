@@ -3,6 +3,15 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unreleased — Kalendertage
+
+**Tage rechnen jetzt über den Kalender: Die Zeitumstellung am 25. Oktober bringt keine Verschiebung mehr.**
+
+- **Tagessprung im Gantt:** Der Tag endete bei der Zeitumstellung um eine Stunde daneben; jetzt endet er um Mitternacht des Kalendertags.
+- **Datumsband in der Achse:** Das Tagesband war am 25-Stunden-Tag eine Stunde zu kurz, Wochenbänder entsprechend; jetzt füllt es genau den Kalendertag.
+- **Bedarfsansicht, Tagesraster:** Die Tageskästen rechneten mit 24 Stunden und lagen nach der Umstellung eine Stunde daneben; jetzt steht jeder Tag auf derselben Uhrzeit wie am Vortag.
+- **Neue Phase:** «+ Phase» endete 24 Stunden nach dem Start und damit eine Stunde daneben; jetzt endet die neue Phase am gleichen Wandzeitpunkt des Folgetags.
+
 ## 0.20.0 — 2026-11-21
 
 **Prüfpaket: 19 Funde aus dem Fable-Durchgang behoben.**
