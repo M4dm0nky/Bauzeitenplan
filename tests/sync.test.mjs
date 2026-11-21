@@ -1,4 +1,4 @@
-import { createSync, kodiere, dekodiere, abgleich, gleicherPlan, SYNC_REPO } from '../js/sync.js';
+import { createSync, kodiere, dekodiere, abgleich, gleicherPlan, planHash, unveraendert, SYNC_REPO } from '../js/sync.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -243,6 +243,24 @@ test('gleicherPlan: ein Vorgangstitel anders → false', () => {
   const a = { project: { id: 'p1' }, gewerke: [], tasks: [{ id: 't', title: 'T' }], deps: [] };
   const b = { project: { id: 'p1' }, gewerke: [], tasks: [{ id: 't', title: 'U' }], deps: [] };
   assert.equal(gleicherPlan(a, b), false);
+});
+
+test('planHash: stabil gegen Schlüsselreihenfolge und quelle, anders bei geändertem Inhalt', () => {
+  const a = { project: { id: 'p1', name: 'X', quelle: { exported: '2026-01-01', hash: 'egal' } }, gewerke: [{ id: 'g', name: 'G' }], tasks: [{ id: 't', title: 'T', start: 's' }], deps: [] };
+  const b = { deps: [], tasks: [{ start: 's', title: 'T', id: 't' }], gewerke: [{ name: 'G', id: 'g' }], project: { name: 'X', quelle: { exported: '2099-02-02' }, id: 'p1' } };
+  assert.equal(planHash(a), planHash(b));
+  assert.match(planHash(a), /^[0-9a-f]{8}$/);
+  b.tasks[0].title = 'U';
+  assert.notEqual(planHash(a), planHash(b));
+});
+test('unveraendert: true mit passendem Hash, false nach einer Änderung und ohne Hash', () => {
+  const plan = { project: { id: 'p1', name: 'X' }, gewerke: [], tasks: [{ id: 't', title: 'T' }], deps: [] };
+  assert.equal(unveraendert(plan), false);                        // kein Hash: unbekannt = nein
+  plan.project.quelle = { datei: 'x.json', hash: planHash(plan) };
+  assert.equal(unveraendert(plan), true);
+  plan.tasks[0].title = 'geändert';
+  assert.equal(unveraendert(plan), false);
+  assert.equal(unveraendert(null), false);
 });
 
 test('gleicherPlan: nur die Phasen verschieden → false; gleiche Phasen → true', () => {

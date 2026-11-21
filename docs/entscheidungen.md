@@ -982,6 +982,8 @@ Antwort ohne Liste oder ein 404 der Liste ist aber auch ein kaputtes Repo, und d
 wäre Datenverlust. Jetzt fragt `askDialog` («Lokal löschen» oder «Behalten und neu
 hochladen»), und das offene Projekt wird erst nach dem Wechsel gelöscht.
 
+**Warum der Planstand einen Fingerabdruck trägt:** Ob lokal etwas geändert wurde, lässt sich nicht am Vergleich mit der NEUEN Datei sehen (die ist ja anders). Deshalb steht beim Laden `quelle.hash` (FNV-1a über den kanonischen Inhalt ohne `quelle`, `planHash` in sync.js). Passt er später noch, hat niemand etwas geändert, und V08 ersetzt V07 ohne Frage, auch am Live-Monitor. Bei «Meine behalten» gilt der Hash des lokalen Plans, damit spätere eigene Änderungen erkennbar bleiben. Ohne Hash (Altbestand) bleibt es beim Inhaltsvergleich.
+
 **Warum zwei Tabs gefragt werden:** Zwei Tabs auf demselben Projekt überschrieben sich
 gegenseitig. Ändert ein anderer Tab den Plan, übernimmt der offene Tab den Stand, wenn
 er selbst nichts Ungesichertes hat. Sonst fragt er («Meine behalten», «Die aus dem

@@ -5,7 +5,7 @@
 
 import { createStore, verschiebeZeit, SHIFT_MAX_TAGE, SHIFT_MAX_MIN } from './store.js';
 import { createRepo, serialize, deserialize } from './persistence.js';
-import { createSync, abgleich, gleicherPlan, SYNC_REPO } from './sync.js';
+import { createSync, abgleich, gleicherPlan, planHash, unveraendert, SYNC_REPO } from './sync.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
@@ -149,6 +149,7 @@ async function openBundled(key, { still = false } = {}) {
     const roh = JSON.parse(text);
     r.plan.project.quelle = { datei: b.file, version: roh.version || null, exported: roh.exported || null };
     datei = r.plan;
+    datei.project.quelle.hash = planHash(datei);   // «unverändert seit dem Laden» bleibt erkennbar
     hinweis = r.hinweis || null;   // z. B. entfallene Phasen: wer die Datei übernimmt, soll es erfahren
   } catch (e) {
     if (!lokal) { toast('«' + b.name + '» konnte nicht geladen werden: ' + (e.message || e), 'bad', 8000); return false; }
@@ -157,14 +158,15 @@ async function openBundled(key, { still = false } = {}) {
   if (datei && neuer(datei, lokal)) {
     // Die Datei ersetzt nur still, was nichts Eigenes trägt. Hat der Betrachter
     // lokal etwas geändert, geht das mit «Neuen Stand nehmen» verloren — also
-    // fragen. Gleicher Inhalt (nur der Stempel ist neuer) ist kein Verlust.
-    if (lokal && !gleicherPlan(lokal, datei) && still) {
+    // fragen. Kein Verlust, und damit keine Frage: Inhalt seit dem Laden der Datei
+    // unverändert (Fingerabdruck in quelle.hash) oder gleich dem neuen Stand.
+    if (lokal && !unveraendert(lokal) && !gleicherPlan(lokal, datei) && still) {
       // Am Monitor klickt niemand einen Dialog weg: lokal behalten, ohne Stempel.
       const offen = await open(lokal);
       if (offen) toast('Neuer Planstand liegt vor — lokale Fassung behalten', 'bad', 8000);
       return offen;
     }
-    if (lokal && !gleicherPlan(lokal, datei)) {
+    if (lokal && !unveraendert(lokal) && !gleicherPlan(lokal, datei)) {
       const wahl = await askDialog({
         title: 'Zwei Fassungen',
         message: [`Zu «${b.name}» liegt ein neuer Stand vor, und deine lokale Fassung weicht davon ab.`,
@@ -185,7 +187,7 @@ async function openBundled(key, { still = false } = {}) {
       } else if (wahl !== 'neu') {
         // Abbruch (null) wie «Meine behalten», aber ohne Stempel: dann fragt der
         // nächste Start erneut. Mit Stempel gilt der Stand als gesehen.
-        if (wahl === 'meine') lokal.project.quelle = { ...datei.project.quelle };
+        if (wahl === 'meine') lokal.project.quelle = { ...datei.project.quelle, hash: planHash(lokal) };   // Hash des LOKALEN Plans: spätere eigene Änderungen bleiben erkennbar
         return await open(lokal);
       }
     }
@@ -263,7 +265,7 @@ async function open(plan) {
   // abgeglichen — sonst würde jedes Öffnen einen Upload auslösen.
   const id = plan.project.id;
   const alt = repo.load(id), info = repo.syncInfo(id);
-  const unveraendert = !!(alt && info.remoteSha && !info.dirty && gleicherPlan(alt, plan));
+  const abgeglichen = !!(alt && info.remoteSha && !info.dirty && gleicherPlan(alt, plan));
   const wechsel = !!store;
   // Projektwechsel heißt andere id. Ein Sync-Update desselben Projekts ersetzt
   // nur den Inhalt: der Versatz gehört dem Abend, nicht dem Stand des Plans.
@@ -293,7 +295,7 @@ async function open(plan) {
   repo.setActive(plan.project.id);   // wirft nie (persistence.js)
   refreshChrome();
   save();
-  if (unveraendert) repo.markSynced(id, info.remoteSha);
+  if (abgeglichen) repo.markSynced(id, info.remoteSha);
   // Projektwechsel: sofort abgleichen (Änderungen am bisherigen Projekt hochladen).
   if (wechsel && !abgleichLaeuft) abgleichen();
   return true;

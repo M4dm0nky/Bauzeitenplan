@@ -471,6 +471,58 @@ for (const adresse of ['/index.html', '/index.html?plan=klassentreffen']) {
   });
 }
 
+// Echter Planstand: die Datei kommt mit anderem INHALT und neuerem Stempel. Wer seit
+// dem Laden nichts geändert hat, bekommt ihn ohne Frage — das ist der Monitor, der
+// nach einem Stromausfall mit V07 startet, wenn V08 gepusht wurde.
+async function liveMitNeuerDatei(lokalGeaendert, adresse) {
+  const c = await browser.newContext({ viewport: { width: 1600, height: 950 }, serviceWorkers: 'block' })   // sonst liefert der Service Worker die Datei an route() vorbei;
+  const p = await c.newPage();
+  await p.goto(BASE + '/index.html?plan=klassentreffen');
+  await p.waitForTimeout(1500);
+  await p.evaluate((geaendert) => {
+    const q = JSON.parse(localStorage.getItem('bzp_projects'))[0];
+    const plan = JSON.parse(localStorage.getItem('bzp_p_' + q.id));
+    // Nur der Stempel altert; geändert heißt: zusätzlich ein Gewerkname (steht in der Legende) (der Hash bleibt stehen).
+    if (geaendert) plan.gewerke[0].name = 'LOKAL GEÄNDERT';
+    plan.project.quelle = { ...(plan.project.quelle || {}), exported: '2000-01-01T00:00:00.000Z' };
+    localStorage.setItem('bzp_p_' + q.id, JSON.stringify(plan));
+    localStorage.setItem('bzp_live', '1');
+  }, lokalGeaendert);
+  await p.route('**/klassentreffen-festival.json*', async (route) => {
+    const res = await route.fetch();
+    const j = await res.json();
+    j.gewerke[0].name = 'NEUER STAND TEST';
+    j.exported = '2099-01-01T00:00:00.000Z';
+    await route.fulfill({ response: res, json: j });
+  });
+  await p.goto(BASE + adresse);
+  await p.waitForTimeout(1500);
+  const r = {
+    dialog: await p.locator('.dlg h2', { hasText: 'Zwei Fassungen' }).count(),
+    neu: await p.evaluate(() => document.body.textContent.includes('NEUER STAND TEST')),
+    lokal: await p.evaluate(() => document.body.textContent.includes('LOKAL GEÄNDERT')),
+    toast: (await p.locator('#toast').textContent()) || '',
+    offen: (await p.locator('#proj-name').textContent()) || '',
+  };
+  await c.close();
+  return r;
+}
+for (const adresse of ['/index.html', '/index.html?plan=klassentreffen']) {
+  const wie = adresse.includes('plan=') ? '?plan= bei Live an' : 'nackte Adresse bei Live an';
+  const u = await liveMitNeuerDatei(false, adresse);
+  await check(wie + ', lokal seit dem Laden unverändert + neuere Datei mit anderem Inhalt: neuer Stand sichtbar, kein Dialog, kein «behalten»', async () => {
+    if (u.dialog) return 'Dialog';
+    if (!u.neu) return 'alter Stand wird angezeigt (Datei nicht übernommen), Toast «' + u.toast + '»';
+    return /behalten/.test(u.toast) ? 'Hinweis «behalten» trotz unverändert' : true;
+  });
+  const g = await liveMitNeuerDatei(true, adresse);
+  await check(wie + ', lokal geändert + neuere Datei: lokale Fassung bleibt, Toast, kein Dialog', async () => {
+    if (g.dialog) return 'Dialog';
+    if (g.neu || !g.lokal) return 'lokale Fassung ging verloren';
+    return /lokale Fassung behalten/.test(g.toast) ? true : 'Toast: «' + g.toast + '»';
+  });
+}
+
 console.log('\nDIE LINIE ZEIGT DIE PROJEKT-ZEITZONE, NICHT DIE DES BETRACHTERS');
 // nowInZone() rechnet «jetzt» in die Projekt-Zeitzone um. Scheitert das Parsen,
 // fällt es stumm auf die LOKALE Zeit zurück — und niemand sieht es, weil das
