@@ -3,7 +3,7 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
-## Unreleased — Kalendertage
+## 0.21.0 — 2026-11-21
 
 **Tage rechnen jetzt über den Kalender: Die Zeitumstellung am 25. Oktober bringt keine Verschiebung mehr.**
 
