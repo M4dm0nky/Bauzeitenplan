@@ -2812,6 +2812,28 @@ console.log('\nZEITUMSTELLUNG');
     if (!r) return 'Gruppenzeile/Achse nicht gefunden';
     return r.unterAchse >= -1 && r.bisUnten >= -1 ? true : 'Gruppenzeile nicht im Bild: ' + r.unterAchse.toFixed(0) + ' px unter der Achse, ' + r.bisUnten.toFixed(0) + ' px bis zum unteren Rand (' + letztesGewerk.n + ' Gewerke)';
   });
+  await check('«+ Phase» vor der Zeitumstellung endet einen KALENDERtag später (24.10. 18:00 → 25.10. 18:00, nicht 17:00)', async () => {
+    // Alle fünf Arten belegt → «+ Phase» nimmt «Aufbau»; dessen letzte Phase endet am 24.10. um 18:00.
+    await page.evaluate(async () => {
+      const m = await import('/js/persistence.js');
+      const repo = m.createRepo(window.localStorage);
+      const pl = repo.load(repo.list()[0].id);
+      const arten = ['planung', 'vorbereitung', 'aufbau', 'show', 'abbau'];
+      pl.phases = arten.map((art, i) => ({ id: 'zp' + i, art, start: '2026-10-23T0' + i + ':00', end: art === 'aufbau' ? '2026-10-24T18:00' : '2026-10-23T0' + i + ':30' }));
+      repo.save(pl);
+    });
+    await page.goto(BASE + '/index.html?plan=leer&ansicht=bau');
+    await page.waitForSelector('.bz-t-major', { timeout: 20000 });
+    await page.locator('#rail-ein').click();
+    await page.locator('[data-ein="phasen"]').click();
+    const vorher = await page.locator('.ph-z').count();
+    await page.locator('#ei-ph-add').click();
+    await page.waitForTimeout(200);
+    const r = await page.evaluate(() => [...document.querySelectorAll('.ph-z')].map((z) => z.querySelector('.ph-bis').value));
+    await page.locator('#ein-zu').click();
+    if (r.length !== vorher + 1) return 'keine neue Zeile (' + vorher + ' → ' + r.length + ')';
+    return r.includes('2026-10-25T18:00') ? true : 'Bis-Werte: ' + r.join(', ');
+  });
 }
 
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }

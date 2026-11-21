@@ -17,6 +17,7 @@ import { toMin, toDate } from './schedule.js';
 import { local } from './conflicts.js';
 import { PHASEN_ARTEN, phaseLabel, showTage } from './phasen.js';
 import { entwurfBinden } from './entwurf.js';
+import { verschiebeZeit } from './store.js';
 
 export function createPhasenEditor({ store, askDialog, onError, onHinweis }) {
   const lesen = (id) => (store.state.phases || []).find((p) => p.id === id);
@@ -120,7 +121,7 @@ export function createPhasenEditor({ store, askDialog, onError, onHinweis }) {
       // Überlappung gleich ab und der Knopf täte «nichts».
       const letzte = (S.phases || []).filter((p) => p.art === art).map((p) => toMin(p.end)).sort((a, b) => a - b).pop();
       const start = letzte != null ? local(toDate(letzte)) : S.project.start;
-      const r = senden({ type: 'addPhase', phase: { art, start, end: local(toDate(toMin(start) + 1440)) } });
+      const r = senden({ type: 'addPhase', phase: { art, start, end: verschiebeZeit(start, 1, 0) } });
       if (r && r.id) liste.querySelector(`.ph-z[data-phase="${r.id}"] .ph-name`)?.focus();
     });
     zeichneListe();

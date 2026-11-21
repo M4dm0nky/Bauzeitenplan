@@ -91,11 +91,29 @@ export function deckung(t, kind, state) {
 }
 
 /**
+ * Scheibengrenzen [von, …, gn] in Epochenminuten mit gn >= bis. `schritt`: Minuten
+ * oder 'tag' = nächster Kalendertag zur gleichen Uhrzeit (Zeitumstellung: 1380/1500 min).
+ */
+export function rasterGrenzen(von, bis, schritt) {
+  const g = [von];
+  if (!(bis > von)) return g;
+  if (schritt !== 'tag') {
+    while (g[g.length - 1] < bis) g.push(g[g.length - 1] + schritt);
+    return g;
+  }
+  const d0 = new Date(von * 60000);
+  for (let k = 1; g[g.length - 1] < bis; k++) {
+    g.push(Math.round(new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + k, d0.getHours(), d0.getMinutes()).getTime() / 60000));
+  }
+  return g;
+}
+
+/**
  * Bedarfs-/Verfügbarkeitsraster über eine Menge von Vorgängen: je Ressource
  * dieser Art, je Zeitscheibe die Summe aus Bedarf (normale Vorgänge) und
  * Verfügbarkeit (Bereitstellungen).
  *
- * `schritt` in Minuten (60 = Stunde, 1440 = Tag). Das Raster deckt
+ * `schritt` in Minuten (60 = Stunde) oder 'tag' (Kalendertage, siehe `rasterGrenzen`). Das Raster deckt
  * [von, bis) in `schritt`-Schritten; Zuweisungen, die eine Scheibe nur
  * teilweise berühren, zählen für diese Scheibe voll — bei stündlichem Raster
  * eine praxistaugliche Näherung, kein Anspruch auf Minutenschärfe.
@@ -103,7 +121,16 @@ export function deckung(t, kind, state) {
  * @returns {{rid:string, label:string, slots:{bedarf:number, verfuegbar:number, frei:number}[]}[]}
  */
 export function bedarfsRaster(tasks, resList, { kind, von, bis, schritt = 60 } = {}) {
-  const n = Math.max(0, Math.ceil((bis - von) / schritt));
+  // Zahl-Schritt: Division (schnell, Stundenraster). 'tag': Kalendertage, deren
+  // Länge an der Zeitumstellung 23/25 Stunden beträgt — Grenzen suchen statt dividieren.
+  const grenzen = schritt === 'tag' ? rasterGrenzen(von, bis, 'tag') : null;
+  const n = grenzen ? Math.max(0, grenzen.length - 1) : Math.max(0, Math.ceil((bis - von) / schritt));
+  // Index der Scheibe, die Minute m enthält (grenzen[i] <= m < grenzen[i+1]).
+  const scheibe = (m) => {
+    let i = 0;
+    while (i < n - 1 && grenzen[i + 1] <= m) i++;
+    return i;
+  };
   const liste = kind ? resList.filter((r) => r.kind === kind) : resList;
   const out = liste.map((r) => ({
     rid: r.id, label: r.label,
@@ -119,8 +146,9 @@ export function bedarfsRaster(tasks, resList, { kind, von, bis, schritt = 60 } =
       const s = spanne(t, z);
       const a = Math.max(s.von, von), b = Math.min(s.bis, bis);
       if (b <= a) continue;
-      const i0 = Math.max(0, Math.floor((a - von) / schritt));
-      const i1 = Math.min(n - 1, Math.ceil((b - von) / schritt) - 1);
+      const i0 = grenzen ? scheibe(a) : Math.max(0, Math.floor((a - von) / schritt));
+      // Ende exklusiv: b selbst gehört noch nicht in die Scheibe
+      const i1 = grenzen ? scheibe(b - 1e-9) : Math.min(n - 1, Math.ceil((b - von) / schritt) - 1);
       for (let i = i0; i <= i1; i++) {
         if (t.bereitstellung) row.slots[i].verfuegbar += z.n;
         else row.slots[i].bedarf += z.n;

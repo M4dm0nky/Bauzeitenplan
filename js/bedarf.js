@@ -7,7 +7,7 @@
 import { toMin, toDate } from './schedule.js';
 import { local } from './conflicts.js';
 import { sichtTasks, amTag, programmFenster } from './ebene.js';
-import { ressourcen, bedarfsRaster } from './resources.js';
+import { ressourcen, bedarfsRaster, rasterGrenzen } from './resources.js';
 import { el } from './dom.js';
 
 export function createBedarf(root, { store, onEinrichten } = {}) {
@@ -44,11 +44,12 @@ export function createBedarf(root, { store, onEinrichten } = {}) {
       von = fenster.von; bis = fenster.bis; schritt = 60;
       label = (m) => local(toDate(m)).slice(11, 16);
     } else {
-      von = toMin(S.project.start); bis = toMin(S.project.end); schritt = 1440;
+      von = toMin(S.project.start); bis = toMin(S.project.end); schritt = 'tag';
       label = (m) => local(toDate(m)).slice(5, 10);
     }
 
     const raster = bedarfsRaster(tasks, resList, { kind, von, bis, schritt });
+    const grenzen = rasterGrenzen(von, bis, schritt);   // Kopfzeile aus denselben Grenzen wie das Raster
     const n = raster[0] ? raster[0].slots.length : 0;
     if (!n) { root.append(el('div', 'bd-empty', 'Kein Zeitraum zu zeigen.')); return; }
 
@@ -58,7 +59,7 @@ export function createBedarf(root, { store, onEinrichten } = {}) {
     const thead = el('thead');
     const hr = el('tr');
     hr.append(el('th', 'bd-h-name'));
-    for (let i = 0; i < n; i++) hr.append(el('th', 'bd-h-zeit', label(von + i * schritt)));
+    for (let i = 0; i < n; i++) hr.append(el('th', 'bd-h-zeit', label(grenzen[i])));
     thead.append(hr);
     table.append(thead);
 

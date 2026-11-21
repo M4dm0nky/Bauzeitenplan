@@ -1,4 +1,4 @@
-import { ressourcen, resLabel, resKind, deckung, bedarfsRaster } from '../js/resources.js';
+import { ressourcen, resLabel, resKind, deckung, bedarfsRaster, rasterGrenzen } from '../js/resources.js';
 import { toMin } from '../js/schedule.js';
 import { createStore } from '../js/store.js';
 import assert from 'node:assert/strict';
@@ -137,6 +137,23 @@ test('bedarfsRaster: terminlose Vorgänge und Bereitstellungen tragen nichts bei
   const sh = r.find((x) => x.rid === 'stagehand');
   assert.deepEqual(sh.slots.map((s) => s.bedarf), [0, 0, 2, 2, 2, 2, 2, 2, 2, 2]);
   assert.ok(sh.slots.every((s) => s.verfuegbar === 0 && Number.isFinite(s.frei)));
+});
+
+// ── Kalendertage ─────────────────────────────────────────────────────────────
+console.log('\nKalendertage');
+// Der 25.10.2026 hat 25 Stunden (Zeitumstellung): ein Tag ist NICHT immer 1440 min.
+test('rasterGrenzen mit «tag»: gleiche Uhrzeit am Folgetag, 24.→25.10. = 1500 min', () => {
+  const g = rasterGrenzen(toMin('2026-10-24T08:00'), toMin('2026-10-27T08:00'), 'tag');
+  assert.equal(g.length, 4);
+  ['2026-10-24T08:00', '2026-10-25T08:00', '2026-10-26T08:00', '2026-10-27T08:00'].forEach((iso, i) => assert.equal(g[i], toMin(iso)));
+  assert.equal(g[1] - g[0], 1500);   // 24.→25.10. überspannt die Umstellung (03:00 → 02:00)
+  assert.equal(g[2] - g[1], 1440);
+});
+test('bedarfsRaster «tag»: Bedarf um 23:30 am 26.10. landet in Scheibe 2, nicht 3', () => {
+  const t = { id: 't', start: '2026-10-26T23:30', end: '2026-10-26T23:45', res: [{ rid: 'r1', n: 2 }] };
+  const [row] = bedarfsRaster([t], [{ id: 'r1', label: 'R', kind: 'personal' }],
+    { kind: 'personal', von: toMin('2026-10-24T00:00'), bis: toMin('2026-10-28T00:00'), schritt: 'tag' });
+  assert.deepEqual(row.slots.map((s) => s.bedarf), [0, 0, 2, 0]);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
