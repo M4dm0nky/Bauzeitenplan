@@ -22,7 +22,7 @@ const personalSum = (t, state) =>
     .reduce((a, z) => a + z.n, 0);
 import {
   ZOOM, clampZoom, zoomAnchored, nearestPreset, fitPx, tickScale, ticksFor,
-  weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat, rasterMin, gezogen,
+  weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat, rasterMin, gezogen, naechsteMitternacht,
 } from './timeaxis.js';
 
 // T0/T1/NOW/TOTAL_MIN hingen früher als Modul-Konstanten an einem festen
@@ -1428,7 +1428,10 @@ export function createGantt(root, opts = {}) {
 
     // Die grobe Zeile (Tag/Woche/Monat) spannt ihr Intervall und trägt das Label
     // MITTIG — im Tagesmodus das volle Datum genau über den Stunden.
-    const majSpan = (u, d) => u === 'day' ? 1440 : u === 'week' ? 10080
+    // Tag und Woche über den Kalender, nicht 1440/10080: der Umstellungstag hat 23 bzw. 25 Stunden,
+    // das Band wäre sonst eine Stunde zu schmal bzw. zu breit.
+    const majSpan = (u, d) => u === 'day' ? naechsteMitternacht(Math.round(d.getTime() / 60000)) - Math.round(d.getTime() / 60000)
+      : u === 'week' ? Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7) - d) / 60000)
       : Math.round((new Date(d.getFullYear(), d.getMonth() + 1, 1) - new Date(d.getFullYear(), d.getMonth(), 1)) / 60000);
     axisMajor.replaceChildren();
     // Die grobe Zeile beginnt eine EINHEIT FRÜHER als der Ausschnitt: gesucht ist
@@ -1439,7 +1442,8 @@ export function createGantt(root, opts = {}) {
     // NICHT auf T0 klemmen: gebraucht wird gerade der Tick, der VOR T0 beginnt —
     // im Showablauf steht T0 auf 12:00, der Tag aber auf 00:00. `endMin <= T0`
     // unten wirft weg, was den Ausschnitt gar nicht berührt.
-    const majBack = sc.major === 'day' ? 1440 : sc.major === 'week' ? 10080 : 44640;
+    // Rückgriff mit einer Stunde Reserve für die 25-Stunden-Umstellungsperiode (Tag, Woche, Monat).
+    const majBack = sc.major === 'day' ? 1500 : sc.major === 'week' ? 10140 : 44700;
     const majFrom = new Date((vFrom - majBack) * 60000);
     for (const t of ticksFor(sc.major, majFrom, to)) {
       const startMin = Math.round(t.t.getTime() / 60000);
@@ -1706,7 +1710,7 @@ export function createGantt(root, opts = {}) {
   // NUR bei Erstansicht und ausdrücklichem Tagessprung gerufen, nie bei jedem
   // Neuaufbau: wer selbst gescrollt hat, wird nicht zurückgeholt.
   function zeigeBalkenDesTages(iso) {
-    const d0 = toMin(String(iso || centerDayIso()).slice(0, 10) + 'T00:00'), d1 = d0 + 1440;
+    const d0 = toMin(String(iso || centerDayIso()).slice(0, 10) + 'T00:00'), d1 = naechsteMitternacht(d0);   // Kalendertag, nicht +1440 (Zeitumstellung)
     const gewerkVon = new Map();
     for (const t of VT) {
       // Vorgang mit Dauer, der um 00:00 endet, gehört nicht mehr zu diesem Tag

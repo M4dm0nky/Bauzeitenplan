@@ -189,6 +189,15 @@ export function schnapp(min, schritt) {
 }
 
 /**
+ * Epochenminute der nächsten lokalen Mitternacht NACH `min` (liegt `min` auf Mitternacht, die des
+ * Folgetags). Über den Kalender statt `+ 1440`: der Tag der Zeitumstellung hat 23 bzw. 25 Stunden.
+ */
+export function naechsteMitternacht(min) {
+  const d = new Date(min * 60000);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() / 60000;
+}
+
+/**
  * Rasterung der VERSCHIEBUNG, nicht der Lage: ein Balken auf 08:00–18:00 bleibt im Zoom
  * «Monate» auf 08:00–18:00 und wandert nur um ganze Tage; 4 px verschieben nichts. Ab einem Tag
  * über den Kalender (`new Date(y, m, d + n, hh, mm)`): die Uhrzeit bleibt, die Sommerzeit stimmt.

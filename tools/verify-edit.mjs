@@ -2755,6 +2755,65 @@ await check('eigener Abschnitt «Load-in» erscheint im Panel-Abschnittsfeld', a
   return gewaehlt === 'Load-in' ? true : 'Panel-Abschnitt zeigt «' + gewaehlt + '»';
 });
 
+console.log('\nZEITUMSTELLUNG');
+{
+  // Der 25.10.2026 hat 25 Stunden. Mit «Tag = 1440 min» war das Datumsband an diesem Tag
+  // eine Stunde zu schmal, und der Tagessprung hielt einen Vorgang um 23:30 (liegt hinter
+  // d0 + 1440) für «nicht am Tag». Plan: je Gewerk ein Vorgang am 24.10. (viele Zeilen, so
+  // dass gescrollt werden muss), der letzte Gewerk-Vorgang um 23:30 am 25.10., einer am 26.10.
+  await page.goto(BASE + '/index.html?plan=leer');
+  await page.waitForTimeout(900);
+  const letztesGewerk = await page.evaluate(async () => {
+    const m = await import('/js/persistence.js');
+    const r = m.deserialize(await (await fetch('/klassentreffen-festival.json')).text());
+    const pl = r.plan;
+    const t0 = pl.tasks[0];
+    const gw = [...pl.gewerke].sort((a, b) => a.sort - b.sort).filter((g) => g.art === 'gewerk');
+    const vor = (id, g, a, e) => ({ ...t0, id, gewerk: g.id, title: 'Z ' + id, start: a, end: e, milestone: false, parent: null, deps: [], fuer: null });
+    pl.project = { ...pl.project, start: '2026-10-23T00:00', end: '2026-10-27T00:00' };   // die Achse folgt der Projektspanne
+
+    pl.tasks = gw.map((g, i) => vor('z' + i, g, '2026-10-24T10:00', '2026-10-24T11:00'));
+    const last = gw[gw.length - 1];
+    pl.tasks.push(vor('zumstellung', last, '2026-10-25T23:30', '2026-10-25T23:45'));
+    pl.tasks.push(vor('znach', gw[0], '2026-10-26T10:00', '2026-10-26T11:00'));
+    m.createRepo(window.localStorage).save(pl);
+    return { id: last.id, n: gw.length };
+  });
+  await page.goto(BASE + '/index.html?plan=leer&ansicht=bau');
+  await page.waitForSelector('.bz-t-major', { timeout: 20000 });
+  await page.waitForTimeout(600);
+  const springe = async (name) => {
+    await page.locator('#tag-wahl').click();
+    await page.locator('.mn-i', { hasText: name }).first().click();
+    await page.waitForTimeout(500);
+  };
+  await check('Datumsband am 25.10. ist 25 Stunden breit (1500 min), am 24.10. 24 Stunden', async () => {
+    await springe('25.10.');
+    const w = (datum) => page.evaluate((d) => {
+      const kopf = [...document.querySelectorAll('.bz-t-major')].find((n) => n.textContent.includes(d));
+      return kopf ? kopf.getBoundingClientRect().width : null;
+    }, datum);
+    const b25 = await w('25.10.'), b24 = await w('24.10.');
+    if (!b25 || !b24) return 'Band nicht gefunden: 25.=' + b25 + ' 24.=' + b24;
+    const px = b24 / 1440;     // der 24.10. ist ein normaler Tag: seine Breite eicht die Skala
+    if (Math.abs(b25 - 1500 * px) > 1) return 'Band 25.10. ist ' + (b25 / px).toFixed(1) + ' min breit statt 1500';
+    return true;
+  });
+  await check('Tagessprung auf den 25.10. scrollt zur Gruppenzeile des Vorgangs um 23:30', async () => {
+    // Die letzte Gruppe kann nicht bis unter die Achse scrollen (Ende des Inhalts): geprüft wird,
+    // dass ihre Zeile im Bild steht (vorher lag sie ~1300 px darunter, außerhalb).
+    const r = await page.evaluate((id) => {
+      const g = document.querySelector('.bz-lab-group[data-gewerk="' + id + '"]');
+      const ax = document.querySelector('.bz-axis'), sc = document.querySelector('.bz-scroll');
+      if (!g || !ax || !sc) return null;
+      const q = g.getBoundingClientRect();
+      return { unterAchse: q.top - ax.getBoundingClientRect().bottom, bisUnten: sc.getBoundingClientRect().bottom - q.bottom };
+    }, letztesGewerk.id);
+    if (!r) return 'Gruppenzeile/Achse nicht gefunden';
+    return r.unterAchse >= -1 && r.bisUnten >= -1 ? true : 'Gruppenzeile nicht im Bild: ' + r.unterAchse.toFixed(0) + ' px unter der Achse, ' + r.bisUnten.toFixed(0) + ' px bis zum unteren Rand (' + letztesGewerk.n + ' Gewerke)';
+  });
+}
+
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 

@@ -1,4 +1,4 @@
-import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM, rasterMin, schnapp, gezogen, planMinute } from '../js/timeaxis.js';
+import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM, rasterMin, schnapp, gezogen, planMinute, naechsteMitternacht } from '../js/timeaxis.js';
 import assert from 'node:assert/strict';
 import { toMin } from '../js/schedule.js';
 
@@ -235,6 +235,21 @@ test('planMinute: Versatz 5 liefert 5 min frueher', () => {
   const a = planMinute(100, { ...o, versatz: 0 });
   const b = planMinute(100, { ...o, versatz: 5 });
   assert.equal(a, 1200); assert.equal(b, a - 5);
+});
+
+console.log('\nKalendertage');
+test('naechsteMitternacht: 25.10.2026 (Ende der Sommerzeit) hat 25 Stunden', () => {
+  const a = T('2026-10-25T00:00');
+  assert.equal(naechsteMitternacht(a), T('2026-10-26T00:00'));
+  assert.equal(naechsteMitternacht(a) - a, 1500);
+});
+test('naechsteMitternacht: 29.03.2026 (Beginn der Sommerzeit) hat 23 Stunden', () => {
+  const a = T('2026-03-29T00:00');
+  assert.equal(naechsteMitternacht(a) - a, 1380);
+});
+test('naechsteMitternacht: 23:59 und 00:00 am Monatsende', () => {
+  assert.equal(naechsteMitternacht(T('2026-08-30T23:59')), T('2026-08-31T00:00'));
+  assert.equal(naechsteMitternacht(T('2026-08-31T00:00')), T('2026-09-01T00:00'));
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
