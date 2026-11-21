@@ -29,8 +29,11 @@ const server = createServer((req, res) => {
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const BASE = 'http://127.0.0.1:' + server.address().port;
 
+// Zeitumstellungs-Checks (25.10.2026 hat 25 Stunden) sind nur in dieser Zone bedeutungsvoll; die
+// Unit-Tests laufen ebenfalls mit TZ=Europe/Berlin. Alle Kontexte dieser Datei sind darauf gepinnt.
+const ZONE = 'Europe/Berlin';
 const browser = await firefox.launch({ executablePath: exe });
-const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+const ctx = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push('JS: ' + e.message));
@@ -1562,7 +1565,7 @@ await page.screenshot({ path: join(here, 'shots', 'edit-11-schiene.png') });
 
 console.log('\nGESPERRTER SPEICHER');
 await check('Gesperrter Speicher: keine Ausnahme, Ansicht-Umschalter wechselt', async () => {
-  const c2 = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const c2 = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   const fehler = [];
   try {
     // Jeder Zugriff wirft (Privatmodus/gesperrt), vom ersten Aufruf an — auch Lesen.
@@ -1591,7 +1594,7 @@ await check('Gesperrter Speicher: keine Ausnahme, Ansicht-Umschalter wechselt', 
 
 console.log('\nVOLLER SPEICHER BEIM PROJEKTWECHSEL');
 await check('Voller Speicher beim Projektwechsel fragt (Abbrechen / Trotzdem wechseln / Exportieren)', async () => {
-  const c3 = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const c3 = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   try {
     const p3 = await c3.newPage();
     const fehler = [];
@@ -1682,7 +1685,7 @@ await check('Voller Speicher beim Projektwechsel fragt (Abbrechen / Trotzdem wec
 
 console.log('\nNIE GESPEICHERTER PLAN BEIM WECHSEL');
 await check('Neu angelegter Plan, dessen erstes Speichern scheitert, gilt als ungesichert (Wechsel fragt)', async () => {
-  const c4 = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const c4 = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   try {
     const p4 = await c4.newPage();
     const fehler = [];
@@ -1724,7 +1727,7 @@ await check('Neu angelegter Plan, dessen erstes Speichern scheitert, gilt als un
 
 console.log('\nLEERE ZUSTÄNDE');
 await check('Leere Tabelle, Bedarf und Showablauf ohne Bühne bieten den passenden Knopf an', async () => {
-  const c5 = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const c5 = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   try {
     const p5 = await c5.newPage();
     const fehler = [];
@@ -1775,7 +1778,7 @@ await check('Leere Tabelle, Bedarf und Showablauf ohne Bühne bieten den passend
 });
 
 await check('Leerer Bauzeitenplan: der GANTT (nicht die Tabelle) bietet EINEN Knopf an, und er legt einen Vorgang an', async () => {
-  const c6 = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const c6 = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   try {
     const p6 = await c6.newPage();
     const fehler = [];
@@ -1809,7 +1812,7 @@ console.log('\nTOUCH: VERKNÜPFEN-GRIFF NUR AM AUSGEWÄHLTEN BALKEN (Handy 390×
   if (!chromExe) { skipped++; console.log('  – übersprungen: Chromium nicht installiert (npx playwright install chromium).'); }
   else {
     const cb = await chromium.launch({ executablePath: chromExe });
-    const ct = await cb.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const ct = await cb.newContext({ timezoneId: ZONE, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
     const pt = await ct.newPage();
     pt.on('pageerror', (e) => errors.push('JS: ' + e.message));
     try {
@@ -1921,7 +1924,7 @@ console.log('\nTOUCH: VERKNÜPFEN-GRIFF NUR AM AUSGEWÄHLTEN BALKEN (Handy 390×
 
 console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur)');
 {
-  const cz = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const cz = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   const pz = await cz.newPage();
   pz.on('pageerror', (e) => errors.push('JS: ' + e.message));
   try {
@@ -2234,7 +2237,7 @@ console.log('\nENTWURF: DER STORE LEHNT ✓ AB (echte Tabelle, Store absichtlich
   // Entwurf sichtbar. Deshalb bekommt DIESE Seite einen Store, dessen moveTask
   // auf Zuruf («window.__lehneAb») ablehnt — alles andere ist die echte App.
   // Ohne Service Worker: dessen Abruf läuft an page.route vorbei, der Patch griffe nicht.
-  const cr = await browser.newContext({ viewport: { width: 1600, height: 950 }, serviceWorkers: 'block' });
+  const cr = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 }, serviceWorkers: 'block' });
   await cr.route('**/js/store.js*', async (route) => {
     const src = readFileSync(join(root, 'js/store.js'), 'utf8')
       .replace('\n  moveTask(state, cmd) {', "\n  moveTask(state, cmd) {\n    if (globalThis.__lehneAb) return 'Test: Die Zeiten ergeben sich aus den Untervorgängen.';");
@@ -2326,7 +2329,7 @@ console.log('\nENTWURF: DER STORE LEHNT ✓ AB (echte Tabelle, Store absichtlich
 
 console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
 {
-  const cv = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const cv = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   const pv = await cv.newPage();
   const fehlerV = [];
   pv.on('pageerror', (e) => fehlerV.push(e.message));
@@ -2428,7 +2431,7 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
 // Aufbau 14.–18.09.; zwei Show-Phasen = zwei Showtage (Fr 18:00–Sa 02:00, Sa 18:00–So 02:00).
 {
   console.log('\nPHASEN');
-  const cp = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const cp = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   const pp = await cp.newPage();
   const fehlerP = [];
   pp.on('pageerror', (e) => fehlerP.push(e.message));
@@ -2651,7 +2654,7 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
 
 console.log('\nMEILENSTEIN OHNE TERMIN DATIEREN (Vorlage, Tabelle und Panel)');
 {
-  const cm = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const cm = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   const mp = await cm.newPage();
   const fehlerM = [];
   mp.on('pageerror', (e) => fehlerM.push(e.message));
@@ -2756,6 +2759,7 @@ await check('eigener Abschnitt «Load-in» erscheint im Panel-Abschnittsfeld', a
 });
 
 console.log('\nZEITUMSTELLUNG');
+// Muss der letzte Block bleiben: ändert project.start/end und speichert den Plan.
 {
   // Der 25.10.2026 hat 25 Stunden. Mit «Tag = 1440 min» war das Datumsband an diesem Tag
   // eine Stunde zu schmal, und der Tagessprung hielt einen Vorgang um 23:30 (liegt hinter
@@ -2810,6 +2814,7 @@ console.log('\nZEITUMSTELLUNG');
       return { unterAchse: q.top - ax.getBoundingClientRect().bottom, bisUnten: sc.getBoundingClientRect().bottom - q.bottom };
     }, letztesGewerk.id);
     if (!r) return 'Gruppenzeile/Achse nicht gefunden';
+    if (letztesGewerk.n < 8) return 'zu wenige Gewerke, Prüfung nicht aussagekräftig';
     return r.unterAchse >= -1 && r.bisUnten >= -1 ? true : 'Gruppenzeile nicht im Bild: ' + r.unterAchse.toFixed(0) + ' px unter der Achse, ' + r.bisUnten.toFixed(0) + ' px bis zum unteren Rand (' + letztesGewerk.n + ' Gewerke)';
   });
   await check('«+ Phase» vor der Zeitumstellung endet einen KALENDERtag später (24.10. 18:00 → 25.10. 18:00, nicht 17:00)', async () => {
