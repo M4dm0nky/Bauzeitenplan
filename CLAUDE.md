@@ -48,7 +48,7 @@ node tools/verify-sync.mjs  # Sync: zwei Geräte, Konflikt, Offline-Start
 - **`js/dom.js` = DOM-Kleinkram** (`el`, `svgEl`, `$`, `escapeHtml`, `toInput`, `STATUS`), nicht `clone`.
 - **Ein Zustand, ein Besitzer:** Inspector = INHALT des Panels, `syncPanel()` (app.js) allein die Sichtbarkeit (`#ins.hidden`).
 - **Die App holt nie eine Plan-JSON:** kein `BUNDLED`/`openBundled`, kein `fetch` einer `.json` in `js/` (`tests/run.mjs` sperrt es). Testdaten liegen in `tools/fixtures/`, Prüfskripte seeden sie per `tools/plan-fixture.mjs`.
-- **Start = Projektdialog** (`bootLokal`), kein Autostart. Direkt nur der Live-Monitor (`bzp_live=1` + aktives Projekt). `?plan=leer` = ohne Plan: aktives/erstes Projekt, sonst Dialog (`verify-browser`, `verify-edit`, `verify-live`, `verify-amk` hängen daran).
+- **Start = Projektdialog** (`bootLokal`), kein Autostart. Direkt nur der Live-Monitor (`bzp_live=1` + aktives Projekt). `?plan=leer` = ohne Plan: aktives/erstes Projekt, sonst Dialog (alle verify-Skripte hängen daran).
 - **Was der erste Start braucht, gehört auf Modulebene, nicht in `mount()`** (Import, Neu, Projekte, `openEinrichten`).
 - **Keine Platzhaltertexte in Freitextspalten.** **„Tag 1/2/3" gehört in die Notiz, nicht in den Titel** (Test). **Das Wort ist «Zeiteintrag»** in Spalte, Knopf, Zähler, Ecke der Seitenspalte, Vorgabename, Kennzahl (Datenfeld `punktTyp`; auf dem A3-Blatt bleibt «Programmpunkt»).
 - **Zeiten aus echten Zeitstempeln** (`toMin()`), nie aus Ziffern auf Datumsstrings.

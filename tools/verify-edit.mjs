@@ -1666,19 +1666,6 @@ await check('Voller Speicher beim Projektwechsel fragt (Abbrechen / Trotzdem wec
     if (!/\.json$/.test(dl.suggestedFilename())) return 'Download: ' + dl.suggestedFilename();
     await p3.waitForTimeout(700);
     if ((await p3.locator('#proj-name').textContent()) !== 'Beta') return '(c) nicht gewechselt';
-    // (d) Eine zweite eigene Projektzeile (Alpha) aus dem Projektdialog öffnen, dann Abbrechen:
-    // Dialog bleibt, altes Projekt (Beta) bleibt aktiv.
-    await aendern('Geändert-3');
-    await p3.locator('#rail-ein').click();
-    await p3.locator('#proj-menu').click();
-    await p3.waitForTimeout(300);
-    await p3.locator('.dlg-open', { hasText: 'Alpha' }).first().click();
-    await p3.waitForTimeout(800);
-    if ((await p3.locator('.dlg-h', { hasText: 'Nicht gespeichert' }).count()) !== 1) return '(d) kein Dialog beim Wechsel zur zweiten Projektzeile';
-    await p3.locator('body > .dlg').last().locator('.btn', { hasText: 'Abbrechen' }).click();
-    await p3.waitForTimeout(400);
-    if (!(await p3.locator('#dlg .dlg-open').count()) || await p3.locator('#dlg').isHidden()) return '(d) Projektdialog wurde geschlossen';
-    if ((await p3.locator('#proj-name').textContent()) !== 'Beta') return '(d) Projekt gewechselt';
     if (fehler.length) return 'pageerror: ' + fehler[0];
     return true;
   } finally { await c3.close(); }

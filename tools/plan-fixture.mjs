@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deserialize } from '../js/persistence.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const FIXTURES = join(here, 'fixtures');
@@ -16,7 +17,12 @@ export const FIXTURES = join(here, 'fixtures');
 /** Liest die Fixture; `scripts` ist JS-Text, der Plan, Index und aktives Projekt setzt. */
 export function planSeed(datei) {
   const text = readFileSync(join(FIXTURES, datei), 'utf8');
-  const plan = JSON.parse(text);
+  // Über `deserialize` (wie der Import-Knopf), nicht roher Dateitext: sonst fehlen Prüfung
+  // und Normalisierung, und die Datei-Felder (schema, exported, app, version) lägen im
+  // gespeicherten Plan, den die App selbst nie so ablegt.
+  const r = deserialize(text);
+  if (r.ok === false) throw new Error('Fixture ' + datei + ': ' + r.error);
+  const plan = r.plan;
   const id = plan.project.id;
   const eintrag = { id, name: plan.project.name, venue: plan.project.venue || '', modified: new Date().toISOString(), remoteSha: null, dirty: false };
   // Der Index wird gemergt (andere Projekte bleiben). `bzp_active` zeigt auf diesen
@@ -25,7 +31,7 @@ export function planSeed(datei) {
   const id = ${JSON.stringify(id)};
   if (localStorage.getItem('bzp_seeded_' + id) !== '1') {
     localStorage.setItem('bzp_seeded_' + id, '1');
-    localStorage.setItem('bzp_p_' + id, ${JSON.stringify(text)});
+    localStorage.setItem('bzp_p_' + id, ${JSON.stringify(JSON.stringify(plan))});
     const idx = JSON.parse(localStorage.getItem('bzp_projects') || '[]').filter((e) => e.id !== id);
     idx.push(${JSON.stringify(eintrag)});
     localStorage.setItem('bzp_projects', JSON.stringify(idx));

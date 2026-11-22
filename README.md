@@ -288,7 +288,7 @@ node tools/verify-edit.mjs    # Bearbeiten: anlegen, tippen, Undo, Konflikte, Pa
 node tools/verify-live.mjs    # Live-Modus mit gestellter Uhr (page.clock)
 node tools/verify-amk.mjs     # AMK-Plan importieren und prüfen
 node tools/verify-print.mjs   # Tagesblätter: Zuschnitt, Filter, Maßstab, PDF
-node tools/verify-klassentreffen.mjs  # V07-Plan + Startdialog + Direktlink
+node tools/verify-klassentreffen.mjs  # V07-Plan importieren + Negativprüfung «kein mitgelieferter Plan»
 node tools/verify-showablauf.mjs      # Showablauf: Ebene, Bühnen, Live-Kopfzeile, Blatt
 node tools/make-amk.mjs       # tools/fixtures/amk-singleshow.json (Testdaten) aus den PDF-Daten neu bauen
 

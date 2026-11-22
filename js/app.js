@@ -121,7 +121,7 @@ async function bootLokal() {
   const activeId = repo.getActive();
   const aktiv = activeId && repo.load(activeId);
   if (live && aktiv && await open(aktiv)) return;
-  // `?plan=leer` ist der Schalter der Prüfwerkzeuge beim Neuladen (verify-edit, verify-sync):
+  // `?plan=leer` ist der Schalter der Prüfwerkzeuge beim Neuladen (alle verify-Skripte):
   // aktives, sonst erstes Projekt öffnet; der Dialog kommt, wenn keines da ist.
   if (wunsch === 'leer') {
     const erstes = aktiv || (repo.list().length ? repo.load(repo.list()[0].id) : null);

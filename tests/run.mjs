@@ -206,12 +206,22 @@ check('der Sync-Schlüssel (bzp_sync) kommt nie in die Plan-Schicht', () => {
   return s.includes('bzp_sync') ? 'js/persistence.js kennt den Schlüssel' : true;
 });
 
-check('die App holt keinen mitgelieferten Plan (kein BUNDLED/openBundled, kein fetch einer .json in js/)', () => {
+check('die App holt keinen mitgelieferten Plan (kein BUNDLED/openBundled, fetch nur in der Erlaubnisliste, kein XHR/JSON-Import)', () => {
+  // Erlaubnisliste statt Muster: eine zusammengesetzte URL (`fetch('./' + datei + '?v=')`)
+  // ist durch kein Muster auf «.json» fassbar. Darum zählt jedes `fetch(` je Datei; erlaubt
+  // sind genau die zwei Sync-Stellen (die eine Anfrage in sync.js, der gereichte Aufruf in app.js).
+  const ERLAUBT = { 'sync.js': 1, 'app.js': 1 };
+  // Kommentare weg (Block und Zeile; `://` in Zeichenketten bleibt stehen), sonst zählt Prosa mit.
+  const ohneKommentar = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\'"`])\/\/.*$/gm, '$1');
   const treffer = [];
   for (const f of JS_FILES) {
-    const s = js(f);
-    if (/\bBUNDLED\b|openBundled|bundledKey/.test(s)) treffer.push('js/' + f + ': BUNDLED/openBundled');
-    if (/fetch\([^)]*\.json/.test(s)) treffer.push('js/' + f + ': fetch(.json)');
+    const roh = js(f);
+    const s = ohneKommentar(roh);
+    if (/\bBUNDLED\b|openBundled|bundledKey/.test(roh)) treffer.push('js/' + f + ': BUNDLED/openBundled');
+    const n = (s.match(/\bfetch\(/g) || []).length;
+    if (n !== (ERLAUBT[f] || 0)) treffer.push('js/' + f + ': ' + n + ' fetch( (erlaubt ' + (ERLAUBT[f] || 0) + ')');
+    if (/XMLHttpRequest/.test(s)) treffer.push('js/' + f + ': XMLHttpRequest');
+    if (/\bimport\s*\(|(with|assert)\s*\{\s*type\s*:\s*['"]json['"]/.test(s)) treffer.push('js/' + f + ': dynamischer/JSON-Import');
   }
   return treffer.length ? treffer.join(' | ') : true;
 });

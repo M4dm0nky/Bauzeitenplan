@@ -5,7 +5,7 @@ nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
 ## Unreleased — kein mitgelieferter Plan
 
-**Die App holt keinen Plan mehr von selbst: Pläne kommen nur über Import oder Sync.**
+**Die App holt keinen Plan mehr von selbst: Pläne kommen nur über Neu/Vorlage, Import oder Sync.**
 
 - **Kein mitgelieferter Plan:** `?plan=klassentreffen` und `?plan=amk` öffnen nichts mehr, der Startdialog zeigt keine «Mitgelieferte Pläne». Ein Plan, der von allein erscheint, ist unerwartet und zieht Netzabrufe nach sich.
 - **Testdaten nach `tools/fixtures/`:** Die beiden JSONs sind nur noch Testdaten für die Prüfskripte; eine Sperre in `tests/run.mjs` verhindert, dass die App wieder eine Plan-JSON holt.

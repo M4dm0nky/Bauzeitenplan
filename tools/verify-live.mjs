@@ -9,7 +9,7 @@ import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
-import { planLaden } from './plan-fixture.mjs';
+import { planLaden, planSeed } from './plan-fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -429,11 +429,25 @@ await check('Live ausschalten räumt die Marken weg', async () => {
 console.log('\nLIVE-MONITOR ÖFFNET DAS AKTIVE PROJEKT OHNE ABRUF');
 // Die App liefert keinen Plan mit: der Monitor liest das aktive Projekt aus dem
 // localStorage, ohne Dialog und ohne einen einzigen .json-Abruf (Module enden auf .js).
+// Geseedet wird der Altbestand wie in verify-klassentreffen (b): `project.quelle` mit
+// uraltem Stempel und lokal geänderter Titel. Nur so wird die Prüfung rot, wenn der Live-Pfad
+// die Datei der `quelle` wieder nachlädt (ohne `quelle` hätte der alte Pfad nie geladen).
 for (const adresse of ['/index.html', '/index.html?plan=klassentreffen']) {
   const wie = adresse.includes('plan=') ? '?plan= bei Live an' : 'nackte Adresse bei Live an';
   const c = await browser.newContext({ viewport: { width: 1600, height: 950 } });
-  await planLaden(c);
-  await c.addInitScript(() => { try { localStorage.setItem('bzp_live', '1'); } catch { /* */ } });
+  const { plan, id } = planSeed('klassentreffen-festival.json');
+  plan.project.quelle = { datei: 'klassentreffen-festival.json', exported: '2000-01-01T00:00:00.000Z' };
+  plan.tasks[0].title = 'LOKAL GEÄNDERT';
+  await c.addInitScript(([i, text, name]) => {
+    try {
+      if (localStorage.getItem('bzp_seeded_' + i) === '1') return;
+      localStorage.setItem('bzp_seeded_' + i, '1');
+      localStorage.setItem('bzp_p_' + i, text);
+      localStorage.setItem('bzp_projects', JSON.stringify([{ id: i, name, venue: '', modified: new Date().toISOString(), remoteSha: null, dirty: false }]));
+      localStorage.setItem('bzp_active', i);
+      localStorage.setItem('bzp_live', '1');
+    } catch { /* */ }
+  }, [id, JSON.stringify(plan), plan.project.name]);
   const p = await c.newPage();
   let json = 0;
   p.on('request', (r) => { if (new URL(r.url()).pathname.endsWith('.json')) json++; });
@@ -441,8 +455,12 @@ for (const adresse of ['/index.html', '/index.html?plan=klassentreffen']) {
   await p.waitForTimeout(1500);
   const offen = (await p.locator('#proj-name').textContent()) || '';
   const dlgHidden = await p.locator('#dlg').isHidden();
-  await check(wie + ': aktives Projekt offen, kein Dialog, kein .json-Abruf', async () => {
+  // Aus der Oberfläche, nicht aus dem Speicher: gezeigt wird, was die App wirklich geöffnet hat.
+  const zeigtLokal = ((await p.locator('body').textContent()) || '').includes('LOKAL GEÄNDERT')
+    || await p.locator('input[value="LOKAL GEÄNDERT"]').count() > 0;
+  await check(wie + ': aktives Projekt offen, lokaler Titel bleibt, kein Dialog, kein .json-Abruf', async () => {
     if (!offen.includes('Klassentreffen')) return 'nicht offen: «' + offen + '»';
+    if (!zeigtLokal) return 'lokaler Titel «LOKAL GEÄNDERT» nicht sichtbar';
     if (!dlgHidden) return 'Dialog sichtbar';
     return json === 0 ? true : json + ' .json-Abrufe';
   });
