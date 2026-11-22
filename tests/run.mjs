@@ -211,14 +211,19 @@ check('die App holt keinen mitgelieferten Plan (kein BUNDLED/openBundled, fetch 
   // ist durch kein Muster auf «.json» fassbar. Darum zählt jedes `fetch(` je Datei; erlaubt
   // sind genau die zwei Sync-Stellen (die eine Anfrage in sync.js, der gereichte Aufruf in app.js).
   const ERLAUBT = { 'sync.js': 1, 'app.js': 1 };
-  // Kommentare weg (Block und Zeile; `://` in Zeichenketten bleibt stehen), sonst zählt Prosa mit.
-  const ohneKommentar = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\'"`])\/\/.*$/gm, '$1');
+  // Nur ganze Kommentarzeilen fallen weg (Beginn `//`, `*`, `/*`), sonst zählt Prosa mit.
+  // Kein Muster-Strip über den Text: `//` oder `/*` in einer Zeichenkette ließe sonst den
+  // Rest der Zeile — und damit ein echtes `fetch(` — unsichtbar werden. Ein `fetch(` in
+  // einem Zeilenende-Kommentar zählt mit; das fällt sofort auf und ist der sichere Fehler.
+  // Die Sperre ist eine Heuristik gegen Versehen, nicht gegen absichtliche Umgehung
+  // (`const f = fetch`, `globalThis['fetch']`, `sendBeacon`).
+  const ohneKommentar = (s) => s.split('\n').filter((z) => !/^\s*(\/\/|\*|\/\*)/.test(z)).join('\n');
   const treffer = [];
   for (const f of JS_FILES) {
     const roh = js(f);
     const s = ohneKommentar(roh);
     if (/\bBUNDLED\b|openBundled|bundledKey/.test(roh)) treffer.push('js/' + f + ': BUNDLED/openBundled');
-    const n = (s.match(/\bfetch\(/g) || []).length;
+    const n = (s.match(/\bfetch\s*\(/g) || []).length;
     if (n !== (ERLAUBT[f] || 0)) treffer.push('js/' + f + ': ' + n + ' fetch( (erlaubt ' + (ERLAUBT[f] || 0) + ')');
     if (/XMLHttpRequest/.test(s)) treffer.push('js/' + f + ': XMLHttpRequest');
     if (/\bimport\s*\(|(with|assert)\s*\{\s*type\s*:\s*['"]json['"]/.test(s)) treffer.push('js/' + f + ': dynamischer/JSON-Import');
