@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { createServer } from 'node:http';
+import { planLaden, FIXTURES } from './plan-fixture.mjs';
 const here = dirname(fileURLToPath(import.meta.url)); const root = join(here, '..');
 mkdirSync(join(here, 'shots'), { recursive: true });
 const exe = mustFirefox();
@@ -21,8 +22,11 @@ const server = createServer((q, s) => {
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const BASE = 'http://127.0.0.1:' + server.address().port;
 
+// Ursprungstext der Fixture: der localStorage-Stand wird von den Tests verändert
+const KT_TEXT = readFileSync(join(FIXTURES, 'klassentreffen-festival.json'), 'utf8');
 const b = await firefox.launch({ executablePath: exe });
 const ctx = await b.newContext({ viewport: { width: 1700, height: 1000 }, timezoneId: 'Europe/Berlin' });
+await planLaden(ctx);
 const p = await ctx.newPage();
 const errors = [];
 p.on('pageerror', (e) => errors.push('JS: ' + e.message));
@@ -36,7 +40,7 @@ const check = async (name, fn) => {
 };
 
 console.log('\nTAGESBLÄTTER');
-await p.goto(BASE + '/print.html?plan=klassentreffen');
+await p.goto(BASE + '/print.html');
 await p.waitForSelector('.pr-sheet', { timeout: 15000 });
 await p.waitForTimeout(600);
 
@@ -175,7 +179,8 @@ if (!chromExe) {
 } else {
   const cb = await chromium.launch({ executablePath: chromExe });
   const cp = await cb.newPage();
-  await cp.goto(BASE + '/print.html?plan=klassentreffen');
+  await planLaden(cp);
+  await cp.goto(BASE + '/print.html');
   await cp.waitForSelector('.pr-sheet', { timeout: 15000 });
   await cp.waitForTimeout(600);
   const pfad = join(here, 'shots', 'tagesblaetter.pdf');
@@ -192,9 +197,26 @@ if (!chromExe) {
 }
 
 // ── Vorschau passt ins Fenster, Druck bleibt 1:1 ─────────────────────────────
+// ── Ohne Projekt: kein stiller Ersatzplan ────────────────────────────────────
+// Frischer Context OHNE Seed: print.html darf keinen Plan mitbringen, sondern
+// sagt, dass im Browser kein Projekt liegt.
+console.log('\nOHNE PROJEKT');
+{
+  const nc = await b.newContext({ viewport: { width: 1200, height: 800 } });
+  const np = await nc.newPage();
+  await np.goto(BASE + '/print.html');
+  await np.waitForSelector('.pr-leer', { timeout: 15000 });
+  await check('frischer Browser ohne Projekt: print.html meldet «Kein Projekt in diesem Browser»', async () => {
+    const t = await np.locator('#sheets').innerText();
+    const n = await np.locator('.pr-ro, .pr-bar, .pr-sheet:has(.pr-row)').count();
+    return /Kein Projekt in diesem Browser/.test(t) && n === 0 ? true : 'Text: ' + t.slice(0, 120) + ' / Zeilen: ' + n;
+  });
+  await nc.close();
+}
+
 console.log('\nVORSCHAU');
 for (const [w, h] of [[1440, 900], [1000, 800]]) {
-  for (const [name, url, sel] of [['Tagesblatt', '/print.html?plan=klassentreffen', '.pr-sheet'], ['Running Order', '/print.html?plan=klassentreffen&ansicht=show', '.pr-ro']]) {
+  for (const [name, url, sel] of [['Tagesblatt', '/print.html', '.pr-sheet'], ['Running Order', '/print.html?ansicht=show', '.pr-ro']]) {
     await p.setViewportSize({ width: w, height: h });
     await p.goto(BASE + url);
     await p.waitForSelector(sel, { timeout: 15000 });
@@ -218,7 +240,8 @@ for (const [w, h] of [[1440, 900], [1000, 800]]) {
   const kb = await firefox.launch({ executablePath: exe, firefoxUserPrefs: { 'ui.useOverlayScrollbars': 0 } });
   try {
     const kp = await (await kb.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
-    await kp.goto(BASE + '/print.html?plan=klassentreffen');
+    await planLaden(kp);
+    await kp.goto(BASE + '/print.html');
     await kp.waitForSelector('.pr-sheet', { timeout: 15000 });
     await kp.waitForTimeout(400);
     const leiste = await kp.evaluate(() => innerWidth - document.documentElement.clientWidth);
@@ -242,18 +265,18 @@ console.log('\nZEITUMSTELLUNG');
   // Nachtschicht über das Ende der Sommerzeit (25.10.2026, 25 Stunden). Das Blatt
   // muss bis an die echte Mitternacht reichen; mit «a + 1440» endete es um 23:00
   // und die letzte Stunde stand auf keinem Blatt.
-  await p.goto(BASE + '/print.html?plan=klassentreffen');
+  await p.goto(BASE + '/print.html');
   await p.waitForSelector('.pr-sheet', { timeout: 15000 });
-  await p.evaluate(async () => {
+  await p.evaluate(async (orig) => {
     const m = await import('/js/persistence.js');
-    const r = m.deserialize(await (await fetch('/klassentreffen-festival.json')).text());
+    const r = m.deserialize(orig);
     const pl = r.plan;
     const t0 = pl.tasks[0];
     pl.tasks = [{ ...t0, id: 'zeitumstellung-nacht', title: 'Nachtschicht Zeitumstellung', start: '2026-10-25T22:00', end: '2026-10-26T02:00', milestone: false, parent: null, deps: [], fuer: null }];
     m.createRepo(window.localStorage).save(pl);
-  });
+  }, KT_TEXT);
   const fehler0 = errors.length;
-  await p.goto(BASE + '/print.html?plan=klassentreffen');
+  await p.goto(BASE + '/print.html');
   await p.waitForSelector('.pr-sheet', { timeout: 15000 });
   await p.waitForTimeout(500);
   await check('Nachtschicht am 25.10.: Blatt 25.10. hat einen Balken bis an die rechte Kante, 26.10. ab der linken', async () => {
@@ -288,24 +311,24 @@ console.log('\nVORGÄNGE OHNE TERMIN');
   // Ein Plan, in dem ein Teil der Vorgänge keinen Termin hat — in beiden Ebenen.
   // Sie dürfen auf keinem Blatt stehen und nichts zu NaN machen.
   await check('Gegenprobe: ein Plan, in dem alles einen Termin hat, druckt keinen Hinweis «ohne Termin»', async () => {
-    await p.goto(BASE + '/print.html?plan=klassentreffen');
+    await p.goto(BASE + '/print.html');
     await p.waitForSelector('.pr-sheet', { timeout: 15000 });
     const k = await p.locator('.pr-fehlt').count();
     return k === 0 ? true : k + ' Hinweise, obwohl nichts fehlt';
   });
-  const n = await p.evaluate(async () => {
+  const n = await p.evaluate(async (orig) => {
     const m = await import('/js/persistence.js');
-    const r = m.deserialize(await (await fetch('/klassentreffen-festival.json')).text());
+    const r = m.deserialize(orig);
     const pl = r.plan;
     let c = 0;
     pl.tasks.forEach((t, i) => { if (i % 3 === 0) { t.start = null; t.end = null; c++; } });
     m.createRepo(window.localStorage).save(pl);
     return c;
-  });
+  }, KT_TEXT);
   for (const [ebene, sel] of [['bau', '.pr-sheet'], ['show', '.pr-sheet']]) {
     await check('Tagesblätter (' + ebene + ') mit ' + n + ' terminlosen Vorgängen: kein NaN, keine Ausnahme', async () => {
       const fehler0 = errors.length;
-      await p.goto(BASE + '/print.html?plan=klassentreffen&ebene=' + ebene);
+      await p.goto(BASE + '/print.html?ebene=' + ebene);
       await p.waitForSelector(sel, { timeout: 15000 });
       await p.waitForTimeout(500);
       const t = await p.locator('#sheets').innerText();

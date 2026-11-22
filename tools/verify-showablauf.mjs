@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { createServer } from 'node:http';
+import { planLaden } from './plan-fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -31,6 +32,7 @@ const BASE = 'http://127.0.0.1:' + server.address().port;
 
 const b = await firefox.launch({ executablePath: exe });
 const ctx = await b.newContext({ viewport: { width: 1700, height: 1000 } });
+await planLaden(ctx);
 const p = await ctx.newPage();
 const errors = [];
 p.on('pageerror', (e) => errors.push('JS: ' + e.message));
@@ -75,7 +77,7 @@ await p.clock.install({ time: new Date('2026-08-29T15:30:00') });
 
 // ── Ebene ───────────────────────────────────────────────────────────────────
 console.log('\nEBENE UMSCHALTEN');
-await p.goto(BASE + '/index.html?plan=klassentreffen');
+await p.goto(BASE + '/index.html?plan=leer');
 await p.waitForSelector('.bz-lab', { timeout: 20000 });
 await p.waitForTimeout(700);
 
@@ -549,7 +551,7 @@ await p.screenshot({ path: join(here, 'shots', 'showablauf-live.png') });
 
 // ── Running-Order-Blatt ─────────────────────────────────────────────────────
 console.log('\nRUNNING-ORDER-BLATT (A3 quer)');
-await p.goto(BASE + '/print.html?plan=klassentreffen&ansicht=show');
+await p.goto(BASE + '/print.html?ansicht=show');
 await p.waitForSelector('.pr-ro', { timeout: 20000 });
 await p.waitForTimeout(700);
 
@@ -665,7 +667,7 @@ await p.locator('.pr-ro').first().screenshot({ path: join(here, 'shots', 'showab
 console.log('\nUHRZEIT STATT DATUM');
 
 await check('Start und Ende zeigen nur die Uhrzeit', async () => {
-  await p.goto(BASE + '/index.html?plan=klassentreffen&ansicht=show');
+  await p.goto(BASE + '/index.html?plan=leer&ansicht=show');
   await p.waitForSelector('.bz-lab', { timeout: 20000 });
   await p.locator('[data-view="tabelle"]').click();
   await p.waitForTimeout(700);
@@ -880,7 +882,7 @@ await check('Showablauf: Zeile ohne Termin beginnt bündig mit terminierten Zeil
 // ── Setup-Abschnitt: anlegen und wiederfinden ───────────────────────────────
 console.log('\nSETUP-ABSCHNITT');
 
-await p.goto(BASE + '/index.html?plan=klassentreffen&ansicht=setup');
+await p.goto(BASE + '/index.html?plan=leer&ansicht=setup');
 await p.waitForSelector('[data-ansicht="setup"][aria-pressed="true"]', { timeout: 20000 });
 await p.waitForTimeout(900);
 
@@ -1345,10 +1347,10 @@ await check('eine eigene Art TRITT AUF DEM BLATT ZURÜCK, wenn sie soll', async 
   // niedrigere Zeile bekommt. Jetzt sagt es die Art selbst — sonst nähme eine
   // selbst angelegte «Umbaupause» genauso viel Platz weg wie ein Act.
   // ctx.newPage(), nicht b.newPage(): ein neuer Context hätte einen eigenen
-  // localStorage, print.html fiele auf die mitgelieferte JSON zurück und kennte
+  // localStorage, print.html läse dort ein anderes (geseedetes) Projekt und kennte
   // die eben angelegte Art gar nicht.
   const seite = await ctx.newPage();
-  await seite.goto(BASE + '/print.html?plan=klassentreffen&ansicht=show&abschnitt=setup');
+  await seite.goto(BASE + '/print.html?ansicht=show&abschnitt=setup');
   await seite.waitForSelector('.pr-ro-r', { timeout: 20000 });
   await seite.waitForTimeout(600);
   const treffer = await seite.evaluate(() => {
@@ -1423,7 +1425,7 @@ await check('kein zweiter Umschalter mehr in der Werkzeugzeile', async () => {
 
 // ── Dunkel und schmal ───────────────────────────────────────────────────────
 console.log('\nDUNKEL UND SCHMAL');
-await p.goto(BASE + '/index.html?plan=klassentreffen&ansicht=show');
+await p.goto(BASE + '/index.html?plan=leer&ansicht=show');
 await p.waitForSelector('.bz-lab', { timeout: 20000 });
 await p.waitForTimeout(800);
 
@@ -1518,7 +1520,8 @@ try {
 if (chromeExe && existsSync(chromeExe)) {
   const cb = await chromium.launch({ executablePath: chromeExe });
   const cp = await cb.newPage();
-  await cp.goto(BASE + '/print.html?plan=klassentreffen&ansicht=show');
+  await planLaden(cp);
+  await cp.goto(BASE + '/print.html?ansicht=show');
   await cp.waitForSelector('.pr-ro', { timeout: 20000 });
   await cp.waitForTimeout(600);
   const out = join(here, 'shots', 'running-order-a3.pdf');
@@ -1536,9 +1539,10 @@ if (chromeExe && existsSync(chromeExe)) {
 console.log('\nNACH DER SHOW (Uhr 23:00)');
 {
   const sCtx = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  await planLaden(sCtx);
   const sp = await sCtx.newPage();
   await sp.clock.install({ time: new Date('2026-08-29T23:00:00') });
-  await sp.goto(BASE + '/index.html?plan=klassentreffen&ansicht=show');
+  await sp.goto(BASE + '/index.html?plan=leer&ansicht=show');
   await sp.waitForSelector('.bz-lab', { timeout: 20000 });
   await sp.waitForTimeout(700);
   await sp.locator('#live').click();
@@ -1556,12 +1560,13 @@ console.log('\nNACH DER SHOW (Uhr 23:00)');
 {
   console.log('\nSUCHE IM SHOWABLAUF');
   const xCtx = await b.newContext({ viewport: { width: 1700, height: 1000 } });
+  await planLaden(xCtx);
   const xp = await xCtx.newPage();
   xp.setDefaultTimeout(5000);
   const xerr = [];
   xp.on('pageerror', (e) => xerr.push('JS: ' + e.message));
   await xp.clock.install({ time: new Date('2026-08-29T15:30:00') });
-  await xp.goto(BASE + '/index.html?plan=klassentreffen&ansicht=setup');
+  await xp.goto(BASE + '/index.html?plan=leer&ansicht=setup');
   await xp.waitForSelector('.bz-lab', { timeout: 20000 });
   await xp.waitForTimeout(700);
   // Vorbedingung: im Setup (leer) und am 29.08.; CHEFKET spielt nur am 30.08. in der Show.

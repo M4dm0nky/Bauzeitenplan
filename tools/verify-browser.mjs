@@ -17,6 +17,7 @@ import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
+import { planLaden } from './plan-fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -71,9 +72,7 @@ if (argBase) {
 // (siehe themeAn). Ein Theme, das in der App bricht, ist ein Fehler.
 const THEMES = ['console', 'blueprint', 'studio', 'board'];
 const PAGES = [
-  // ?plan=leer: ohne den Schalter lüde die App den mitgelieferten Klassentreffen-
-  // Plan und die Darstellungsprüfungen liefen gegen andere Daten (der hat z.B.
-  // keine Phasen). Geprüft wird hier weiter die Festival-Vorlage.
+  // ?plan=leer: Testschalter, öffnet das gesetzte Projekt ohne Dialog (ohne Projekt: Dialog).
   { name: 'APP (index.html)', url: BASE + '/index.html?plan=leer', app: true },
   ...THEMES.map((t) => ({ name: 'APP Theme ' + t, url: BASE + '/index.html?plan=leer', app: true, theme: t, key: t })),
 ];
@@ -554,13 +553,14 @@ for (const pg of PAGES) {
   };
   for (const t of HANDY_THEMES) for (const modus of ['bau', 'show']) {
     const m = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await planLaden(m);
     const label = `${t} · ${modus === 'bau' ? 'Bauzeitenplan' : 'Showablauf'}`;
     const mc = async (name, fn) => {
       let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
       if (r === true) console.log(`    ✓ ${label}: ${name}`);
       else { console.log(`    ✗ ${label}: ${name}: ${r}`); problems++; }
     };
-    await m.goto(BASE + '/index.html?plan=klassentreffen&ansicht=' + modus, { waitUntil: 'load', timeout: 30000 });
+    await m.goto(BASE + '/index.html?plan=leer&ansicht=' + modus, { waitUntil: 'load', timeout: 30000 });
     await m.waitForSelector('.bz-lab', { timeout: 20000 });
     await m.waitForTimeout(argBase ? 1600 : 800);
     if (t !== 'callboard') { await themeAn(m, t); await m.waitForTimeout(400); }
@@ -616,9 +616,10 @@ for (const pg of PAGES) {
   const SOLL = { bau: 15, show: 13 };
   for (const [w, h] of [[1600, 950], [390, 844]]) for (const modus of ['bau', 'show']) {
     const m = await browser.newPage({ viewport: { width: w, height: h } });
+    await planLaden(m);
     let r;
     try {
-      await m.goto(BASE + '/index.html?plan=klassentreffen&ansicht=' + modus, { waitUntil: 'load', timeout: 30000 });
+      await m.goto(BASE + '/index.html?plan=leer&ansicht=' + modus, { waitUntil: 'load', timeout: 30000 });
       await m.waitForSelector('.bz-lab', { timeout: 20000 });
       await m.waitForTimeout(argBase ? 1600 : 800);
       r = await m.evaluate(() => [...document.querySelectorAll('.hd-bar button, .hd-bar input, .hd-bar select')]

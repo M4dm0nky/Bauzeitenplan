@@ -8,6 +8,7 @@ import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
+import { planSeed } from './plan-fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -2733,7 +2734,19 @@ console.log('\nMEILENSTEIN OHNE TERMIN DATIEREN (Vorlage, Tabelle und Panel)');
 console.log('\nABSCHNITT IM PANEL');
 // Das Panel zeigt das Abschnittsfeld nur bei Bühnen-Einträgen. Die Festival-
 // Vorlage hat keine Bühne, daher der Plan mit Hauptbühne (wie verify-showablauf).
-await page.goto(BASE + '/index.html?plan=klassentreffen&ansicht=show');
+// Der Plan kommt als Testdaten in den localStorage (App liefert keinen mehr mit);
+// das Klassentreffen-Projekt wird zum aktiven, die übrigen Projekte bleiben im Index.
+{
+  const { plan: kt, id: ktId } = planSeed('klassentreffen-festival.json');
+  await page.evaluate(({ text, id, name, venue }) => {
+    localStorage.setItem('bzp_p_' + id, text);
+    const idx = JSON.parse(localStorage.getItem('bzp_projects') || '[]').filter((e) => e.id !== id);
+    idx.push({ id, name, venue: venue || '', modified: new Date().toISOString(), remoteSha: null, dirty: false });
+    localStorage.setItem('bzp_projects', JSON.stringify(idx));
+    localStorage.setItem('bzp_active', id);
+  }, { text: JSON.stringify(kt), id: ktId, name: kt.project.name, venue: kt.project.venue });
+}
+await page.goto(BASE + '/index.html?plan=leer&ansicht=show');
 await page.waitForSelector('[data-ansicht="show"][aria-pressed="true"]', { timeout: 20000 });
 await page.waitForTimeout(900);
 await check('eigener Abschnitt «Load-in» erscheint im Panel-Abschnittsfeld', async () => {
@@ -2769,7 +2782,7 @@ console.log('\nZEITUMSTELLUNG');
   await page.waitForTimeout(900);
   const letztesGewerk = await page.evaluate(async () => {
     const m = await import('/js/persistence.js');
-    const r = m.deserialize(await (await fetch('/klassentreffen-festival.json')).text());
+    const r = m.deserialize(localStorage.getItem('bzp_p_klassentreffen-festival-2026'));
     const pl = r.plan;
     const t0 = pl.tasks[0];
     const gw = [...pl.gewerke].sort((a, b) => a.sort - b.sort).filter((g) => g.art === 'gewerk');

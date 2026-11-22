@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { createServer } from 'node:http';
+import { FIXTURES } from './plan-fixture.mjs';
 const here = dirname(fileURLToPath(import.meta.url)); const root = join(here, '..');
 mkdirSync(join(here, 'shots'), { recursive: true });
 const exe = mustFirefox();
@@ -38,7 +39,7 @@ await p.waitForTimeout(700);
 
 console.log('\nAMK IMPORTIEREN');
 await p.locator('.dlg-act .btn', { hasText: 'JSON importieren' }).click();
-await p.locator('#import-file').setInputFiles(join(root, 'amk-singleshow.json'));
+await p.locator('#import-file').setInputFiles(join(FIXTURES, 'amk-singleshow.json'));
 await p.waitForTimeout(1200);
 
 await check('Projekt heißt richtig', async () =>
