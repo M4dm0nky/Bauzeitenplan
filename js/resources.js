@@ -109,6 +109,28 @@ export function rasterGrenzen(von, bis, schritt) {
 }
 
 /**
+ * Index der Zeitscheibe, die Minute `m` enthält: größtes i in [0, grenzen.length-2]
+ * mit grenzen[i] <= m (exklusiv: grenzen[i] < m). Passt keins, 0.
+ * Binäre Suche über das aufsteigende Array `grenzen` (statt linearem Durchlauf).
+ *
+ * Exklusiv gilt für das (exklusive) Ende eines Vorgangs: endet er genau auf einer
+ * Grenze, gehört er noch zur Scheibe davor. Ein Abzug wie `m - 1e-9` wirkt bei
+ * Epochenminuten (~3e7) nicht (Gleitkomma-Schritt ~3,7e-9), daher ein echtes «kleiner als».
+ */
+export function scheibeIndex(grenzen, m, exklusiv = false) {
+  const n = grenzen.length - 1;
+  if (n <= 1) return 0;
+  // lo: letzter bekannter Kandidat mit Bedingung erfüllt (0 als Vorgabe)
+  let lo = 0, hi = n - 1;
+  while (lo < hi) {
+    const mitte = (lo + hi + 1) >> 1;
+    const erfuellt = exklusiv ? grenzen[mitte] < m : grenzen[mitte] <= m;
+    if (erfuellt) lo = mitte; else hi = mitte - 1;
+  }
+  return lo;
+}
+
+/**
  * Bedarfs-/Verfügbarkeitsraster über eine Menge von Vorgängen: je Ressource
  * dieser Art, je Zeitscheibe die Summe aus Bedarf (normale Vorgänge) und
  * Verfügbarkeit (Bereitstellungen).
@@ -125,20 +147,10 @@ export function bedarfsRaster(tasks, resList, { kind, von, bis, schritt = 60 } =
   // Länge an der Zeitumstellung 23/25 Stunden beträgt — Grenzen suchen statt dividieren.
   const grenzen = schritt === 'tag' ? rasterGrenzen(von, bis, 'tag') : null;
   const n = grenzen ? Math.max(0, grenzen.length - 1) : Math.max(0, Math.ceil((bis - von) / schritt));
-  // Index der Scheibe, die Minute m enthält (grenzen[i] <= m < grenzen[i+1]).
-  const scheibe = (m) => {
-    let i = 0;
-    while (i < n - 1 && grenzen[i + 1] <= m) i++;
-    return i;
-  };
-  // Scheibe des (exklusiven) Endes m: endet ein Vorgang genau auf einer Grenze, gehört er
-  // noch zur Scheibe davor. Ein Abzug wie `m - 1e-9` wirkt bei Epochenminuten (~3e7) nicht
-  // (Gleitkomma-Schritt ~3,7e-9), daher ein echtes «kleiner als».
-  const scheibeBis = (m) => {
-    let i = 0;
-    while (i < n - 1 && grenzen[i + 1] < m) i++;
-    return i;
-  };
+  // Scheibe der Minute m (grenzen[i] <= m < grenzen[i+1]) und Scheibe des exklusiven Endes m
+  // (siehe scheibeIndex).
+  const scheibe = (m) => scheibeIndex(grenzen, m);
+  const scheibeBis = (m) => scheibeIndex(grenzen, m, true);
   const liste = kind ? resList.filter((r) => r.kind === kind) : resList;
   const out = liste.map((r) => ({
     rid: r.id, label: r.label,

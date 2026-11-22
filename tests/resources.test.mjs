@@ -1,4 +1,4 @@
-import { ressourcen, resLabel, resKind, deckung, bedarfsRaster, rasterGrenzen } from '../js/resources.js';
+import { ressourcen, resLabel, resKind, deckung, bedarfsRaster, rasterGrenzen, scheibeIndex } from '../js/resources.js';
 import { toMin } from '../js/schedule.js';
 import { createStore } from '../js/store.js';
 import assert from 'node:assert/strict';
@@ -167,6 +167,55 @@ test('bedarfsRaster «tag»: Bedarf um 23:30 am 26.10. landet in Scheibe 2, nich
   const [row] = bedarfsRaster([t], [{ id: 'r1', label: 'R', kind: 'personal' }],
     { kind: 'personal', von: toMin('2026-10-24T00:00'), bis: toMin('2026-10-28T00:00'), schritt: 'tag' });
   assert.deepEqual(row.slots.map((s) => s.bedarf), [0, 0, 2, 0]);
+});
+
+// Lineare Referenz (Bezugswert für die binäre Suche): größtes i in [0, len-2]
+// mit g[i] <= m (exklusiv: g[i] < m); 0, wenn keins passt.
+const scheibeLinear = (g, m, exklusiv = false) => {
+  let i = 0;
+  for (let k = 0; k <= g.length - 2; k++) {
+    if (exklusiv ? g[k] < m : g[k] <= m) i = k;
+  }
+  return i;
+};
+
+console.log('\nScheibensuche (scheibeIndex)');
+test('scheibeIndex entspricht der linearen Referenz (200 Zufallsfälle, fester Seed)', () => {
+  let seed = 12345;
+  const zufall = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  for (let f = 0; f < 200; f++) {
+    const len = 2 + Math.floor(zufall() * 30);
+    const g = [Math.floor(zufall() * 1000)];
+    for (let k = 1; k < len; k++) g.push(g[k - 1] + 1 + Math.floor(zufall() * 60));
+    const m = g[0] - 5 + Math.floor(zufall() * (g[len - 1] - g[0] + 10));
+    for (const exklusiv of [false, true]) {
+      const soll = scheibeLinear(g, m, exklusiv);
+      const ist = scheibeIndex(g, m, exklusiv);
+      assert.equal(ist, soll, `Grenzen=${JSON.stringify(g)} m=${m} exklusiv=${exklusiv}`);
+    }
+  }
+});
+test('scheibeIndex: m genau auf einer Grenze (beide Modi)', () => {
+  const g = [600, 660, 720, 780, 840];
+  for (let k = 0; k < g.length; k++) {
+    const erwartetNormal = Math.min(k, g.length - 2);
+    const erwartetExkl = Math.max(0, Math.min(k - 1, g.length - 2));
+    assert.equal(scheibeIndex(g, g[k]), erwartetNormal, `m=${g[k]} normal`);
+    assert.equal(scheibeIndex(g, g[k], true), erwartetExkl, `m=${g[k]} exklusiv`);
+  }
+});
+test('scheibeIndex: m vor dem Anfang und hinter dem Ende', () => {
+  const g = [600, 660, 720];
+  assert.equal(scheibeIndex(g, 599), 0);
+  assert.equal(scheibeIndex(g, 599, true), 0);
+  assert.equal(scheibeIndex(g, 5000), 1);
+  assert.equal(scheibeIndex(g, 5000, true), 1);
+});
+test('scheibeIndex: grenzen.length === 1 und === 2 → 0', () => {
+  assert.equal(scheibeIndex([600], 600), 0);
+  assert.equal(scheibeIndex([600], 700, true), 0);
+  assert.equal(scheibeIndex([600, 660], 700), 0);
+  assert.equal(scheibeIndex([600, 660], 600, true), 0);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
