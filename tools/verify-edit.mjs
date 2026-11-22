@@ -1919,6 +1919,31 @@ console.log('\nTOUCH: VERKNÜPFEN-GRIFF NUR AM AUSGEWÄHLTEN BALKEN (Handy 390×
         const v = await sichtbar();
         return v.length === 1 && v[0] === ziel.id ? true : `sichtbar: [${v}], erwartet [${ziel.id}]`;
       });
+      await check('Hybridgerät: Tastaturfokus auf einem nicht gewählten Balken zeigt dessen Griff, Blur versteckt ihn wieder', async () => {
+        const sel = await pt.evaluate(() => document.querySelector('.bz-link.is-sel')?.dataset.linkFrom);
+        if (!sel) return 'Voraussetzung: kein gewählter Balken';
+        await pt.evaluate((id) => document.querySelector('.bz-bar[data-task="' + id + '"]').focus(), sel);
+        let ziel = null;
+        for (let i = 0; i < 10 && !ziel; i++) {
+          await pt.keyboard.press('Tab');
+          ziel = await pt.evaluate((id) => {
+            const a = document.activeElement;
+            return a && a.matches('.bz-bar[data-task]') && a.dataset.task !== id ? a.dataset.task : null;
+          }, sel);
+        }
+        if (!ziel) return 'Tab erreicht in 10 Versuchen keinen zweiten Balken';
+        const zustand = () => pt.evaluate((id) => {
+          const h = document.querySelector('.bz-link[data-link-from="' + id + '"]');
+          return { on: h.classList.contains('is-on'), sel: h.classList.contains('is-sel'), vis: getComputedStyle(h).visibility };
+        }, ziel);
+        const a = await zustand();
+        if (a.sel) return 'Voraussetzung: Fokusbalken ist gewählt';
+        if (!a.on || a.vis !== 'visible') return `visibility ${a.vis} trotz Fokus (is-on: ${a.on})`;
+        await pt.evaluate(() => document.activeElement.blur());
+        await pt.waitForTimeout(200);
+        const b = await zustand();
+        return b.vis === 'hidden' && !b.on ? true : `nach Blur: visibility ${b.vis}, is-on ${b.on}`;
+      });
     } finally { await cb.close(); }
   }
 }
