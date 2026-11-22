@@ -131,33 +131,7 @@ den **Abschnitt**: ein Setup-Blatt für die Crew am Vormittag, ein Show-Blatt f�
 den Abend, oder beides auf einem. Kopf und Fuß nennen ihn, damit ein abgelegtes
 Blatt sich selbst erklärt.
 
-**Weitergeben: einfach die Adresse schicken.** Der
-Direktlink [`?plan=klassentreffen`](https://m4dm0nky.github.io/Bauzeitenplan/?plan=klassentreffen)
-öffnet den Klassentreffen-Plan **sofort** — kein Import, keine Datei im Anhang. Die
-App holt ihn aus `klassentreffen-festival.json`. Ohne `?plan=` fragt beim Start der
-Projektdialog (zuletzt geöffnete Projekte, mitgelieferte Pläne, Neu, Import); nur
-ein Live-Monitor, bei dem Live an war, öffnet das aktive Projekt ohne Dialog.
-
-**Neuer Planstand? Nur die JSON austauschen.** Kommt V08, V09 …, wird die Datei
-neu gebaut und gepusht — jeder Betrachter bekommt sie beim nächsten Öffnen des
-Plans über den Direktlink, «Mitgelieferte Pläne» oder seine Projektzeile; am
-Live-Monitor kommt sie still an.
-Erkannt wird das am `exported`-Stempel: ist der in der Datei neuer als der zuletzt
-geladene und hat die lokale Fassung eigene Änderungen, fragt die App («Zwei
-Fassungen»: neuen Stand nehmen, meine behalten, beide behalten als Kopie). Ohne
-eigene Änderungen oder bei gleichem Stempel passiert nichts Überraschendes. Am
-Live-Monitor (Live an) fragt sie nie: Ohne eigene Änderungen kommt der neue Stand
-still, mit eigenen bleibt die lokale Fassung und ein Hinweis erscheint.
-
-```bash
-node tools/make-klassentreffen.mjs   # JSON aus der Quelle neu bauen
-git commit -am "Plan auf V08" && git push origin main
-```
-
-`?plan=amk` öffnet stattdessen den AMK-Plan, **`?plan=leer`** öffnet
-keinen mitgelieferten Plan: das aktive (sonst erste) Projekt, sonst der Projektdialog für eigene
-Projekte. Beide Pläne stehen
-auch im Dialog unter „Mitgelieferte Pläne".
+**Pläne kommen über Export/Import (JSON-Datei) oder den Sync auf andere Geräte.** Beim Start fragt immer der Projektdialog (eigene Projekte, Neu, Import); nur ein Live-Monitor mit aktivem Projekt öffnet ohne Dialog. Die App holt nie von selbst einen Plan aus dem Netz. `?plan=leer` ist der Schalter der Prüfwerkzeuge.
 
 **Drucken: ein A3 quer je Tag.** Der Knopf **Drucken** im Kopf öffnet
 `print.html` — die Tagesblätter für die Wand im Produktionsbüro. Dort wählst du
@@ -316,7 +290,7 @@ node tools/verify-amk.mjs     # AMK-Plan importieren und prüfen
 node tools/verify-print.mjs   # Tagesblätter: Zuschnitt, Filter, Maßstab, PDF
 node tools/verify-klassentreffen.mjs  # V07-Plan + Startdialog + Direktlink
 node tools/verify-showablauf.mjs      # Showablauf: Ebene, Bühnen, Live-Kopfzeile, Blatt
-node tools/make-amk.mjs       # amk-singleshow.json aus den PDF-Daten neu bauen
+node tools/make-amk.mjs       # tools/fixtures/amk-singleshow.json (Testdaten) aus den PDF-Daten neu bauen
 
 # gegen die veröffentlichte Seite statt lokal:
 node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
@@ -451,11 +425,11 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 Messe sind entworfene Gerüste — richtige Gewerke und Meilensteine, aber keine
 erfundenen Detailvorgänge. Korrigier sie beim ersten echten Einsatz.
 
-**Beispielplan Klassentreffen:** `klassentreffen-festival.json` bildet den
+**Beispielplan Klassentreffen:** `tools/fixtures/klassentreffen-festival.json` (Testdaten für die Prüfskripte) bildet den
 **Bauzeitenplan V07 (Stand 25.08.2026)** ab — 20 Gewerke, 353 Vorgänge über
 14 Tage, quellentreu bis auf 19 Zeilen, die im Original ohne Uhrzeit gedruckt
 sind (gestrichelte Kante, Grund in der Notiz). Neu gebaut wird er mit
-`node tools/make-klassentreffen.mjs`; die Quelle steht Zeile für Zeile in
+`node tools/make-klassentreffen.mjs` nach `tools/fixtures/`; die Quelle steht Zeile für Zeile in
 diesem Werkzeug. **Keine Verknüpfungen** — V07 ist ein terminierter Kalender,
 und erfundene Abhängigkeiten erzeugten rote Konflikte ohne Wirklichkeitsbezug.
 

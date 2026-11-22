@@ -192,7 +192,7 @@ const dialogZu = async (g) => {
   }
   await p.evaluate(() => document.getElementById('ein-zu').click());
 };
-// Nur die EIGENEN Projekte (erste .dlg-list), nicht die mitgelieferten Pläne.
+// Nur die EIGENEN Projekte (erste .dlg-list).
 const eigeneProjekte = async (g) => {
   const p = g.page;
   await p.locator('#rail-ein').click();

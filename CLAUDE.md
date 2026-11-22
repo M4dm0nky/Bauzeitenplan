@@ -13,8 +13,8 @@ node tests/run.mjs  # Unit-Tests + statische Prüfungen
 node tools/verify-browser.mjs  # Darstellung: App in allen 5 Themes
 node tools/verify-edit.mjs  # Bearbeiten: anlegen, tippen, Undo, Panel, Menü
 node tools/verify-live.mjs  # Live-Modus mit gestellter Uhr
-node tools/verify-amk.mjs  # AMK-Plan importieren
-node tools/verify-klassentreffen.mjs  # V07-Plan + Startdialog + Direktlink
+node tools/verify-amk.mjs  # AMK-Plan importieren (tools/fixtures)
+node tools/verify-klassentreffen.mjs  # V07-Plan importieren + Negativprüfung «kein mitgelieferter Plan»
 node tools/verify-print.mjs  # Tagesblätter A3: Zuschnitt, Filter, Maßstab
 node tools/verify-showablauf.mjs  # Showablauf: Ebene, Bühnen, Kopfzeile, Blatt
 node tools/verify-sync.mjs  # Sync: zwei Geräte, Konflikt, Offline-Start
@@ -47,8 +47,8 @@ node tools/verify-sync.mjs  # Sync: zwei Geräte, Konflikt, Offline-Start
 - **Neue Felder müssen durch `addTask` durch** (sonst fallen sie beim Anlegen still weg).
 - **`js/dom.js` = DOM-Kleinkram** (`el`, `svgEl`, `$`, `escapeHtml`, `toInput`, `STATUS`), nicht `clone`.
 - **Ein Zustand, ein Besitzer:** Inspector = INHALT des Panels, `syncPanel()` (app.js) allein die Sichtbarkeit (`#ins.hidden`).
-- **Die JSON ist die Wahrheit:** `openBundled` holt `klassentreffen-festival.json` (`BUNDLED` in app.js); neuer Planstand = Datei tauschen + pushen. `exported`-Stempel (`project.quelle`): Datei neuer UND lokal anders (`gleicherPlan`) → `askDialog` «Zwei Fassungen»; sonst still.
-- **Start = Projektdialog** (`bootLokal`), kein Autostart. Direkt nur `?plan=<key>` und Live-Monitor (`bzp_live=1` + aktives Projekt). `?plan=leer` = ohne Plan: aktives/erstes Projekt, sonst Dialog (`verify-browser`, `verify-edit`, `verify-live`, `verify-amk` hängen daran).
+- **Die App holt nie eine Plan-JSON:** kein `BUNDLED`/`openBundled`, kein `fetch` einer `.json` in `js/` (`tests/run.mjs` sperrt es). Testdaten liegen in `tools/fixtures/`, Prüfskripte seeden sie per `tools/plan-fixture.mjs`.
+- **Start = Projektdialog** (`bootLokal`), kein Autostart. Direkt nur der Live-Monitor (`bzp_live=1` + aktives Projekt). `?plan=leer` = ohne Plan: aktives/erstes Projekt, sonst Dialog (`verify-browser`, `verify-edit`, `verify-live`, `verify-amk` hängen daran).
 - **Was der erste Start braucht, gehört auf Modulebene, nicht in `mount()`** (Import, Neu, Projekte, `openEinrichten`).
 - **Keine Platzhaltertexte in Freitextspalten.** **„Tag 1/2/3" gehört in die Notiz, nicht in den Titel** (Test). **Das Wort ist «Zeiteintrag»** in Spalte, Knopf, Zähler, Ecke der Seitenspalte, Vorgabename, Kennzahl (Datenfeld `punktTyp`; auf dem A3-Blatt bleibt «Programmpunkt»).
 - **Zeiten aus echten Zeitstempeln** (`toMin()`), nie aus Ziffern auf Datumsstrings.

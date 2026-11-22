@@ -945,44 +945,35 @@ Farbe gehört dem Gewerk, nicht
 seiner Position; sonst färbt sich beim Sortieren der halbe Plan um. Ein Test
 prüft das.
 
-### Der Start fragt, die JSON bleibt die Wahrheit.
+### Der Start fragt, und die App holt nichts von selbst.
 
-`openBundled` holt `klassentreffen-festival.json` (`BUNDLED` in app.js). Neuer
-Planstand = Datei austauschen und pushen; ist die lokale Fassung verändert, fragt die App (siehe unten). Ob die Datei neuer ist,
-entscheidet der `exported`-Stempel aus `serialize()`, mitgeführt in
-`project.quelle`; nicht erreichbar → lokal.
+Bis 0.21.0 holte `openBundled` die Datei `klassentreffen-festival.json` (`BUNDLED` in app.js),
+und `?plan=<key>` öffnete sie direkt; neuer Planstand hieß Datei tauschen, pushen und beim
+Öffnen «Zwei Fassungen» entscheiden lassen (Hash-Vergleich in `quelle.hash`).
 
-**Warum jetzt ein Dialog statt Autostart:** `bootLokal` öffnete bei jedem Aufruf
-ohne `?plan=` den Klassentreffen-Plan und ignorierte das aktive Projekt — ein
-Live-Monitor mit eigenem Projekt zeigte nach dem Neustart den falschen Plan. Jetzt
-fragt der Projektdialog (zuletzt geöffnete nach `modified`, mitgelieferte Pläne,
-Neu, Import). Direkt öffnen nur `?plan=<key>` (wer den Link schickt, will genau
-diesen Plan) und der Live-Monitor.
+**Warum das entfiel (Marco, 2026-11-22):** Ein Plan, der von allein erscheint, ist unerwartet
+und zieht Netzabrufe nach sich. Sein Plan bleibt lokal bei ihm; Pläne kommen über Import/Export
+oder den Sync. Entfernt sind `BUNDLED`/`openBundled`/`bundledKey`, der Abschnitt «Mitgelieferte
+Pläne» im Projektdialog, `planHash`/`unveraendert` und die Abfrage «Zwei Fassungen» beim Laden.
+`project.quelle` bleibt in Altbeständen als totes Feld stehen.
 
-**Warum die Live-Ausnahme:** Nach einem Stromausfall klickt am Monitor niemand
-einen Dialog weg. War beim letzten Lauf Live an (`bzp_live === '1'`) und lässt
-sich das aktive Projekt laden, wird es ohne Dialog geöffnet. Fehlt eines von
-beidem, fragt der Dialog.
+**Was jetzt gilt:** Der Start fragt (Projektdialog: zuletzt geöffnete, Neu, Import), statt wie früher
+das Klassentreffen zu öffnen, das das aktive Projekt ignorierte. Ohne Dialog öffnet nur der
+Live-Monitor (`bzp_live=1`) das aktive Projekt, ohne Netzabruf. `?plan=<key>` wirkt wie kein
+Parameter. **`?plan=leer`** bleibt als Testschalter: aktives (sonst erstes) Projekt, sonst der
+Dialog; so starten die Prüfskripte im leeren Browser.
 
-**Warum beim neuen Planstand gefragt wird:** «Datei neuer → Datei gewinnt» ersetzte
-die lokale Fassung ohne Rückfrage — Änderungen des Betrachters waren still weg.
-Jetzt fragt `askDialog` («Zwei Fassungen»), aber nur, wenn die Datei neuer ist UND
-die lokale Fassung inhaltlich abweicht (`gleicherPlan`, Stempel zählen nicht):
-«Neuen Stand nehmen» (wie früher), «Meine behalten» (Stempel der Datei wird
-übernommen, sonst fragte jeder Start erneut), «Beide behalten (Kopie)» (lokale
-Fassung als «… (lokal vor Update)» unter neuer id). Abbruch = «Meine behalten»
-ohne Stempel. **`?plan=leer`** öffnet weiter keinen mitgelieferten Plan: aktives (sonst erstes) Projekt,
-sonst der Dialog. Das gehört dazu, weil `verify-edit`, `verify-live` und
-`verify-sync` damit das Neuladen prüfen; im leeren Browser (Erststart von
-`verify-browser`, `verify-edit`, `verify-live`, `verify-amk`) zeigt es den Dialog.
+**Die Sperre:** `tests/run.mjs` lässt keine Plan-JSON mehr in `js/` zu (kein `BUNDLED`/`openBundled`,
+kein `fetch` einer `.json`). Die JSONs sind Testdaten unter `tools/fixtures/`, gebaut von
+`tools/make-*.mjs`; `tools/plan-fixture.mjs` seedet sie per `addInitScript`. Die Negativprüfung
+«KEIN MITGELIEFERTER PLAN» in `verify-klassentreffen.mjs` öffnet `?plan=klassentreffen` im frischen
+Browser und erwartet den Dialog ohne Abruf.
 
 **Warum im Repo nur nach Rückfrage gelöscht wird:** Fehlt ein Projekt im Daten-Repo,
 hieß das bisher «auf einem anderen Gerät gelöscht» und entfernte es lokal still. Eine
 Antwort ohne Liste oder ein 404 der Liste ist aber auch ein kaputtes Repo, und das
 wäre Datenverlust. Jetzt fragt `askDialog` («Lokal löschen» oder «Behalten und neu
 hochladen»), und das offene Projekt wird erst nach dem Wechsel gelöscht.
-
-**Warum der Planstand einen Fingerabdruck trägt:** Ob lokal etwas geändert wurde, lässt sich nicht am Vergleich mit der NEUEN Datei sehen (die ist ja anders). Deshalb steht beim Laden `quelle.hash` (FNV-1a über den kanonischen Inhalt ohne `quelle`, `planHash` in sync.js). Passt er später noch, hat niemand etwas geändert, und V08 ersetzt V07 ohne Frage, auch am Live-Monitor. Bei «Meine behalten» gilt der Hash des lokalen Plans, damit spätere eigene Änderungen erkennbar bleiben. Ohne Hash (Altbestand) bleibt es beim Inhaltsvergleich.
 
 **Warum zwei Tabs gefragt werden:** Zwei Tabs auf demselben Projekt überschrieben sich
 gegenseitig. Ändert ein anderer Tab den Plan, übernimmt der offene Tab den Stand, wenn

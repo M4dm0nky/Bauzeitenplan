@@ -3,6 +3,15 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unreleased — kein mitgelieferter Plan
+
+**Die App holt keinen Plan mehr von selbst: Pläne kommen nur über Import oder Sync.**
+
+- **Kein mitgelieferter Plan:** `?plan=klassentreffen` und `?plan=amk` öffnen nichts mehr, der Startdialog zeigt keine «Mitgelieferte Pläne». Ein Plan, der von allein erscheint, ist unerwartet und zieht Netzabrufe nach sich.
+- **Testdaten nach `tools/fixtures/`:** Die beiden JSONs sind nur noch Testdaten für die Prüfskripte; eine Sperre in `tests/run.mjs` verhindert, dass die App wieder eine Plan-JSON holt.
+- **Griffe auf Touch:** Der Verknüpfen-Kreis ist auf Touch-Geräten per Tastatur erreichbar; ein Fingertipp allein zeigt ihn nicht.
+- **Bedarfsansicht:** Die Scheibensuche im Tagesraster ist binär statt linear.
+
 ## 0.21.0 — 2026-11-21
 
 **Tage rechnen jetzt über den Kalender: Die Zeitumstellung am 25. Oktober bringt keine Verschiebung mehr.**
