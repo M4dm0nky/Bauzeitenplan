@@ -101,11 +101,11 @@ const startAnsicht = () => {
 const TEXT_EINGABEN = new Set(['text', 'search', 'url', 'tel', 'email', 'password', 'number',
   'date', 'time', 'datetime-local', 'month', 'week']);
 
-// ── Start ───────────────────────────────────────────────────────────────────
-// Kein mitgelieferter Plan: die App holt nie eine JSON von selbst (Marco, 2026-11-22).
-// Pläne kommen nur über Import, Vorlage oder Sync. `?plan=leer` ist der Schalter der Prüfwerkzeuge.
-
 // ── Erststart ───────────────────────────────────────────────────────────────
+// Kein mitgelieferter Plan: die App holt nie eine JSON von selbst — ein Plan, der
+// von allein erscheint, wäre für den Nutzer unerwartet und zöge Netzabrufe nach
+// sich (Entscheidung 2026-11-22). Pläne kommen nur über Import, Vorlage oder Sync.
+// `?plan=leer` ist der Schalter der Prüfwerkzeuge.
 async function boot() {
   await bootLokal();
   // Danach, nicht davor und nicht blockierend: lokal starten, dann abgleichen.
@@ -667,8 +667,8 @@ async function fuehreAus(sync, a) {
     return { ok: true };
   }
 
-  // Konflikt. Gleicher Inhalt (z. B. der mitgelieferte Plan auf einem neuen
-  // Gerät) ist keiner: still als abgeglichen vermerken.
+  // Konflikt. Gleicher Inhalt (z. B. derselbe Plan auf zwei Geräten
+  // importiert) ist keiner: still als abgeglichen vermerken.
   const lokal = repo.load(a.id);
   if (lokal && gleicherPlan(lokal, d.plan)) { repo.markSynced(a.id, p.sha); return { ok: true }; }
   const wahl = await askDialog({
@@ -1508,7 +1508,7 @@ function showProjectDialog({ firstRun = false }) {
   box.append(el('h2', 'dlg-h', firstRun ? 'Bauzeitenplan' : 'Projekte'));
   const list = repo.list();
   if (firstRun) box.append(el('p', 'dlg-sub', list.length
-    ? 'Öffne ein Projekt, einen mitgelieferten Plan oder leg ein neues an. Alles bleibt in diesem Browser; sichere regelmäßig per Export.'
+    ? 'Öffne ein Projekt oder leg ein neues an. Alles bleibt in diesem Browser; sichere regelmäßig per Export.'
     : 'Leg ein Projekt an — aus einer Vorlage oder leer. Alles bleibt in diesem Browser; sichere regelmäßig per Export.'));
 
   // Bestehende Projekte
