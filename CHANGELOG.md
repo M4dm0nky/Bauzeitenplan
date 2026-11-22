@@ -3,7 +3,7 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
-## Unreleased — kein mitgelieferter Plan
+## 0.22.0 — 2026-11-22
 
 **Die App holt keinen Plan mehr von selbst: Pläne kommen nur über Neu/Vorlage, Import oder Sync.**
 
