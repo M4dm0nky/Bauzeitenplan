@@ -16,7 +16,8 @@ Du prüfst den Bauzeitenplan auf Herz und Nieren. ZUERST NUR LESEN UND AUSPROBIE
   Personal und Maschinen). Vanilla JS, ES-Module, kein Build-Step, kein Backend.
   Projekte leben in localStorage + JSON-Export, optional Sync über GitHub.
 - Einsatz: Planung am Rechner, im Betrieb läuft der Plan im Live-Modus auf einem
-  Monitor; Nutzer sind Techniker und Produktionsleiter unter Zeitdruck, teils am Handy.
+  Monitor; Nutzer sind Techniker und Produktionsleiter unter Zeitdruck. Handy-Bedienung
+  ist keine Anforderung (keine Touch-/iPhone-Befunde melden).
   Tagesblätter werden als A3 gedruckt.
 - Was nie passieren darf: Plan geht verloren oder wird still überschrieben (localStorage,
   Import, Sync-Konflikt, Service-Worker-Update), falsche Uhrzeit/Jetzt-Linie/Verzug im
@@ -54,7 +55,7 @@ Du prüfst den Bauzeitenplan auf Herz und Nieren. ZUERST NUR LESEN UND AUSPROBIE
    offline, zwei Tabs gleichzeitig, Versionswechsel des Service Workers.
    Screenshots ansehen, nicht nur Konsole.
 4. Benutzbarkeit: Versteht ein neuer Nutzer ohne Anleitung, was zu tun ist?
-   Leere Zustände, Fehlermeldungen, Bestätigungen, Tastatur, Handy-Breite,
+   Leere Zustände, Fehlermeldungen, Bestätigungen, Tastatur,
    Kontrast in allen 5 Themes, Lesbarkeit des Live-Modus aus Entfernung,
    Symbole statt Textkürzel, einheitliche Begriffe («Zeiteintrag» usw.).
 5. Features & Lücken: Was erwartet ein Produktionsleiter auf einer echten
