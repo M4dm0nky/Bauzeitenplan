@@ -1346,9 +1346,9 @@ await check('eine eigene Art TRITT AUF DEM BLATT ZURÜCK, wenn sie soll', async 
   // Bisher entschied ein fest verdrahteter Vergleich auf 'changeover', wer eine
   // niedrigere Zeile bekommt. Jetzt sagt es die Art selbst — sonst nähme eine
   // selbst angelegte «Umbaupause» genauso viel Platz weg wie ein Act.
-  // ctx.newPage(), nicht b.newPage(): ein neuer Context hätte einen eigenen
-  // localStorage, print.html läse dort ein anderes (geseedetes) Projekt und kennte
-  // die eben angelegte Art gar nicht.
+  // ctx.newPage(), nicht b.newPage(): ein neuer Context hätte gar kein
+  // Projekt: ladePlan() in print.js würfe «Kein Projekt in diesem Browser». Darum
+  // derselbe Context, in dem die Art eben angelegt wurde.
   const seite = await ctx.newPage();
   await seite.goto(BASE + '/print.html?ansicht=show&abschnitt=setup');
   await seite.waitForSelector('.pr-ro-r', { timeout: 20000 });

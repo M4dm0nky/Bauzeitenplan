@@ -2736,16 +2736,15 @@ console.log('\nABSCHNITT IM PANEL');
 // Vorlage hat keine Bühne, daher der Plan mit Hauptbühne (wie verify-showablauf).
 // Der Plan kommt als Testdaten in den localStorage (App liefert keinen mehr mit);
 // das Klassentreffen-Projekt wird zum aktiven, die übrigen Projekte bleiben im Index.
-{
-  const { plan: kt, id: ktId } = planSeed('klassentreffen-festival.json');
-  await page.evaluate(({ text, id, name, venue }) => {
-    localStorage.setItem('bzp_p_' + id, text);
-    const idx = JSON.parse(localStorage.getItem('bzp_projects') || '[]').filter((e) => e.id !== id);
-    idx.push({ id, name, venue: venue || '', modified: new Date().toISOString(), remoteSha: null, dirty: false });
-    localStorage.setItem('bzp_projects', JSON.stringify(idx));
-    localStorage.setItem('bzp_active', id);
-  }, { text: JSON.stringify(kt), id: ktId, name: kt.project.name, venue: kt.project.venue });
-}
+const { plan: kt, id: ktId } = planSeed('klassentreffen-festival.json');
+const ktText = JSON.stringify(kt);   // Ursprungstext: der localStorage-Stand wird von den Tests verändert
+await page.evaluate(({ text, id, name, venue }) => {
+  localStorage.setItem('bzp_p_' + id, text);
+  const idx = JSON.parse(localStorage.getItem('bzp_projects') || '[]').filter((e) => e.id !== id);
+  idx.push({ id, name, venue: venue || '', modified: new Date().toISOString(), remoteSha: null, dirty: false });
+  localStorage.setItem('bzp_projects', JSON.stringify(idx));
+  localStorage.setItem('bzp_active', id);
+}, { text: ktText, id: ktId, name: kt.project.name, venue: kt.project.venue });
 await page.goto(BASE + '/index.html?plan=leer&ansicht=show');
 await page.waitForSelector('[data-ansicht="show"][aria-pressed="true"]', { timeout: 20000 });
 await page.waitForTimeout(900);
@@ -2780,9 +2779,9 @@ console.log('\nZEITUMSTELLUNG');
   // dass gescrollt werden muss), der letzte Gewerk-Vorgang um 23:30 am 25.10., einer am 26.10.
   await page.goto(BASE + '/index.html?plan=leer');
   await page.waitForTimeout(900);
-  const letztesGewerk = await page.evaluate(async () => {
+  const letztesGewerk = await page.evaluate(async (orig) => {
     const m = await import('/js/persistence.js');
-    const r = m.deserialize(localStorage.getItem('bzp_p_klassentreffen-festival-2026'));
+    const r = m.deserialize(orig);
     const pl = r.plan;
     const t0 = pl.tasks[0];
     const gw = [...pl.gewerke].sort((a, b) => a.sort - b.sort).filter((g) => g.art === 'gewerk');
@@ -2797,7 +2796,7 @@ console.log('\nZEITUMSTELLUNG');
     repo.save(pl);
     repo.setActive(pl.project.id);   // sonst lädt ?plan=leer ein anderes «erstes» Projekt
     return { id: last.id, n: gw.length };
-  });
+  }, ktText);
   await page.goto(BASE + '/index.html?plan=leer&ansicht=bau');
   await page.waitForSelector('.bz-t-major', { timeout: 20000 });
   await page.waitForTimeout(600);

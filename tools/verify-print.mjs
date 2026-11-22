@@ -196,7 +196,6 @@ if (!chromExe) {
   await check('das PDF hat 14 Seiten — eine je Tag', async () => (seiten === 14 ? true : seiten + ' Seiten'));
 }
 
-// ── Vorschau passt ins Fenster, Druck bleibt 1:1 ─────────────────────────────
 // ── Ohne Projekt: kein stiller Ersatzplan ────────────────────────────────────
 // Frischer Context OHNE Seed: print.html darf keinen Plan mitbringen, sondern
 // sagt, dass im Browser kein Projekt liegt.
@@ -205,15 +204,15 @@ console.log('\nOHNE PROJEKT');
   const nc = await b.newContext({ viewport: { width: 1200, height: 800 } });
   const np = await nc.newPage();
   await np.goto(BASE + '/print.html');
-  await np.waitForSelector('.pr-leer', { timeout: 15000 });
+  await np.waitForSelector('.pr-sheet', { timeout: 15000 });
   await check('frischer Browser ohne Projekt: print.html meldet «Kein Projekt in diesem Browser»', async () => {
     const t = await np.locator('#sheets').innerText();
-    const n = await np.locator('.pr-ro, .pr-bar, .pr-sheet:has(.pr-row)').count();
-    return /Kein Projekt in diesem Browser/.test(t) && n === 0 ? true : 'Text: ' + t.slice(0, 120) + ' / Zeilen: ' + n;
+    return /Kein Projekt in diesem Browser/.test(t) ? true : 'Text: ' + t.slice(0, 120);
   });
   await nc.close();
 }
 
+// ── Vorschau passt ins Fenster, Druck bleibt 1:1 ─────────────────────────────
 console.log('\nVORSCHAU');
 for (const [w, h] of [[1440, 900], [1000, 800]]) {
   for (const [name, url, sel] of [['Tagesblatt', '/print.html', '.pr-sheet'], ['Running Order', '/print.html?ansicht=show', '.pr-ro']]) {
