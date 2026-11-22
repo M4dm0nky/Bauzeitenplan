@@ -196,7 +196,6 @@ const jsonZaehler = (pg) => { const z = { n: 0, urls: [] }; pg.on('request', (r)
       localStorage.setItem('bzp_seeded_' + i, '1');
       localStorage.setItem('bzp_p_' + i, text);
       localStorage.setItem('bzp_projects', JSON.stringify([{ id: i, name: 'Klassentreffen Festival 2026 (Altbestand)', venue: '', modified: new Date().toISOString(), remoteSha: null, dirty: false }]));
-      localStorage.setItem('bzp_active', i);
     } catch { /* */ }
   }, [id, JSON.stringify(plan)]);
   const pg2 = await c2.newPage();
@@ -208,11 +207,13 @@ const jsonZaehler = (pg) => { const z = { n: 0, urls: [] }; pg.on('request', (r)
     if (!(await pg2.locator('#dlg').isVisible())) return 'kein Projektdialog';
     await pg2.locator('#dlg .dlg-open', { hasText: 'Altbestand' }).first().click();
     await pg2.waitForTimeout(1500);
-    if (await pg2.locator('.dlg h2', { hasText: 'Zwei Fassungen' }).count()) return 'Dialog «Zwei Fassungen»';
-    if (!((await pg2.locator('#proj-name').textContent()) || '').includes('Klassentreffen')) return 'Projekt nicht offen';
+    const f = [];
+    if (await pg2.locator('.dlg h2', { hasText: 'Zwei Fassungen' }).count()) f.push('Dialog «Zwei Fassungen»');
+    if (!((await pg2.locator('#proj-name').textContent()) || '').includes('Klassentreffen')) f.push('Projekt nicht offen');
     const t = await pg2.evaluate((i) => JSON.parse(localStorage.getItem('bzp_p_' + i)).tasks[0].title, id);
-    if (t !== 'LOKAL GEÄNDERT') return 'lokale Fassung ersetzt: ' + t;
-    return z2.n === 0 ? true : z2.n + ' .json-Abrufe: ' + z2.urls.join(', ');
+    if (t !== 'LOKAL GEÄNDERT') f.push('lokale Fassung ersetzt: ' + t);
+    if (z2.n) f.push(z2.n + ' .json-Abrufe: ' + z2.urls.join(', '));
+    return f.length ? f.join(' / ') : true;
   });
   await c2.close();
 }
