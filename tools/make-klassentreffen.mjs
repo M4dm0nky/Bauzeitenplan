@@ -3,7 +3,7 @@
 // V07 löst V06 vollständig ab: was dort nicht mehr steht, ist hier nicht mehr
 // drin; was neu dazukam, ist aufgenommen. Kein Nachtrag, sondern der Plan.
 //
-//   node tools/make-klassentreffen.mjs   →  klassentreffen-festival.json
+//   node tools/make-klassentreffen.mjs   →  tools/fixtures/klassentreffen-festival.json
 //
 // QUELLENTREUE ist die oberste Regel:
 //   • Tag UND Uhrzeit stammen aus V07 (Spalten Beginn/Ende) → estimated: false.
@@ -646,7 +646,7 @@ const plan = {
 export { plan, ROWS, RUNNING_ORDER, BUEHNE };
 
 if (process.argv[1] && process.argv[1].endsWith('make-klassentreffen.mjs')) {
-  writeFileSync(join(here, '..', 'klassentreffen-festival.json'), serialize(plan));
+  writeFileSync(join(here, 'fixtures', 'klassentreffen-festival.json'), serialize(plan));
   const est = tasks.filter((t) => t.estimated).length;
   const used = new Set(tasks.map((t) => t.gewerk));
   console.log('  ✓ klassentreffen-festival.json (aus V07)');

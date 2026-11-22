@@ -73,8 +73,6 @@ const HUELLE = [
   'assets/fonts/jetbrains-mono-400.woff2',
   'assets/fonts/jetbrains-mono-500.woff2',
   'assets/fonts/jetbrains-mono-600.woff2',
-  'klassentreffen-festival.json',
-  'amk-singleshow.json',
 ];
 
 self.addEventListener('install', (e) => {

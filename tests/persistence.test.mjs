@@ -525,9 +525,9 @@ test('deserialize lehnt eine halb fehlende Zeit ab (nur das Paar null/null ist �
   assert.equal(b.ok, false);
   assert.match(b.error, /OhneEnde/);
 });
-test('mitgelieferte Pläne bestehen die Prüfung', () => {
+test('Beispielpläne (tools/fixtures) bestehen die Prüfung', () => {
   for (const f of ['klassentreffen-festival.json', 'amk-singleshow.json']) {
-    const r = deserialize(readFileSync(new URL('../' + f, import.meta.url), 'utf8'));
+    const r = deserialize(readFileSync(new URL('../tools/fixtures/' + f, import.meta.url), 'utf8'));
     assert.equal(r.ok, true, f + ': ' + r.error);
   }
 });

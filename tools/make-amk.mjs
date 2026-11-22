@@ -1,7 +1,7 @@
 // ── AnnenMayKantereit · Outdoor Singleshow ────────────────────────────────────
 // Baut aus den beiden PDFs (Stand 260710) eine importierbare JSON.
 //
-//   node tools/make-amk.mjs   →  amk-singleshow.json
+//   node tools/make-amk.mjs   →  tools/fixtures/amk-singleshow.json
 //
 // QUELLENTREUE ist hier die oberste Regel. Was im PDF steht, steht hier.
 // Was NICHT im PDF steht, ist als solches gekennzeichnet:
@@ -166,7 +166,7 @@ export { plan };
 // Nur schreiben, wenn direkt aufgerufen. Der Test importiert diese Datei —
 // ein Import darf nichts auf die Platte schreiben.
 if (process.argv[1] && process.argv[1].endsWith('make-amk.mjs')) {
-  writeFileSync(join(here, '..', 'amk-singleshow.json'), serialize(plan));
+  writeFileSync(join(here, 'fixtures', 'amk-singleshow.json'), serialize(plan));
   const est = tasks.filter((t) => t.estimated).length;
   const gwl = [...AUFBAU, ...ABBAU].filter((r) => r.gw).length;
   console.log('  ✓ amk-singleshow.json');

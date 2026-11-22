@@ -5,7 +5,7 @@
 
 import { createStore, verschiebeZeit, SHIFT_MAX_TAGE, SHIFT_MAX_MIN } from './store.js';
 import { createRepo, serialize, deserialize } from './persistence.js';
-import { createSync, abgleich, gleicherPlan, planHash, unveraendert, SYNC_REPO } from './sync.js';
+import { createSync, abgleich, gleicherPlan, SYNC_REPO } from './sync.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
@@ -101,126 +101,9 @@ const startAnsicht = () => {
 const TEXT_EINGABEN = new Set(['text', 'search', 'url', 'tel', 'email', 'password', 'number',
   'date', 'time', 'datetime-local', 'month', 'week']);
 
-// ── Mitgelieferte Pläne ─────────────────────────────────────────────────────
-// Der Plan liegt als JSON neben der App. `?plan=<key>` holt und öffnet ihn
-// direkt — kein Import, keine Datei im Anhang. Ohne Kennung fragt der
-// Projektdialog (bootLokal).
-//
-// DIE DATEI IM REPO IST DIE WAHRHEIT. Kommt ein neuer Stand (V08, V09 …), wird
-// nur die JSON ausgetauscht und gepusht; jeder Betrachter bekommt sie beim
-// nächsten Öffnen. Erkannt wird das am `exported`-Stempel, den serialize()
-// mitschreibt: ist der in der Datei neuer als der zuletzt geladene, gilt sie als
-// neuer Stand — trägt die lokale Kopie eigene Änderungen, wird gefragt (openBundled).
-//
-// `?plan=leer` überspringt das und öffnet das aktive (sonst erste) eigene Projekt,
-// nur ohne Projekt kommt der Projektdialog — die Prüfwerkzeuge (verify-edit,
-// verify-live, verify-amk) hängen am Neuladen dieses Verhaltens.
-const BUNDLED = {
-  klassentreffen: { file: 'klassentreffen-festival.json', name: 'Klassentreffen Festival 2026' },
-  amk: { file: 'amk-singleshow.json', name: 'AMK Singleshow' },
-};
-
-/**
- * Mitgelieferten Plan öffnen. Ist die Datei neuer als die lokale Kopie und die
- * lokale unverändert, gewinnt die Datei; weicht die lokale ab, fragt ein Dialog.
- * Sonst wird die lokale geöffnet (die kann Änderungen des Betrachters tragen). Ist die Datei nicht erreichbar — offline, `file://` —
- * bleibt es bei der lokalen Kopie.
- * `still` (Live-Monitor): nie ein Dialog. Lokal unverändert → neuer Stand still;
- * lokal anders → lokale Fassung bleibt (ohne Stempel, der nächste normale Start
- * fragt) und ein Hinweis erscheint.
- * @returns {Promise<boolean>} ob der Plan offen ist (false: nicht gefunden oder Wechsel abgebrochen)
- */
-async function openBundled(key, { still = false } = {}) {
-  const b = BUNDLED[key];
-  if (!b) { toast('Unbekannter Plan: ' + key, 'bad', 6000); return false; }
-  const da = repo.list().find((p) => p.name === b.name);
-  const lokal = da ? repo.load(da.id) : null;
-
-  let datei = null, hinweis = null;
-  try {
-    // ?v= wie in index.html: sonst liefert Pages bis zu zehn Minuten den alten Stand.
-    const res = await fetch('./' + b.file + '?v=' + VERSION, { cache: 'no-cache' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const text = await res.text();
-    const r = deserialize(text);
-    if (r.ok === false) throw new Error(r.error);
-    // Den Stempel der Datei mitführen, sonst ist beim nächsten Start nicht
-    // feststellbar, welcher Stand hier liegt.
-    const roh = JSON.parse(text);
-    r.plan.project.quelle = { datei: b.file, version: roh.version || null, exported: roh.exported || null };
-    datei = r.plan;
-    datei.project.quelle.hash = planHash(datei);   // «unverändert seit dem Laden» bleibt erkennbar
-    hinweis = r.hinweis || null;   // z. B. entfallene Phasen: wer die Datei übernimmt, soll es erfahren
-  } catch (e) {
-    if (!lokal) { toast('«' + b.name + '» konnte nicht geladen werden: ' + (e.message || e), 'bad', 8000); return false; }
-  }
-
-  if (datei && neuer(datei, lokal)) {
-    // Die Datei ersetzt nur still, was nichts Eigenes trägt. Hat der Betrachter
-    // lokal etwas geändert, geht das mit «Neuen Stand nehmen» verloren — also
-    // fragen. Kein Verlust, und damit keine Frage: Inhalt seit dem Laden der Datei
-    // unverändert (Fingerabdruck in quelle.hash) oder gleich dem neuen Stand.
-    if (lokal && !unveraendert(lokal) && !gleicherPlan(lokal, datei) && still) {
-      // Am Monitor klickt niemand einen Dialog weg: lokal behalten, ohne Stempel.
-      const offen = await open(lokal);
-      if (offen) toast('Neuer Planstand liegt vor — lokale Fassung behalten', 'bad', 8000);
-      return offen;
-    }
-    if (lokal && !unveraendert(lokal) && !gleicherPlan(lokal, datei)) {
-      const wahl = await askDialog({
-        title: 'Zwei Fassungen',
-        message: [`Zu «${b.name}» liegt ein neuer Stand vor, und deine lokale Fassung weicht davon ab.`,
-          'Der neue Stand ersetzt die lokale Fassung. Du kannst sie auch behalten oder als Kopie sichern.'],
-        buttons: [
-          { label: 'Meine behalten', value: 'meine' },
-          { label: 'Beide behalten (Kopie)', value: 'beide' },
-          { label: 'Neuen Stand nehmen', value: 'neu', primary: true },
-        ],
-      });
-      if (wahl === 'beide') {
-        const kopie = JSON.parse(JSON.stringify(lokal));
-        kopie.project.id = 'p' + Date.now().toString(36);
-        kopie.project.name = lokal.project.name + ' (lokal vor Update)';
-        delete kopie.project.quelle;      // die Kopie ist kein Planstand der Datei
-        const r = repo.save(kopie);
-        if (!r.ok) { toast(r.error, 'bad', 8000); return false; }
-      } else if (wahl !== 'neu') {
-        // Abbruch (null) wie «Meine behalten», aber ohne Stempel: dann fragt der
-        // nächste Start erneut. Mit Stempel gilt der Stand als gesehen.
-        if (wahl === 'meine') lokal.project.quelle = { ...datei.project.quelle, hash: planHash(lokal) };   // Hash des LOKALEN Plans: spätere eigene Änderungen bleiben erkennbar
-        return await open(lokal);
-      }
-    }
-    const offen = await open(datei);
-    if (offen && lokal) toast('Neuer Stand geladen: ' + b.name);
-    if (offen && hinweis) toast(hinweis, 'bad', 8000);
-    return offen;
-  }
-  if (lokal) return await open(lokal);
-  if (datei) {
-    const offen = await open(datei);
-    if (offen && hinweis) toast(hinweis, 'bad', 8000);
-    return offen;
-  }
-  return false;
-}
-
-// Schlüssel des mitgelieferten Plans, aus dem dieses Projekt stammt (sonst null).
-function bundledKey(plan) {
-  const datei = plan.project.quelle && plan.project.quelle.datei;
-  const e = Object.entries(BUNDLED).find(([, b]) => b.file === datei && b.name === plan.project.name);
-  return e ? e[0] : null;
-}
-
-// Ist die Datei neuer als die lokale Kopie? Ohne lokale Kopie: ja. Ohne Stempel
-// auf einer der beiden Seiten: ja — dann ist die Datei die verlässlichere Quelle.
-function neuer(datei, lokal) {
-  if (!lokal) return true;
-  const a = (datei.project.quelle || {}).exported;
-  const b = (lokal.project.quelle || {}).exported;
-  if (!a || !b) return true;
-  return a > b;
-}
+// ── Start ───────────────────────────────────────────────────────────────────
+// Kein mitgelieferter Plan: die App holt nie eine JSON von selbst (Marco, 2026-11-22).
+// Pläne kommen nur über Import, Vorlage oder Sync. `?plan=leer` ist der Schalter der Prüfwerkzeuge.
 
 // ── Erststart ───────────────────────────────────────────────────────────────
 async function boot() {
@@ -231,28 +114,21 @@ async function boot() {
 
 async function bootLokal() {
   const wunsch = new URLSearchParams(location.search).get('plan');
-  // Direktlink: wer ?plan=<key> aufruft, will genau diesen Plan.
   const live = lsLies('bzp_live') === '1';
-  if (wunsch && wunsch !== 'leer' && await openBundled(wunsch, { still: live })) return;
 
   // Ein Live-Monitor startet nach Stromausfall von selbst: niemand klickt dort
-  // einen Dialog weg, und das zuletzt offene Projekt ist das richtige. Stammt es
-  // aus einer mitgelieferten Datei, kommt ein neuer Planstand trotzdem still an.
+  // einen Dialog weg, und das zuletzt offene Projekt ist das richtige.
   const activeId = repo.getActive();
   const aktiv = activeId && repo.load(activeId);
-  if (live && aktiv) {
-    const key = bundledKey(aktiv);
-    if (key ? await openBundled(key, { still: true }) : await open(aktiv)) return;
-  }
-  // `?plan=leer` heißt nur «ohne mitgelieferten Plan» und behält das Verhalten,
-  // an dem die Prüfwerkzeuge beim Neuladen hängen (verify-edit, verify-sync):
+  if (live && aktiv && await open(aktiv)) return;
+  // `?plan=leer` ist der Schalter der Prüfwerkzeuge beim Neuladen (verify-edit, verify-sync):
   // aktives, sonst erstes Projekt öffnet; der Dialog kommt, wenn keines da ist.
   if (wunsch === 'leer') {
     const erstes = aktiv || (repo.list().length ? repo.load(repo.list()[0].id) : null);
     if (erstes && await open(erstes)) return;
   }
 
-  // Sonst entscheidet der Mensch: zuletzt geöffnete, mitgelieferte Pläne, Neu, Import.
+  // Sonst entscheidet der Mensch: zuletzt geöffnete, Neu, Import.
   showProjectDialog({ firstRun: !store });
 }
 
@@ -1648,10 +1524,7 @@ function showProjectDialog({ firstRun = false }) {
       b.onclick = async () => {
         const pl = repo.load(p.id);
         if (!pl) return;
-        // Ein Projekt aus einer mitgelieferten Datei geht durch dieselbe Prüfung
-        // wie der Direktlink, sonst bliebe ein neuer Planstand für immer unbemerkt.
-        const key = bundledKey(pl);
-        if (key ? await openBundled(key) : await open(pl)) close();
+        if (await open(pl)) close();
       };
       const del = el('button', 'dlg-del', '×');
       del.title = 'Projekt löschen';
@@ -1674,24 +1547,6 @@ function showProjectDialog({ firstRun = false }) {
     }
     box.append(ul);
   }
-
-  // Mitgelieferte Pläne — auch erreichbar, wenn man schon eigene Projekte hat.
-  box.append(el('h3', 'dlg-h3', 'Mitgelieferte Pläne'));
-  const bl = el('div', 'dlg-list');
-  for (const [key, b] of Object.entries(BUNDLED)) {
-    const row = el('div', 'dlg-row');
-    const btn = el('button', 'dlg-open');
-    btn.append(el('span', 'dlg-open-n', b.name));
-    btn.append(el('span', 'dlg-open-m', 'aus ' + b.file + ' · Direktlink: ?plan=' + key));
-    btn.onclick = async () => {
-      if (btn.disabled) return;
-      btn.disabled = true;       // Doppelklick: sonst öffnen zwei Ladevorgänge zwei Dialoge
-      try { if (await openBundled(key)) close(); } finally { btn.disabled = false; }
-    };
-    row.append(btn);
-    bl.append(row);
-  }
-  box.append(bl);
 
   // Neu anlegen
   box.append(el('h3', 'dlg-h3', 'Neues Projekt'));

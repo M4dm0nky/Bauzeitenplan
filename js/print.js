@@ -11,7 +11,7 @@
 // Alles Rechnende kommt aus den vorhandenen DOM-freien Modulen: tagesScheiben
 // und seriesRows (schedule.js), ticksFor/fmtDay (timeaxis.js), palette.js.
 
-import { createRepo, deserialize } from './persistence.js';
+import { createRepo } from './persistence.js';
 import { tagesScheiben, naechsterTag, seriesRows, toMin, toDate, ohneTermin } from './schedule.js';
 import { ticksFor, fmtDay } from './timeaxis.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
@@ -19,12 +19,6 @@ import { local } from './conflicts.js';
 import { el, $ } from './dom.js';
 import { sichtGewerke, typHinweis, punktKompakt, imAbschnitt, ABSCHNITTE } from './ebene.js';
 import { VERSION } from './version.js';
-
-// Mitgelieferte Pläne — dieselben Kennungen wie in app.js.
-const BUNDLED = {
-  klassentreffen: { file: 'klassentreffen-festival.json', name: 'Klassentreffen Festival 2026' },
-  amk: { file: 'amk-singleshow.json', name: 'AMK Singleshow' },
-};
 
 // ── Reine Helfer (exportiert, damit sie geprüft werden können) ───────────────
 
@@ -92,17 +86,7 @@ let PLAN = null;
 const wahl = { ebene: 'bau', abschnitt: 'alle', gewerke: new Set(), von: null, bis: null, fenster: null, autoFenster: true };
 
 async function ladePlan() {
-  const key = new URLSearchParams(location.search).get('plan');
   const repo = createRepo(window.localStorage);
-  if (key && BUNDLED[key]) {
-    const b = BUNDLED[key];
-    const da = repo.list().find((x) => x.name === b.name);
-    if (da) { const pl = repo.load(da.id); if (pl) return pl; }
-    const res = await fetch('./' + b.file + '?v=' + VERSION, { cache: 'no-cache' });
-    const r = deserialize(await res.text());
-    if (r.ok === false) throw new Error(r.error);
-    return r.plan;
-  }
   const aktiv = repo.getActive();
   const pl = aktiv && repo.load(aktiv);
   if (pl) return pl;

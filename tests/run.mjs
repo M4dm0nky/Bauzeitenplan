@@ -206,6 +206,16 @@ check('der Sync-Schlüssel (bzp_sync) kommt nie in die Plan-Schicht', () => {
   return s.includes('bzp_sync') ? 'js/persistence.js kennt den Schlüssel' : true;
 });
 
+check('die App holt keinen mitgelieferten Plan (kein BUNDLED/openBundled, kein fetch einer .json in js/)', () => {
+  const treffer = [];
+  for (const f of JS_FILES) {
+    const s = js(f);
+    if (/\bBUNDLED\b|openBundled|bundledKey/.test(s)) treffer.push('js/' + f + ': BUNDLED/openBundled');
+    if (/fetch\([^)]*\.json/.test(s)) treffer.push('js/' + f + ': fetch(.json)');
+  }
+  return treffer.length ? treffer.join(' | ') : true;
+});
+
 check('jedes Theme gestaltet alle Bausteine der Engine', () => {
   // Fängt den Fall, dass ein neuer Baustein in gantt.js entsteht und ein Theme
   // ihn nicht kennt — dann fehlt er dort unsichtbar.
@@ -347,7 +357,6 @@ check('jede ausgelieferte Datei steht in HUELLE (sw.js) — und keine tote', () 
     d.isDirectory() ? rekursiv(dir + '/' + d.name) : [dir + '/' + d.name]);
   const soll = [
     ...readdirSync(root).filter((f) => f.endsWith('.html')),
-    'klassentreffen-festival.json', 'amk-singleshow.json',
     ...rekursiv('js').filter((f) => f.endsWith('.js')),
     ...rekursiv('styles').filter((f) => f.endsWith('.css')),
     ...rekursiv('assets'),

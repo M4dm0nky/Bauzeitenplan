@@ -131,27 +131,11 @@ const kanon = (v) => {
   }
   return v;
 };
-// Der Inhalt ohne Stempel, kanonisch — die eine Rechnung für Vergleich und Fingerabdruck.
+// Der Inhalt ohne Stempel, kanonisch.
 const teil = (p) => {
   const { quelle, ...project } = (p && p.project) || {};
   return kanon({ project, gewerke: p && p.gewerke, tasks: p && p.tasks, deps: p && p.deps, phases: (p && p.phases) || [] });   // fehlend = leer: Altstand und migrierter Plan sind gleich
 };
 export function gleicherPlan(a, b) {
   return JSON.stringify(teil(a)) === JSON.stringify(teil(b));
-}
-
-// Kurzer Fingerabdruck des Planinhalts (FNV-1a, hex), ohne `quelle`. Er wird beim
-// Laden einer mitgelieferten Datei in `quelle.hash` gemerkt: stimmt er später noch,
-// hat niemand etwas geändert, und ein neuer Planstand darf ohne Rückfrage ersetzen.
-export function planHash(plan) {
-  const t = JSON.stringify(teil(plan));
-  let h = 0x811c9dc5;
-  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
-  return h.toString(16).padStart(8, '0');
-}
-
-/** Ist der Plan seit dem Laden der Datei unverändert? Ohne gemerkten Hash: unbekannt = nein. */
-export function unveraendert(plan) {
-  const h = plan && plan.project && plan.project.quelle && plan.project.quelle.hash;
-  return !!h && planHash(plan) === h;
 }
