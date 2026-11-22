@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { createServer } from 'node:http';
+import { planLaden, planSeed, FIXTURES } from './plan-fixture.mjs';
 const here = dirname(fileURLToPath(import.meta.url)); const root = join(here, '..');
 mkdirSync(join(here, 'shots'), { recursive: true });
 const exe = mustFirefox();
@@ -38,7 +39,7 @@ await p.waitForTimeout(700);
 
 console.log('\nKLASSENTREFFEN IMPORTIEREN');
 await p.locator('.dlg-act .btn', { hasText: 'JSON importieren' }).click();
-await p.locator('#import-file').setInputFiles(join(root, 'klassentreffen-festival.json'));
+await p.locator('#import-file').setInputFiles(join(FIXTURES, 'klassentreffen-festival.json'));
 await p.waitForTimeout(1200);
 
 await check('Projekt heißt richtig', async () =>
@@ -160,78 +161,76 @@ await zoomWahl(p, 'monate');
 await p.waitForTimeout(400);
 await p.screenshot({ path: join(here, 'shots', 'klassentreffen-monate.png'), fullPage: false });
 
-// ── Autostart: die Adresse allein muss den Plan zeigen ───────────────────────
-// Das ist der eigentliche Zweck der Weitergabe — wer den Link öffnet, sieht den
-// Plan, ohne etwas zu importieren. Frischer Kontext = leerer localStorage, also
-// genau die Lage eines fremden Besuchers.
-console.log('\nDIREKTLINK ?plan=klassentreffen (frischer Browser)');
-const frisch = await b.newContext({ viewport: { width: 1600, height: 950 } });
-const fp = await frisch.newPage();
+// ── Kein mitgelieferter Plan ─────────────────────────────────────────────────
+// Die App liefert keinen Plan mehr mit: weder ?plan=klassentreffen noch der
+// Projektdialog holen etwas aus dem Netz, und Altbestand mit `quelle` (Datei +
+// Stempel) fragt nicht mehr «Zwei Fassungen». Jede Prüfung muss fehlschlagen
+// können: (a) und (b) sind rot gegen den Stand VOR dem Entfernen.
+console.log('\nKEIN MITGELIEFERTER PLAN');
+const BASEURL = 'http://127.0.0.1:' + server.address().port + '/index.html';
 const ferr = [];
-fp.on('pageerror', (e) => ferr.push('JS: ' + e.message));
-await fp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=klassentreffen');
-await fp.waitForTimeout(1500);
-await check('der Plan ist ohne Import da', async () =>
-  (await fp.locator('#proj-name').textContent()).includes('Klassentreffen') ? true : 'kein Plan geladen');
-await check('kein Projektdialog im Weg', async () =>
-  (await fp.locator('#dlg').isHidden()) ? true : 'Dialog verdeckt den Plan');
-await check('353 Vorgänge', async () => {
-  const t = await fp.locator('.kpi', { hasText: 'Vorgänge' }).locator('.kpi-v').textContent();
-  return t.trim() === '353' ? true : t;
-});
-await fp.screenshot({ path: join(here, 'shots', 'klassentreffen-autostart.png') });
+const jsonZaehler = (pg) => { const z = { n: 0, urls: [] }; pg.on('request', (r) => { const u = new URL(r.url()); if (u.pathname.endsWith('.json')) { z.n++; z.urls.push(u.pathname); } }); return z; };
+{
+  // (a) frischer Browser, Direktlink
+  const c = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  const pg = await c.newPage();
+  pg.on('pageerror', (e) => ferr.push('JS: ' + e.message));
+  const z = jsonZaehler(pg);
+  await pg.goto(BASEURL + '?plan=klassentreffen');
+  await pg.waitForTimeout(1500);
+  await check('(a) ?plan=klassentreffen im frischen Browser: Projektdialog, kein «Mitgelieferte Pläne», kein .json-Abruf', async () => {
+    if (!(await pg.locator('#dlg').isVisible())) return 'kein Dialog (Plan geöffnet: «' + ((await pg.locator('#proj-name').textContent()) || '') + '»)';
+    if (await pg.locator('#dlg .dlg-h3', { hasText: 'Mitgelieferte Pläne' }).count()) return 'Abschnitt «Mitgelieferte Pläne» da';
+    return z.n === 0 ? true : z.n + ' .json-Abrufe: ' + z.urls.join(', ');
+  });
+  await c.close();
 
-// Der zweite Aufruf holt NICHT neu: derselbe Stempel, also bleibt die lokale
-// Fassung stehen — sonst verlöre der Betrachter bei jedem Laden seine Änderungen.
-await check('zweiter Aufruf öffnet die lokale Fassung', async () => {
-  await fp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=klassentreffen');
-  await fp.waitForTimeout(1200);
-  return (await fp.locator('#proj-name').textContent()).includes('Klassentreffen') ? true : 'Plan weg';
-});
-
-// Eine Altphase mit Ende vor Start in der mitgelieferten Datei sperrt den Start nicht,
-// und der Autostart SAGT, dass sie entfallen ist (vorher stumm).
-await check('Autostart: umgedrehte Phase in der Datei → Plan öffnet, Hinweis erscheint', async () => {
+  // (b) Altbestand mit quelle + uraltem Stempel: Zeile öffnet ohne «Zwei Fassungen»
   const c2 = await b.newContext({ viewport: { width: 1600, height: 950 } });
-  const p2 = await c2.newPage();
-  try {
-    await c2.route('**/klassentreffen-festival.json*', async (route) => {
-      const j = JSON.parse(readFileSync(join(root, 'klassentreffen-festival.json'), 'utf8'));
-      j.phases = [...(j.phases || []), { name: 'Umgedreht', art: 'abbau', start: '2026-09-10T12:00', end: '2026-09-09T12:00' }];
-      await route.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify(j) });
-    });
-    await p2.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=klassentreffen');
-    await p2.waitForTimeout(1500);
-    const name = (await p2.locator('#proj-name').textContent()) || '';
-    const toast = (await p2.locator('#toast').textContent()) || '';
-    const sichtbar = await p2.locator('#toast').isVisible();
-    if (!name.includes('Klassentreffen')) return 'Plan nicht geöffnet: «' + name + '»';
-    return sichtbar && /Phase.*(nicht übernommen|wurde)/.test(toast) ? true : 'Toast: «' + toast + '» sichtbar=' + sichtbar;
-  } finally { await c2.close(); }
-});
+  const { plan, id } = planSeed('klassentreffen-festival.json');
+  plan.project.quelle = { datei: 'klassentreffen-festival.json', exported: '2000-01-01T00:00:00.000Z' };
+  plan.tasks[0].title = 'LOKAL GEÄNDERT';
+  await c2.addInitScript(([i, text]) => {
+    try {
+      if (localStorage.getItem('bzp_seeded_' + i) === '1') return;
+      localStorage.setItem('bzp_seeded_' + i, '1');
+      localStorage.setItem('bzp_p_' + i, text);
+      localStorage.setItem('bzp_projects', JSON.stringify([{ id: i, name: 'Klassentreffen Festival 2026 (Altbestand)', venue: '', modified: new Date().toISOString(), remoteSha: null, dirty: false }]));
+      localStorage.setItem('bzp_active', i);
+    } catch { /* */ }
+  }, [id, JSON.stringify(plan)]);
+  const pg2 = await c2.newPage();
+  pg2.on('pageerror', (e) => ferr.push('JS: ' + e.message));
+  const z2 = jsonZaehler(pg2);
+  await pg2.goto(BASEURL);
+  await pg2.waitForTimeout(1200);
+  await check('(b) Altbestand mit quelle + altem Stempel: Zeile öffnet das Projekt, kein «Zwei Fassungen», kein .json-Abruf', async () => {
+    if (!(await pg2.locator('#dlg').isVisible())) return 'kein Projektdialog';
+    await pg2.locator('#dlg .dlg-open', { hasText: 'Altbestand' }).first().click();
+    await pg2.waitForTimeout(1500);
+    if (await pg2.locator('.dlg h2', { hasText: 'Zwei Fassungen' }).count()) return 'Dialog «Zwei Fassungen»';
+    if (!((await pg2.locator('#proj-name').textContent()) || '').includes('Klassentreffen')) return 'Projekt nicht offen';
+    const t = await pg2.evaluate((i) => JSON.parse(localStorage.getItem('bzp_p_' + i)).tasks[0].title, id);
+    if (t !== 'LOKAL GEÄNDERT') return 'lokale Fassung ersetzt: ' + t;
+    return z2.n === 0 ? true : z2.n + ' .json-Abrufe: ' + z2.urls.join(', ');
+  });
+  await c2.close();
+}
 
 // ── Start ohne Kennung: Projektdialog statt Autostart ────────────────────────
-// Die Adresse allein öffnet NICHT mehr still den mitgelieferten Plan, sondern
-// fragt: sonst zeigt ein Monitor mit eigenem Projekt nach dem Neustart den
-// falschen Plan. Ausnahme ?plan= (Direktlink) und Live-Monitor (verify-live).
+// Ohne ?plan= fragt die App; ?plan=leer öffnet das aktive Projekt direkt.
 console.log('\nSTART OHNE KENNUNG: PROJEKTDIALOG');
-const BASEURL = 'http://127.0.0.1:' + server.address().port + '/index.html';
 {
   const lc = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  await planLaden(lc);
   const lpg = await lc.newPage();
   await lpg.goto(BASEURL);
   await lpg.waitForTimeout(1200);
-  await check('ohne Projekte: Dialog mit «Klassentreffen Festival 2026» unter «Mitgelieferte Pläne»', async () => {
+  await check('mit einem Projekt: Dialog mit dessen Zeile, nichts automatisch geöffnet', async () => {
     if (!(await lpg.locator('#dlg').isVisible())) return 'kein Dialog';
-    if (!(await lpg.locator('#dlg .dlg-h3', { hasText: 'Mitgelieferte Pläne' }).count())) return 'Abschnitt fehlt';
-    return (await lpg.locator('#dlg .dlg-open', { hasText: 'Klassentreffen Festival 2026' }).count()) ? true : 'Eintrag fehlt';
+    return (await lpg.locator('#dlg .dlg-open', { hasText: 'Klassentreffen Festival 2026' }).count()) ? true : 'Zeile fehlt';
   });
-  await check('ohne Projekte: Klick auf den mitgelieferten Plan öffnet ihn', async () => {
-    await lpg.locator('#dlg .dlg-open', { hasText: 'Klassentreffen Festival 2026' }).click();
-    await lpg.waitForTimeout(1500);
-    return (await lpg.locator('#proj-name').textContent()).includes('Klassentreffen') && (await lpg.locator('#dlg').isHidden()) ? true : 'Plan nicht offen';
-  });
-  // Zweites Projekt «Alpha» anlegen (Kopie des geöffneten Plans, jüngster Stand).
+  // Zweites Projekt «Alpha» anlegen (Kopie des Plans, jüngster Stand).
   await lpg.evaluate(() => {
     const idx = JSON.parse(localStorage.getItem('bzp_projects'));
     const q = idx[0];
@@ -260,104 +259,12 @@ const BASEURL = 'http://127.0.0.1:' + server.address().port + '/index.html';
     await lpg.waitForTimeout(800);
     return (await lpg.locator('#proj-name').textContent()).includes('Alpha') ? true : 'Alpha nicht offen';
   });
-  await check('?plan=klassentreffen öffnet weiter direkt, ohne Dialog', async () => {
-    await lpg.goto(BASEURL + '?plan=klassentreffen');
+  await check('?plan=leer öffnet das aktive Projekt direkt, ohne Dialog', async () => {
+    await lpg.goto(BASEURL + '?plan=leer');
     await lpg.waitForTimeout(1200);
-    return (await lpg.locator('#dlg').isHidden()) && (await lpg.locator('#proj-name').textContent()).includes('Klassentreffen') ? true : 'Dialog oder falscher Plan';
+    return (await lpg.locator('#dlg').isHidden()) && (await lpg.locator('#proj-name').textContent()).includes('Alpha') ? true : 'Dialog oder falsches Projekt';
   });
   await lc.close();
-}
-
-// ── Neuer Planstand: nachfragen statt still ersetzen ─────────────────────────
-console.log('\nNEUER PLANSTAND IN DER DATEI');
-{
-  const aeltere = async (c) => {
-    const pg = await c.newPage();
-    await pg.goto(BASEURL + '?plan=klassentreffen');
-    await pg.waitForTimeout(1500);
-    // Lokale Fassung: Titel eines Vorgangs geändert, Stempel älter als die Datei.
-    await pg.evaluate(() => {
-      const q = JSON.parse(localStorage.getItem('bzp_projects'))[0];
-      const plan = JSON.parse(localStorage.getItem('bzp_p_' + q.id));
-      plan.tasks[0].title = 'LOKAL GEÄNDERT';
-      plan.project.quelle = { ...(plan.project.quelle || {}), exported: '2000-01-01T00:00:00.000Z' };
-      localStorage.setItem('bzp_p_' + q.id, JSON.stringify(plan));
-    });
-    await pg.goto(BASEURL + '?plan=klassentreffen');
-    await pg.waitForTimeout(1500);
-    return pg;
-  };
-  const namen = (pg) => pg.evaluate(() => JSON.parse(localStorage.getItem('bzp_projects')).map((x) => x.name));
-  const dlgZwei = (pg) => pg.locator('.dlg h2', { hasText: 'Zwei Fassungen' });
-  const c1 = await b.newContext({ viewport: { width: 1600, height: 950 } });
-  const g1 = await aeltere(c1);
-  await check('geänderte lokale Fassung + neuere Datei: Dialog «Zwei Fassungen»', async () =>
-    (await dlgZwei(g1).count()) ? true : 'kein Dialog');
-  await check('«Beide behalten»: zwei Projekte, Kopie «… (lokal vor Update)»', async () => {
-    await g1.locator('.dlg .btn', { hasText: 'Beide behalten' }).click();
-    await g1.waitForTimeout(1500);
-    const n = await namen(g1);
-    if (n.length !== 2) return 'Projekte: ' + n.join(' | ');
-    if (!n.some((x) => x === 'Klassentreffen Festival 2026 (lokal vor Update)')) return 'Kopie fehlt: ' + n.join(' | ');
-    return (await g1.locator('#proj-name').textContent()).includes('(lokal') ? 'Kopie statt Datei offen' : true;
-  });
-  await c1.close();
-  const c2 = await b.newContext({ viewport: { width: 1600, height: 950 } });
-  const g2 = await aeltere(c2);
-  await check('«Meine behalten»: lokale Fassung offen, Stempel nachgezogen, danach keine Nachfrage mehr', async () => {
-    await g2.locator('.dlg .btn', { hasText: 'Meine behalten' }).click();
-    await g2.waitForTimeout(1200);
-    const t = await g2.evaluate(() => { const q = JSON.parse(localStorage.getItem('bzp_projects'))[0]; return JSON.parse(localStorage.getItem('bzp_p_' + q.id)).tasks[0].title; });
-    if (t !== 'LOKAL GEÄNDERT') return 'Titel: ' + t;
-    await g2.goto(BASEURL + '?plan=klassentreffen');
-    await g2.waitForTimeout(1500);
-    return (await dlgZwei(g2).count()) ? 'fragt erneut' : true;
-  });
-  await c2.close();
-  const c3 = await b.newContext({ viewport: { width: 1600, height: 950 } });
-  const g3 = await aeltere(c3);
-  await check('«Neuen Stand nehmen»: Datei ersetzt die lokale Fassung', async () => {
-    await g3.locator('.dlg .btn', { hasText: 'Neuen Stand nehmen' }).click();
-    await g3.waitForTimeout(1200);
-    const t = await g3.evaluate(() => { const q = JSON.parse(localStorage.getItem('bzp_projects'))[0]; return JSON.parse(localStorage.getItem('bzp_p_' + q.id)).tasks[0].title; });
-    return t !== 'LOKAL GEÄNDERT' ? true : 'lokale Fassung blieb';
-  });
-  await c3.close();
-}
-
-// Die Projektzeile unter «Öffnen» geht durch dieselbe Prüfung wie der Direktlink:
-// sonst bliebe ein neuer Planstand für jeden unbemerkt, der sein Projekt dort öffnet.
-console.log('\nPROJEKTZEILE: PLANSTAND WIRD GEPRÜFT');
-{
-  const zeile = async (geaendert) => {
-    const c = await b.newContext({ viewport: { width: 1600, height: 950 } });
-    const pg = await c.newPage();
-    await pg.goto(BASEURL + '?plan=klassentreffen');
-    await pg.waitForTimeout(1500);
-    await pg.evaluate((g) => {
-      const q = JSON.parse(localStorage.getItem('bzp_projects'))[0];
-      const plan = JSON.parse(localStorage.getItem('bzp_p_' + q.id));
-      if (g) plan.tasks[0].title = 'LOKAL GEÄNDERT';
-      plan.project.quelle = { ...(plan.project.quelle || {}), exported: '2000-01-01T00:00:00.000Z' };
-      localStorage.setItem('bzp_p_' + q.id, JSON.stringify(plan));
-    }, geaendert);
-    await pg.goto(BASEURL);
-    await pg.waitForTimeout(1200);
-    await pg.locator('#dlg .dlg-open', { hasText: 'geändert' }).first().click();
-    await pg.waitForTimeout(1500);
-    const r = {
-      zwei: await pg.locator('.dlg h2', { hasText: 'Zwei Fassungen' }).count(),
-      offen: (await pg.locator('#proj-name').textContent()) || '',
-    };
-    await c.close();
-    return r;
-  };
-  const g = await zeile(true);
-  await check('Projektzeile, lokal geändert + neuere Datei: Dialog «Zwei Fassungen»', async () =>
-    g.zwei ? true : 'kein Dialog, geöffnet: ' + g.offen);
-  const u = await zeile(false);
-  await check('Projektzeile, lokal unverändert + ältere Fassung: öffnet ohne Dialog', async () =>
-    !u.zwei && u.offen.includes('Klassentreffen') ? true : 'Dialog: ' + u.zwei + ', offen: ' + u.offen);
 }
 
 // Start an einem Tag OHNE Vorgänge mitten im Plan: der Plan öffnet nicht auf der
@@ -366,7 +273,7 @@ console.log('\nPROJEKTZEILE: PLANSTAND WIRD GEPRÜFT');
 // im Testplan leergeräumt (alles, was ihn berührt, fliegt raus).
 console.log('\nSTART AN EINEM TAG OHNE VORGÄNGE');
 {
-  const plan = JSON.parse((await import('node:fs')).readFileSync(join(root, 'klassentreffen-festival.json'), 'utf8'));
+  const plan = JSON.parse((await import('node:fs')).readFileSync(join(FIXTURES, 'klassentreffen-festival.json'), 'utf8'));
   const a = new Date('2026-08-27T00:00').getTime(), z = new Date('2026-08-28T00:00').getTime();
   plan.tasks = plan.tasks.filter((t) => !(new Date(t.start).getTime() < z && new Date(t.end).getTime() >= a));
   const gCtx = await b.newContext({ viewport: { width: 1600, height: 950 } });
@@ -399,7 +306,7 @@ for (const [vw, vh, minBalken] of [[1600, 950, 3], [390, 844, 1]]) {   // Handy:
   await np.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
   await np.waitForTimeout(700);
   await np.locator('.dlg-act .btn', { hasText: 'JSON importieren' }).click();
-  await np.locator('#import-file').setInputFiles(join(root, 'klassentreffen-festival.json'));
+  await np.locator('#import-file').setInputFiles(join(FIXTURES, 'klassentreffen-festival.json'));
   await np.waitForTimeout(1500);
   await check(`Start nach dem Planende (${vw}x${vh}): Balken im Sichtfeld (waagerecht UND senkrecht)`, async () => {
     const vis = await np.evaluate(() => {
@@ -445,7 +352,7 @@ for (const [vw, vh, minBalken] of [[1600, 950, 3], [390, 844, 1]]) {   // Handy:
 // der 28. nichts — wer den Tag aus der Bildmitte liest, sucht am 28. und scrollt nicht.
 console.log('\nFOKUSTAG NACH EBENENWECHSEL');
 {
-  const plan = JSON.parse(readFileSync(join(root, 'klassentreffen-festival.json'), 'utf8'));
+  const plan = JSON.parse(readFileSync(join(FIXTURES, 'klassentreffen-festival.json'), 'utf8'));
   const tag = (d) => new Date(d + 'T00:00').getTime();
   const beruehrt = (t, d) => new Date(t.start).getTime() < tag(d) + 864e5 && new Date(t.end).getTime() > tag(d);
   const unten = [...plan.gewerke].reverse().find((g) => plan.tasks.some((t) => t.gewerk === g.id && beruehrt(t, '2026-08-27'))).id;
@@ -485,7 +392,8 @@ console.log('\nFOKUSTAG NACH EBENENWECHSEL');
   const serr = [];
   sp.on('pageerror', (e) => serr.push('JS: ' + e.message));
   await sp.clock.install({ time: new Date('2026-08-27T10:00:00') });
-  await sp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=klassentreffen');
+  await planLaden(sCtx);
+  await sp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
   await sp.waitForSelector('.bz-lab', { timeout: 20000 });
   await sp.waitForTimeout(800);
   // Der ausgewählte Balken liegt vollständig im sichtbaren Ausschnitt des Gantt.
@@ -622,7 +530,8 @@ console.log('\nFOKUSTAG NACH EBENENWECHSEL');
   const hp = await hCtx.newPage();
   hp.setDefaultTimeout(5000);
   await hp.clock.install({ time: new Date('2026-08-27T10:00:00') });
-  await hp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=klassentreffen');
+  await planLaden(hCtx);
+  await hp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
   await hp.waitForSelector('.bz-lab', { timeout: 20000 });
   await hp.waitForTimeout(800);
   await check('Suche Handy: erreichbar, Kopf ≤ 300 px, Gantt ≥ 50 %', async () => {
@@ -659,7 +568,7 @@ await lp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=le
 await lp.waitForTimeout(1000);
 await check('?plan=leer zeigt im leeren Browser den Projektdialog', async () =>
   (await lp.locator('#dlg').isVisible()) ? true : 'Dialog fehlt');
-if (ferr.length) { console.log('  ✗ JS-Fehler beim Autostart: ' + ferr[0]); bad++; }
+if (ferr.length) { console.log('  ✗ JS-Fehler beim Start ohne Plan: ' + ferr[0]); bad++; }
 
 if (errors.length) { console.log('\n  ✗ Fehler:'); errors.slice(0, 5).forEach((e) => console.log('      ' + e)); bad += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');

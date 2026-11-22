@@ -15,6 +15,7 @@ import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
+import { planLaden } from './plan-fixture.mjs';
 
 const ECHT = process.argv.includes('--echt');
 const TOKEN = process.env.BZP_TOKEN || '';
@@ -828,22 +829,24 @@ try {
       finally { await schliesse(A, B); }
     }
 
-    // ─── 6. Mitgelieferter Plan ─────────────────────────────────────────────
-    console.log('\nMITGELIEFERTER PLAN (R1)');
+    // ─── 6. Plan aus dem localStorage ─────────────────────────────────────────────
+    console.log('\nPLAN AUS DEM LOCALSTORAGE (R1)');
     {
       const fake = neuerFake();
       const mk = () => geraet(fake, BASE);
       const A = await mk(), B = await mk();
       try {
-        await start(A, '?plan=klassentreffen');
+        await planLaden(A.ctx);
+        await start(A);
         await A.page.locator('.bz-bar').first().waitFor({ timeout: 8000 });
         await verbinden(A); await warteZustand(A, 'ok'); await einZu(A);
-        await check('A: Direktlink-Plan liegt im Repo', async () => fake.namen().includes('Klassentreffen Festival 2026') ? true : 'Fake: ' + fake.namen());
-        await start(B, '?plan=klassentreffen');
+        await check('A: der geseedete Plan liegt im Repo', async () => fake.namen().includes('Klassentreffen Festival 2026') ? true : 'Fake: ' + fake.namen());
+        await planLaden(B.ctx);
+        await start(B);
         await B.page.locator('.bz-bar').first().waitFor({ timeout: 8000 });
         const putsVor = fake.puts;
         await verbinden(B); await einZu(B);
-        await check('B (frisch, ebenfalls Direktlink): Abgleich endet auf «ok»', () => warteZustand(B, 'ok'));
+        await check('B (frisch, ebenfalls geseedet): Abgleich endet auf «ok»', () => warteZustand(B, 'ok'));
         await check('B: KEIN Konfliktdialog (Nicht-Treffer)', async () => (await B.page.locator('.dlg', { hasText: 'Zwei verschiedene Fassungen' }).count()) === 0 ? true : 'Dialog erschien');
         await check('B: schickt nichts hoch, Repo hat weiter genau eine Datei', async () => fake.puts === putsVor && fake.dateien.size === 1 ? true : `PUTs +${fake.puts - putsVor}, Dateien ${fake.dateien.size}`);
         await check('B: Projekt ist als abgeglichen vermerkt (sha des Repos steht im Index)', async () => {

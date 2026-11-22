@@ -9,6 +9,7 @@ import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
+import { planLaden } from './plan-fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -425,102 +426,27 @@ await check('Live ausschalten räumt die Marken weg', async () => {
   return n === 0 ? true : `${n} Marken bleiben stehen`;
 });
 
-console.log('\nLIVE-MONITOR UND NEUER PLANSTAND IN DER DATEI');
-// Am Monitor klickt niemand einen Dialog weg: neuer Planstand kommt still an,
-// hat jemand lokal etwas geändert, bleibt die lokale Fassung (Toast statt Dialog).
-async function liveMitAelterem(lokalGeaendert, adresse) {
+console.log('\nLIVE-MONITOR ÖFFNET DAS AKTIVE PROJEKT OHNE ABRUF');
+// Die App liefert keinen Plan mit: der Monitor liest das aktive Projekt aus dem
+// localStorage, ohne Dialog und ohne einen einzigen .json-Abruf (Module enden auf .js).
+for (const adresse of ['/index.html', '/index.html?plan=klassentreffen']) {
+  const wie = adresse.includes('plan=') ? '?plan= bei Live an' : 'nackte Adresse bei Live an';
   const c = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await planLaden(c);
+  await c.addInitScript(() => { try { localStorage.setItem('bzp_live', '1'); } catch { /* */ } });
   const p = await c.newPage();
-  await p.goto(BASE + '/index.html?plan=klassentreffen');
-  await p.waitForTimeout(1500);
-  await p.evaluate((geaendert) => {
-    const q = JSON.parse(localStorage.getItem('bzp_projects'))[0];
-    const plan = JSON.parse(localStorage.getItem('bzp_p_' + q.id));
-    // Unverändert: nur der Stempel altert, der Inhalt gleicht der Datei.
-    if (geaendert) plan.tasks[0].title = 'LOKAL GEÄNDERT';
-    plan.project.quelle = { ...(plan.project.quelle || {}), exported: '2000-01-01T00:00:00.000Z' };
-    localStorage.setItem('bzp_p_' + q.id, JSON.stringify(plan));
-    localStorage.setItem('bzp_live', '1');
-  }, lokalGeaendert);
+  let json = 0;
+  p.on('request', (r) => { if (new URL(r.url()).pathname.endsWith('.json')) json++; });
   await p.goto(BASE + adresse);
   await p.waitForTimeout(1500);
-  const r = {
-    dialog: await p.locator('.dlg h2', { hasText: 'Zwei Fassungen' }).count(),
-    titel: await p.evaluate(() => { const q = JSON.parse(localStorage.getItem('bzp_projects'))[0]; return JSON.parse(localStorage.getItem('bzp_p_' + q.id)).tasks[0].title; }),
-    stempel: await p.evaluate(() => { const q = JSON.parse(localStorage.getItem('bzp_projects'))[0]; return JSON.parse(localStorage.getItem('bzp_p_' + q.id)).project.quelle.exported; }),
-    toast: (await p.locator('#toast').textContent()) || '',
-    offen: (await p.locator('#proj-name').textContent()) || '',
-  };
+  const offen = (await p.locator('#proj-name').textContent()) || '';
+  const dlgHidden = await p.locator('#dlg').isHidden();
+  await check(wie + ': aktives Projekt offen, kein Dialog, kein .json-Abruf', async () => {
+    if (!offen.includes('Klassentreffen')) return 'nicht offen: «' + offen + '»';
+    if (!dlgHidden) return 'Dialog sichtbar';
+    return json === 0 ? true : json + ' .json-Abrufe';
+  });
   await c.close();
-  return r;
-}
-for (const adresse of ['/index.html', '/index.html?plan=klassentreffen']) {
-  const wie = adresse.includes('plan=') ? '?plan= bei Live an' : 'nackte Adresse bei Live an';
-  const u = await liveMitAelterem(false, adresse);
-  await check(wie + ', lokal unverändert + ältere Fassung: neuer Stand, kein Dialog', async () => {
-    if (u.dialog) return 'Dialog';
-    if (!u.offen.includes('Klassentreffen')) return 'nicht offen: ' + u.offen;
-    return /behalten/.test(u.toast) ? 'Hinweis «behalten» trotz unverändert' : true;
-  });
-  const g = await liveMitAelterem(true, adresse);
-  await check(wie + ', lokal geändert: kein Dialog, lokaler Stand bleibt, Toast', async () => {
-    if (g.dialog) return 'Dialog';
-    if (g.titel !== 'LOKAL GEÄNDERT') return 'Titel: ' + g.titel;
-    if (g.stempel !== '2000-01-01T00:00:00.000Z') return 'Stempel wurde nachgezogen';
-    return /lokale Fassung behalten/.test(g.toast) ? true : 'Toast: «' + g.toast + '»';
-  });
-}
-
-// Echter Planstand: die Datei kommt mit anderem INHALT und neuerem Stempel. Wer seit
-// dem Laden nichts geändert hat, bekommt ihn ohne Frage — das ist der Monitor, der
-// nach einem Stromausfall mit V07 startet, wenn V08 gepusht wurde.
-async function liveMitNeuerDatei(lokalGeaendert, adresse) {
-  const c = await browser.newContext({ viewport: { width: 1600, height: 950 }, serviceWorkers: 'block' })   // sonst liefert der Service Worker die Datei an route() vorbei;
-  const p = await c.newPage();
-  await p.goto(BASE + '/index.html?plan=klassentreffen');
-  await p.waitForTimeout(1500);
-  await p.evaluate((geaendert) => {
-    const q = JSON.parse(localStorage.getItem('bzp_projects'))[0];
-    const plan = JSON.parse(localStorage.getItem('bzp_p_' + q.id));
-    // Nur der Stempel altert; geändert heißt: zusätzlich ein Gewerkname (steht in der Legende) (der Hash bleibt stehen).
-    if (geaendert) plan.gewerke[0].name = 'LOKAL GEÄNDERT';
-    plan.project.quelle = { ...(plan.project.quelle || {}), exported: '2000-01-01T00:00:00.000Z' };
-    localStorage.setItem('bzp_p_' + q.id, JSON.stringify(plan));
-    localStorage.setItem('bzp_live', '1');
-  }, lokalGeaendert);
-  await p.route('**/klassentreffen-festival.json*', async (route) => {
-    const res = await route.fetch();
-    const j = await res.json();
-    j.gewerke[0].name = 'NEUER STAND TEST';
-    j.exported = '2099-01-01T00:00:00.000Z';
-    await route.fulfill({ response: res, json: j });
-  });
-  await p.goto(BASE + adresse);
-  await p.waitForTimeout(1500);
-  const r = {
-    dialog: await p.locator('.dlg h2', { hasText: 'Zwei Fassungen' }).count(),
-    neu: await p.evaluate(() => document.body.textContent.includes('NEUER STAND TEST')),
-    lokal: await p.evaluate(() => document.body.textContent.includes('LOKAL GEÄNDERT')),
-    toast: (await p.locator('#toast').textContent()) || '',
-    offen: (await p.locator('#proj-name').textContent()) || '',
-  };
-  await c.close();
-  return r;
-}
-for (const adresse of ['/index.html', '/index.html?plan=klassentreffen']) {
-  const wie = adresse.includes('plan=') ? '?plan= bei Live an' : 'nackte Adresse bei Live an';
-  const u = await liveMitNeuerDatei(false, adresse);
-  await check(wie + ', lokal seit dem Laden unverändert + neuere Datei mit anderem Inhalt: neuer Stand sichtbar, kein Dialog, kein «behalten»', async () => {
-    if (u.dialog) return 'Dialog';
-    if (!u.neu) return 'alter Stand wird angezeigt (Datei nicht übernommen), Toast «' + u.toast + '»';
-    return /behalten/.test(u.toast) ? 'Hinweis «behalten» trotz unverändert' : true;
-  });
-  const g = await liveMitNeuerDatei(true, adresse);
-  await check(wie + ', lokal geändert + neuere Datei: lokale Fassung bleibt, Toast, kein Dialog', async () => {
-    if (g.dialog) return 'Dialog';
-    if (g.neu || !g.lokal) return 'lokale Fassung ging verloren';
-    return /lokale Fassung behalten/.test(g.toast) ? true : 'Toast: «' + g.toast + '»';
-  });
 }
 
 console.log('\nDIE LINIE ZEIGT DIE PROJEKT-ZEITZONE, NICHT DIE DES BETRACHTERS');
