@@ -3,7 +3,7 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
-## Unveröffentlicht
+## 0.25.0 — 2026-11-23
 
 - **Helfer und Maschinen aus festem Katalog:** Standardbezeichnungen der Vermieter in Kategorien (`js/res-katalog.js`), eigene Bezeichnungen bekommen eine Kategorie; gleichnamige eigene Einträge in alten Plänen werden in die eingebaute umgelegt.
 - **Such-Auswahl statt Auswahlliste:** Zuweisen in Seitenpanel und Tabelle über `openResPicker` (gruppiert, suchbar), «+ Neu…» fragt Name und Kategorie.
