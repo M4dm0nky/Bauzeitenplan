@@ -20,76 +20,94 @@ import { benutztVon } from './store.js';
  * Rückgabe: `refresh()` für Aufrufer, wenn der Store anderswo geändert wurde.
  */
 export function mountAuswahlListe(container, { store, send, liste, kind, leerText, nachZeichnen }) {
-  const zeichne = () => {
-    // In DERSELBEN Reihenfolge wie das Auswahlfeld: `reorderAuswahl` setzt nur
-    // `sort`, es dreht das Array nicht um. Ohne das Sortieren hier bliebe die
-    // Liste nach einem Klick auf ↑ sichtbar unverändert.
+  // In DERSELBEN Reihenfolge wie das Auswahlfeld: `reorderAuswahl` setzt nur
+  // `sort`, es dreht das Array nicht um. Ohne das Sortieren hier bliebe die
+  // Liste nach einem Klick auf ↑ sichtbar unverändert.
+  // Ohne `kind` zählt eine Ressource als Personal (wie `resKind` in resources.js:
+  // Altdaten kennen das Feld nicht und fielen sonst aus beiden Listen).
+  const daten = () => {
     const alle = nachSort(store.state.project[liste]);
-    // Ohne `kind` zählt eine Ressource als Personal (wie `resKind` in resources.js:
-    // Altdaten kennen das Feld nicht und fielen sonst aus beiden Listen).
-    const eigene = kind ? alle.filter((x) => (x.kind || 'personal') === kind) : alle;
-    container.replaceChildren();
+    return { alle, eigene: kind ? alle.filter((x) => (x.kind || 'personal') === kind) : alle };
+  };
 
-    if (!eigene.length) container.append(el('div', 'tb-verw-leer', leerText));
+  // Zeilen nach id wiederverwendet: ein Neubau tauschte Knöpfe unter dem Mauszeiger
+  // aus (mousedown nimmt dem Namensfeld den Fokus → Änderung → Neubau → mouseup auf
+  // einem neuen Knoten = kein click). Handler lesen frisch aus dem Store.
+  const zeilen = new Map();   // id → { zeile, nam, hoch, runter, weg, art }
+  const leer = el('div', 'tb-verw-leer', leerText);
+
+  function baueZeile(id) {
+    const zeile = el('div', 'tb-verw-z');
+    const nam = el('input', 'tb-verw-n');
+    nam.setAttribute('aria-label', 'Name');
+    nam.onchange = () => {
+      const r = send({ type: 'setAuswahlLabel', liste, id, label: nam.value });
+      // Abgelehnt: zurück auf den echten Stand (auch im Fokus). Erfolg: nur angleichen (z. B. getrimmt).
+      const jetzt = (store.state.project[liste] || []).find((e) => e.id === id);
+      if (jetzt && jetzt.label !== nam.value) nam.value = jetzt.label;
+      if (r && r.ok === false) nam.focus();
+    };
+    const hoch = el('button', 'tb-verw-b', '↑');
+    hoch.title = 'Nach oben';
+    const runter = el('button', 'tb-verw-b', '↓');
+    runter.title = 'Nach unten';
+    // `reorderAuswahl` verlangt ALLE ids der Liste. Mit `kind` stehen hier nur
+    // die einer Art: also die volle Reihenfolge nehmen und genau die zwei
+    // Nachbarn derselben Art tauschen.
+    const tausche = (d) => {
+      const { alle, eigene } = daten();
+      const i = eigene.findIndex((e) => e.id === id);
+      const j = i + d;
+      if (i < 0 || j < 0 || j >= eigene.length) return;
+      const ids = alle.map((e) => e.id);
+      const a = ids.indexOf(eigene[i].id);
+      const b = ids.indexOf(eigene[j].id);
+      [ids[a], ids[b]] = [ids[b], ids[a]];
+      send({ type: 'reorderAuswahl', liste, ids });
+      zeichne();
+    };
+    hoch.onclick = () => tausche(-1);
+    runter.onclick = () => tausche(1);
+    const weg = el('button', 'tb-verw-b tb-verw-x', '×');
+    weg.onclick = () => { if (!weg.disabled) { send({ type: 'removeAuswahl', liste, id }); zeichne(); } };
+    zeile.append(nam, hoch, runter, weg);
+    const rec = { zeile, nam, hoch, runter, weg, art: null };
+    zeilen.set(id, rec);
+    return rec;
+  }
+
+  function zeichne() {
+    const { eigene } = daten();
+    const ids = new Set(eigene.map((x) => x.id));
+    for (const [id, r] of zeilen) if (!ids.has(id)) { r.zeile.remove(); zeilen.delete(id); }
+    leer.remove();
+    if (!eigene.length) container.append(leer);
     for (const [i, x] of eigene.entries()) {
-      const zeile = el('div', 'tb-verw-z');
-
-      const nam = el('input', 'tb-verw-n');
-      nam.value = x.label;
-      nam.setAttribute('aria-label', 'Name');
-      nam.onchange = () => {
-        const r = send({ type: 'setAuswahlLabel', liste, id: x.id, label: nam.value });
-        // Kein Neubau bei Erfolg: mousedown auf ↑/↓/× hat den Fokus genommen, ein Neubau
-        // träte den Knopf vor mouseup weg (kein click). Abgelehnt: zurück auf den echten Stand.
-        if (r && r.ok === false) { zeichne(); nam.focus(); }
-        else {
-          const jetzt = (store.state.project[liste] || []).find((e) => e.id === x.id);
-          if (jetzt && jetzt.label !== nam.value) nam.value = jetzt.label;
-        }
-      };
-
-      const hoch = el('button', 'tb-verw-b', '↑');
-      hoch.title = 'Nach oben';
-      hoch.disabled = i === 0;
-      const runter = el('button', 'tb-verw-b', '↓');
-      runter.title = 'Nach unten';
-      runter.disabled = i === eigene.length - 1;
-      // `reorderAuswahl` verlangt ALLE ids der Liste. Mit `kind` stehen hier nur
-      // die einer Art: also die volle Reihenfolge nehmen und genau die zwei
-      // Nachbarn derselben Art tauschen.
-      const tausche = (j) => {
-        const ids = alle.map((e) => e.id);
-        const a = ids.indexOf(eigene[i].id);
-        const b = ids.indexOf(eigene[j].id);
-        [ids[a], ids[b]] = [ids[b], ids[a]];
-        send({ type: 'reorderAuswahl', liste, ids });
-        zeichne();
-      };
-      hoch.onclick = () => tausche(i - 1);
-      runter.onclick = () => tausche(i + 1);
-
+      const r = zeilen.get(x.id) || baueZeile(x.id);
+      if (container.children[i] !== r.zeile) container.insertBefore(r.zeile, container.children[i] || null);
+      if (document.activeElement !== r.nam && r.nam.value !== x.label) r.nam.value = x.label;
+      r.hoch.disabled = i === 0;
+      r.runter.disabled = i === eigene.length - 1;
       // Wie viele hängen dran? Der STORE zählt — er weiß, welches Feld am
       // Vorgang auf diese Liste zeigt. Wüsste die Verwaltung es auch, wären es
       // zwei Wahrheiten, und bei einer dritten Liste vergisst man eine davon.
       const benutzt = benutztVon(store.state, liste, x.id);
-      const weg = el('button', 'tb-verw-b tb-verw-x', '×');
-      if (benutzt) {
-        weg.disabled = true;
-        weg.title = `Wird von ${benutzt} ${benutzt === 1 ? 'Zeiteintrag' : 'Zeiteinträgen'} benutzt`;
-      } else {
-        weg.title = 'Löschen';
-        weg.onclick = () => { send({ type: 'removeAuswahl', liste, id: x.id }); zeichne(); };
-      }
-
+      r.weg.disabled = !!benutzt;
+      r.weg.title = benutzt
+        ? `Wird von ${benutzt} ${benutzt === 1 ? 'Zeiteintrag' : 'Zeiteinträgen'} benutzt`
+        : 'Löschen';
       // Ressourcen ohne `kind` mischen Personal und Maschinen in EINER Liste;
       // ein Kürzel sagt wenigstens, was man vor sich hat. Mit `kind` ist die Art
       // ohnehin klar.
-      if (x.kind && !kind) zeile.append(el('span', 'tb-verw-kind', x.kind === 'maschine' ? '⚙' : '👤'));
-      zeile.append(nam, hoch, runter, weg);
-      container.append(zeile);
+      const art = x.kind && !kind ? x.kind : null;
+      if (art !== r.art) {
+        r.zeile.querySelector('.tb-verw-kind')?.remove();
+        if (art) r.zeile.prepend(el('span', 'tb-verw-kind', art === 'maschine' ? '⚙' : '👤'));
+        r.art = art;
+      }
     }
     nachZeichnen?.();
-  };
+  }
 
   zeichne();
   return { refresh: zeichne };

@@ -3290,6 +3290,33 @@ await check('«+ Personal» / «+ Maschine» legen an, umbenennen und löschen a
   await page.screenshot({ path: join(here, 'shots', 'ein-res.png') });
   return true;
 });
+await check('Personal: erster Klick auf ↓ nach Feldwechsel zählt (mouse.down, Pause, mouse.up)', async () => {
+  for (const n of ['Klick-A', 'Klick-B']) {
+    await page.locator('#ei-res-personal').click();
+    await page.waitForTimeout(150);
+    await neuName(n);
+  }
+  const vor = await resNamen('personal');
+  const liste = page.locator('.ein-liste[data-kind="personal"]');
+  if (vor.join() !== 'Alt-Eintrag,Klick-A,Klick-B') return 'Ausgang: ' + vor.join();
+  // Im Namensfeld des ZWEITEN tippen, dann ↓ am ERSTEN drücken (mousedown nimmt den Fokus).
+  await liste.locator('.tb-verw-z').nth(1).locator('.tb-verw-n').fill('Klick-A x');
+  const b = await liste.locator('.tb-verw-z').first().locator('.tb-verw-b').nth(1).boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(120);
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const nach = await resNamen('personal');
+  if (nach.join() !== 'Klick-A x,Alt-Eintrag,Klick-B') return 'Reihenfolge: ' + nach.join();
+  // Aufräumen: die zwei angelegten Einträge löschen.
+  for (const n of ['Klick-A x', 'Klick-B']) {
+    const i = (await resNamen('personal')).indexOf(n);
+    await liste.locator('.tb-verw-z').nth(i).locator('.tb-verw-x').click();
+    await page.waitForTimeout(250);
+  }
+  return (await resNamen('personal')).join() === 'Alt-Eintrag' ? true : 'Aufräumen: ' + (await resNamen('personal')).join();
+});
 await einrichten(page, 'arten');
 const listeNamen = (liste) => page.locator(`.ein-liste[data-liste="${liste}"] .tb-verw-n`).evaluateAll((l) => l.map((i) => i.value));
 await check('Arten & Abschnitte: «+ Art» und «+ Abschnitt» legen an, Liste zeigt sie, ⌘Z nimmt zurück', async () => {
