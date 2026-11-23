@@ -14,7 +14,7 @@ import { einrichtStatus, ausserhalb, zeitraumHuelle } from './einrichten-status.
 import { planSpanne } from './timeaxis.js';
 import { toMin } from './schedule.js';
 import { phaseLabel, istPhasenArt } from './phasen.js';
-import { newId } from './store.js';
+import { newId, benutztVon } from './store.js';
 import { mountAuswahlListe } from './listen-editor.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { artOf } from './ebene.js';
@@ -46,6 +46,7 @@ export function createEinrichten(root, { store, send, zu, zurueck, weiter, onZu,
   let offen = false;
   let erst = false;             // geführtes erstes Einrichten (Optik C)
   let bereich = 'projekt';
+  let aufgeschoben = false;     // refresh hat ein Feld wegen Fokus übersprungen: beim Fokusverlust nachholen
 
   // ── Formular «Projekt» ──
   const felder = {};            // Feldname → input/textarea
@@ -115,7 +116,9 @@ export function createEinrichten(root, { store, send, zu, zurueck, weiter, onZu,
       if (kontaktBox.children[i] !== z) kontaktBox.insertBefore(z, kontaktBox.children[i] || null);
       for (const [cls, f] of [['.k-name', 'name'], ['.k-rolle', 'rolle'], ['.k-tel', 'tel']]) {
         const inp = z.querySelector(cls);
-        if (document.activeElement !== inp && inp.value !== k[f]) inp.value = k[f];
+        const v = k[f] ?? '';
+        if (document.activeElement === inp) aufgeschoben = true;
+        else if (inp.value !== v) inp.value = v;
       }
     });
     kontaktLeer.hidden = liste.length > 0;
@@ -202,7 +205,7 @@ export function createEinrichten(root, { store, send, zu, zurueck, weiter, onZu,
 
   function zeichneZeitraum() {
     for (const [f, inp] of Object.entries(zrFelder)) {
-      if (document.activeElement === inp) continue;
+      if (document.activeElement === inp) { aufgeschoben = true; continue; }
       const v = projekt()[f] ?? '';
       if (inp.value !== v) inp.value = v;
     }
@@ -259,46 +262,57 @@ export function createEinrichten(root, { store, send, zu, zurueck, weiter, onZu,
     send({ type: 'moveGewerk', id, before });
   }
 
-  function gewerkZeile(g, art, i, n) {
+  // Zeilen nach id wiederverwendet (wie die Kontakte): ein Neubau unter dem Mauszeiger
+  // würde den ersten Klick verschlucken (mousedown → Fokusverlust → Neubau → mouseup
+  // auf einem neuen Knoten = kein click). Handler lesen frisch aus dem Store.
+  const gwZeilen = new Map();   // id → { z, art, nam, hoch, runter }
+  const gwFrisch = (id) => (store.state.gewerke || []).find((x) => x.id === id);
+
+  function gewerkZeile(g) {
     const z = el('div', 'tb-verw-z ein-gw-z');
     z.dataset.id = g.id;
     const farbe = el('span', 'ein-gw-farbe');
-    farbe.style.setProperty('--gw', gewerkVar(g.slot));
-    if (gewerkTexture(g.slot)) farbe.dataset.tex = '1';
     farbe.setAttribute('aria-hidden', 'true');
     const nam = el('input', 'tb-verw-n ein-gw-n');
-    nam.value = g.name;
     nam.setAttribute('aria-label', 'Name');
     nam.addEventListener('change', () => {
       const r = send({ type: 'setGewerkField', id: g.id, field: 'name', value: nam.value });
       // Abgelehnt (leer, doppelt): das Feld zeigt wieder, was im Store steht.
-      if (r && r.ok === false) nam.value = (store.state.gewerke.find((x) => x.id === g.id) || g).name;
+      if (r && r.ok === false) nam.value = (gwFrisch(g.id) || g).name;
     });
     const hoch = el('button', 'tb-verw-b ein-gw-hoch', '↑');
-    hoch.type = 'button'; hoch.title = 'Nach oben'; hoch.disabled = i === 0;
-    hoch.onclick = () => verschiebe(art, g.id, -1);
+    hoch.type = 'button'; hoch.title = 'Nach oben';
     const runter = el('button', 'tb-verw-b ein-gw-runter', '↓');
-    runter.type = 'button'; runter.title = 'Nach unten'; runter.disabled = i === n - 1;
-    runter.onclick = () => verschiebe(art, g.id, 1);
+    runter.type = 'button'; runter.title = 'Nach unten';
     const weg = el('button', 'tb-verw-b tb-verw-x ein-gw-x', '×');
     weg.type = 'button'; weg.title = 'Löschen (fragt nach, ⌘Z holt es zurück)';
     weg.onclick = () => loescheGewerk?.(g.id);
+    const rec = { z, nam, hoch, runter, farbe };
+    hoch.onclick = () => verschiebe(artOf(gwFrisch(g.id) || g), g.id, -1);
+    runter.onclick = () => verschiebe(artOf(gwFrisch(g.id) || g), g.id, 1);
     z.append(farbe, nam, hoch, runter, weg);
-    return z;
+    gwZeilen.set(g.id, rec);
+    return rec;
   }
 
   function zeichneGewerke() {
+    const alleIds = new Set((store.state.gewerke || []).map((g) => g.id));
+    for (const [id, r] of gwZeilen) if (!alleIds.has(id)) { r.z.remove(); gwZeilen.delete(id); }
     for (const [art, { liste }] of Object.entries(gwListen)) {
       const eigene = sortiert().filter((g) => artOf(g) === art);
       if (art === 'buehne') liste.hidden = !eigene.length;
-      // Im Namensfeld wird gerade getippt: nicht unter dem Cursor austauschen.
-      if (document.activeElement?.tagName === 'INPUT' && liste.contains(document.activeElement)) continue;
-      const a = document.activeElement;
-      const merk = a && liste.contains(a) ? { id: a.closest('.ein-gw-z')?.dataset.id, cls: [...a.classList].find((c) => /^ein-gw-(hoch|runter|x)$/.test(c)) } : null;
-      liste.replaceChildren(...eigene.map((g, i) => gewerkZeile(g, art, i, eigene.length)));
+      liste.querySelector('.tb-verw-leer')?.remove();
+      eigene.forEach((g, i) => {
+        const r = gwZeilen.get(g.id) || gewerkZeile(g);
+        if (liste.children[i] !== r.z) liste.insertBefore(r.z, liste.children[i] || null);
+        r.farbe.style.setProperty('--gw', gewerkVar(g.slot));
+        if (gewerkTexture(g.slot)) r.farbe.dataset.tex = '1'; else delete r.farbe.dataset.tex;
+        if (document.activeElement === r.nam) aufgeschoben = true;
+        else if (r.nam.value !== g.name) r.nam.value = g.name;
+        r.hoch.disabled = i === 0;
+        r.runter.disabled = i === eigene.length - 1;
+      });
       if (!eigene.length && art === 'gewerk') liste.append(el('div', 'tb-verw-leer', 'Noch kein Gewerk.'));
-      const f = merk && liste.querySelector(`.ein-gw-z[data-id="${merk.id}"] .${merk.cls}:not(:disabled)`);
-      if (f) f.focus();
     }
   }
 
@@ -339,7 +353,7 @@ export function createEinrichten(root, { store, send, zu, zurueck, weiter, onZu,
     box.append(el('h3', 'ei-h', titel), a, container);
     host.append(box);
     const m = mountAuswahlListe(container, { store, send, liste, kind, leerText });
-    listen.push({ container, refresh: m.refresh });
+    listen.push({ container, liste, refresh: m.refresh, sig: null });
   }
 
   function baueListen() {
@@ -356,15 +370,22 @@ export function createEinrichten(root, { store, send, zu, zurueck, weiter, onZu,
   }
 
   function zeichneListen() {
-    for (const { container, refresh } of listen) {
+    for (const l of listen) {
       // Im Namensfeld wird gerade getippt: nicht unter dem Cursor austauschen.
-      if (document.activeElement?.tagName === 'INPUT' && container.contains(document.activeElement)) continue;
-      refresh();
+      if (document.activeElement?.tagName === 'INPUT' && l.container.contains(document.activeElement)) { aufgeschoben = true; continue; }
+      // Nur neu zeichnen, wenn sich der Inhalt der Liste (oder ihre Benutzung) geändert hat.
+      const lst = store.state.project[l.liste] || [];
+      const sig = JSON.stringify([lst, lst.map((x) => benutztVon(store.state, l.liste, x.id))]);
+      if (sig === l.sig) continue;
+      l.sig = sig;
+      l.refresh();
     }
   }
 
   // ── Zeichnen ──
   function refresh() {
+    if (!offen) return;       // open() zeichnet selbst
+    aufgeschoben = false;
     const st = einrichtStatus(store.state);
     titel.textContent = '⚙ Einrichten — ' + (projekt().name || '');
     for (const b of navBtns) {
@@ -374,10 +395,11 @@ export function createEinrichten(root, { store, send, zu, zurueck, weiter, onZu,
       mark.className = 'ein-st ein-st-' + s;
       mark.textContent = ZEICHEN[s];
       mark.title = STATUS_TITEL[s];
+      mark.setAttribute('aria-label', STATUS_TITEL[s]);
     }
     // Werte an Ort und Stelle; das Feld mit dem Cursor bleibt unberührt.
     for (const [f, inp] of Object.entries(felder)) {
-      if (document.activeElement === inp) continue;
+      if (document.activeElement === inp) { aufgeschoben = true; continue; }
       const v = projekt()[f] ?? '';
       if (inp.value !== v) inp.value = v;
     }
@@ -414,7 +436,7 @@ export function createEinrichten(root, { store, send, zu, zurueck, weiter, onZu,
   weiter.onclick = () => schritt(1);
   // Was beim Tippen aufgeschoben wurde, nachholen, sobald der Fokus das Feld verlässt
   // (erst im nächsten Tick: `activeElement` ist während focusout noch das alte Feld).
-  root.addEventListener('focusout', () => setTimeout(refresh, 0));
+  root.addEventListener('focusout', () => { if (aufgeschoben) setTimeout(refresh, 0); });
 
   baueFormular();
   baueZeitraum();

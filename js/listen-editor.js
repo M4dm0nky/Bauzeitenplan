@@ -39,8 +39,13 @@ export function mountAuswahlListe(container, { store, send, liste, kind, leerTex
       nam.setAttribute('aria-label', 'Name');
       nam.onchange = () => {
         const r = send({ type: 'setAuswahlLabel', liste, id: x.id, label: nam.value });
-        zeichne();                       // auch bei Ablehnung: zurück auf den echten Stand
-        if (r && r.ok === false) nam.focus();
+        // Kein Neubau bei Erfolg: mousedown auf ↑/↓/× hat den Fokus genommen, ein Neubau
+        // träte den Knopf vor mouseup weg (kein click). Abgelehnt: zurück auf den echten Stand.
+        if (r && r.ok === false) { zeichne(); nam.focus(); }
+        else {
+          const jetzt = (store.state.project[liste] || []).find((e) => e.id === x.id);
+          if (jetzt && jetzt.label !== nam.value) nam.value = jetzt.label;
+        }
       };
 
       const hoch = el('button', 'tb-verw-b', '↑');

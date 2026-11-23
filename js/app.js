@@ -148,9 +148,6 @@ async function open(plan) {
   // nur den Inhalt: der Versatz gehört dem Abend, nicht dem Stand des Plans.
   const andereId = wechsel && store.state.project.id !== id;
   verworfen.delete(id);     // wird (wieder) geöffnet, also kein Gelöschtes mehr
-  // Ein anderes Projekt (auch «Neu») schließt die Einrichten-Seite des bisherigen —
-  // vor dem Sichern, damit «eingerichtet» noch zum alten Plan gehört.
-  if (andereId) { einScroll = null; closeEinrichten(); }
   if (store) {
     // Eine noch ausstehende Eingabe gehört dem bisherigen Projekt und wäre nach
     // dem Ersetzen weg (der Timer schriebe den NEUEN Plan). Deshalb sofort sichern.
@@ -163,6 +160,10 @@ async function open(plan) {
         return false;
       }
     }
+    // Ein anderes Projekt (auch «Neu») schließt die Einrichten-Seite des bisherigen —
+    // nach erfolgreichem Sichern, direkt vor dem Ersetzen, damit «eingerichtet» noch
+    // zum alten Plan gehört und ein Abbruch die Seite stehen lässt.
+    if (andereId) { einScroll = null; closeEinrichten(); }
     store.replace(plan);
     // Der Gantt des neuen Projekts hat sich selbst auf den Aufbau eingepasst — der
     // Scrollstand, den die Einrichten-Seite beim Öffnen gemerkt hat, gehört dem alten.
@@ -237,7 +238,8 @@ function mount() {
       // schreibt nichts. «Showablauf» kehrt in den zuletzt gewählten
       // Abschnitt zurück.
       modus: (m) => { closeEinrichten(); setAnsicht(m === 'bau' ? 'bau' : letzteShowAnsicht); },
-      einrichten: () => openEinrichten(),
+      // Seite schon offen: nichts tun (geführtes Einrichten und Bereich bleiben).
+      einrichten: () => { if (!einrichten?.offen) openEinrichten(); },
     },
   });
   table = createTable($('tb'), {
@@ -262,7 +264,7 @@ function mount() {
       ebene,
     }),
     onWahl: springeZu,
-    blockiert: () => !!document.querySelector('.dlg:not([hidden])'),
+    blockiert: () => !!document.querySelector('.dlg:not([hidden])') || !!document.querySelector('.col.ist-ein'),
   });
   phasen = createPhasenEditor({ store, askDialog, onError: (msg) => toast(msg, 'bad'), onHinweis: (msg) => toast(msg) });
   phasen.mountListe($('ei-ph-liste'), $('ei-ph-add'));

@@ -3141,6 +3141,30 @@ await check('Gewerk umbenennen auf der Seite: der Gantt zeigt den neuen Namen', 
   await einrichten(page, 'baender');
   return n === 'Licht & Ton NEU' ? true : 'Gantt: «' + n + '»';
 });
+await check('Erster Klick auf ↓ nach Feldwechsel zählt (mouse.down, Pause, mouse.up)', async () => {
+  const vor = await gwNamen();
+  if (vor.length < 2) return 'weniger als zwei Gewerke';
+  // Im Namensfeld des ZWEITEN Gewerks tippen, dann auf ↓ des ERSTEN drücken: das
+  // mousedown nimmt den Fokus (focusout → change), der Neubau darf den Knopf
+  // nicht austauschen, bevor mouseup kommt — sonst entsteht kein click.
+  await gwListe().locator('.ein-gw-z').nth(1).locator('.ein-gw-n').fill(vor[1] + ' x');
+  const b = await gwListe().locator('.ein-gw-z').first().locator('.ein-gw-runter').boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(120);
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const nach = await gwNamen();
+  if (nach[0] !== vor[1] + ' x' || nach[1] !== vor[0]) return 'Reihenfolge unverändert: ' + nach.slice(0, 2).join('|');
+  // Aufräumen: Name zurück, Reihenfolge zurück.
+  await gwListe().locator('.ein-gw-z').first().locator('.ein-gw-n').fill(vor[1]);
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(300);
+  await gwListe().locator('.ein-gw-z').first().locator('.ein-gw-runter').click();
+  await page.waitForTimeout(300);
+  const ende = await gwNamen();
+  return ende[0] === vor[0] && ende[1] === vor[1] ? true : 'Aufräumen misslang: ' + ende.slice(0, 2).join('|');
+});
 await check('Gewerk löschen fragt: Abbrechen behält, Löschen entfernt, ⌘Z holt zurück', async () => {
   await page.locator('#add-gewerk').click();
   await page.waitForTimeout(150);
