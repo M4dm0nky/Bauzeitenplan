@@ -8,7 +8,7 @@ let open = null;
 
 /**
  * @param {number} x,y   Mausposition
- * @param {Array} items  {label, hint?, danger?, disabled?, run} · null = Trennlinie
+ * @param {Array} items  {id?, label, hint?, danger?, disabled?, run} · null = Trennlinie
  */
 export function openMenu(x, y, items) {
   closeMenu();
@@ -18,6 +18,7 @@ export function openMenu(x, y, items) {
     const b = el('button', 'mn-i' + (it.danger ? ' is-danger' : ''));
     b.append(el('span', 'mn-l', it.label));
     if (it.hint) b.append(el('span', 'mn-h', it.hint));
+    if (it.id) b.id = it.id;       // greifbar für Prüfskripte (Projektmenü)
     if (it.disabled) b.disabled = true;
     else b.onclick = () => { closeMenu(); it.run(); };
     box.append(b);

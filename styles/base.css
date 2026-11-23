@@ -586,6 +586,8 @@ body { margin: 0; }
 .col.ist-ein { position: relative; }
 .col.ist-ein > .hd, .col.ist-ein > .showhead, .col.ist-ein > .ft { display: none; }
 .col.ist-ein > .work { position: absolute; inset: 0; visibility: hidden; pointer-events: none; }
+/* Die Hit-Pfade der Verknüpfungen setzen pointer-events selbst (stroke) und fingen sonst Klicks auf der Seite ab. */
+.col.ist-ein > .work * { pointer-events: none; }
 .ein-seite { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; padding: 0 28px 28px; }
 .ein-seite[hidden] { display: none; }
 .ein-kopf { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0 14px; margin-bottom: 18px; }
@@ -620,7 +622,16 @@ body { margin: 0; }
 .ein-zl-ph-aufbau { --ph-c: var(--ph-aufbau); }
 .ein-zl-ph-show { --ph-c: var(--ph-show); }
 .ein-zl-ph-abbau { --ph-c: var(--ph-abbau); }
-.ein-projekt-knoepfe { margin-top: 22px; padding-top: 16px; border-top: 1px solid currentColor; border-top-color: color-mix(in srgb, currentColor 22%, transparent); }
+/* Bereiche 3–5: Gewerke/Bühnen und die eingebetteten Auswahllisten. Zeilen teilen
+   sich die Klassen tb-verw-* mit dem schwebenden Kasten der Tabelle. */
+.ein-gewerke, .ein-res, .ein-arten { display: flex; flex-direction: column; gap: 22px; max-width: 34em; }
+.ein-gw-gruppe, .ein-liste-gruppe { max-width: 100%; }
+.ein-gw-gruppe > .ein-liste, .ein-liste-gruppe > .ein-liste { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.ein-gw-liste[hidden] { display: none; }
+.ein-liste .tb-verw-z { gap: 6px; }
+.ein-gw-farbe { flex: none; position: relative; width: 22px; height: 22px; box-sizing: border-box; background: var(--gw, #888); }
+.ein-gw-farbe[data-tex]::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(45deg, rgba(255,255,255,.7) 0 2px, transparent 2px 5px); }
 .einrichten { display: flex; flex-direction: column; gap: 18px; }
 .ei-sec { display: flex; flex-direction: column; gap: 8px; }
 .ei-h { font: inherit; margin: 0; }
@@ -859,7 +870,8 @@ body { margin: 0; }
      in die Zeile des Live-Steppers statt in eine eigene. */
   .hd .btn-wort { display: none; }
   .hd #drucken { min-width: 40px; }
-  .hd .suche { flex: 1 1 80px; width: auto; height: 40px; min-height: 0; box-sizing: border-box; }
+  /* Basis 40 statt 80: mit «Projekt» in der Zeile bräche sonst «gesichert» in eine eigene um. */
+  .hd .suche { flex: 1 1 40px; width: auto; height: 40px; min-height: 0; box-sizing: border-box; }
   .hd .seg button { padding-left: 8px; padding-right: 8px; letter-spacing: 0; }
 
   /* Fingergerechte Tap-Ziele (≥ 40 px hoch). */

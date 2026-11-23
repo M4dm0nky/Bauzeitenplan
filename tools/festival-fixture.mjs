@@ -27,9 +27,9 @@ function vorgabe() {
  * Importiert den Festival-Plan über #import-file (der Projektdialog darf offen sein).
  * @param {import('playwright-core').Page} page
  * @param {string} name   Projektname (eindeutig wählen, sonst fragt der Import «ersetzen?»)
- * @param {{venue?:string, loadIn?:string, phasen?:object[]}} o  loadIn verschiebt alle Termine (wie früher das Dialogfeld)
+ * @param {{venue?:string, loadIn?:string, phasen?:object[], ressourcen?:object[]}} o  loadIn verschiebt alle Termine (wie früher das Dialogfeld)
  */
-export async function festivalMitDaten(page, name, { venue = '', loadIn = vorgabe(), phasen = null } = {}) {
+export async function festivalMitDaten(page, name, { venue = '', loadIn = vorgabe(), phasen = null, ressourcen = null } = {}) {
   const j = JSON.parse(readFileSync(DATEI, 'utf8'));
   // Abstand zum Anker in ECHTEN Minuten (die Fixture liegt im September, ohne
   // Zeitumstellung), aufgesetzt auf den lokalen Aufbaubeginn — genau so rechnete
@@ -44,6 +44,7 @@ export async function festivalMitDaten(page, name, { venue = '', loadIn = vorgab
   for (const t of j.tasks) { t.start = v(t.start); t.end = v(t.end); }
   for (const p of j.phases || []) { p.start = v(p.start); p.end = v(p.end); }
   if (phasen) j.phases = phasen;   // absolute Phasen (nicht verschoben), z. B. zwei einzelne Showabende
+  if (ressourcen) j.project.ressourcen = ressourcen;   // z. B. Altdaten ohne `kind`
   j.exported = new Date().toISOString();
   await page.locator('#import-file').setInputFiles({ name: 'festival.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(j)) });
 }

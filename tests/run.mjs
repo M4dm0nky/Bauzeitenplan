@@ -289,7 +289,11 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // (grün/gelb/gedämpft). Ohne sie stünde die Seite in den anderen Themes ungestaltet da.
     'ein-seite', 'ein-nav', 'ein-st-ok', 'ein-st-warn', 'ein-st-leer',
     // Bereich «Zeitraum & Phasen»: Warnleiste und Mini-Zeitleiste.
-    'ein-zl', 'ein-warn'];
+    'ein-zl', 'ein-warn',
+    // Bereich «Gewerke & Bühnen»: das Farbfeld der Zeile (Schraffur ab Platz 11).
+    'ein-gw-farbe',
+    // Kontextmenü (Zoom, Tag, Projektmenü, Rechtsklick): fehlte in Board, Blueprint und Studio.
+    'mn-i', 'mn-sep'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

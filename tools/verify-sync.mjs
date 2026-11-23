@@ -16,6 +16,7 @@ import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
 import { planLaden } from './plan-fixture.mjs';
+import { einrichten, projektMenue } from './ui-helfer.mjs';
 
 const ECHT = process.argv.includes('--echt');
 const TOKEN = process.env.BZP_TOKEN || '';
@@ -142,9 +143,7 @@ const start = async (g, query = '?plan=leer') => {
 const legeAn = async (g, name) => {
   const p = g.page;
   if (await p.locator('#dlg').isHidden()) {
-    await p.locator('#rail-ein').click();
-    await p.locator('#new-proj').click();
-    await p.evaluate(() => document.getElementById('ein-zu').click());
+    await projektMenue(p, 'new-proj');
   }
   // Die Vorlage hat keine Termine mehr; der Abgleich soll einen Plan MIT Balken sehen.
   await festivalMitDaten(p, name);
@@ -153,10 +152,11 @@ const legeAn = async (g, name) => {
 
 const verbinden = async (g, token = 'ghp_fake') => {
   const p = g.page;
-  await p.locator('#rail-ein').click();
-  await p.locator('[data-ein="sync"]').click();
+  await einrichten(p, 'sync');
   await p.fill('#sync-token', token);
   await p.locator('#sync-verbinden').click();
+  await p.waitForTimeout(150);
+  await p.keyboard.press('Escape');      // der Speicherort-Dialog liegt über der App
 };
 // Ein frisch geöffnetes Gerät ohne Projekt hat keine Schiene (rail.js entsteht erst in
 // mount()) und damit keinen Weg zum Reiter «Speicherort». Für solche Geräte den
@@ -195,9 +195,7 @@ const dialogZu = async (g) => {
 // Nur die EIGENEN Projekte (erste .dlg-list).
 const eigeneProjekte = async (g) => {
   const p = g.page;
-  await p.locator('#rail-ein').click();
-  await p.locator('[data-ein="projekt"]').click();
-  await p.locator('#proj-menu').click();
+  await projektMenue(p, 'proj-menu');
   await p.locator('#dlg').waitFor({ state: 'visible' });
   const namen = await p.evaluate(() => {
     const h = [...document.querySelectorAll('#dlg .dlg-h3')].find((x) => x.textContent === 'Öffnen');
@@ -254,8 +252,9 @@ try {
       if (ECHT) { await A.page.reload(); await A.page.waitForTimeout(800); }
       else await verbinden(A);
       await check('A: Reiter «Speicherort» zeigt «Verbunden mit …»', async () => {
-        if (ECHT) { await A.page.locator('#rail-ein').click(); await A.page.locator('[data-ein="sync"]').click(); }
+        if (ECHT) { await einrichten(A.page, 'sync'); }
         const ok = await bis(async () => /Verbunden mit/.test(await A.page.locator('#sync-info').textContent()), 5000);
+        if (ECHT) await A.page.keyboard.press('Escape');
         return ok ? true : 'Text: ' + await A.page.locator('#sync-info').textContent();
       });
       await check('A: Abgleich endet auf «ok»', () => warteZustand(A, 'ok'));
@@ -315,9 +314,7 @@ try {
       if (ECHT) {
         // Aufräumen: beide Testprojekte über die Oberfläche löschen (online → auch im Repo), dann A nachziehen lassen.
         for (const name of [PROBE, NURB]) {
-          await B.page.locator('#rail-ein').click();
-          await B.page.locator('[data-ein="projekt"]').click();
-          await B.page.locator('#proj-menu').click();
+          await projektMenue(B.page, 'proj-menu');
           const zeile = B.page.locator('#dlg .dlg-row', { hasText: name });
           if (await zeile.count()) {
             await zeile.locator('.dlg-del').click();
@@ -335,7 +332,7 @@ try {
           return [...nb, ...na].some((n) => n === PROBE || n === NURB) ? 'noch da: ' + nb.join(',') + ' | ' + na.join(',') : true;
         });
       }
-    } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+    } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A, B); }
   }
 
@@ -399,7 +396,7 @@ try {
           return ok ? true : fake.dateien.size + ' Dateien';
         });
         await check('B: kein zweiter Dialog hinterher (Nicht-Treffer)', async () => (await dlg.count()) === 0 ? true : 'Dialog erneut');
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A, B); }
     }
 
@@ -460,7 +457,7 @@ try {
           const dlg = B.page.locator('.dlg', { hasText: 'Zwei verschiedene Fassungen' });
           return (await bis(async () => (await dlg.count()) === 1, 6000)) ? true : 'kein Dialog';
         });
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A, B); }
     }
 
@@ -479,7 +476,9 @@ try {
           return ok && gespeichert === null && (await syncZustand(A)) === 'aus' ? true : `Toast ${ok}, gespeichert ${gespeichert}, Zustand ${await syncZustand(A)}`;
         });
         fake.schluesselOk = true;
+        await einrichten(A.page, 'sync');          // der Dialog wurde nach dem ersten Versuch geschlossen; das Feld behält den Schlüssel
         await A.page.locator('#sync-verbinden').click();
+        await A.page.keyboard.press('Escape');
         await check('Gegenprobe: mit gültigem Schlüssel verbindet er (Zustand «ok»)', () => warteZustand(A, 'ok'));
         await einZu(A);
         fake.schluesselOk = false;      // Schlüssel wird nachträglich ungültig
@@ -499,7 +498,7 @@ try {
           return nach === vor + 1 ? true : `${vor} → ${nach}`;
         });
         await check('Zustand bleibt «fehler» (kein stilles Zurückfallen auf «ok»)', async () => (await syncZustand(A)) === 'fehler' ? true : await syncZustand(A));
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A); }
     }
 
@@ -521,7 +520,7 @@ try {
         });
         const loesche = async (g, name) => {
           const p = g.page;
-          if (await p.locator('#dlg').isHidden()) { await p.locator('#rail-ein').click(); await p.locator('[data-ein="projekt"]').click(); await p.locator('#proj-menu').click(); }
+          if (await p.locator('#dlg').isHidden()) { await projektMenue(p, 'proj-menu'); }
           await p.locator('#dlg .dlg-row', { hasText: name }).locator('.dlg-del').click();
           await p.locator('.dlg .dlg-act .btn-danger', { hasText: 'Löschen' }).click();
           await p.waitForTimeout(700);
@@ -552,7 +551,7 @@ try {
           return ok && n.includes('Bleibt') ? true : 'B: ' + n.join(',');
         });
         await check('A: «Bleibt» bleibt ebenfalls (Nicht-Treffer)', async () => (await eigeneProjekte(A)).includes('Bleibt') ? true : 'weg');
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A, B); }
     }
 
@@ -582,7 +581,7 @@ try {
         // B löscht das offene Projekt (online → auch im Repo).
         {
           const p = B.page;
-          await p.locator('#rail-ein').click(); await p.locator('[data-ein="projekt"]').click(); await p.locator('#proj-menu').click();
+          await projektMenue(p, 'proj-menu');
           await p.locator('#dlg .dlg-row', { hasText: 'Offen-Kopie' }).locator('.dlg-del').click();
           await p.locator('.dlg .dlg-act .btn-danger', { hasText: 'Löschen' }).click();
           await p.waitForTimeout(700);
@@ -616,7 +615,7 @@ try {
           if (offen) return offen + ' Entwurf offen im Folgeprojekt';
           return wert === store && wert === v0 ? true : `Feld ${wert}, Store ${store}, vorher ${v0}`;
         });
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A, B); }
     }
 
@@ -660,7 +659,7 @@ try {
         const idS2 = await A.page.evaluate(() => { const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_') && JSON.parse(localStorage.getItem(x)).project.name === 'S2'); return k.slice(6); });
         {
           const p = A.page;
-          await p.locator('#rail-ein').click(); await p.locator('[data-ein="projekt"]').click(); await p.locator('#proj-menu').click();
+          await projektMenue(p, 'proj-menu');
           await p.locator('#dlg .dlg-row', { hasText: 'S2' }).locator('.dlg-del').click();
           await p.locator('.dlg .dlg-act .btn-danger', { hasText: 'Löschen' }).click();
           await p.waitForTimeout(900);
@@ -677,7 +676,7 @@ try {
         const idS1 = (await indexIds(A))[0];
         {
           const p = A.page;
-          await p.locator('#rail-ein').click(); await p.locator('[data-ein="projekt"]').click(); await p.locator('#proj-menu').click();
+          await projektMenue(p, 'proj-menu');
           await p.locator('#dlg .dlg-row', { hasText: 'S1' }).locator('.dlg-del').click();
           await p.locator('.dlg .dlg-act .btn-danger', { hasText: 'Löschen' }).click();
           await p.waitForTimeout(900);
@@ -693,7 +692,7 @@ try {
           const ids = await indexIds(A);
           return ids.length === 1 && !ids.includes(idS1) && !ids.includes(idS2) ? true : 'Index ' + ids;
         });
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A); }
     }
 
@@ -713,7 +712,7 @@ try {
         await A.netz(false);
         {
           const p = A.page;
-          await p.locator('#rail-ein').click(); await p.locator('[data-ein="projekt"]').click(); await p.locator('#proj-menu').click();
+          await projektMenue(p, 'proj-menu');
           await p.locator('#dlg .dlg-row', { hasText: 'T2' }).locator('.dlg-del').click();
           await p.locator('.dlg .dlg-act .btn-danger', { hasText: 'Löschen' }).click();
           await p.waitForTimeout(900);
@@ -731,7 +730,7 @@ try {
           const dlg = await A.page.locator('.dlg', { hasText: 'Im Daten-Repo gelöscht' }).count();
           return r === true && dlg === 0 && (await indexIds(A)).length === 2 ? true : `${r}, Dialog ${dlg}`;
         });
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A); }
     }
 
@@ -760,7 +759,7 @@ try {
           if (!ok) return 'A zeigt den neuen Inhalt nicht';
           return (await vzA()) === '5' ? true : 'Versatz ' + await vzA() + ' statt 5';
         });
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A, B); }
     }
     {
@@ -782,9 +781,7 @@ try {
         // blur löst change aus (Timer läuft jetzt praktisch nie ab), dann das andere Projekt öffnen.
         await A.page.evaluate(() => document.activeElement && document.activeElement.blur());
         const oeffne = async (name) => {
-          await A.page.locator('#rail-ein').click();
-          await A.page.locator('[data-ein="projekt"]').click();
-          await A.page.locator('#proj-menu').click();
+          await projektMenue(A.page, 'proj-menu');
           await A.page.locator('#dlg').waitFor({ state: 'visible' });
           await A.page.locator('#dlg .dlg-open', { hasText: name }).click();
           await A.page.waitForTimeout(500);
@@ -797,7 +794,7 @@ try {
           const v = await A.page.locator('.tb-r .c-title input').first().inputValue();
           return v === 'Frisch getippt' ? true : 'Titel: ' + v;
         });
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A); }
     }
 
@@ -825,7 +822,7 @@ try {
         await sleep(12000);
         await check('danach bleibt es bei einem (kein Nachklapp, B schickt nichts zurück)', async () => fake.puts === putVorEdit + 1 ? true : `${fake.puts - putVorEdit} PUTs`);
         await check('A: Zustand «ok» nach dem Upload', () => warteZustand(A, 'ok'));
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A, B); }
     }
 
@@ -861,7 +858,7 @@ try {
           const ok = await bis(async () => fake.puts === putsVor + 1, 6000);
           return ok ? true : `PUTs +${fake.puts - putsVor}`;
         });
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await schliesse(A, B); }
     }
 
@@ -1033,7 +1030,7 @@ try {
           const da = await A.evaluate(() => Object.keys(localStorage).filter((x) => x.startsWith('bzp_p_')));
           return ok && !da.includes('bzp_p_' + gone) ? true : `Dialog ${ok}, Pläne im Speicher ${da.join(',')}, gelöscht ${gone}`;
         });
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await ctx.close(); }
     }
 
@@ -1081,7 +1078,7 @@ try {
           await kalt.setOffline(true);
           const p2 = await kalt.newPage();
           let fehler = null;
-          try { await p2.goto(BASE + '/index.html?plan=leer', { timeout: 8000 }); } catch (e) { fehler = e.message.split('\n')[0]; }
+          try { await p2.goto(BASE + '/index.html?plan=leer', { timeout: 8000 }); } catch (e) { fehler = e.message.split('\n').slice(0, 4).join(' | '); }
           await check('Gegenprobe: ohne Erstbesuch offline → keine App (der Treffer kommt vom Cache)', async () => {
             const balken = await p2.locator('.bz-bar').count();
             const app = await p2.locator('#bz').count();
@@ -1089,7 +1086,7 @@ try {
           });
           await shot(p2, 'offline-kalt');
         } finally { await kalt.close(); }
-      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n')[0]); problems++; }
+      } catch (e) { console.log('  ✗ Schritt abgebrochen: ' + e.message.split('\n').slice(0, 4).join(' | ')); problems++; }
       finally { await ctx.close(); }
     }
   }

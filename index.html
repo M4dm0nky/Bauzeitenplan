@@ -175,6 +175,9 @@
         <input type="search" class="suche" id="suche" placeholder="🔍 Suchen …  ( / )"
                autocomplete="off" spellcheck="false" role="combobox" aria-label="Suchen"
                aria-expanded="false" aria-controls="suche-liste" aria-autocomplete="list">
+        <!-- Projektmenü: Neu, Projekte, Import, Export, Speicherort. Die Einträge
+             entstehen beim Öffnen (openMenu), nichts davon steht dauerhaft im DOM. -->
+        <button class="btn" id="proj-knopf" title="Projekt: neu, wechseln, Import, Export, Speicherort" aria-label="Projekt" aria-haspopup="menu">📁<span class="btn-wort"> Projekt</span></button>
         <button class="btn" id="drucken" title="Drucken (A3 quer)" aria-label="Drucken">🖨<span class="btn-wort"> Drucken</span></button>
         <button class="btn hd-mode" id="theme-toggle" title="Hell/Dunkel umschalten" aria-label="Hell/Dunkel umschalten">☾</button>
         <span class="sync-state" id="sync-state" data-state="ok" role="status" hidden>☁</span>
@@ -201,9 +204,8 @@
   <!-- Einrichten: eine eigene SEITE derselben App (Modus), kein Fenster darüber.
        Der Plan wird nur verborgen (`.col.ist-ein`), nicht abgebaut — beim Zurück
        steht er genau dort, wo man ihn verlassen hat (Zoom, Scroll, Tag).
-       Die Knöpfe sind DIESELBEN Elemente mit denselben ids wie vorher: ihre
-       Handler in app.js bleiben unverändert, hier ist nur eine andere Hülle.
-       Gefüllt und aktuell gehalten wird die Seite von js/einrichten.js. -->
+       Die Bereiche sind leere Hüllen: Formulare, Listen und «+»-Knöpfe baut und
+       aktualisiert js/einrichten.js (Auswahllisten: js/listen-editor.js). -->
   <section class="ein-seite" id="ein-seite" hidden aria-label="Einrichten">
     <div class="ein-kopf">
       <h2 class="ein-titel">⚙ Einrichten</h2>
@@ -216,20 +218,12 @@
         <button type="button" data-ein="baender" aria-pressed="false"><span class="ein-nz">🏗</span><span>Gewerke &amp; Bühnen</span><span class="ein-st ein-st-leer">○</span></button>
         <button type="button" data-ein="res" aria-pressed="false"><span class="ein-nz">👷</span><span>Personal &amp; Maschinen</span><span class="ein-st ein-st-leer">○</span></button>
         <button type="button" data-ein="arten" aria-pressed="false"><span class="ein-nz">🏷</span><span>Arten &amp; Abschnitte</span><span class="ein-st ein-st-leer">○</span></button>
-        <!-- Vorläufig: Speicherort bleibt hier erreichbar (kommt in einem späteren Schritt ins Kopfmenü). -->
-        <button type="button" data-ein="sync" aria-pressed="false"><span class="ein-nz">☁</span><span>Speicherort</span><span></span></button>
       </nav>
 
       <div class="ein-inhalt">
         <div class="ei-sec" data-ein-tab="projekt">
           <div class="ein-projekt-form"></div>
-          <div class="ei-row ein-projekt-knoepfe">
-            <button class="btn" id="new-proj">Neu</button>
-            <button class="btn" id="proj-menu">Projekte</button>
-            <button class="btn" id="export" title="Sicherung herunterladen">Export</button>
-            <button class="btn" id="import">Import</button>
-          </div>
-          <p class="ei-hint">Drucken und Hell/Dunkel stehen in der Kopfzeile.</p>
+          <p class="ei-hint">Neu, Projekte, Import, Export und Speicherort: Knopf «Projekt» in der Kopfzeile. Drucken und Hell/Dunkel stehen ebenfalls dort.</p>
         </div>
 
         <div class="ei-sec" data-ein-tab="phasen" hidden>
@@ -243,39 +237,15 @@
         </div>
 
         <div class="ei-sec" data-ein-tab="baender" hidden>
-          <div class="ei-row">
-            <button class="btn" id="add-gewerk">+ Gewerk</button>
-          </div>
-          <p class="ei-hint">Umbenennen, sortieren und löschen: Rechtsklick auf ein Gewerk im Plan.</p>
+          <div class="ein-gewerke"></div>
         </div>
 
         <div class="ei-sec" data-ein-tab="res" hidden>
-          <div class="ei-row">
-            <button class="btn" id="ei-res-personal">+ Personal</button>
-            <button class="btn" id="ei-res-maschine">+ Maschine</button>
-            <button class="btn" id="ei-res-verwalten">Verwalten…</button>
-          </div>
-          <p class="ei-hint">Zuweisen tust du am Vorgang selbst — im Panel oder in der Tabelle, Spalte «Ressourcen».</p>
+          <div class="ein-res"></div>
         </div>
 
         <div class="ei-sec" data-ein-tab="arten" hidden>
-          <div class="ei-row">
-            <button class="btn" id="ei-typen-verwalten">Arten verwalten…</button>
-            <button class="btn" id="ei-abschnitte-verwalten">Abschnitte verwalten…</button>
-          </div>
-          <p class="ei-hint">Angelegt wird «+ Neu…» im Auswahlfeld der Tabelle, mitten im Tippen.</p>
-        </div>
-
-        <div class="ei-sec" data-ein-tab="sync" hidden>
-          <h3 class="ei-h">GitHub-Schlüssel</h3>
-          <label class="ei-feld">
-            <input type="password" id="sync-token" autocomplete="off" spellcheck="false" placeholder="github_pat_…" aria-label="GitHub-Schlüssel"></label>
-          <div class="ei-row">
-            <button class="btn" id="sync-verbinden">Verbinden</button>
-            <button class="btn" id="sync-trennen">Trennen</button>
-          </div>
-          <p class="ei-hint" id="sync-info"></p>
-          <p class="ei-hint">Schlüssel anlegen: GitHub → Settings → Developer settings → Fine-grained tokens. Nur das Repo «Bauzeitenplan-Daten» wählen, Berechtigung «Contents: Read and write». Der Schlüssel bleibt in diesem Browser und wird nie exportiert.</p>
+          <div class="ein-arten"></div>
         </div>
       </div>
     </div>
@@ -295,6 +265,22 @@
   </div>
 </div>
 
+<!-- Speicherort (GitHub-Sync): eigener kleiner Dialog, geöffnet über das Projektmenü. -->
+<div class="dlg" id="sync-dlg" hidden>
+  <div class="dlg-box ei-sec">
+    <h2 class="dlg-h">☁ Speicherort</h2>
+    <h3 class="ei-h">GitHub-Schlüssel</h3>
+    <label class="ei-feld">
+      <input type="password" id="sync-token" autocomplete="off" spellcheck="false" placeholder="github_pat_…" aria-label="GitHub-Schlüssel"></label>
+    <div class="ei-row">
+      <button class="btn" id="sync-verbinden">Verbinden</button>
+      <button class="btn" id="sync-trennen">Trennen</button>
+    </div>
+    <p class="ei-hint" id="sync-info"></p>
+    <p class="ei-hint">Schlüssel anlegen: GitHub → Settings → Developer settings → Fine-grained tokens. Nur das Repo «Bauzeitenplan-Daten» wählen, Berechtigung «Contents: Read and write». Der Schlüssel bleibt in diesem Browser und wird nie exportiert.</p>
+    <div class="dlg-act"><button class="btn" id="sync-zu">Schließen</button></div>
+  </div>
+</div>
 <div class="dlg" id="dlg" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="import-file" accept="application/json,.json" hidden>

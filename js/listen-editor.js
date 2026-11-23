@@ -25,7 +25,9 @@ export function mountAuswahlListe(container, { store, send, liste, kind, leerTex
     // `sort`, es dreht das Array nicht um. Ohne das Sortieren hier bliebe die
     // Liste nach einem Klick auf ↑ sichtbar unverändert.
     const alle = nachSort(store.state.project[liste]);
-    const eigene = kind ? alle.filter((x) => x.kind === kind) : alle;
+    // Ohne `kind` zählt eine Ressource als Personal (wie `resKind` in resources.js:
+    // Altdaten kennen das Feld nicht und fielen sonst aus beiden Listen).
+    const eigene = kind ? alle.filter((x) => (x.kind || 'personal') === kind) : alle;
     container.replaceChildren();
 
     if (!eigene.length) container.append(el('div', 'tb-verw-leer', leerText));

@@ -269,9 +269,13 @@ function mount() {
     zu: $('ein-zu'),
     onZu: closeEinrichten,
     onBereich: (name) => {
-      if (name === 'sync') paintSyncInfo();
       if (name === 'phasen') phasen?.refresh();
     },
+    // Eine Quelle für Löschen, Anlegen und den «Neu…»-Kasten — dieselben Wege wie
+    // Rechtsklick im Plan und Tabelle.
+    loescheGewerk,
+    neuGewerk: (anker, art) => addGewerk(anker, art),
+    neuFragen: (opt, ankerEl, fertig) => table.openNeuFragen(opt, ankerEl, fertig),
   });
   bedarf = createBedarf($('bd'), { store, onEinrichten: (tab) => openEinrichten(tab) });
   inspector = createInspector($('ins'), {
@@ -371,17 +375,6 @@ function mount() {
   document.querySelector('button[data-bedarf="personal"]').setAttribute('aria-pressed', 'true');
 
   // ── Projekt ──
-  $('proj-menu').onclick = () => showProjectDialog({});
-  $('export').onclick = doExport;
-  $('add-gewerk').onclick = addGewerk;
-  $('ei-res-personal').onclick = () => neuerRessourcenKnopf('personal');
-  $('ei-res-maschine').onclick = () => neuerRessourcenKnopf('maschine');
-  $('ei-res-verwalten').onclick = () => table.openVerwalten(
-    { liste: 'ressourcen', titel: 'Personal & Maschinen verwalten' }, $('ei-res-verwalten'));
-  $('ei-typen-verwalten').onclick = () => table.openVerwalten(
-    { liste: 'punktTypen', titel: 'Arten verwalten' }, $('ei-typen-verwalten'));
-  $('ei-abschnitte-verwalten').onclick = () => table.openVerwalten(
-    { liste: 'abschnitte', titel: 'Abschnitte verwalten' }, $('ei-abschnitte-verwalten'));
   // Der Konflikt-Knopf zeigt jetzt die Liste, statt blind alle zu verschieben —
   // im Popup entscheidet man je Konflikt (zeigen · lösen · ist ok) oder auf einmal.
   $('resolve').onclick = () => openReview();
@@ -456,6 +449,7 @@ const scrollerListe = () => [
 ];
 
 function openEinrichten(bereich = 'projekt') {
+  if (bereich === 'sync') { oeffneSpeicherort(); return; }   // Speicherort ist ein Dialog, kein Bereich
   if (!einrichten) return;
   if (!einrichten.offen) {
     einScroll = {};
@@ -905,17 +899,6 @@ function tagWahl(anker) {
   openMenu(r.left, r.bottom + 4, items);
 }
 
-// «+ Neu…» aus der Einrichten-Seite: derselbe schwebende Kasten wie beim
-// Anlegen mitten im Tippen, nur ohne anschließende Zuweisung an einen
-// Vorgang — hier wird nur die Bezeichnung angelegt.
-function neuerRessourcenKnopf(kind) {
-  const btn = $(kind === 'maschine' ? 'ei-res-maschine' : 'ei-res-personal');
-  table.openNeuFragen({
-    titel: 'Neue Bezeichnung (' + (kind === 'maschine' ? 'Maschine' : 'Personal') + ')',
-    cmd: { type: 'addRessource', kind },
-  }, btn, () => {});
-}
-
 // ── Ebene wechseln ──────────────────────────────────────────────────────────
 // Der EINZIGE Ort, der über die Ansicht entscheidet. Gantt und Tabelle bekommen
 // Ebene und Abschnitt gereicht; der Rest der Kopfzeile richtet sich danach aus.
@@ -958,7 +941,6 @@ function setAnsicht(name) {
   $('seg-abschnitt').hidden = ebene !== 'show';
   document.querySelector('.hd-zoom').hidden = view !== 'gantt' || ebene !== 'bau';
   syncTagKnopf();
-  $('add-gewerk').textContent = ebene === 'show' ? '+ Bühne' : '+ Gewerk';
   if (view === 'tabelle') renderTable();
   if (view === 'bedarf') bedarf.render();
   refreshChrome();
@@ -1240,17 +1222,7 @@ function showContext(sel, x, y) {
       { label: 'Nach unten', hint: '↓', disabled: i === list.length - 1, run: () => apply({ type: 'reorderGewerk', id: g.id, dir: 1 }) },
       null,
       { label: 'Bearbeiten …', run: () => gantt.select(sel) },
-      { label: count ? `Löschen (${count} ${count === 1 ? 'Vorgang' : 'Vorgänge'})` : 'Löschen', danger: true, run: async () => {
-        const ok = await askDialog({
-          title: 'Gewerk löschen?',
-          message: [count
-            ? `«${g.name}» löschen? ${count} ${count === 1 ? 'Vorgang geht' : 'Vorgänge gehen'} mit. ⌘Z holt alles zurück.`
-            : `«${g.name}» löschen?`],
-          buttons: [{ label: 'Abbrechen', value: false }, { label: 'Löschen', value: true, danger: true }],
-        });
-        if (!ok) return;
-        apply({ type: 'removeGewerk', id: g.id });
-      } },
+      { label: count ? `Löschen (${count} ${count === 1 ? 'Vorgang' : 'Vorgänge'})` : 'Löschen', danger: true, run: () => loescheGewerk(g.id) },
     ]);
     return;
   }
@@ -1439,13 +1411,33 @@ function refreshChrome() {
   $('redo').disabled = !store.canRedo;
 }
 
+// ── Gewerk löschen ──────────────────────────────────────────────────────────
+// EINE Umsetzung für Rechtsklick im Plan und die Einrichten-Seite: Rückfrage mit
+// der Zahl der Vorgänge, die mitgehen, dann ein Befehl (⌘Z holt alles zurück).
+async function loescheGewerk(id) {
+  const g = store.state.gewerke.find((z) => z.id === id);
+  if (!g) return;
+  const count = store.state.tasks.filter((t) => t.gewerk === g.id).length;
+  const ok = await askDialog({
+    title: 'Gewerk löschen?',
+    message: [count
+      ? `«${g.name}» löschen? ${count} ${count === 1 ? 'Vorgang geht' : 'Vorgänge gehen'} mit. ⌘Z holt alles zurück.`
+      : `«${g.name}» löschen?`],
+    buttons: [{ label: 'Abbrechen', value: false }, { label: 'Löschen', value: true, danger: true }],
+  });
+  if (!ok) return;
+  return apply({ type: 'removeGewerk', id: g.id });
+}
+
 // ── Gewerk anlegen ──────────────────────────────────────────────────────────
-function addGewerk(anker) {
-  const buehne = ebene === 'show';
+// `art` ('gewerk' | 'buehne') nennt die Einrichten-Seite; ohne sie entscheidet
+// die Ebene (leerer Gantt, Rechtsklick).
+function addGewerk(anker, art) {
+  const buehne = (art || (ebene === 'show' ? 'buehne' : 'gewerk')) === 'buehne';
   const wort = buehne ? 'Bühne' : 'Gewerk';
-  // Je Ebene gezählt: Gewerke und Bühnen teilen sich die Palette nicht, weil sie
+  // Je Art gezählt: Gewerke und Bühnen teilen sich die Palette nicht, weil sie
   // nie zusammen zu sehen sind (freeSlot in store.js rechnet ebenso).
-  const da = sichtGewerke(store.state, ebene).length;
+  const da = sichtGewerke(store.state, buehne ? 'show' : 'bau').length;
   if (slotsExhausted(da + 1)) {
     toast(`Mehr als ${MAX_SLOTS} ${wort}e: ab hier trägt die Farbe die Zuordnung nicht mehr, nur noch der Name.`, 'warn', 7000);
   }
@@ -1455,7 +1447,7 @@ function addGewerk(anker) {
   table.openNeuFragen({
     titel: buehne ? 'Name der Bühne (z. B. Hauptbühne, Zelt, Halle 3)' : 'Name des Gewerks',
     buildCmd: (name) => ({ type: 'addGewerk', gewerk: { name, art: buehne ? 'buehne' : 'gewerk' } }),
-  }, anker instanceof Element ? anker : $('add-gewerk'), () => syncBuehnen());
+  }, anker instanceof Element ? anker : $('proj-knopf'), () => syncBuehnen());
 }
 
 // ── Export / Import ─────────────────────────────────────────────────────────
@@ -1880,14 +1872,42 @@ function openReview() {
 
 $('undo').onclick = () => store && store.undo();
 $('redo').onclick = () => store && store.redo();
-$('new-proj').onclick = () => showProjectDialog({});
 $('plan-verschieben').onclick = showShiftDialog;
 
-// Import MUSS auf Modulebene verdrahtet sein, nicht in mount(): mount() läuft
-// erst, wenn ein Projekt offen ist. Beim allerersten Start gibt es keins — der
-// Dialog bot «JSON importieren» an, aber der Knopf war tot. Wer die App frisch
-// öffnet oder seinen Speicher geleert hat, konnte nichts importieren.
-$('import').onclick = () => $('import-file').click();
+// ── Projektmenü (Kopfzeile) ─────────────────────────────────────────────────
+// Ein Knopf, ein Menü (openMenu); die Einträge rufen benannte Funktionen. Nichts
+// davon hängt an einem dauerhaft vorhandenen Knopf: Neu und Import müssen schon
+// beim allerersten Start gehen (kein Projekt, kein mount()) — der Projektdialog
+// bietet «JSON importieren» an, und `import-file` wird auf Modulebene verdrahtet.
+const neuesProjekt = () => showProjectDialog({});
+const projekteWaehlen = () => showProjectDialog({});
+const importieren = () => $('import-file').click();
+const exportieren = () => { if (store) doExport(); };
+
+function oeffneSpeicherort() {
+  paintSyncInfo();
+  $('sync-dlg').hidden = false;
+  $('sync-token').focus();
+}
+function schliesseSpeicherort() { $('sync-dlg').hidden = true; }
+$('sync-zu').onclick = schliesseSpeicherort;
+$('sync-dlg').onclick = (e) => { if (e.target === $('sync-dlg')) schliesseSpeicherort(); };
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('sync-dlg').hidden) { e.preventDefault(); schliesseSpeicherort(); }
+});
+
+function projektMenue() {
+  const r = $('proj-knopf').getBoundingClientRect();
+  openMenu(r.left, r.bottom + 4, [
+    { id: 'new-proj', label: '＋ Neu…', run: neuesProjekt },
+    { id: 'proj-menu', label: '📂 Projekte…', run: projekteWaehlen },
+    { id: 'import', label: '⬆ Import…', run: importieren },
+    { id: 'export', label: '⬇ Export', disabled: !store, run: exportieren },
+    null,
+    { id: 'sync-oeffnen', label: '☁ Speicherort…', run: oeffneSpeicherort },
+  ]);
+}
+$('proj-knopf').onclick = projektMenue;
 $('import-file').onchange = doImport;
 
 $('ver').textContent = 'v' + VERSION;

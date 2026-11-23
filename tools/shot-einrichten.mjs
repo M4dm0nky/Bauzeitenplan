@@ -41,6 +41,16 @@ try {
     await page.locator('[data-ein="phasen"]').click();
     await page.waitForTimeout(300);
     await page.screenshot({ path: join(here, 'shots', `einrichten-zeitraum-${theme}-${scheme}.png`) });
+    // Bereiche 3–5 und das Projektmenü
+    for (const b of ['baender', 'res', 'arten']) {
+      await page.locator(`[data-ein="${b}"]`).click();
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: join(here, 'shots', `einrichten-${b}-${theme}-${scheme}.png`) });
+    }
+    await page.locator('#ein-zu').click();
+    await page.locator('#proj-knopf').click();
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: join(here, 'shots', `proj-menue-${theme}-${scheme}.png`), clip: { x: 800, y: 0, width: 600, height: 300 } });
     await ctx.close();
   }
 } finally { await browser.close(); server.close(); }

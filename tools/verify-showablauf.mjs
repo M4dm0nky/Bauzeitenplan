@@ -1151,7 +1151,7 @@ await check('VERWALTEN: umbenennen behält die Zuordnung der Zeile', async () =>
   await sel.selectOption('__verw__');
   await p.waitForTimeout(400);
   if (!(await p.locator('.tb-verw').isVisible())) return 'die Verwaltung öffnete nicht';
-  const nam = p.locator('.tb-verw-n').first();
+  const nam = p.locator('.tb-verw .tb-verw-n').first();
   await nam.fill('Linecheck Bühne');
   await nam.press('Enter');
   await p.waitForTimeout(500);
@@ -1166,7 +1166,7 @@ await check('VERWALTEN: umbenennen behält die Zuordnung der Zeile', async () =>
 await check('VERWALTEN: eine benutzte Art ist gegen Löschen gesperrt', async () => {
   await p.locator('.tb-r .c-typ select').first().selectOption('__verw__');
   await p.waitForTimeout(400);
-  const x = p.locator('.tb-verw-x').first();
+  const x = p.locator('.tb-verw .tb-verw-x').first();
   if (!(await x.isDisabled())) return 'der Löschknopf ist offen, obwohl die Art benutzt wird';
   const grund = await x.getAttribute('title');
   return /benutzt/.test(grund || '') ? true : 'ohne Begründung: ' + grund;
@@ -1185,12 +1185,12 @@ await check('VERWALTEN: sortieren, und die Reihenfolge hält', async () => {
 
   await p.locator('.tb-r .c-typ select').first().selectOption('__verw__');
   await p.waitForTimeout(400);
-  const vorher = await p.locator('.tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
+  const vorher = await p.locator('.tb-verw .tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
   if (vorher.length !== 2) return vorher.length + ' eigene Arten statt 2';
   // Die zweite nach oben.
-  await p.locator('.tb-verw-z').nth(1).locator('.tb-verw-b').first().click();
+  await p.locator('.tb-verw .tb-verw-z').nth(1).locator('.tb-verw-b').first().click();
   await p.waitForTimeout(400);
-  const nachher = await p.locator('.tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
+  const nachher = await p.locator('.tb-verw .tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
   if (nachher[0] !== vorher[1]) return 'nach dem Sortieren: ' + nachher.join(' · ');
 
   // Der Kasten muss beim Auswahlfeld STEHEN BLEIBEN. Nach jedem Befehl baut die
@@ -1223,7 +1223,7 @@ await check('NACH DEM SORTIEREN ANGELEGT: die neue Art steht HINTEN', async () =
   await p.waitForTimeout(500);
   await p.locator('.tb-r .c-typ select').first().selectOption('__verw__');
   await p.waitForTimeout(400);
-  const namen = await p.locator('.tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
+  const namen = await p.locator('.tb-verw .tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
   await p.locator('.tb-verw .btn-p').click();
   await p.waitForTimeout(300);
   return namen[namen.length - 1] === 'Zuletzt'
@@ -1234,11 +1234,11 @@ await check('VERWALTEN: unbenutzte Art löschen, ⌘Z holt sie zurück', async (
   await p.locator('.tb-r .c-typ select').first().selectOption('__verw__');
   await p.waitForTimeout(400);
   // Catering steht jetzt oben und ist unbenutzt.
-  const frei = p.locator('.tb-verw-z').filter({ has: p.locator('.tb-verw-x:not([disabled])') }).first();
+  const frei = p.locator('.tb-verw .tb-verw-z').filter({ has: p.locator('.tb-verw-x:not([disabled])') }).first();
   const name = await frei.locator('.tb-verw-n').inputValue();
   await frei.locator('.tb-verw-x').click();
   await p.waitForTimeout(400);
-  const rest = await p.locator('.tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
+  const rest = await p.locator('.tb-verw .tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
   if (rest.includes(name)) return '«' + name + '» steht noch da';
   await p.locator('.tb-verw .btn-p').click();
   await p.waitForTimeout(300);
@@ -1262,7 +1262,7 @@ await check('auch die Abschnitte lassen sich verwalten', async () => {
   await p.waitForTimeout(400);
   const titel = (await p.locator('.tb-neuart-h').textContent()).trim();
   if (titel !== 'Abschnitte verwalten') return 'Überschrift: ' + titel;
-  const namen = await p.locator('.tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
+  const namen = await p.locator('.tb-verw .tb-verw-n').evaluateAll((n) => n.map((x) => x.value));
   await p.keyboard.press('Escape');
   await p.waitForTimeout(300);
   // Setup und Show stehen NICHT darin — sie sind fest.

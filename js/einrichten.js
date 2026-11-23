@@ -1,7 +1,8 @@
 // ── Einrichten als eigene Seite ──────────────────────────────────────────────
 // Die Seite liegt als `#ein-seite` fest im index.html (Kopf, Navigation, die
 // Bereiche samt den umgezogenen Knöpfen mit ihren ids). Dieses Modul füllt, was
-// sich ändert: Titel, Status je Bereich und das Formular «Projekt».
+// sich ändert: Titel, Status je Bereich, das Formular «Projekt», der Zeitraum und
+// die Listen der Bereiche 3–5 (Gewerke/Bühnen, Personal/Maschinen, Arten/Abschnitte).
 //
 // Sie SCHREIBT nur über `send(cmd)` (= app.js `apply`, das Fehler anzeigt) und
 // zeichnet aus dem Store. Ein abgelehnter Befehl setzt das Feld auf den
@@ -14,6 +15,9 @@ import { planSpanne } from './timeaxis.js';
 import { toMin } from './schedule.js';
 import { phaseLabel, istPhasenArt } from './phasen.js';
 import { newId } from './store.js';
+import { mountAuswahlListe } from './listen-editor.js';
+import { gewerkVar, gewerkTexture } from './palette.js';
+import { artOf } from './ebene.js';
 
 const BEREICHE = ['projekt', 'phasen', 'baender', 'res', 'arten'];
 const ZEICHEN = { ok: '✓', warn: '⚠', leer: '○' };
@@ -21,15 +25,23 @@ const STATUS_TITEL = { ok: 'in Ordnung', warn: 'braucht einen Blick', leer: 'noc
 
 /**
  * @param {HTMLElement} root  das feste `#ein-seite`
- * @param {{store, send:(cmd:object)=>any, zu:HTMLElement, onZu?:()=>void, onBereich?:(name:string)=>void}} o
+ * `loescheGewerk(id)` (Rückfrage + Löschen), `neuGewerk(ankerEl, art)` und
+ * `neuFragen(opt, ankerEl, fertig)` (der schwebende «Neu…»-Kasten der Tabelle)
+ * kommen von außen: dieses Modul importiert nichts aus app.js.
+ * @param {{store, send:(cmd:object)=>any, zu:HTMLElement, onZu?:()=>void, onBereich?:(name:string)=>void,
+ *          loescheGewerk?:(id:string)=>any, neuGewerk?:(anker:HTMLElement, art:string)=>void,
+ *          neuFragen?:(opt:object, anker:HTMLElement, fertig?:Function)=>void}} o
  * @returns {{open(bereich?:string, opt?:{erst?:boolean}):void, close():void, refresh():void, readonly offen:boolean}}
  */
-export function createEinrichten(root, { store, send, zu, onZu, onBereich }) {
+export function createEinrichten(root, { store, send, zu, onZu, onBereich, loescheGewerk, neuGewerk, neuFragen }) {
   const titel = root.querySelector('.ein-titel');
   const navBtns = [...root.querySelectorAll('button[data-ein]')];
   const sektionen = [...root.querySelectorAll('[data-ein-tab]')];
   const host = root.querySelector('.ein-projekt-form');
   const zrHost = root.querySelector('.ein-zeitraum');
+  const gwHost = root.querySelector('.ein-gewerke');
+  const resHost = root.querySelector('.ein-res');
+  const artenHost = root.querySelector('.ein-arten');
   let offen = false;
   let bereich = 'projekt';
 
@@ -225,6 +237,130 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich }) {
     zl.replaceChildren(rahmen, ...balken);
   }
 
+  // ── Bereich «Gewerke & Bühnen» ──
+  // Zwei Listen (Art `gewerk`, Art `buehne`), je Zeile Farbfeld · Name · ↑ ↓ · ×.
+  // Die Bühnenliste steht nur da, wenn es eine Bühne gibt; «+ Bühne» immer.
+  const gwListen = {};          // art → { box, liste }
+  const sortiert = () => [...(store.state.gewerke || [])].sort((a, b) => a.sort - b.sort);
+
+  // `moveGewerk` statt `reorderGewerk`: Gewerke und Bühnen teilen EINE Reihenfolge
+  // (`sort`). Stünde eine Bühne zwischen zwei Gewerken, tauschte `reorderGewerk`
+  // mit ihr und die Gewerkliste bliebe sichtbar unverändert. Hier wird vor das
+  // nächste Band GLEICHER Art eingefügt (↓: hinter das nächste, also vor dessen Nachfolger).
+  function verschiebe(art, id, dir) {
+    const alle = sortiert();
+    const eigene = alle.filter((g) => artOf(g) === art);
+    const i = eigene.findIndex((g) => g.id === id);
+    const ziel = eigene[i + dir];
+    if (i < 0 || !ziel) return;
+    const before = dir < 0 ? ziel.id : (alle[alle.indexOf(ziel) + 1] || {}).id ?? null;
+    send({ type: 'moveGewerk', id, before });
+  }
+
+  function gewerkZeile(g, art, i, n) {
+    const z = el('div', 'tb-verw-z ein-gw-z');
+    z.dataset.id = g.id;
+    const farbe = el('span', 'ein-gw-farbe');
+    farbe.style.setProperty('--gw', gewerkVar(g.slot));
+    if (gewerkTexture(g.slot)) farbe.dataset.tex = '1';
+    farbe.setAttribute('aria-hidden', 'true');
+    const nam = el('input', 'tb-verw-n ein-gw-n');
+    nam.value = g.name;
+    nam.setAttribute('aria-label', 'Name');
+    nam.addEventListener('change', () => {
+      const r = send({ type: 'setGewerkField', id: g.id, field: 'name', value: nam.value });
+      // Abgelehnt (leer, doppelt): das Feld zeigt wieder, was im Store steht.
+      if (r && r.ok === false) nam.value = (store.state.gewerke.find((x) => x.id === g.id) || g).name;
+    });
+    const hoch = el('button', 'tb-verw-b ein-gw-hoch', '↑');
+    hoch.type = 'button'; hoch.title = 'Nach oben'; hoch.disabled = i === 0;
+    hoch.onclick = () => verschiebe(art, g.id, -1);
+    const runter = el('button', 'tb-verw-b ein-gw-runter', '↓');
+    runter.type = 'button'; runter.title = 'Nach unten'; runter.disabled = i === n - 1;
+    runter.onclick = () => verschiebe(art, g.id, 1);
+    const weg = el('button', 'tb-verw-b tb-verw-x ein-gw-x', '×');
+    weg.type = 'button'; weg.title = 'Löschen (fragt nach, ⌘Z holt es zurück)';
+    weg.onclick = () => loescheGewerk?.(g.id);
+    z.append(farbe, nam, hoch, runter, weg);
+    return z;
+  }
+
+  function zeichneGewerke() {
+    for (const [art, { box, liste }] of Object.entries(gwListen)) {
+      const eigene = sortiert().filter((g) => artOf(g) === art);
+      if (art === 'buehne') liste.hidden = !eigene.length;
+      // Im Namensfeld wird gerade getippt: nicht unter dem Cursor austauschen.
+      if (document.activeElement?.tagName === 'INPUT' && liste.contains(document.activeElement)) continue;
+      const a = document.activeElement;
+      const merk = a && liste.contains(a) ? { id: a.closest('.ein-gw-z')?.dataset.id, cls: [...a.classList].find((c) => /^ein-gw-(hoch|runter|x)$/.test(c)) } : null;
+      liste.replaceChildren(...eigene.map((g, i) => gewerkZeile(g, art, i, eigene.length)));
+      if (!eigene.length && art === 'gewerk') liste.append(el('div', 'tb-verw-leer', 'Noch kein Gewerk.'));
+      const f = merk && liste.querySelector(`.ein-gw-z[data-id="${merk.id}"] .${merk.cls}:not(:disabled)`);
+      if (f) f.focus();
+    }
+  }
+
+  function baueGewerke() {
+    const knopf = (id, text, art) => {
+      const b = el('button', 'btn', text);
+      b.type = 'button';
+      b.id = id;
+      b.onclick = () => neuGewerk?.(b, art);
+      return b;
+    };
+    const gruppe = (art, titel, add) => {
+      const box = el('div', 'ein-gruppe ein-gw-gruppe');
+      const liste = el('div', 'ein-liste ein-gw-liste');
+      liste.dataset.art = art;
+      gwListen[art] = { box, liste };
+      box.append(el('h3', 'ei-h', titel), liste, add);
+      return box;
+    };
+    gwHost.append(
+      gruppe('gewerk', 'Gewerke', knopf('add-gewerk', '+ Gewerk', 'gewerk')),
+      gruppe('buehne', 'Bühnen (Showablauf)', knopf('add-buehne', '+ Bühne', 'buehne')),
+      el('p', 'ei-hint', 'Die Farbe gehört dem Gewerk und bleibt beim Sortieren. Rechtsklick im Plan geht weiter: dort auch «Vorgang hinzufügen».'),
+    );
+  }
+
+  // ── Bereiche «Personal & Maschinen» und «Arten & Abschnitte»: eingebettete Auswahllisten ──
+  const listen = [];            // { container, refresh }
+  function einbetten(host, { titel, liste, kind, leerText, add }) {
+    const box = el('div', 'ein-gruppe ein-liste-gruppe');
+    const container = el('div', 'ein-liste');
+    container.dataset.liste = liste;
+    if (kind) container.dataset.kind = kind;
+    const a = el('button', 'btn', add.text);
+    a.type = 'button';
+    a.id = add.id;
+    a.onclick = () => neuFragen?.(add.opt, a, () => {});
+    box.append(el('h3', 'ei-h', titel), a, container);
+    host.append(box);
+    const m = mountAuswahlListe(container, { store, send, liste, kind, leerText });
+    listen.push({ container, refresh: m.refresh });
+  }
+
+  function baueListen() {
+    einbetten(resHost, { titel: 'Personal', liste: 'ressourcen', kind: 'personal', leerText: 'Noch kein Personal.',
+      add: { id: 'ei-res-personal', text: '+ Personal', opt: { titel: 'Neue Bezeichnung (Personal)', cmd: { type: 'addRessource', kind: 'personal' } } } });
+    einbetten(resHost, { titel: 'Maschinen', liste: 'ressourcen', kind: 'maschine', leerText: 'Noch keine Maschine.',
+      add: { id: 'ei-res-maschine', text: '+ Maschine', opt: { titel: 'Neue Bezeichnung (Maschine)', cmd: { type: 'addRessource', kind: 'maschine' } } } });
+    resHost.append(el('p', 'ei-hint', 'Zugewiesen wird am Vorgang — im Panel oder in der Tabelle, Spalte «Ressourcen».'));
+    einbetten(artenHost, { titel: 'Arten der Zeiteinträge', liste: 'punktTypen', leerText: 'Noch keine eigene Art.',
+      add: { id: 'ein-art-add', text: '+ Art', opt: { titel: 'Neue Art', kompaktFeld: true, cmd: { type: 'addPunktTyp' } } } });
+    einbetten(artenHost, { titel: 'Abschnitte', liste: 'abschnitte', leerText: 'Noch kein eigener Abschnitt.',
+      add: { id: 'ein-abschnitt-add', text: '+ Abschnitt', opt: { titel: 'Neuer Abschnitt', cmd: { type: 'addAbschnitt' } } } });
+    artenHost.append(el('p', 'ei-hint', 'Hier stehen deine eigenen Einträge; die eingebauten bleiben immer. Anlegen geht auch mitten im Tippen: «+ Neu…» im Auswahlfeld der Tabelle.'));
+  }
+
+  function zeichneListen() {
+    for (const { container, refresh } of listen) {
+      // Im Namensfeld wird gerade getippt: nicht unter dem Cursor austauschen.
+      if (document.activeElement?.tagName === 'INPUT' && container.contains(document.activeElement)) continue;
+      refresh();
+    }
+  }
+
   // ── Zeichnen ──
   function refresh() {
     const st = einrichtStatus(store.state);
@@ -232,7 +368,7 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich }) {
     for (const b of navBtns) {
       const s = st[b.dataset.ein];
       const mark = b.querySelector('.ein-st');
-      if (!s || !mark) continue;           // «sync» hat kein Status-Zeichen
+      if (!s || !mark) continue;
       mark.className = 'ein-st ein-st-' + s;
       mark.textContent = ZEICHEN[s];
       mark.title = STATUS_TITEL[s];
@@ -245,6 +381,8 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich }) {
     }
     zeichneKontakte();
     zeichneZeitraum();
+    zeichneGewerke();
+    zeichneListen();
   }
 
   function zeigeBereich(name) {
@@ -262,6 +400,8 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich }) {
 
   baueFormular();
   baueZeitraum();
+  baueGewerke();
+  baueListen();
   refresh();
 
   return {
@@ -269,7 +409,7 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich }) {
       offen = true;
       root.hidden = false;
       refresh();
-      zeigeBereich(BEREICHE.includes(name) || name === 'sync' ? name : 'projekt');
+      zeigeBereich(BEREICHE.includes(name) ? name : 'projekt');
       zu.focus();
     },
     close() {

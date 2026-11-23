@@ -131,6 +131,14 @@ body {
 /* Schwebt über der Tabelle — ohne eigene Fläche stünde die Eingabe
    durchsichtig auf den Zeilen darunter. */
 .tb-neuart { background: var(--panel); border: 1px solid var(--line-2); box-shadow: 0 14px 40px -10px rgba(10,30,60,.35); }
+/* Kontextmenü (openMenu): Zoom, Tag, Projektmenü, Rechtsklick. */
+.mn { background: var(--panel); border: 1px solid var(--line-2); box-shadow: 0 14px 40px -10px rgba(10,30,60,.35); padding: 3px; }
+.mn-i { padding: 6px 10px; color: var(--ink); }
+.mn-i:hover:not(:disabled), .mn-i:focus-visible { background: color-mix(in srgb, var(--ink) 12%, transparent); outline: none; }
+.mn-i:disabled { opacity: .45; }
+.mn-i.is-danger { color: var(--crit); }
+.mn-h { font-size: .85em; color: var(--ink-3, var(--ink-2)); }
+.mn-sep { background: var(--line-2); margin: 3px 0; }
 .tb-neuart-n { border: 1px solid var(--line-2); background: var(--panel2); color: var(--ink); }
 .tb-neuart-h { color: var(--ink); }
 .tb-neuart-k { color: var(--ink-2); }
@@ -344,6 +352,7 @@ kbd {
 .ein-st-leer { background: transparent; color: var(--ink-2); border: 1px dashed var(--ink-2); }
 .ein-warn { background: color-mix(in srgb, var(--ein-warn) 22%, var(--sheet)); border: 1px solid var(--ein-warn); border-left-width: 6px; color: var(--ink); }
 .ein-zl { background: var(--sheet); border: 1px solid var(--line-2); color: var(--ink); }
+.ein-gw-farbe { border: 1px solid var(--line-2); border-radius: 0; }
 .ein-lab { color: var(--ink-2); }
 .ein-seite input, .ein-seite textarea { background: var(--sheet); color: var(--ink); border: 1px solid var(--line-2); }
 .ein-seite input:focus, .ein-seite textarea:focus { outline: 2px solid var(--cyan); outline-offset: -1px; }

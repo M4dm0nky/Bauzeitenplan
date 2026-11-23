@@ -9,6 +9,7 @@ import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
 import { planSeed } from './plan-fixture.mjs';
+import { einrichten, zumPlan, projektMenue } from './ui-helfer.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -361,10 +362,7 @@ await check(`das ${HUES + 1}. Gewerk (Platz ${HUES}) bekommt Schraffur`, async (
   // Der Store lehnt Namensdubletten ab, deshalb jedes Mal ein eigener Name.
   const start = await page.locator('.legend-i').count();
   // «+ Gewerk» steht im Einrichten-Fenster, Reiter «Gewerke & Bühnen».
-  await page.locator('#rail-ein').click();
-  await page.waitForTimeout(200);
-  await page.locator('[data-ein="baender"]').click();
-  await page.waitForTimeout(150);
+  await einrichten(page, 'baender');
   for (let slot = start; slot <= HUES; slot++) {
     // Eigener Kasten statt window.prompt — Name tippen, «Anlegen» klicken.
     await page.locator('#add-gewerk').click();
@@ -810,9 +808,7 @@ console.log('\nPROJEKTWECHSEL');
 await check('zweites Projekt mit ganz anderem Zeitraum anlegen', async () => {
   // Projekt/Export/Import/+Gewerk stehen auf der Einrichten-Seite, nicht mehr
   // in der Arbeitsleiste (siehe "Ansicht | Einrichten" oben im Kopf).
-  await page.locator('#rail-ein').click();
-  await page.waitForTimeout(200);
-  await page.locator('#new-proj').click();
+  await projektMenue(page, 'new-proj');
   await page.waitForTimeout(400);
   await festivalMitDaten(page, 'Weit weg 2027', { loadIn: '2027-03-15T06:00' });
   await page.waitForTimeout(900);
@@ -821,13 +817,12 @@ await check('zweites Projekt mit ganz anderem Zeitraum anlegen', async () => {
 await check('nach dem Wechsel steht die Ansicht beim AUFBAU, nicht irgendwo', async () => {
   // Pixel bedeuten nach einem Projektwechsel einen anderen Zeitpunkt: T0 ist
   // ein anderes Datum. Wer scrollLeft einfach behält, landet Wochen daneben.
-  await page.locator('#proj-menu').click();
+  await projektMenue(page, 'proj-menu');
   await page.waitForTimeout(400);
   await page.locator('.dlg-open', { hasText: 'Testprojekt Halle 7' }).click();
   await page.waitForTimeout(1000);
-  // Zurück zur Arbeitsleiste — sonst steht der Gantt hinter «Einrichten» und
-  // jeder .bz-bar hat eine leere Bounding-Box.
-  await page.locator('#ein-zu').click();
+  // Der Plan steht vorn (das Projektmenü liegt in der Kopfzeile, nicht auf der Seite).
+  await zumPlan(page);
   await page.waitForTimeout(300);
   // Die Tagesansicht zieht GENAU EINEN Kalendertag auf die Breite (volle
   // Tagesansicht) — sichtbar sind also nur die Balken des Aufbau-Tags, nicht
@@ -880,7 +875,7 @@ await check('Wechsel über den Projektdialog verwirft den Entwurf', async () => 
   await page.waitForTimeout(300);
   if (!(await page.locator('.tb-r.is-entwurf').count())) return 'Entwurf nicht offen (Vorbedingung)';
   const wechsle = async (name) => {
-    await page.evaluate(() => document.querySelector('#proj-menu').click());
+    await projektMenue(page, 'proj-menu');
     await page.waitForTimeout(400);
     await page.evaluate((n) => [...document.querySelectorAll('.dlg-open')].find((b) => b.textContent.includes(n)).click(), name);
     await page.waitForTimeout(1000);
@@ -1409,10 +1404,10 @@ await page.screenshot({ path: join(here, 'shots', 'edit-9-sub-gantt.png') });
 
 console.log('\nEXPORT');
 await check('Export lädt eine JSON-Datei herunter', async () => {
-  await page.locator('#rail-ein').click();
-  await page.waitForTimeout(200);
-  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), page.locator('#export').click()]);
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), projektMenue(page, 'export')]);
   const n = dl.suggestedFilename();
+  // Die Prüfung danach beginnt mit offener Einrichten-Seite.
+  await einrichten(page, 'projekt');
   return n.endsWith('.json') ? true : 'Dateiname: ' + n;
 });
 
@@ -1594,8 +1589,7 @@ await check('Voller Speicher beim Projektwechsel fragt (Abbrechen / Trotzdem wec
       await p3.waitForTimeout(700);
     };
     await anlegen('Alpha');
-    await p3.locator('#rail-ein').click();
-    await p3.locator('#new-proj').click();
+    await projektMenue(p3, 'new-proj');
     await p3.waitForTimeout(300);
     await anlegen('Beta');
     await p3.waitForTimeout(1200);
@@ -1615,8 +1609,7 @@ await check('Voller Speicher beim Projektwechsel fragt (Abbrechen / Trotzdem wec
       });
     };
     const projektOeffnen = async (name) => {
-      await p3.locator('#rail-ein').click();
-      await p3.locator('#proj-menu').click();
+      await projektMenue(p3, 'proj-menu');
       await p3.waitForTimeout(300);
       await p3.locator('.dlg-open', { hasText: name }).click();
       await p3.waitForTimeout(500);
@@ -1681,15 +1674,12 @@ await check('Neu angelegter Plan, dessen erstes Speichern scheitert, gilt als un
         return orig.call(this, k, v);
       };
     });
-    await p4.locator('#rail-ein').click();
-    await p4.locator('#new-proj').click();
+    await projektMenue(p4, 'new-proj');
     await p4.waitForTimeout(300);
     await anlegen('Beta');
     await p4.waitForTimeout(1200);
     if ((await p4.locator('#proj-name').textContent()) !== 'Beta') return 'Beta nicht offen';
-    await p4.locator('#ein-zu').click({ timeout: 2000 }).catch(() => {});
-    await p4.locator('#rail-ein').click();
-    await p4.locator('#proj-menu').click();
+    await projektMenue(p4, 'proj-menu');
     await p4.waitForTimeout(300);
     await p4.locator('.dlg-open', { hasText: 'Alpha' }).click();
     await p4.waitForTimeout(600);
@@ -2924,8 +2914,8 @@ await check('Einrichten ist eine Seite: Gantt weg, Schiene gedrückt, fünf Bere
   if (!(await page.locator('#ein-seite').isVisible())) return '#ein-seite nicht sichtbar';
   if (await page.locator('#bz').isVisible()) return 'der Gantt ist noch sichtbar';
   if ((await page.locator('#rail-ein').getAttribute('aria-pressed')) !== 'true') return '#rail-ein nicht gedrückt';
-  const n = await page.locator('.ein-nav button[data-ein]:not([data-ein="sync"])').count();
-  if (n !== 5) return n + ' Bereiche statt 5';
+  const n = await page.locator('.ein-nav button[data-ein]').count();
+  if (n !== 5) return n + ' Bereiche statt 5 (Speicherort gehört nicht mehr in die Navigation)';
   const st = (await page.locator('.ein-nav [data-ein="projekt"] .ein-st').textContent()).trim();
   if (st !== '✓') return 'Status Projekt «' + st + '»';
   if (!(await page.locator('.ein-nav [data-ein="projekt"] .ein-st-ok').count())) return 'Klasse ein-st-ok fehlt';
@@ -3080,16 +3070,29 @@ await check('Hülle setzen = ein Undo (Start und Ende zusammen)', async () => {
   if ((await stZeichen()) !== '⚠') return 'Status nach ⌘Z «' + (await stZeichen()) + '»';
   return true;
 });
-await check('Ende vor Start abgelehnt: Feld springt zurück, Toast, kein Undo-Eintrag', async () => {
+await check('Ende vor Start abgelehnt: Feld springt zurück, Toast, Store unverändert, kein Undo-Eintrag', async () => {
+  // Erst EINE angenommene Änderung (= ein Undo-Eintrag), dann die abgelehnte: ein
+  // einziges ⌘Z muss die angenommene zurücknehmen. Hätte die Ablehnung einen
+  // Eintrag hinterlassen, bliebe das Ende nach dem ⌘Z auf dem neuen Wert stehen.
+  // (Der Vergleich «#undo gesperrt vorher/nachher» konnte nicht scheitern, sobald
+  // der Undo-Stapel nicht leer war.)
   const alt = await zrProjekt();
-  const undoVor = await page.locator('#undo').isDisabled();
+  await page.locator('#ein-ende').fill('2026-09-25T06:00');
+  await page.keyboard.press('Tab');
+  const angenommen = await zrProjekt();
+  if (angenommen.end !== '2026-09-25T06:00') return 'Vorbedingung: Ende ' + angenommen.end;
+  await page.waitForTimeout(4300);                       // der Toast von vorhin ist weg
+  if (await page.locator('#toast').isVisible()) return 'Vorbedingung: Toast noch sichtbar';
   await page.locator('#ein-ende').fill('2026-06-01T06:00');
   await page.keyboard.press('Tab');
   await page.waitForTimeout(300);
-  if ((await page.locator('#ein-ende').inputValue()) !== alt.end) return 'Feld zeigt «' + (await page.locator('#ein-ende').inputValue()) + '»';
+  if ((await page.locator('#ein-ende').inputValue()) !== angenommen.end) return 'Feld zeigt «' + (await page.locator('#ein-ende').inputValue()) + '»';
   if (await page.locator('#toast').isHidden()) return 'kein Toast';
-  if ((await page.locator('#undo').isDisabled()) !== undoVor) return 'Undo-Zustand hat sich geändert';
-  return true;
+  const nach = await zrProjekt();
+  if (JSON.stringify(nach) !== JSON.stringify(angenommen)) return 'Store hat sich verändert: ' + nach.start + ' – ' + nach.end;
+  await undoOhneFeld();
+  const zurueck = await zrProjekt();
+  return zurueck.end === alt.end ? true : 'ein ⌘Z stellt das Ende nicht zurück (' + zurueck.end + ' statt ' + alt.end + ') — die Ablehnung hat einen Undo-Eintrag hinterlassen';
 });
 await check('Zeitraum ändern lässt Vorgänge und Phasen stehen; Warnung folgt dem neuen Zeitraum', async () => {
   const alt = await zrProjekt();
@@ -3112,7 +3115,178 @@ await check('Phasenliste und «Plan verschieben…» liegen im Bereich 2, nicht 
   if (!(await sek('phasen').locator('#ei-ph-liste .ph-z').count())) return 'Phasenliste leer';
   return true;
 });
-await page.locator('#ein-zu').click();
+console.log('\nEINRICHTEN BEREICHE 3–5 (Gewerke, Personal, Arten) UND PROJEKTMENÜ');
+const gwListe = (art = 'gewerk') => page.locator(`.ein-gw-liste[data-art="${art}"]`);
+const gwNamen = (art = 'gewerk') => gwListe(art).locator('.ein-gw-n').evaluateAll((l) => l.map((i) => i.value));
+const neuName = async (name) => {
+  await page.locator('.tb-neuart-n').fill(name);
+  await page.locator('.tb-neuart-a .btn-p').click();
+  await page.waitForTimeout(300);
+};
+await einrichten(page, 'baender');
+await check('Gewerk umbenennen auf der Seite: der Gantt zeigt den neuen Namen', async () => {
+  const z = gwListe().locator('.ein-gw-z').first();
+  if (!(await z.count())) return 'keine Gewerk-Zeile';
+  await z.locator('.ein-gw-n').fill('Licht & Ton NEU');
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(300);
+  if ((await gwNamen())[0] !== 'Licht & Ton NEU') return 'Liste zeigt «' + (await gwNamen())[0] + '»';
+  await zumPlan(page);
+  await page.waitForTimeout(300);
+  const n = await page.locator('.bz-lab-group .bz-lab-name').first().textContent();
+  await einrichten(page, 'baender');
+  return n === 'Licht & Ton NEU' ? true : 'Gantt: «' + n + '»';
+});
+await check('Gewerk löschen fragt: Abbrechen behält, Löschen entfernt, ⌘Z holt zurück', async () => {
+  await page.locator('#add-gewerk').click();
+  await page.waitForTimeout(150);
+  await neuName('Wegwerf-Gewerk');
+  const vor = await gwNamen();
+  if (!vor.includes('Wegwerf-Gewerk')) return 'Gewerk nicht angelegt: ' + vor.join('|');
+  const zeile = () => gwListe().locator('.ein-gw-z', { has: page.locator('.ein-gw-n[value="Wegwerf-Gewerk"]') });
+  const idx = vor.indexOf('Wegwerf-Gewerk');
+  const x = gwListe().locator('.ein-gw-z').nth(idx).locator('.ein-gw-x');
+  await x.click();
+  await page.waitForTimeout(200);
+  if (!(await page.locator('.dlg .dlg-h', { hasText: 'Gewerk löschen?' }).isVisible())) return 'keine Rückfrage';
+  await page.locator('.dlg .dlg-act .btn', { hasText: 'Abbrechen' }).click();
+  await page.waitForTimeout(200);
+  if (!(await gwNamen()).includes('Wegwerf-Gewerk')) return 'Abbrechen hat gelöscht';
+  await gwListe().locator('.ein-gw-z').nth(idx).locator('.ein-gw-x').click();
+  await page.locator('.dlg .dlg-act .btn-danger').click();
+  await page.waitForTimeout(300);
+  if ((await gwNamen()).includes('Wegwerf-Gewerk')) return 'Löschen hat nichts gelöscht';
+  await undoOhneFeld();
+  await page.waitForTimeout(300);
+  return (await gwNamen()).includes('Wegwerf-Gewerk') ? true : '⌘Z holt das Gewerk nicht zurück';
+});
+await check('↑ ↓ sortieren (an den Enden gesperrt), Farbfeld trägt die Palettenfarbe', async () => {
+  const z = gwListe().locator('.ein-gw-z');
+  if (!(await z.first().locator('.ein-gw-hoch').isDisabled())) return '↑ der ersten Zeile nicht gesperrt';
+  if (!(await z.last().locator('.ein-gw-runter').isDisabled())) return '↓ der letzten Zeile nicht gesperrt';
+  const vor = await gwNamen();
+  await z.first().locator('.ein-gw-runter').click();
+  await page.waitForTimeout(300);
+  const nach = await gwNamen();
+  if (nach[0] !== vor[1] || nach[1] !== vor[0]) return 'Reihenfolge ' + vor.slice(0, 2).join('|') + ' → ' + nach.slice(0, 2).join('|');
+  await undoOhneFeld();
+  await page.waitForTimeout(300);
+  if ((await gwNamen())[0] !== vor[0]) return '⌘Z stellt die Reihenfolge nicht her';
+  const bg = await gwListe().locator('.ein-gw-farbe').first().evaluate((n) => n.style.getPropertyValue('--gw') || n.style.background || n.getAttribute('style'));
+  return /--gw-\d/.test(bg) ? true : 'Farbfeld ohne Palettenfarbe: «' + bg + '»';
+});
+await check('Schraffur sichtbar: ab dem 11. Gewerk trägt das Farbfeld data-tex', async () => {
+  let n = (await gwNamen()).length, i = 0;
+  while (n <= HUES && i++ < 20) {
+    await page.locator('#add-gewerk').click();
+    await page.waitForTimeout(120);
+    await neuName('Farbe-' + i);
+    n = (await gwNamen()).length;
+  }
+  const tex = await gwListe().locator('.ein-gw-farbe[data-tex]').count();
+  const mit = (await gwListe().locator('.ein-gw-farbe').count());
+  await page.screenshot({ path: join(here, 'shots', 'ein-gewerke.png') });
+  return tex >= 1 && tex < mit ? true : `${tex} schraffierte von ${mit} Farbfeldern`;
+});
+await check('Bühnenliste nur mit Bühnen; «+ Bühne» immer; neue Bühne erscheint', async () => {
+  if (await gwListe('buehne').isVisible()) return 'Bühnenliste sichtbar, obwohl es keine Bühne gibt';
+  if (!(await page.locator('#add-buehne').isVisible())) return '«+ Bühne» fehlt';
+  await page.locator('#add-buehne').click();
+  await page.waitForTimeout(150);
+  await neuName('Hauptbühne');
+  if (!(await gwListe('buehne').isVisible())) return 'Bühnenliste bleibt weg';
+  if ((await gwNamen('buehne')).join() !== 'Hauptbühne') return 'Bühnen: ' + (await gwNamen('buehne')).join();
+  if ((await gwNamen()).includes('Hauptbühne')) return 'die Bühne steht auch unter den Gewerken';
+  await undoOhneFeld();
+  await page.waitForTimeout(300);
+  return (await gwListe('buehne').isVisible()) ? '⌘Z blendet die Bühnenliste nicht aus' : true;
+});
+
+await check('Projektmenü in der Kopfzeile: genau fünf Einträge, alte Knöpfe weg', async () => {
+  await zumPlan(page);
+  for (const id of ['new-proj', 'proj-menu', 'export', 'import', 'ei-res-verwalten', 'ei-typen-verwalten', 'ei-abschnitte-verwalten']) {
+    if (await page.locator('#' + id).count()) return '#' + id + ' steht noch dauerhaft im DOM';
+  }
+  await page.locator('#proj-knopf').click();
+  await page.waitForTimeout(150);
+  const ids = await page.locator('.mn .mn-i').evaluateAll((l) => l.map((b) => b.id));
+  await page.screenshot({ path: join(here, 'shots', 'proj-menue.png') });
+  await page.keyboard.press('Escape');
+  return ids.join() === 'new-proj,proj-menu,import,export,sync-oeffnen' ? true : 'Einträge: ' + ids.join();
+});
+await check('Speicherort: «☁ Speicherort…» öffnet #sync-dlg mit Schlüsselfeld; Escape und Klick daneben schließen', async () => {
+  await projektMenue(page, 'sync-oeffnen');
+  await page.waitForTimeout(200);
+  if (!(await page.locator('#sync-dlg').isVisible())) return '#sync-dlg nicht sichtbar';
+  if (!(await page.locator('#sync-dlg #sync-token').isVisible())) return '#sync-token fehlt im Dialog';
+  if (!(await page.locator('#sync-info').textContent()).trim()) return '#sync-info leer (paintSyncInfo nicht gelaufen)';
+  await page.screenshot({ path: join(here, 'shots', 'sync-dlg.png') });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  if (await page.locator('#sync-dlg').isVisible()) return 'Escape schließt nicht';
+  await projektMenue(page, 'sync-oeffnen');
+  await page.mouse.click(5, 5);
+  await page.waitForTimeout(150);
+  return (await page.locator('#sync-dlg').isVisible()) ? 'Klick daneben schließt nicht' : true;
+});
+
+// Bereich 4 und 5 brauchen Ressourcen OHNE `kind` (Altdaten): sie zählen als Personal.
+await festivalMitDaten(page, 'Bereiche-Test', { loadIn: '2026-10-05T06:00', ressourcen: [
+  { id: 'r_alt', label: 'Alt-Eintrag' }, { id: 'r_gabel', label: 'Gabelstapler', kind: 'maschine' }] });
+await page.waitForTimeout(1000);
+await zumPlan(page);
+await einrichten(page, 'res');
+const resNamen = (kind) => page.locator(`.ein-liste[data-liste="ressourcen"][data-kind="${kind}"] .tb-verw-n`).evaluateAll((l) => l.map((i) => i.value));
+await check('Personal & Maschinen: zwei Listen, Ressource ohne kind steht bei Personal', async () => {
+  const p = await resNamen('personal'), m = await resNamen('maschine');
+  if (p.join() !== 'Alt-Eintrag') return 'Personal: ' + p.join();
+  if (m.join() !== 'Gabelstapler') return 'Maschinen: ' + m.join();
+  return true;
+});
+await check('«+ Personal» / «+ Maschine» legen an, umbenennen und löschen auf der Seite', async () => {
+  await page.locator('#ei-res-personal').click();
+  await page.waitForTimeout(150);
+  await neuName('Rigger');
+  if ((await resNamen('personal')).join() !== 'Alt-Eintrag,Rigger') return 'Personal: ' + (await resNamen('personal')).join();
+  await page.locator('#ei-res-maschine').click();
+  await page.waitForTimeout(150);
+  await neuName('Hebebühne');
+  if (!(await resNamen('maschine')).includes('Hebebühne')) return 'Maschine fehlt';
+  const z = page.locator('.ein-liste[data-kind="personal"] .tb-verw-z').nth(1);
+  await z.locator('.tb-verw-n').fill('Rigger 2');
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(250);
+  if ((await resNamen('personal'))[1] !== 'Rigger 2') return 'Umbenennen: ' + (await resNamen('personal')).join();
+  await page.locator('.ein-liste[data-kind="personal"] .tb-verw-z').nth(1).locator('.tb-verw-x').click();
+  await page.waitForTimeout(250);
+  if ((await resNamen('personal')).includes('Rigger 2')) return 'Löschen ohne Wirkung';
+  await page.screenshot({ path: join(here, 'shots', 'ein-res.png') });
+  return true;
+});
+await einrichten(page, 'arten');
+const listeNamen = (liste) => page.locator(`.ein-liste[data-liste="${liste}"] .tb-verw-n`).evaluateAll((l) => l.map((i) => i.value));
+await check('Arten & Abschnitte: «+ Art» und «+ Abschnitt» legen an, Liste zeigt sie, ⌘Z nimmt zurück', async () => {
+  await page.locator('#ein-art-add').click();
+  await page.waitForTimeout(150);
+  await neuName('Pyro-Effekt');
+  if (!(await listeNamen('punktTypen')).includes('Pyro-Effekt')) return 'Art fehlt: ' + (await listeNamen('punktTypen')).join();
+  await page.locator('#ein-abschnitt-add').click();
+  await page.waitForTimeout(150);
+  await neuName('Zugabe');
+  if (!(await listeNamen('abschnitte')).includes('Zugabe')) return 'Abschnitt fehlt: ' + (await listeNamen('abschnitte')).join();
+  await undoOhneFeld();
+  await page.waitForTimeout(300);
+  if ((await listeNamen('abschnitte')).includes('Zugabe')) return '⌘Z nimmt den Abschnitt nicht zurück';
+  await page.screenshot({ path: join(here, 'shots', 'ein-arten.png') });
+  return true;
+});
+await check('Status: Personal & Maschinen und Arten & Abschnitte tragen ✓, sobald etwas drinsteht', async () => {
+  const st = async (b) => (await page.locator(`.ein-nav [data-ein="${b}"] .ein-st`).textContent()).trim();
+  return (await st('res')) === '✓' && (await st('arten')) === '✓' ? true : `res «${await st('res')}» arten «${await st('arten')}»`;
+});
+await zumPlan(page);
+
+await zumPlan(page);
 
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');

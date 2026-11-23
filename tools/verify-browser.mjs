@@ -653,13 +653,13 @@ for (const pg of PAGES) {
 }
 
 // ── Bedienelemente zählen ────────────────────────────────────────────────────
-// CLAUDE.md sagt: 15 im Bauzeitenplan, 13 im Showablauf — gemessen als sichtbare
+// .claude/rules/tabelle-einrichten.md sagt: 16 im Bauzeitenplan, 14 im Showablauf — gemessen als sichtbare
 // button/input/select in .hd-bar (Klassentreffen, ohne Live, ohne offenen
 // Konflikt). Eine Zahl, die kein Werkzeug prüft, ist eine Zahl, die lügt.
 // Desktop UND Handy müssen dieselbe Zahl liefern: nichts fällt weg, nichts kommt dazu.
 {
   console.log('\nBEDIENELEMENTE (sichtbare button/input/select in .hd-bar)');
-  const SOLL = { bau: 15, show: 13 };
+  const SOLL = { bau: 16, show: 14 };
   for (const [w, h] of [[1600, 950], [390, 844]]) for (const modus of ['bau', 'show']) {
     const m = await browser.newPage({ viewport: { width: w, height: h } });
     await planLaden(m);

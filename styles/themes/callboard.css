@@ -500,6 +500,7 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .ein-st-leer { background: transparent; color: var(--muted); border: 1px dashed var(--muted); }
 .ein-warn { background: color-mix(in srgb, var(--ein-warn) 22%, var(--panel)); border: 1px solid var(--ein-warn); border-left-width: 6px; color: var(--ink); }
 .ein-zl { background: var(--panel); border: 1px solid var(--rule); color: var(--ink); }
+.ein-gw-farbe { border: 1px solid var(--rule-2); border-radius: 0; }
 .ein-lab { color: var(--muted); }
 .ein-seite input, .ein-seite textarea { background: var(--panel2); color: var(--ink); border: 1px solid var(--rule-2); }
 .ein-seite input:focus, .ein-seite textarea:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
