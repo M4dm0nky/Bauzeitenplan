@@ -212,6 +212,35 @@ Heute ist Bedarf eine Zuweisung am Vorgang: `t.res = [{rid, n, von, bis}]`
   der Status betrifft nur Bedarf an normalen Vorgängen.
 - Keine Mail-Benachrichtigung in dieser Runde (späterer Ausbau).
 
+## 9b. Eingebaute Helfer und Maschinen, in Kategorien (von Marco festgelegt)
+
+Ersetzt die bisherige Regel «keine eingebauten Bezeichnungen»
+(`.claude/rules/personal-maschinen.md`, `docs/entscheidungen.md` nachziehen).
+
+- **Fest eingebaut:** in jedem Plan vorhanden, nicht löschbar, nicht umbenennbar.
+  Sie stehen im **Code** (eine Liste wie `PUNKT_TYPEN`, mit festen ids wie
+  `m-stapler-bis35`), nicht in den Plandaten; die Collection `ressourcen` hält nur
+  **eigene** Einträge. Ein Export bleibt aus sich heraus lesbar, weil die
+  eingebauten Namen in jeder App-Version gleich sind (Test hält die ids stabil).
+- **Kategorien:** Jede Bezeichnung hat eine Kategorie. Die Auswahl zeigt sie
+  **gruppiert** (Kopfzeile je Kategorie, darunter die Einträge; Suche über alles),
+  nicht als lange flache Liste. Eigene Einträge wählen beim Anlegen eine Kategorie
+  (vorhandene oder «Eigene»).
+
+| Kategorie | Einträge |
+|---|---|
+| ⚙ Stapler | Gabelstapler bis 3,5 t · Gabelstapler über 3,5 t · Geländestapler bis 3,5 t · Geländestapler über 3,5 t |
+| ⚙ Teleskoplader | Teleskoplader starr 7 m · starr 14 m · starr 17 m · Rotor (16–26 m) |
+| ⚙ Scherenbühne Halle (Elektro) | 8 m · 10 m · 12 m · 14 m |
+| ⚙ Gelände-Scherenbühne (Diesel, Allrad) | 10 m · 12 m · 15 m · 18 m |
+| ⚙ Gelenkteleskopbühne | 16 m · 20 m · 26 m |
+| ⚙ Sonstige Bühnen | Raupenarbeitsbühne · LKW-Arbeitsbühne |
+| ⚙ Sonstiges | Mobilkran · Radlader · Hubwagen |
+| 👤 Helfer | Stagehand · Rigger (Höhe) · Ground-Rigger · Staplerfahrer · Elektrofachkraft · Runner |
+
+Höhen = Arbeitshöhe (wie bei Vermietern angegeben). Die alte migrierte Ressource
+«Crew» (`rid:'crew'`) bleibt in Altplänen als eigener Eintrag bestehen.
+
 ## 10. Offline
 
 - Die App hält je Plan eine **lokale Kopie** (localStorage, wie heute).
