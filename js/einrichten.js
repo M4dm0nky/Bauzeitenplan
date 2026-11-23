@@ -9,7 +9,10 @@
 // Stelle und lässt das Feld in Ruhe, in dem gerade getippt wird — nie ein
 // Austausch des Knotens unter dem Cursor (dieselbe Regel wie in der Tabelle).
 import { el } from './dom.js';
-import { einrichtStatus } from './einrichten-status.js';
+import { einrichtStatus, ausserhalb, zeitraumHuelle } from './einrichten-status.js';
+import { planSpanne } from './timeaxis.js';
+import { toMin } from './schedule.js';
+import { phaseLabel, istPhasenArt } from './phasen.js';
 import { newId } from './store.js';
 
 const BEREICHE = ['projekt', 'phasen', 'baender', 'res', 'arten'];
@@ -26,6 +29,7 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich }) {
   const navBtns = [...root.querySelectorAll('button[data-ein]')];
   const sektionen = [...root.querySelectorAll('[data-ein-tab]')];
   const host = root.querySelector('.ein-projekt-form');
+  const zrHost = root.querySelector('.ein-zeitraum');
   let offen = false;
   let bereich = 'projekt';
 
@@ -137,6 +141,90 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich }) {
     );
   }
 
+  // ── Bereich «Zeitraum & Phasen»: Beginn/Ende, Warnung, Mini-Zeitleiste ──
+  // Der Zeitraum ist jederzeit änderbar und verschiebt NIE Vorgänge oder Phasen;
+  // liegt etwas außerhalb, warnt die Leiste und bietet die Hülle an (nie automatisch).
+  const zrFelder = {};          // 'start' | 'end' → datetime-local
+  const kurz = (s) => `${s.slice(8, 10)}.${s.slice(5, 7)}. ${s.slice(11, 16)}`;   // 'YYYY-MM-DDTHH:MM' → 'TT.MM. HH:MM'
+  const plural = (n, eins, viel) => `${n} ${n === 1 ? eins : viel}`;
+  const warn = el('div', 'ein-warn');
+  const warnText = el('span', 'ein-warn-t');
+  const warnKnopf = el('button', 'btn ein-warn-knopf');
+  warnKnopf.type = 'button';
+  warn.append(warnText, warnKnopf);
+  warn.hidden = true;
+  const zl = el('div', 'ein-zl');
+  zl.setAttribute('role', 'img');
+
+  function zeitFeld(field, label, id) {
+    const inp = el('input');
+    inp.type = 'datetime-local';
+    inp.id = id;
+    inp.setAttribute('aria-label', label);
+    inp.addEventListener('change', () => {
+      const r = send({ type: 'setProjectField', field, value: inp.value });
+      if (r && r.ok === false) inp.value = projekt()[field] ?? '';
+    });
+    zrFelder[field] = inp;
+    const lab = el('label', 'ein-feld');
+    lab.append(el('span', 'ein-lab', label), inp);
+    return lab;
+  }
+
+  warnKnopf.onclick = () => {
+    // Frisch aus dem Store: ein Befehl-Bündel = ein ⌘Z.
+    const h = zeitraumHuelle(store.state);
+    send({ type: 'batch', cmds: [
+      { type: 'setProjectField', field: 'start', value: h.start },
+      { type: 'setProjectField', field: 'end', value: h.end },
+    ] });
+  };
+
+  function baueZeitraum() {
+    const zeile = el('div', 'ein-zeile ein-zr-felder');
+    zeile.append(zeitFeld('start', 'Projektbeginn', 'ein-start'), zeitFeld('end', 'Projektende', 'ein-ende'));
+    zrHost.append(zeile, warn, zl);
+  }
+
+  function zeichneZeitraum() {
+    for (const [f, inp] of Object.entries(zrFelder)) {
+      if (document.activeElement === inp) continue;
+      const v = projekt()[f] ?? '';
+      if (inp.value !== v) inp.value = v;
+    }
+    const st = store.state, a = ausserhalb(st);
+    const teile = [];
+    if (a.phasen) teile.push(plural(a.phasen, 'Phase', 'Phasen'));
+    if (a.vorgaenge) teile.push(plural(a.vorgaenge, 'Vorgang', 'Vorgänge'));
+    warn.hidden = !teile.length;
+    if (teile.length) {
+      const h = zeitraumHuelle(st);
+      warnText.textContent = `⚠ ${teile.join(' und ')} ${a.phasen + a.vorgaenge === 1 ? 'liegt' : 'liegen'} außerhalb des Zeitraums`;
+      warnKnopf.textContent = `Zeitraum auf ${kurz(h.start)} – ${kurz(h.end)} setzen`;
+    }
+    // Mini-Zeitleiste: Breite = planSpanne, Phasen als Balken (Farbe nach Art),
+    // Projektzeitraum gestrichelt umrandet.
+    const { von, bis } = planSpanne(st);
+    const w = Math.max(1, bis - von);
+    const pct = (m) => (((m - von) / w) * 100).toFixed(3) + '%';
+    const rahmen = el('div', 'ein-zl-zeitraum');
+    rahmen.style.left = pct(toMin(projekt().start));
+    rahmen.style.width = (((toMin(projekt().end) - toMin(projekt().start)) / w) * 100).toFixed(3) + '%';
+    const balken = [];
+    for (const p of st.phases || []) {
+      if (!p.start || !p.end) continue;
+      const b = el('div', 'ein-zl-ph ein-zl-ph-' + (istPhasenArt(p.art) ? p.art : 'aufbau'), phaseLabel(p));
+      b.style.left = pct(toMin(p.start));
+      b.style.width = (((toMin(p.end) - toMin(p.start)) / w) * 100).toFixed(3) + '%';
+      b.title = `${phaseLabel(p)}: ${kurz(p.start)} – ${kurz(p.end)}`;
+      balken.push(b);
+    }
+    zl.style.setProperty('--zl-zeilen', String(Math.max(1, balken.length)));
+    zl.setAttribute('aria-label', 'Zeitleiste: Phasen und Projektzeitraum');
+    balken.forEach((b, i) => { b.style.top = `calc(${i} * var(--zl-h))`; });
+    zl.replaceChildren(rahmen, ...balken);
+  }
+
   // ── Zeichnen ──
   function refresh() {
     const st = einrichtStatus(store.state);
@@ -156,6 +244,7 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich }) {
       if (inp.value !== v) inp.value = v;
     }
     zeichneKontakte();
+    zeichneZeitraum();
   }
 
   function zeigeBereich(name) {
@@ -172,6 +261,7 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich }) {
   root.addEventListener('focusout', () => setTimeout(refresh, 0));
 
   baueFormular();
+  baueZeitraum();
   refresh();
 
   return {

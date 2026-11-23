@@ -293,6 +293,8 @@ kbd { font: inherit; font-size: 10px; border: 1.5px solid var(--ink-3); backgrou
 .ein-st-ok { background: var(--ein-ok); color: var(--ein-ok-t); }
 .ein-st-warn { background: var(--ein-warn); color: var(--ein-warn-t); }
 .ein-st-leer { background: transparent; color: var(--ink-2); border: 1px dashed var(--ink-2); }
+.ein-warn { background: color-mix(in srgb, var(--ein-warn) 22%, var(--panel)); border: 1px solid var(--ein-warn); border-left-width: 6px; color: var(--ink); }
+.ein-zl { background: var(--panel); border: 1px solid var(--line); color: var(--ink); }
 .ein-lab { color: var(--ink-2); }
 .ein-seite input, .ein-seite textarea { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); }
 .ein-seite input:focus, .ein-seite textarea:focus { outline: 2px solid var(--ink); outline-offset: -1px; }

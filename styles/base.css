@@ -608,6 +608,18 @@ body { margin: 0; }
 .ein-kontakt { display: grid; grid-template-columns: 1.2fr 1fr 1fr 2.6em; gap: 8px; align-items: center; }
 .ein-kontakt-kopf { font-size: .85em; opacity: .75; }
 .ein-kontakt input { font: inherit; padding: 6px 8px; min-width: 0; width: 100%; box-sizing: border-box; }
+/* Bereich «Zeitraum & Phasen»: Warnleiste und Mini-Zeitleiste (Farben je Theme). */
+.ein-zeitraum { display: flex; flex-direction: column; gap: 12px; max-width: 46em; }
+.ein-warn { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 12px; font-weight: 600; }
+.ein-warn[hidden] { display: none; }
+.ein-zl { --zl-h: 20px; position: relative; height: calc(var(--zl-zeilen, 1) * var(--zl-h) + 6px); padding: 3px 0; }
+.ein-zl-zeitraum { position: absolute; top: 0; bottom: 0; border: 2px dashed currentColor; box-sizing: border-box; pointer-events: none; }
+.ein-zl-ph { position: absolute; height: calc(var(--zl-h) - 3px); margin-top: 3px; box-sizing: border-box; padding: 0 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: .75em; line-height: calc(var(--zl-h) - 3px); font-weight: 700; background: var(--ph-c, var(--ph-aufbau)); color: var(--ph-t, #fff); }
+.ein-zl-ph-planung { --ph-c: var(--ph-planung); }
+.ein-zl-ph-vorbereitung { --ph-c: var(--ph-vorbereitung); }
+.ein-zl-ph-aufbau { --ph-c: var(--ph-aufbau); }
+.ein-zl-ph-show { --ph-c: var(--ph-show); }
+.ein-zl-ph-abbau { --ph-c: var(--ph-abbau); }
 .ein-projekt-knoepfe { margin-top: 22px; padding-top: 16px; border-top: 1px solid currentColor; border-top-color: color-mix(in srgb, currentColor 22%, transparent); }
 .einrichten { display: flex; flex-direction: column; gap: 18px; }
 .ei-sec { display: flex; flex-direction: column; gap: 8px; }

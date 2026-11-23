@@ -38,6 +38,9 @@ try {
     await page.locator('.ein-kontakt .k-rolle').fill('Projektleitung');
     await page.keyboard.press('Tab');
     await page.screenshot({ path: join(here, 'shots', `einrichten-seite-${theme}-${scheme}.png`) });
+    await page.locator('[data-ein="phasen"]').click();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(here, 'shots', `einrichten-zeitraum-${theme}-${scheme}.png`) });
     await ctx.close();
   }
 } finally { await browser.close(); server.close(); }

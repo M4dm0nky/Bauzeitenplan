@@ -258,7 +258,7 @@ await check('Plan verschieben: Tage 7 → Vorschau, Balken und Phase +7 Kalender
   const bar = () => page.locator('.bz-bar', { hasText: 'Podest' }).first().evaluate((b) => +b.dataset.from);
   const oeffne = async () => {
     await page.locator('#rail-ein').click();
-    await page.locator('[data-ein="projekt"]').click();
+    await page.locator('[data-ein="phasen"]').click();
   };
   // Phasenbeginn aus dem Reiter «Phasen» lesen (die Achse trägt kein data-from).
   const phase = async () => {
@@ -306,7 +306,7 @@ await check('Plan verschieben: Tage 7 → Vorschau, Balken und Phase +7 Kalender
 });
 await check('Plan verschieben: Feld «Stunden:Minuten» nimmt h:mm und reine Minuten, Vorschau und Sperre rechnen gleich', async () => {
   await page.locator('#rail-ein').click();
-  await page.locator('[data-ein="projekt"]').click();
+  await page.locator('[data-ein="phasen"]').click();
   await page.locator('#plan-verschieben').click();
   const ok = page.locator('.dlg-box .btn-p', { hasText: 'Verschieben' });
   const min = page.locator('.dlg-box .sv-min');
@@ -337,7 +337,7 @@ await check('Plan verschieben: Feld «Stunden:Minuten» nimmt h:mm und reine Min
 });
 await check('Plan verschieben: Escape schließt nur den Dialog, Einrichten bleibt; Riesenwert sperrt den Knopf ohne NaN', async () => {
   await page.locator('#rail-ein').click();
-  await page.locator('[data-ein="projekt"]').click();
+  await page.locator('[data-ein="phasen"]').click();
   await page.locator('#plan-verschieben').click();
   const ok = page.locator('.dlg-box .btn-p', { hasText: 'Verschieben' });
   await page.locator('.dlg-box .sv-tage').fill('99999999999');
@@ -2938,6 +2938,12 @@ await check('Zum Plan behält den Ausschnitt (Zoomstufe, Scroll, Tag)', async ()
   await page.locator('#zoom-stufe').click();
   await page.locator('.mn .mn-i', { hasText: 'Stunden' }).click();
   await page.waitForTimeout(400);
+  // Einen ANDEREN Tag wählen, sonst beweist der Vergleich nichts (Standard = erster Tag).
+  const tagVor = (await page.locator('#tag-wahl').textContent()).trim();
+  await page.locator('#tag-wahl').click();
+  await page.locator('.mn .mn-i').last().click();
+  await page.waitForTimeout(500);
+  if ((await page.locator('#tag-wahl').textContent()).trim() === tagVor) return 'Tagwahl hat den Tag nicht geändert';
   await page.locator('.bz-scroll').evaluate((n) => { n.scrollLeft = 1234; n.scrollTop = 300; });
   await page.waitForTimeout(300);
   const lies = () => page.evaluate(() => {
@@ -3025,6 +3031,88 @@ await check('kein Neuaufbau unter dem Cursor', async () => {
   await page.locator('#ein-zu').click();
   return a === 'Elsewhere 7' ? true : 'Adresse nach dem Aufschub «' + a + '»';
 });
+
+console.log('\nEINRICHTEN ALS SEITE (Bereich Zeitraum & Phasen)');
+await page.goto(BASE + '/index.html?plan=leer&ansicht=bau');
+await page.waitForSelector('.bz-t-major', { timeout: 20000 });
+// Festwiese-Lage: EINE Phase ragt auf beiden Seiten über den Projektzeitraum hinaus
+// (Projekt 06.07. 06:00 – 23.09. 06:00, alle Vorgänge innerhalb).
+await festivalMitDaten(page, 'Zeitraum-Test', { loadIn: '2026-09-14T06:00', phasen: [
+  { name: 'Planung', start: '2026-06-29T06:00', end: '2026-09-24T18:00' },
+  { name: 'Aufbau', start: '2026-09-14T06:00', end: '2026-09-18T06:00' },
+  { name: 'Show', start: '2026-09-18T18:00', end: '2026-09-19T02:00' },
+] });
+await page.waitForTimeout(1200);
+await page.locator('#rail-ein').click();
+await page.locator('[data-ein="phasen"]').click();
+await page.waitForTimeout(300);
+const zrProjekt = async () => { await page.waitForTimeout(1100); return page.evaluate(async () => {
+  const pers = await import('/js/persistence.js');
+  const repo = pers.createRepo(window.localStorage);
+  const p = repo.load(repo.getActive());
+  return { start: p.project.start, end: p.project.end, tasks: JSON.stringify(p.tasks), phases: JSON.stringify(p.phases) };
+}); };
+const stZeichen = async () => (await page.locator('.ein-nav [data-ein="phasen"] .ein-st').textContent()).trim();
+await check('Zeitraum-Warnung: gelbe Leiste nennt «1 Phase», Status ⚠', async () => {
+  if (!(await page.locator('.ein-warn').isVisible())) return '.ein-warn nicht sichtbar';
+  const t = (await page.locator('.ein-warn').textContent());
+  if (!/1 Phase liegt außerhalb des Zeitraums/.test(t) || /Vorgang/.test(t)) return 'Text «' + t.trim() + '»';
+  if ((await stZeichen()) !== '⚠') return 'Status «' + (await stZeichen()) + '»';
+  if (!(await page.locator('.ein-zl').isVisible())) return 'Mini-Zeitleiste fehlt';
+  if (!(await page.locator('.ein-zl .ein-zl-ph').count())) return 'keine Phasenbalken';
+  await page.screenshot({ path: join(here, 'shots', 'ein-zeitraum-warnung.png') });
+  return true;
+});
+await check('Hülle setzen = ein Undo (Start und Ende zusammen)', async () => {
+  const alt = await zrProjekt();
+  const knopf = page.locator('.ein-warn button');
+  if (!/Zeitraum auf 29\.06\. 06:00 – 24\.09\. 18:00 setzen/.test(await knopf.textContent())) return 'Knopf «' + (await knopf.textContent()) + '»';
+  await knopf.click();
+  const neu = await zrProjekt();
+  if (neu.start !== '2026-06-29T06:00' || neu.end !== '2026-09-24T18:00') return 'Zeitraum ' + neu.start + ' – ' + neu.end;
+  if (await page.locator('.ein-warn').isVisible()) return 'Warnung bleibt stehen';
+  if ((await stZeichen()) !== '✓') return 'Status nach Hülle «' + (await stZeichen()) + '»';
+  if ((await page.locator('#ein-start').inputValue()) !== neu.start) return 'Feld Beginn zeigt «' + (await page.locator('#ein-start').inputValue()) + '»';
+  await undoOhneFeld();
+  const zu = await zrProjekt();
+  if (zu.start !== alt.start || zu.end !== alt.end) return 'nach ⌘Z ' + zu.start + ' – ' + zu.end + ' statt ' + alt.start + ' – ' + alt.end;
+  if (!(await page.locator('.ein-warn').isVisible())) return 'Warnung nach ⌘Z nicht wieder da';
+  if ((await stZeichen()) !== '⚠') return 'Status nach ⌘Z «' + (await stZeichen()) + '»';
+  return true;
+});
+await check('Ende vor Start abgelehnt: Feld springt zurück, Toast, kein Undo-Eintrag', async () => {
+  const alt = await zrProjekt();
+  const undoVor = await page.locator('#undo').isDisabled();
+  await page.locator('#ein-ende').fill('2026-06-01T06:00');
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(300);
+  if ((await page.locator('#ein-ende').inputValue()) !== alt.end) return 'Feld zeigt «' + (await page.locator('#ein-ende').inputValue()) + '»';
+  if (await page.locator('#toast').isHidden()) return 'kein Toast';
+  if ((await page.locator('#undo').isDisabled()) !== undoVor) return 'Undo-Zustand hat sich geändert';
+  return true;
+});
+await check('Zeitraum ändern lässt Vorgänge und Phasen stehen; Warnung folgt dem neuen Zeitraum', async () => {
+  const alt = await zrProjekt();
+  await page.waitForTimeout(3500);
+  await page.locator('#ein-ende').fill('2026-09-26T06:00');
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(300);
+  const neu = await zrProjekt();
+  if (neu.end !== '2026-09-26T06:00') return 'Ende ' + neu.end;
+  if (neu.tasks !== alt.tasks || neu.phases !== alt.phases) return 'Vorgänge/Phasen haben sich verändert';
+  // Phase beginnt noch vor dem Start: Warnung bleibt, Knopf nennt nur noch den Start-Teil der Hülle.
+  if (!(await page.locator('.ein-warn').isVisible())) return 'Warnung weg, obwohl der Start noch zu spät liegt';
+  await undoOhneFeld();
+  return (await zrProjekt()).end === alt.end ? true : 'Undo stellt das Ende nicht zurück';
+});
+await check('Phasenliste und «Plan verschieben…» liegen im Bereich 2, nicht mehr in Projekt', async () => {
+  const sek = (n) => page.locator(`[data-ein-tab="${n}"]`);
+  if (!(await sek('phasen').locator('#plan-verschieben').count())) return '#plan-verschieben nicht in «phasen»';
+  if (await sek('projekt').locator('#plan-verschieben').count()) return '#plan-verschieben noch in «projekt»';
+  if (!(await sek('phasen').locator('#ei-ph-liste .ph-z').count())) return 'Phasenliste leer';
+  return true;
+});
+await page.locator('#ein-zu').click();
 
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
