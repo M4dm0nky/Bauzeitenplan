@@ -14,3 +14,5 @@ tools/_*.mjs
 # Lokale Claude-Code-Berechtigungen — maschinenabhängig, kein Projektinhalt.
 .claude/*
 !.claude/rules/
+
+.superpowers/
