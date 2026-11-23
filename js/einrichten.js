@@ -28,12 +28,12 @@ const STATUS_TITEL = { ok: 'in Ordnung', warn: 'braucht einen Blick', leer: 'noc
  * `loescheGewerk(id)` (Rückfrage + Löschen), `neuGewerk(ankerEl, art)` und
  * `neuFragen(opt, ankerEl, fertig)` (der schwebende «Neu…»-Kasten der Tabelle)
  * kommen von außen: dieses Modul importiert nichts aus app.js.
- * @param {{store, send:(cmd:object)=>any, zu:HTMLElement, onZu?:()=>void, onBereich?:(name:string)=>void,
+ * @param {{store, send:(cmd:object)=>any, zu:HTMLElement, zurueck:HTMLElement, weiter:HTMLElement, onZu?:()=>void, onBereich?:(name:string)=>void,
  *          loescheGewerk?:(id:string)=>any, neuGewerk?:(anker:HTMLElement, art:string)=>void,
  *          neuFragen?:(opt:object, anker:HTMLElement, fertig?:Function)=>void}} o
  * @returns {{open(bereich?:string, opt?:{erst?:boolean}):void, close():void, refresh():void, readonly offen:boolean}}
  */
-export function createEinrichten(root, { store, send, zu, onZu, onBereich, loescheGewerk, neuGewerk, neuFragen }) {
+export function createEinrichten(root, { store, send, zu, zurueck, weiter, onZu, onBereich, loescheGewerk, neuGewerk, neuFragen }) {
   const titel = root.querySelector('.ein-titel');
   const navBtns = [...root.querySelectorAll('button[data-ein]')];
   const sektionen = [...root.querySelectorAll('[data-ein-tab]')];
@@ -42,7 +42,9 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich, loesc
   const gwHost = root.querySelector('.ein-gewerke');
   const resHost = root.querySelector('.ein-res');
   const artenHost = root.querySelector('.ein-arten');
+  const zuText = zu.textContent;
   let offen = false;
+  let erst = false;             // geführtes erstes Einrichten (Optik C)
   let bereich = 'projekt';
 
   // ── Formular «Projekt» ──
@@ -286,7 +288,7 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich, loesc
   }
 
   function zeichneGewerke() {
-    for (const [art, { box, liste }] of Object.entries(gwListen)) {
+    for (const [art, { liste }] of Object.entries(gwListen)) {
       const eigene = sortiert().filter((g) => artOf(g) === art);
       if (art === 'buehne') liste.hidden = !eigene.length;
       // Im Namensfeld wird gerade getippt: nicht unter dem Cursor austauschen.
@@ -383,10 +385,23 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich, loesc
     zeichneZeitraum();
     zeichneGewerke();
     zeichneListen();
+    zeichneSchritt();
+  }
+
+  // Erstes Einrichten: «Zurück»/«Weiter» am Fuß, «Fertig» statt «Zum Plan» im letzten Schritt.
+  function zeichneSchritt() {
+    const i = BEREICHE.indexOf(bereich), letzter = i === BEREICHE.length - 1;
+    root.classList.toggle('ein-erst', erst);
+    zurueck.disabled = i <= 0;
+    // Schritt 1 ohne Namen: weiter geht es nicht (alle anderen Schritte sind frei).
+    weiter.disabled = i === 0 && !(projekt().name || '').trim();
+    weiter.hidden = letzter;
+    zu.textContent = erst && letzter ? 'Fertig' : zuText;
   }
 
   function zeigeBereich(name) {
     bereich = name;
+    zeichneSchritt();
     for (const b of navBtns) b.setAttribute('aria-pressed', String(b.dataset.ein === name));
     for (const s of sektionen) s.hidden = s.dataset.einTab !== name;
     onBereich?.(name);
@@ -394,6 +409,9 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich, loesc
 
   navBtns.forEach((b) => { b.onclick = () => zeigeBereich(b.dataset.ein); });
   zu.onclick = () => onZu?.();
+  const schritt = (d) => zeigeBereich(BEREICHE[Math.max(0, Math.min(BEREICHE.length - 1, BEREICHE.indexOf(bereich) + d))]);
+  zurueck.onclick = () => schritt(-1);
+  weiter.onclick = () => schritt(1);
   // Was beim Tippen aufgeschoben wurde, nachholen, sobald der Fokus das Feld verlässt
   // (erst im nächsten Tick: `activeElement` ist während focusout noch das alte Feld).
   root.addEventListener('focusout', () => setTimeout(refresh, 0));
@@ -405,8 +423,9 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich, loesc
   refresh();
 
   return {
-    open(name = 'projekt') {
+    open(name = 'projekt', opt = {}) {
       offen = true;
+      erst = !!opt.erst;
       root.hidden = false;
       refresh();
       zeigeBereich(BEREICHE.includes(name) ? name : 'projekt');
@@ -414,10 +433,13 @@ export function createEinrichten(root, { store, send, zu, onZu, onBereich, loesc
     },
     close() {
       offen = false;
+      erst = false;
+      root.classList.remove('ein-erst');
       root.hidden = true;
     },
     refresh,
     get offen() { return offen; },
     get bereich() { return bereich; },
+    get erst() { return erst; },
   };
 }

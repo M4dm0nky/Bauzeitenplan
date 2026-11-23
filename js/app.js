@@ -148,6 +148,9 @@ async function open(plan) {
   // nur den Inhalt: der Versatz gehört dem Abend, nicht dem Stand des Plans.
   const andereId = wechsel && store.state.project.id !== id;
   verworfen.delete(id);     // wird (wieder) geöffnet, also kein Gelöschtes mehr
+  // Ein anderes Projekt (auch «Neu») schließt die Einrichten-Seite des bisherigen —
+  // vor dem Sichern, damit «eingerichtet» noch zum alten Plan gehört.
+  if (andereId) { einScroll = null; closeEinrichten(); }
   if (store) {
     // Eine noch ausstehende Eingabe gehört dem bisherigen Projekt und wäre nach
     // dem Ersetzen weg (der Timer schriebe den NEUEN Plan). Deshalb sofort sichern.
@@ -267,6 +270,8 @@ function mount() {
     store,
     send: apply,
     zu: $('ein-zu'),
+    zurueck: $('ein-zurueck'),
+    weiter: $('ein-weiter'),
     onZu: closeEinrichten,
     onBereich: (name) => {
       if (name === 'phasen') phasen?.refresh();
@@ -448,7 +453,7 @@ const scrollerListe = () => [
   ['bedarf', $('bd')],
 ];
 
-function openEinrichten(bereich = 'projekt') {
+function openEinrichten(bereich = 'projekt', opt = {}) {
   if (bereich === 'sync') { oeffneSpeicherort(); return; }   // Speicherort ist ein Dialog, kein Bereich
   if (!einrichten) return;
   if (!einrichten.offen) {
@@ -456,13 +461,16 @@ function openEinrichten(bereich = 'projekt') {
     for (const [k, n] of scrollerListe()) if (n) einScroll[k] = [n.scrollLeft, n.scrollTop];
     document.querySelector('.col').classList.add('ist-ein');
   }
-  einrichten.open(typeof bereich === 'string' ? bereich : 'projekt');
+  einrichten.open(typeof bereich === 'string' ? bereich : 'projekt', opt);
   rail?.setEinrichten(true);
 }
 
 function closeEinrichten() {
   if (!einrichten?.offen) return;
   einrichten.close();
+  // Wer die Seite verlässt (Zum Plan, «Fertig», Schiene), hat das erste Einrichten
+  // hinter sich — auch mitten in den Schritten. EIN Befehl = ein ⌘Z, über den Store.
+  if (store.state.project.eingerichtet === false) apply({ type: 'setProjectField', field: 'eingerichtet', value: true });
   document.querySelector('.col').classList.remove('ist-ein');
   rail?.setEinrichten(false);
   const merk = einScroll; einScroll = null;
@@ -1604,7 +1612,9 @@ function showProjectDialog({ firstRun = false }) {
     // Von = Mitternacht des ersten Tages, Bis = Mitternacht NACH dem letzten:
     // der letzte Eventtag steht ganz im Bild.
     const bisEnde = new Date(bisIn.value + 'T00:00'); bisEnde.setDate(bisEnde.getDate() + 1);
-    if (await open(planFromTemplate(chosen, { name: nameIn.value.trim(), venue: venueIn.value.trim(), von: vonIn.value + 'T00:00', bis: local(bisEnde) }))) close();
+    const neu = planFromTemplate(chosen, { name: nameIn.value.trim(), venue: venueIn.value.trim(), von: vonIn.value + 'T00:00', bis: local(bisEnde) });
+    neu.project.eingerichtet = false;     // nur hier: «Neu» führt einmal durch die Schritte
+    if (await open(neu)) { close(); openEinrichten('projekt', { erst: true }); }
   };
   const imp = el('button', 'btn', 'JSON importieren');
   imp.onclick = () => $('import-file').click();

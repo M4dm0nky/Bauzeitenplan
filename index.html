@@ -223,7 +223,7 @@
       <div class="ein-inhalt">
         <div class="ei-sec" data-ein-tab="projekt">
           <div class="ein-projekt-form"></div>
-          <p class="ei-hint">Neu, Projekte, Import, Export und Speicherort: Knopf «Projekt» in der Kopfzeile. Drucken und Hell/Dunkel stehen ebenfalls dort.</p>
+          <p class="ei-hint">Neu, Projekte, Import, Export und Speicherort: Knopf «📁 Projekt» in der Kopfzeile des Plans. Drucken und Hell/Dunkel stehen ebenfalls dort.</p>
         </div>
 
         <div class="ei-sec" data-ein-tab="phasen" hidden>
@@ -248,6 +248,11 @@
           <div class="ein-arten"></div>
         </div>
       </div>
+    </div>
+    <!-- Nur im ersten Einrichten (`.ein-erst`): CSS zeigt sie nur dort, einrichten.js sperrt sie. -->
+    <div class="ein-schritt">
+      <button type="button" class="btn" id="ein-zurueck">← Zurück</button>
+      <button type="button" class="btn btn-p" id="ein-weiter">Weiter →</button>
     </div>
   </section>
 

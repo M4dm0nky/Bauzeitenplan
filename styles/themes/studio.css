@@ -346,3 +346,7 @@ kbd {
 .ein-lab { color: var(--ink-2); }
 .ein-seite input, .ein-seite textarea { background: var(--card-2); color: var(--ink); border: 1px solid var(--line-2); }
 .ein-seite input:focus, .ein-seite textarea:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+/* Erstes Einrichten: Schrittleiste und Fußzeile mit Zurück/Weiter */
+.ein-erst .ein-nav button { border-bottom: 0; border-right: 1px solid var(--line); }
+.ein-erst .ein-nav button:last-child { border-right: 0; }
+.ein-schritt { border-top: 1px solid var(--line); }

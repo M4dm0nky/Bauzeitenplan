@@ -287,7 +287,7 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     'bz-phase-planung', 'bz-phase-vorbereitung', 'bz-phase-aufbau', 'bz-phase-show', 'bz-phase-abbau',
     // Einrichten als Seite: Fläche, Navigation und die drei Statuszeichen
     // (grün/gelb/gedämpft). Ohne sie stünde die Seite in den anderen Themes ungestaltet da.
-    'ein-seite', 'ein-nav', 'ein-st-ok', 'ein-st-warn', 'ein-st-leer',
+    'ein-seite', 'ein-nav', 'ein-erst', 'ein-schritt', 'ein-st-ok', 'ein-st-warn', 'ein-st-leer',
     // Bereich «Zeitraum & Phasen»: Warnleiste und Mini-Zeitleiste.
     'ein-zl', 'ein-warn',
     // Bereich «Gewerke & Bühnen»: das Farbfeld der Zeile (Schraffur ab Platz 11).

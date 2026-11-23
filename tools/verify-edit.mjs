@@ -1703,6 +1703,7 @@ await check('Leere Tabelle, Bedarf und Showablauf ohne Bühne bieten den passend
     await p5.locator('.dlg-t[data-k="leer"]').click();
     await p5.locator('.dlg-act .btn-p').click();
     await p5.waitForTimeout(700);
+    await zumPlan(p5);    // «Neu» führt erst durch die Einrichten-Schritte
     // (a) Tabelle ohne Vorgänge: Knopf in der Leerzeile legt EINEN Vorgang an.
     await p5.locator('[data-view="tabelle"]').click();
     await p5.waitForTimeout(300);
@@ -1754,6 +1755,7 @@ await check('Leerer Bauzeitenplan: der GANTT (nicht die Tabelle) bietet EINEN Kn
     await p6.locator('.dlg-t[data-k="leer"]').click();
     await p6.locator('.dlg-act .btn-p').click();
     await p6.waitForTimeout(700);
+    await zumPlan(p6);
     if (!(await p6.locator('#bz').isVisible())) return 'Gantt nicht sichtbar (Tabelle offen?)';
     const kn = p6.locator('#bz .bz-leer button');
     if ((await kn.count()) !== 1 || !(await kn.isVisible())) return 'kein sichtbarer Leerknopf im Gantt';
@@ -2346,6 +2348,7 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
   await pv.fill('#neu-bis', '2027-05-12');
   await pv.locator('.dlg-act .btn-p').click();
   await pv.waitForTimeout(1000);
+  await zumPlan(pv);
   await check('Projekt aus der Festival-Vorlage: Vorgänge in der Seitenspalte', async () => {
     const n = await pv.locator('.bz-lab-task, .bz-lab-serie, .bz-lab[data-task]').count();
     const alle = await pv.locator('.bz-lab').count();
@@ -2672,6 +2675,7 @@ console.log('\nMEILENSTEIN OHNE TERMIN DATIEREN (Vorlage, Tabelle und Panel)');
   await mp.locator('#dlg .dlg-f input').first().fill('Meilenstein-Test');
   await mp.locator('#dlg .dlg-act .btn-p').click();
   await mp.waitForTimeout(900);
+  await zumPlan(mp);
   await mp.locator('[data-view="tabelle"]').click();
   await mp.waitForTimeout(500);
   const gespeichert = (id) => mp.evaluate(async (i) => {
@@ -3143,7 +3147,6 @@ await check('Gewerk löschen fragt: Abbrechen behält, Löschen entfernt, ⌘Z h
   await neuName('Wegwerf-Gewerk');
   const vor = await gwNamen();
   if (!vor.includes('Wegwerf-Gewerk')) return 'Gewerk nicht angelegt: ' + vor.join('|');
-  const zeile = () => gwListe().locator('.ein-gw-z', { has: page.locator('.ein-gw-n[value="Wegwerf-Gewerk"]') });
   const idx = vor.indexOf('Wegwerf-Gewerk');
   const x = gwListe().locator('.ein-gw-z').nth(idx).locator('.ein-gw-x');
   await x.click();
@@ -3286,7 +3289,132 @@ await check('Status: Personal & Maschinen und Arten & Abschnitte tragen ✓, sob
 });
 await zumPlan(page);
 
-await zumPlan(page);
+console.log('\nERSTES EINRICHTEN');
+const stufe = async (pg) => pg.locator('.ein-nav [aria-pressed="true"]').getAttribute('data-ein');
+const eingerichtetGespeichert = (pg, name = 'Erst-Eins') => pg.evaluate(async (n) => {
+  await new Promise((r) => setTimeout(r, 1200));
+  const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_') && JSON.parse(localStorage.getItem(x)).project.name === n);
+  return k ? JSON.parse(localStorage.getItem(k)).project.eingerichtet : 'kein Plan';
+}, name);
+const neuAnlegen = async (pg, name) => {
+  if (await pg.locator('#dlg').isHidden()) await projektMenue(pg, 'new-proj');   // Erststart: der Dialog steht schon
+  await pg.waitForTimeout(300);
+  await pg.fill('.dlg-f:first-child input', name);
+  await pg.locator('.dlg-f:nth-child(2) input').fill('Halle 7');
+  await pg.fill('#neu-von', '2027-06-01');
+  await pg.fill('#neu-bis', '2027-06-03');
+  await pg.locator('.dlg-t[data-k="festival"]').click();
+  await pg.locator('.dlg-act .btn-p').click();
+  await pg.waitForTimeout(900);
+};
+const ctxE = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+const pe = await ctxE.newPage();
+const fehlerE = [];
+pe.on('pageerror', (e) => fehlerE.push(e.message));
+await pe.goto(BASE + '/index.html?plan=leer');
+await pe.waitForTimeout(900);
+await check('Neu führt durch die Schritte: Schrittleiste, Weiter 4x, «Fertig» → Plan, eingerichtet', async () => {
+  await neuAnlegen(pe, 'Erst-Eins');
+  if (!(await pe.locator('#ein-seite.ein-erst').isVisible())) return 'Seite nicht in .ein-erst offen';
+  if ((await stufe(pe)) !== 'projekt') return 'nicht Schritt 1: ' + (await stufe(pe));
+  if (!(await pe.locator('#ein-zurueck').isDisabled())) return '«Zurück» in Schritt 1 nicht gesperrt';
+  if (await pe.locator('#ein-weiter').isDisabled()) return '«Weiter» trotz Namen gesperrt';
+  const waag = await pe.locator('.ein-nav').evaluate((n) => getComputedStyle(n).flexDirection);
+  if (waag !== 'row') return 'Schrittleiste nicht waagrecht: ' + waag;
+  await pe.screenshot({ path: join(here, 'shots', 'ein-erst-1.png') });
+  for (let i = 0; i < 4; i++) { await pe.locator('#ein-weiter').click(); await pe.waitForTimeout(150); }
+  if ((await stufe(pe)) !== 'arten') return 'nicht Schritt 5: ' + (await stufe(pe));
+  if ((await pe.locator('#ein-zu').textContent()).trim() !== 'Fertig') return '«Fertig» fehlt: ' + (await pe.locator('#ein-zu').textContent());
+  if (await pe.locator('#ein-weiter').isVisible()) return '«Weiter» im letzten Schritt sichtbar';
+  await pe.screenshot({ path: join(here, 'shots', 'ein-erst-5.png') });
+  await pe.locator('#ein-zurueck').click();
+  if ((await stufe(pe)) !== 'res') return '«Zurück» führt nicht zu Schritt 4';
+  await pe.locator('#ein-weiter').click();
+  await pe.locator('#ein-zu').click();
+  await pe.waitForTimeout(300);
+  if (!(await pe.locator('#bz').isVisible())) return 'Plan nach «Fertig» nicht sichtbar';
+  if ((await eingerichtetGespeichert(pe)) !== true) return 'project.eingerichtet nicht true';
+  await pe.locator('#rail-ein').click();
+  await pe.waitForTimeout(200);
+  if (await pe.locator('#ein-seite.ein-erst').count()) return 'erneut geöffnet noch in .ein-erst';
+  if ((await pe.locator('.ein-nav').evaluate((n) => getComputedStyle(n).flexDirection)) !== 'column') return 'Seitenleiste nicht senkrecht';
+  await zumPlan(pe);
+  return true;
+});
+await check('Abbruch im Schritt 2 zählt als eingerichtet', async () => {
+  await neuAnlegen(pe, 'Erst-Zwei');
+  await pe.locator('#ein-weiter').click();
+  await pe.waitForTimeout(150);
+  if ((await stufe(pe)) !== 'phasen') return 'nicht Schritt 2';
+  if ((await eingerichtetGespeichert(pe, 'Erst-Zwei')) !== false) return 'vor dem Verlassen nicht false (Messung wäre blind)';
+  await pe.locator('#ein-zu').click();
+  await pe.waitForTimeout(300);
+  if (!(await pe.locator('#bz').isVisible())) return 'Plan nicht sichtbar';
+  if ((await eingerichtetGespeichert(pe, 'Erst-Zwei')) !== true) return 'project.eingerichtet nicht true';
+  await pe.locator('#rail-ein').click();
+  await pe.waitForTimeout(200);
+  if (await pe.locator('#ein-seite.ein-erst').count()) return 'nächstes Öffnen wieder geführt';
+  await zumPlan(pe);
+  return true;
+});
+await check('Verlassen über die Schiene zählt ebenfalls als eingerichtet', async () => {
+  await neuAnlegen(pe, 'Erst-Drei');
+  await pe.locator('.rail-m:not(.rail-ein)').first().click();
+  await pe.waitForTimeout(300);
+  if (await pe.locator('#ein-seite').isVisible()) return 'Seite noch offen';
+  return (await eingerichtetGespeichert(pe, 'Erst-Drei')) === true ? true : 'eingerichtet nicht true';
+});
+await check('Projektwechsel schließt die offene Seite (Import eines anderen Plans)', async () => {
+  await pe.locator('#rail-ein').click();
+  await pe.waitForTimeout(200);
+  if (!(await pe.locator('#ein-seite').isVisible())) return 'Seite nicht offen vor dem Wechsel';
+  await festivalMitDaten(pe, 'Erst-Import', { loadIn: '2027-02-01T06:00' });
+  await pe.waitForTimeout(1000);
+  if (await pe.locator('#ein-seite').isVisible()) return '#ein-seite noch sichtbar';
+  if (!(await pe.locator('#bz').isVisible())) return '#bz nicht sichtbar';
+  return (await pe.locator('#proj-name').textContent()) === 'Erst-Import' ? true : 'falsches Projekt';
+});
+await check('Erstes Einrichten ohne JS-Fehler', async () => (fehlerE.length ? fehlerE[0] : true));
+await ctxE.close();
+{
+  const seeden = async (plan, id, live) => {
+    const c = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+    await c.addInitScript(([i, text, name, l]) => {
+      try {
+        if (localStorage.getItem('bzp_seeded_' + i) === '1') return;
+        localStorage.setItem('bzp_seeded_' + i, '1');
+        localStorage.setItem('bzp_p_' + i, text);
+        localStorage.setItem('bzp_projects', JSON.stringify([{ id: i, name, venue: '', modified: new Date().toISOString(), remoteSha: null, dirty: false }]));
+        localStorage.setItem('bzp_active', i);
+        if (l) localStorage.setItem('bzp_live', '1');
+      } catch { /* */ }
+    }, [id, JSON.stringify(plan), plan.project.name, live]);
+    const p = await c.newPage();
+    await p.goto(BASE + '/index.html?plan=leer');
+    await p.waitForTimeout(1500);
+    return { c, p };
+  };
+  await check('Bestandsplan öffnet mit Seitenleiste (Klassentreffen-Fixture)', async () => {
+    const { plan, id } = planSeed('klassentreffen-festival.json');
+    const { c, p } = await seeden(plan, id, false);
+    try {
+      if (await p.locator('#ein-seite').isVisible()) return 'Seite beim Start offen';
+      await p.locator('#rail-ein').click();
+      await p.waitForTimeout(200);
+      if (await p.locator('#ein-seite.ein-erst').count()) return '.ein-erst bei Bestandsplan';
+      return (await p.locator('#ein-seite').isVisible()) ? true : 'Seite nicht offen';
+    } finally { await c.close(); }
+  });
+  await check('Live-Monitor zeigt nie die Seite, auch bei eingerichtet:false', async () => {
+    const { plan, id } = planSeed('klassentreffen-festival.json');
+    plan.project.eingerichtet = false;
+    const { c, p } = await seeden(plan, id + 'x', true);
+    try {
+      if (await p.locator('#ein-seite').isVisible()) return '#ein-seite sichtbar';
+      return (await p.locator('#bz').isVisible()) ? true : '#bz nicht sichtbar';
+    } finally { await c.close(); }
+  });
+}
 
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
