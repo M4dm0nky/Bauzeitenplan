@@ -23,6 +23,14 @@ test('Festwiese: Ende 12.08., Phase bis 30.08. → phasen warn, ausserhalb.phase
   assert.equal(ausserhalb(s).phasen, 1);
   assert.equal(einrichtStatus(s).phasen, 'warn');
 });
+test('nur ein Vorgang außerhalb → phasen warn', () => {
+  const s = plan({
+    phases: [phase('ph1', 'aufbau', 'Aufbau', '2027-08-02T08:00', '2027-08-05T18:00')],
+    tasks: [{ id: 't1', gewerk: 'g', title: 'X', start: '2027-08-11T08:00', end: '2027-08-13T08:00' }],
+  });
+  assert.deepEqual(ausserhalb(s), { phasen: 0, vorgaenge: 1 });
+  assert.equal(einrichtStatus(s).phasen, 'warn');
+});
 test('Hülle reicht bis zum Ende der letzten Phase', () => {
   assert.deepEqual(zeitraumHuelle(festwiese()), { start: '2027-08-01T00:00', end: '2027-08-30T18:00' });
 });
