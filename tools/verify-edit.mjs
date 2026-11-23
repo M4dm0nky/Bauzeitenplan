@@ -348,7 +348,7 @@ await check('Plan verschieben: Escape schließt nur den Dialog, Einrichten bleib
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
   if (await page.locator('.sv-vorschau').count()) return 'Dialog noch offen';
-  if (!(await page.locator('#ein-dlg').isVisible())) return 'Escape hat auch Einrichten geschlossen';
+  if (!(await page.locator('#ein-seite').isVisible())) return 'Escape hat auch Einrichten geschlossen';
   await page.locator('#ein-zu').click();
   return true;
 });
@@ -1424,13 +1424,11 @@ console.log('\nBEDIENKONZEPT (Schiene + Einrichten-Fenster)');
 
 await check('Einrichten schließen — der Plan steht unverändert dahinter', async () => {
   // Das Fenster ist vom Export-Test her noch offen.
-  const bzVorher = await page.locator('#bz').isVisible();
   await page.screenshot({ path: join(here, 'shots', 'edit-10-einrichten.png') });
-  if (!bzVorher) return 'der Gantt ist hinter dem Fenster verschwunden — dann wäre es wieder eine Seite';
   const links = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
   await page.locator('#ein-zu').click();
   await page.waitForTimeout(400);
-  if (!(await page.locator('#ein-dlg').isHidden())) return 'das Fenster bleibt offen';
+  if (!(await page.locator('#ein-seite').isHidden())) return 'die Seite bleibt offen';
   const danach = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);
   return Math.abs(danach - links) < 2 ? true
     : 'der Ausschnitt ist um ' + Math.round(danach - links) + ' px gesprungen';
@@ -1736,7 +1734,7 @@ await check('Leere Tabelle, Bedarf und Showablauf ohne Bühne bieten den passend
     if (!(await bk.isVisible())) return '(b) kein Knopf im leeren Bedarf';
     await bk.click();
     await p5.waitForTimeout(300);
-    if (!(await p5.locator('#ein-dlg').isVisible())) return '(b) Einrichten nicht offen';
+    if (!(await p5.locator('#ein-seite').isVisible())) return '(b) Einrichten nicht offen';
     if ((await p5.locator('[data-ein="res"]').getAttribute('aria-pressed')) !== 'true') return '(b) Reiter «Personal & Maschinen» nicht gewählt';
     await p5.locator('#ein-zu').click();
     // (c) Showablauf ohne Bühne: «+ Bühne» öffnet den Namenskasten.
@@ -2905,6 +2903,127 @@ await check('Personal-Liste getrennt sortieren: ↑ tauscht nur mit Personal, Ma
   });
   const ok = r.vorher.join() === 'P1,P2' && r.nachher.join() === 'P2,P1' && r.sortiert.join() === 'P2,M1,P1';
   return ok ? true : JSON.stringify(r);
+});
+
+console.log('\nEINRICHTEN ALS SEITE (einrichten.js, Bereich Projekt)');
+// Projektfelder aus dem gesicherten Stand lesen (Sichern läuft nach 800 ms).
+const projektLesen = async () => {
+  await page.waitForTimeout(1100);
+  return page.evaluate(async () => {
+    const pers = await import('/js/persistence.js');
+    const repo = pers.createRepo(window.localStorage);
+    return repo.load(repo.getActive()).project;
+  });
+};
+await page.goto(BASE + '/index.html?plan=leer&ansicht=bau');
+await page.waitForSelector('.bz-t-major', { timeout: 20000 });
+await page.waitForTimeout(500);
+await check('Einrichten ist eine Seite: Gantt weg, Schiene gedrückt, fünf Bereiche mit Status', async () => {
+  await page.locator('#rail-ein').click();
+  await page.waitForTimeout(300);
+  if (!(await page.locator('#ein-seite').isVisible())) return '#ein-seite nicht sichtbar';
+  if (await page.locator('#bz').isVisible()) return 'der Gantt ist noch sichtbar';
+  if ((await page.locator('#rail-ein').getAttribute('aria-pressed')) !== 'true') return '#rail-ein nicht gedrückt';
+  const n = await page.locator('.ein-nav button[data-ein]:not([data-ein="sync"])').count();
+  if (n !== 5) return n + ' Bereiche statt 5';
+  const st = (await page.locator('.ein-nav [data-ein="projekt"] .ein-st').textContent()).trim();
+  if (st !== '✓') return 'Status Projekt «' + st + '»';
+  if (!(await page.locator('.ein-nav [data-ein="projekt"] .ein-st-ok').count())) return 'Klasse ein-st-ok fehlt';
+  await page.screenshot({ path: join(here, 'shots', 'ein-seite.png') });
+  return true;
+});
+await check('Zum Plan behält den Ausschnitt (Zoomstufe, Scroll, Tag)', async () => {
+  await page.locator('#ein-zu').click();
+  await page.waitForTimeout(300);
+  await page.locator('#zoom-stufe').click();
+  await page.locator('.mn .mn-i', { hasText: 'Stunden' }).click();
+  await page.waitForTimeout(400);
+  await page.locator('.bz-scroll').evaluate((n) => { n.scrollLeft = 1234; n.scrollTop = 300; });
+  await page.waitForTimeout(300);
+  const lies = () => page.evaluate(() => {
+    const n = document.querySelector('.bz-scroll');
+    return { l: n.scrollLeft, t: n.scrollTop, z: document.getElementById('zoom-stufe').textContent.trim(), tag: document.getElementById('tag-wahl').textContent.trim() };
+  });
+  const vor = await lies();
+  await page.locator('#rail-ein').click();
+  await page.locator('[data-ein="phasen"]').click();
+  await page.waitForTimeout(300);
+  await page.locator('#ein-zu').click();
+  await page.waitForTimeout(700);
+  const nach = await lies();
+  if (!(await page.locator('#bz').isVisible())) return 'der Plan ist nicht zurück';
+  if (Math.abs(nach.l - vor.l) > 2 || Math.abs(nach.t - vor.t) > 2) return `Scroll ${vor.l}/${vor.t} → ${nach.l}/${nach.t}`;
+  if (nach.z !== vor.z || nach.tag !== vor.tag) return `Zoom/Tag «${vor.z}/${vor.tag}» → «${nach.z}/${nach.tag}»`;
+  if ((await page.locator('#rail-ein').getAttribute('aria-pressed')) === 'true') return '#rail-ein bleibt gedrückt';
+  return true;
+});
+await check('Adresse ändern = ein Undo', async () => {
+  await page.locator('#rail-ein').click();
+  await page.locator('[data-ein="projekt"]').click();
+  const f = page.locator('#ein-adresse');
+  await f.fill('Hafenstraße 1');
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(300);
+  if ((await (await projektLesen()).adresse) !== 'Hafenstraße 1') return 'Adresse nicht im Store';
+  await undoOhneFeld();
+  const p = await projektLesen();
+  if (p.adresse) return 'Undo hat die Adresse nicht geleert: «' + p.adresse + '»';
+  if ((await f.inputValue()) !== '') return 'Feld zeigt nach Undo noch «' + (await f.inputValue()) + '»';
+  return true;
+});
+await check('Kontakt anlegen, ändern, löschen', async () => {
+  await page.locator('#ein-kontakt-add').click();
+  await page.locator('.ein-kontakt .k-name').fill('Ann');
+  await page.keyboard.press('Tab');
+  await page.locator('.ein-kontakt .k-rolle').fill('PL');
+  await page.keyboard.press('Tab');
+  await page.locator('.ein-kontakt .k-tel').fill('0171');
+  await page.keyboard.press('Tab');
+  let p = await projektLesen();
+  const k = p.kontakte;
+  if (k.length !== 1 || k[0].name !== 'Ann' || k[0].rolle !== 'PL' || k[0].tel !== '0171' || !k[0].id) return JSON.stringify(k);
+  await page.locator('.ein-kontakt .k-del').click();
+  p = await projektLesen();
+  if (p.kontakte.length) return 'Kontakt nicht gelöscht';
+  if (await page.locator('.ein-kontakte .ein-kontakt').count()) return 'Zeile bleibt stehen';
+  return true;
+});
+await check('leerer Name abgelehnt: Feld springt zurück, Toast, kein Undo-Eintrag', async () => {
+  const alt = await page.locator('#ein-name').inputValue();
+  const undoVor = await page.locator('#undo').isDisabled();
+  await page.locator('#ein-name').fill('');
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(300);
+  if ((await page.locator('#ein-name').inputValue()) !== alt) return 'Feld zeigt «' + (await page.locator('#ein-name').inputValue()) + '»';
+  if (await page.locator('#toast').isHidden()) return 'kein Toast';
+  if ((await page.locator('#undo').isDisabled()) !== undoVor) return 'Undo-Zustand hat sich geändert';
+  return true;
+});
+await check('kein Neuaufbau unter dem Cursor', async () => {
+  await page.waitForTimeout(3500);   // Toast weg
+  const kunde = page.locator('#ein-kunde');
+  await kunde.click();
+  await kunde.pressSequentially('Muster');
+  await kunde.evaluate((n) => { n.dataset.markiert = '1'; });
+  // Eine Änderung aus einem ANDEREN Feld: ein echter change-Handler, Fokus bleibt in «Kunde».
+  await page.evaluate(() => {
+    const a = document.getElementById('ein-adresse');
+    a.value = 'Elsewhere 7';
+    a.dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('ein-kunde').focus();
+  });
+  await page.waitForTimeout(300);
+  const r = await page.evaluate(() => {
+    const k = document.getElementById('ein-kunde');
+    return { same: k.dataset.markiert === '1', fokus: document.activeElement === k, wert: k.value };
+  });
+  if (!r.same) return 'das Kunde-Feld wurde neu gebaut';
+  if (!r.fokus || r.wert !== 'Muster') return 'Fokus/Tippstand verloren: ' + JSON.stringify(r);
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(300);
+  const a = await page.locator('#ein-adresse').inputValue();
+  await page.locator('#ein-zu').click();
+  return a === 'Elsewhere 7' ? true : 'Adresse nach dem Aufschub «' + a + '»';
 });
 
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }

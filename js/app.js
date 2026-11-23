@@ -11,6 +11,7 @@ import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
 import { createBedarf } from './bedarf.js';
 import { createRail } from './rail.js';
+import { createEinrichten } from './einrichten.js';
 import { createSuche } from './suche.js';
 import { resolveConflictsCmd, local } from './conflicts.js';
 import { slotsExhausted, MAX_SLOTS, gewerkVar, gewerkTexture } from './palette.js';
@@ -160,6 +161,9 @@ async function open(plan) {
       }
     }
     store.replace(plan);
+    // Der Gantt des neuen Projekts hat sich selbst auf den Aufbau eingepasst — der
+    // Scrollstand, den die Einrichten-Seite beim Öffnen gemerkt hat, gehört dem alten.
+    einScroll = null;
     // Ein Versatz gilt dem Abend, den man gerade fährt — nicht dem nächsten
     // Projekt. Beim Wechsel zurück auf null, sonst stünde der neue Plan
     // kommentarlos verschoben da.
@@ -229,8 +233,8 @@ function mount() {
       // Der Klick auf einen Modus setzt die ANSICHT — die Schiene selbst
       // schreibt nichts. «Showablauf» kehrt in den zuletzt gewählten
       // Abschnitt zurück.
-      modus: (m) => setAnsicht(m === 'bau' ? 'bau' : letzteShowAnsicht),
-      einrichten: openEinrichten,
+      modus: (m) => { closeEinrichten(); setAnsicht(m === 'bau' ? 'bau' : letzteShowAnsicht); },
+      einrichten: () => openEinrichten(),
     },
   });
   table = createTable($('tb'), {
@@ -259,6 +263,16 @@ function mount() {
   });
   phasen = createPhasenEditor({ store, askDialog, onError: (msg) => toast(msg, 'bad'), onHinweis: (msg) => toast(msg) });
   phasen.mountListe($('ei-ph-liste'), $('ei-ph-add'));
+  einrichten = createEinrichten($('ein-seite'), {
+    store,
+    send: apply,
+    zu: $('ein-zu'),
+    onZu: closeEinrichten,
+    onBereich: (name) => {
+      if (name === 'sync') paintSyncInfo();
+      if (name === 'phasen') phasen?.refresh();
+    },
+  });
   bedarf = createBedarf($('bd'), { store, onEinrichten: (tab) => openEinrichten(tab) });
   inspector = createInspector($('ins'), {
     store,
@@ -286,6 +300,7 @@ function mount() {
 
   store.subscribe(() => {
     phasen.refresh();
+    einrichten.refresh();
     refreshChrome();
     syncBuehnen();          // eine neue oder gelöschte Bühne gehört in die Leiste
     refreshLive();
@@ -421,44 +436,52 @@ function setView(v) {
   // Wiederauftauchen selbst ein (ResizeObserver) und meldet das über onView.
 }
 
-// ── Einrichten: ein Fenster über dem Plan ────────────────────────────────────
-// Vorher eine eigene Seite, die den Arbeitsbereich ersetzte — jeder Blick in
-// die Verwaltung kostete den Ausschnitt, auf den man gerade schaute. Als
-// Fenster bleibt der Plan dahinter stehen und das Schließen gibt ihn
-// unverändert zurück; `setView()` muss nichts wiederherstellen.
+// ── Einrichten: eine eigene Seite derselben App ─────────────────────────────
+// Die Seite (`#ein-seite`, js/einrichten.js) ersetzt den Plan als MODUS, ohne
+// ihn abzubauen: `.col.ist-ein` verbirgt nur Kopfzeile, Arbeitsbereich und Fuß.
+// Zoom, Tag und Auswahl bleiben also im Speicher; den Scrollstand merken wir
+// beim Öffnen und stellen ihn beim Schließen zurück.
 //
-// Auf MODULEBENE, nicht in mount(): Import, Neu und Projekte müssen beim
-// allerersten Start funktionieren, wenn noch gar kein Projekt offen ist. Genau
-// daran war der Import schon einmal tot — der Dialog bot ihn an, der Knopf tat
-// nichts.
-function setEinTab(name) {
-  document.querySelectorAll('button[data-ein]')
-    .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ein === name)));
-  document.querySelectorAll('[data-ein-tab]')
-    .forEach((s) => { s.hidden = s.dataset.einTab !== name; });
-  if (name === 'sync') paintSyncInfo();
-  if (name === 'phasen') phasen?.refresh();
+// `openEinrichten` steht auf MODULEBENE (Aufrufer: Schiene, Bedarf), die Seite
+// selbst entsteht erst in mount() — sie braucht den Store. Ohne Projekt ist das
+// Öffnen ein Nichts; Import, Neu und Projekte laufen vorher über den
+// Projektdialog (siehe «Was der erste Start braucht» in CLAUDE.md).
+let einrichten = null;
+let einScroll = null;      // { gantt: [l, t], tabelle: [l, t], … } vom Öffnen; ein Projektwechsel verwirft ihn
+
+const scrollerListe = () => [
+  ['gantt', document.querySelector('#bz .bz-scroll')],
+  ['tabelle', $('tb')],
+  ['bedarf', $('bd')],
+];
+
+function openEinrichten(bereich = 'projekt') {
+  if (!einrichten) return;
+  if (!einrichten.offen) {
+    einScroll = {};
+    for (const [k, n] of scrollerListe()) if (n) einScroll[k] = [n.scrollLeft, n.scrollTop];
+    document.querySelector('.col').classList.add('ist-ein');
+  }
+  einrichten.open(typeof bereich === 'string' ? bereich : 'projekt');
+  rail?.setEinrichten(true);
 }
 
-function openEinrichten(tab = 'projekt') {
-  $('ein-dlg').hidden = false;
-  setEinTab(typeof tab === 'string' ? tab : 'projekt');
-  $('ein-zu').focus();
+function closeEinrichten() {
+  if (!einrichten?.offen) return;
+  einrichten.close();
+  document.querySelector('.col').classList.remove('ist-ein');
+  rail?.setEinrichten(false);
+  const merk = einScroll; einScroll = null;
+  if (!merk) return;
+  // Der Plan behielt seine Breite (siehe base.css) — der Gantt passt sich daher
+  // nicht neu ein; zurückgestellt wird trotzdem, falls ein Browser den Stand
+  // beim Verbergen verwirft.
+  requestAnimationFrame(() => {
+    for (const [k, n] of scrollerListe()) {
+      if (n && merk[k]) { n.scrollLeft = merk[k][0]; n.scrollTop = merk[k][1]; }
+    }
+  });
 }
-
-const closeEinrichten = () => { $('ein-dlg').hidden = true; };
-
-document.querySelectorAll('button[data-ein]').forEach((b) => {
-  b.onclick = () => setEinTab(b.dataset.ein);
-});
-$('ein-zu').onclick = closeEinrichten;
-// Klick auf die Fläche daneben schließt — wie bei den anderen Dialogen.
-$('ein-dlg').addEventListener('mousedown', (e) => { if (e.target === $('ein-dlg')) closeEinrichten(); });
-document.addEventListener('keydown', (e) => {
-  // Liegt ein sichtbarer Dialog (.dlg, ohne das Fenster selbst) darüber, gehört
-  // Escape ihm, nicht dem Fenster darunter.
-  if (e.key === 'Escape' && !$('ein-dlg').hidden && !document.querySelector('.dlg:not(#ein-dlg):not([hidden])')) closeEinrichten();
-});
 
 // ── Speicherort (GitHub-Sync) ────────────────────────────────────────────────
 // Optional: ohne Schlüssel in localStorage (`bzp_sync`) tut dieser Block nichts

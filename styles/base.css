@@ -577,23 +577,41 @@ body { margin: 0; }
 .work { flex: 1; min-height: 0; display: flex; }
 .work > .bz, .work > .tb, .work > .bd { flex: 1; min-width: 0; }
 
-/* ── Einrichten: eigene Seite statt Menü über dem Gantt ──────────────────── */
-/* Einrichten liegt jetzt in einem Fenster (.dlg-box), nicht mehr als eigene
-   Seite im Arbeitsbereich — der Plan bleibt dahinter stehen. */
+/* ── Einrichten: eigene Seite im selben Fenster ─────────────────────────────── */
+/* Der Plan wird NICHT mit display:none weggenommen: ein versteckter Scroller
+   verliert seinen Stand, und der Gantt rechnet bei Breite 0 (Projektwechsel,
+   Einpassen) ins Leere. Er bleibt in voller Größe stehen, nur unsichtbar und
+   aus dem Fluss — so kehrt «Zum Plan» exakt zum Ausschnitt zurück. Kopfzeilen
+   und Fuß gehören zum Plan und fallen weg. */
+.col.ist-ein { position: relative; }
+.col.ist-ein > .hd, .col.ist-ein > .showhead, .col.ist-ein > .ft { display: none; }
+.col.ist-ein > .work { position: absolute; inset: 0; visibility: hidden; pointer-events: none; }
+.ein-seite { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; padding: 0 28px 28px; }
+.ein-seite[hidden] { display: none; }
+.ein-kopf { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0 14px; margin-bottom: 18px; }
+.ein-titel { margin: 0; font-size: 1.5em; }
+.ein-rumpf { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 28px; align-items: start; max-width: 1100px; }
+.ein-nav { display: flex; flex-direction: column; }
+.ein-nav button { display: grid; grid-template-columns: 1.6em 1fr auto; align-items: center; gap: 8px; padding: 12px 12px; text-align: left; cursor: pointer; font: inherit; border-width: 0 0 1px 0; }
+.ein-nav button:last-child { border-bottom: 0; }
+.ein-nz { text-align: center; }
+.ein-st { display: inline-block; min-width: 1.5em; padding: 1px 6px; border-radius: 999px; text-align: center; font-weight: 700; line-height: 1.5; }
+.ein-inhalt { min-width: 0; }
+.ein-feld { display: flex; flex-direction: column; gap: 4px; }
+.ein-feld input, .ein-feld textarea { font: inherit; padding: 6px 8px; width: 100%; box-sizing: border-box; resize: vertical; }
+.ein-lab { font-size: .85em; }
+.ein-zeile { display: grid; grid-template-columns: repeat(auto-fit, minmax(14em, 1fr)); gap: 12px; }
+.ein-projekt-form { display: flex; flex-direction: column; gap: 12px; max-width: 46em; }
+.ein-gruppe { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.ein-gruppe > .ein-kontakte, .ein-gruppe > .ein-kontakt-kopf { width: 100%; }
+.ein-kontakte { display: flex; flex-direction: column; gap: 6px; }
+.ein-kontakt { display: grid; grid-template-columns: 1.2fr 1fr 1fr 2.6em; gap: 8px; align-items: center; }
+.ein-kontakt-kopf { font-size: .85em; opacity: .75; }
+.ein-kontakt input { font: inherit; padding: 6px 8px; min-width: 0; width: 100%; box-sizing: border-box; }
+.ein-projekt-knoepfe { margin-top: 22px; padding-top: 16px; border-top: 1px solid currentColor; border-top-color: color-mix(in srgb, currentColor 22%, transparent); }
 .einrichten { display: flex; flex-direction: column; gap: 18px; }
 .ei-sec { display: flex; flex-direction: column; gap: 8px; }
 .ei-h { font: inherit; margin: 0; }
-.ein-box { width: min(880px, 100%); }
-.ein-kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-/* `width: max-content`, sonst spannt die Segmentgruppe als Blockkind des
-   Fensters die volle Breite und ihre Trennfarbe steht rechts als leerer Kasten
-   hinter dem letzten Reiter — im Screenshot gesehen. */
-.ein-reiter { flex-wrap: wrap; width: max-content; max-width: 100%; margin: 14px 0 16px; }
-/* Bei fünf Reitern bricht die Reihe auf schmalen Fenstern um. Ohne Wachstum
-   stünde dann der Rest der Trennfarbe als leerer Kasten neben dem letzten
-   Reiter: Reiter füllen ihre Zeile, die Gruppe die volle Breite. */
-.ein-reiter { width: auto; }
-.ein-reiter button { flex: 1 1 auto; }
 .ei-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .ei-hint { margin: 0; }
 .ei-feld { display: flex; flex-direction: column; }

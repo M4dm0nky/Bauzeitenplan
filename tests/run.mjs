@@ -284,7 +284,10 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // lesen --ph-<art>/--ph-t aus dem Theme. Ohne sie wäre die Leiste farblos.
     '--ph-planung', '--ph-vorbereitung', '--ph-aufbau', '--ph-show', '--ph-abbau', '--ph-t',
     'bz-ph-planung', 'bz-ph-vorbereitung', 'bz-ph-aufbau', 'bz-ph-show', 'bz-ph-abbau',
-    'bz-phase-planung', 'bz-phase-vorbereitung', 'bz-phase-aufbau', 'bz-phase-show', 'bz-phase-abbau'];
+    'bz-phase-planung', 'bz-phase-vorbereitung', 'bz-phase-aufbau', 'bz-phase-show', 'bz-phase-abbau',
+    // Einrichten als Seite: Fläche, Navigation und die drei Statuszeichen
+    // (grün/gelb/gedämpft). Ohne sie stünde die Seite in den anderen Themes ungestaltet da.
+    'ein-seite', 'ein-nav', 'ein-st-ok', 'ein-st-warn', 'ein-st-leer'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

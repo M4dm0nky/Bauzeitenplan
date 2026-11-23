@@ -182,7 +182,7 @@ const PROJEKT_FELDER = ['name', 'venue', 'timezone', 'start', 'end', 'adresse', 
 const err = (msg) => ({ ok: false, error: msg });
 
 let idSeq = 0;
-const newId = (prefix) => prefix + Date.now().toString(36) + (idSeq++).toString(36);
+export const newId = (prefix) => prefix + Date.now().toString(36) + (idSeq++).toString(36);
 
 /**
  * Eine selbst angelegte Auswahl im Plan ablegen — Eintragsarten und Abschnitte

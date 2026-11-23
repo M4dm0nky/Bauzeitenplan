@@ -278,3 +278,21 @@ kbd { font: inherit; font-size: 10px; border: 1.5px solid var(--ink-3); backgrou
 .bz-phase-abbau { background: color-mix(in srgb, var(--ph-abbau) 10%, transparent); }
 .bz-ph-abbau { background: var(--ph-abbau); }
 .bz-ph-abbau .bz-ph-t { color: var(--ph-t); }
+
+/* ── Einrichten als eigene Seite (ein-seite, ein-nav, ein-st-*) ────────────── */
+:root { --ein-ok: #1a7a46; --ein-ok-t: #ffffff; --ein-warn: #e0a100; --ein-warn-t: #1b1a17; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --ein-ok: #5fcc8a; --ein-ok-t: #08210f; --ein-warn: #f2c14b; --ein-warn-t: #1b1a17; } }
+:root[data-theme="dark"] { --ein-ok: #5fcc8a; --ein-ok-t: #08210f; --ein-warn: #f2c14b; --ein-warn-t: #1b1a17; }
+:root[data-theme="light"] { --ein-ok: #1a7a46; --ein-ok-t: #ffffff; --ein-warn: #e0a100; --ein-warn-t: #1b1a17; }
+.ein-seite { background: var(--bg); color: var(--ink); }
+.ein-kopf { border-bottom: 1px solid var(--line); }
+.ein-nav { background: var(--panel); border: 1px solid var(--line); }
+.ein-nav button { color: var(--ink); background: transparent; border-bottom: 1px solid var(--line); }
+.ein-nav button:hover { background: var(--panel2); }
+.ein-nav button[aria-pressed="true"] { background: var(--ink); color: var(--bg); font-weight: 700; }
+.ein-st-ok { background: var(--ein-ok); color: var(--ein-ok-t); }
+.ein-st-warn { background: var(--ein-warn); color: var(--ein-warn-t); }
+.ein-st-leer { background: transparent; color: var(--ink-2); border: 1px dashed var(--ink-2); }
+.ein-lab { color: var(--ink-2); }
+.ein-seite input, .ein-seite textarea { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); }
+.ein-seite input:focus, .ein-seite textarea:focus { outline: 2px solid var(--ink); outline-offset: -1px; }

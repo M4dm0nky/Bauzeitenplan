@@ -198,6 +198,88 @@
     <aside class="ins" id="ins" hidden></aside>
   </div>
 
+  <!-- Einrichten: eine eigene SEITE derselben App (Modus), kein Fenster darüber.
+       Der Plan wird nur verborgen (`.col.ist-ein`), nicht abgebaut — beim Zurück
+       steht er genau dort, wo man ihn verlassen hat (Zoom, Scroll, Tag).
+       Die Knöpfe sind DIESELBEN Elemente mit denselben ids wie vorher: ihre
+       Handler in app.js bleiben unverändert, hier ist nur eine andere Hülle.
+       Gefüllt und aktuell gehalten wird die Seite von js/einrichten.js. -->
+  <section class="ein-seite" id="ein-seite" hidden aria-label="Einrichten">
+    <div class="ein-kopf">
+      <h2 class="ein-titel">⚙ Einrichten</h2>
+      <button class="btn" id="ein-zu">Zum Plan</button>
+    </div>
+    <div class="ein-rumpf">
+      <nav class="ein-nav" aria-label="Bereich">
+        <button type="button" data-ein="projekt" aria-pressed="true"><span class="ein-nz">📋</span><span>Projekt</span><span class="ein-st ein-st-leer">○</span></button>
+        <button type="button" data-ein="phasen" aria-pressed="false"><span class="ein-nz">📅</span><span>Zeitraum &amp; Phasen</span><span class="ein-st ein-st-leer">○</span></button>
+        <button type="button" data-ein="baender" aria-pressed="false"><span class="ein-nz">🏗</span><span>Gewerke &amp; Bühnen</span><span class="ein-st ein-st-leer">○</span></button>
+        <button type="button" data-ein="res" aria-pressed="false"><span class="ein-nz">👷</span><span>Personal &amp; Maschinen</span><span class="ein-st ein-st-leer">○</span></button>
+        <button type="button" data-ein="arten" aria-pressed="false"><span class="ein-nz">🏷</span><span>Arten &amp; Abschnitte</span><span class="ein-st ein-st-leer">○</span></button>
+        <!-- Vorläufig: Speicherort bleibt hier erreichbar (kommt in einem späteren Schritt ins Kopfmenü). -->
+        <button type="button" data-ein="sync" aria-pressed="false"><span class="ein-nz">☁</span><span>Speicherort</span><span></span></button>
+      </nav>
+
+      <div class="ein-inhalt">
+        <div class="ei-sec" data-ein-tab="projekt">
+          <div class="ein-projekt-form"></div>
+          <div class="ei-row ein-projekt-knoepfe">
+            <button class="btn" id="new-proj">Neu</button>
+            <button class="btn" id="proj-menu">Projekte</button>
+            <button class="btn" id="export" title="Sicherung herunterladen">Export</button>
+            <button class="btn" id="import">Import</button>
+            <button class="btn" id="plan-verschieben" title="Den ganzen Plan um Tage und Minuten verschieben">Plan verschieben…</button>
+          </div>
+          <p class="ei-hint">Drucken und Hell/Dunkel stehen in der Kopfzeile.</p>
+        </div>
+
+        <div class="ei-sec" data-ein-tab="phasen" hidden>
+          <div class="ei-row">
+            <button class="btn" id="ei-ph-add">+ Phase</button>
+          </div>
+          <div class="ph-liste" id="ei-ph-liste"></div>
+          <p class="ei-hint">Planung (Büro), Vorbereitung (vor Ort), Aufbau, Show, Abbau: die Farbe in der Leiste über dem Zeitstrahl hängt an der Art, nicht am Namen. Jede Show-Phase ist ein Show-Tag (Show-Tag 1, 2 …), auch wenn sie über Mitternacht läuft; für den zweiten Abend eine zweite Show-Phase anlegen. Von/Bis gelten erst mit ✓. Die Leiste anklicken öffnet dieselbe Zeile.</p>
+        </div>
+
+        <div class="ei-sec" data-ein-tab="baender" hidden>
+          <div class="ei-row">
+            <button class="btn" id="add-gewerk">+ Gewerk</button>
+          </div>
+          <p class="ei-hint">Umbenennen, sortieren und löschen: Rechtsklick auf ein Gewerk im Plan.</p>
+        </div>
+
+        <div class="ei-sec" data-ein-tab="res" hidden>
+          <div class="ei-row">
+            <button class="btn" id="ei-res-personal">+ Personal</button>
+            <button class="btn" id="ei-res-maschine">+ Maschine</button>
+            <button class="btn" id="ei-res-verwalten">Verwalten…</button>
+          </div>
+          <p class="ei-hint">Zuweisen tust du am Vorgang selbst — im Panel oder in der Tabelle, Spalte «Ressourcen».</p>
+        </div>
+
+        <div class="ei-sec" data-ein-tab="arten" hidden>
+          <div class="ei-row">
+            <button class="btn" id="ei-typen-verwalten">Arten verwalten…</button>
+            <button class="btn" id="ei-abschnitte-verwalten">Abschnitte verwalten…</button>
+          </div>
+          <p class="ei-hint">Angelegt wird «+ Neu…» im Auswahlfeld der Tabelle, mitten im Tippen.</p>
+        </div>
+
+        <div class="ei-sec" data-ein-tab="sync" hidden>
+          <h3 class="ei-h">GitHub-Schlüssel</h3>
+          <label class="ei-feld">
+            <input type="password" id="sync-token" autocomplete="off" spellcheck="false" placeholder="github_pat_…" aria-label="GitHub-Schlüssel"></label>
+          <div class="ei-row">
+            <button class="btn" id="sync-verbinden">Verbinden</button>
+            <button class="btn" id="sync-trennen">Trennen</button>
+          </div>
+          <p class="ei-hint" id="sync-info"></p>
+          <p class="ei-hint">Schlüssel anlegen: GitHub → Settings → Developer settings → Fine-grained tokens. Nur das Repo «Bauzeitenplan-Daten» wählen, Berechtigung «Contents: Read and write». Der Schlüssel bleibt in diesem Browser und wird nie exportiert.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <footer class="ft">
     <div class="ft-mini" id="mini"></div>
     <div class="ft-keys">
@@ -209,86 +291,6 @@
       <span class="ft-ver" id="ver" title="Version — node tools/version.mjs zeigt sie, node tools/version.mjs 0.2.0 setzt sie"></span>
     </div>
   </footer>
-  </div>
-</div>
-
-<!-- Einrichten: ein FENSTER über dem Plan, keine Seite, die ihn ersetzt. Der
-     Plan bleibt dahinter stehen, und beim Schließen ist man genau dort, wo man
-     war — bei einer eigenen Seite kostete jeder Blick in die Verwaltung den
-     Ausschnitt, auf den man gerade schaute.
-     Die Knöpfe sind DIESELBEN Elemente mit denselben ids wie vorher: ihre
-     Handler in app.js bleiben unverändert, hier ist nur eine andere Hülle. -->
-<div class="dlg" id="ein-dlg" hidden>
-  <div class="dlg-box ein-box">
-    <div class="ein-kopf">
-      <h2 class="dlg-h">Einrichten</h2>
-      <button class="btn" id="ein-zu" aria-label="Schließen">Fertig</button>
-    </div>
-    <div class="seg ein-reiter" role="group" aria-label="Bereich">
-      <button data-ein="projekt">Projekt</button>
-      <button data-ein="phasen">Phasen</button>
-      <button data-ein="baender">Gewerke &amp; Bühnen</button>
-      <button data-ein="res">Personal &amp; Maschinen</button>
-      <button data-ein="arten">Arten &amp; Abschnitte</button>
-      <button data-ein="sync">Speicherort</button>
-    </div>
-
-    <div class="einrichten">
-      <div class="ei-sec" data-ein-tab="projekt">
-        <div class="ei-row">
-          <button class="btn" id="new-proj">Neu</button>
-          <button class="btn" id="proj-menu">Projekte</button>
-          <button class="btn" id="export" title="Sicherung herunterladen">Export</button>
-          <button class="btn" id="import">Import</button>
-          <button class="btn" id="plan-verschieben" title="Den ganzen Plan um Tage und Minuten verschieben">Plan verschieben…</button>
-        </div>
-        <p class="ei-hint">Drucken und Hell/Dunkel stehen in der Kopfzeile.</p>
-      </div>
-
-      <div class="ei-sec" data-ein-tab="phasen" hidden>
-        <div class="ei-row">
-          <button class="btn" id="ei-ph-add">+ Phase</button>
-        </div>
-        <div class="ph-liste" id="ei-ph-liste"></div>
-        <p class="ei-hint">Planung (Büro), Vorbereitung (vor Ort), Aufbau, Show, Abbau: die Farbe in der Leiste über dem Zeitstrahl hängt an der Art, nicht am Namen. Jede Show-Phase ist ein Show-Tag (Show-Tag 1, 2 …), auch wenn sie über Mitternacht läuft; für den zweiten Abend eine zweite Show-Phase anlegen. Von/Bis gelten erst mit ✓. Die Leiste anklicken öffnet dieselbe Zeile.</p>
-      </div>
-
-      <div class="ei-sec" data-ein-tab="baender" hidden>
-        <div class="ei-row">
-          <button class="btn" id="add-gewerk">+ Gewerk</button>
-        </div>
-        <p class="ei-hint">Umbenennen, sortieren und löschen: Rechtsklick auf ein Gewerk im Plan.</p>
-      </div>
-
-      <div class="ei-sec" data-ein-tab="res" hidden>
-        <div class="ei-row">
-          <button class="btn" id="ei-res-personal">+ Personal</button>
-          <button class="btn" id="ei-res-maschine">+ Maschine</button>
-          <button class="btn" id="ei-res-verwalten">Verwalten…</button>
-        </div>
-        <p class="ei-hint">Zuweisen tust du am Vorgang selbst — im Panel oder in der Tabelle, Spalte «Ressourcen».</p>
-      </div>
-
-      <div class="ei-sec" data-ein-tab="arten" hidden>
-        <div class="ei-row">
-          <button class="btn" id="ei-typen-verwalten">Arten verwalten…</button>
-          <button class="btn" id="ei-abschnitte-verwalten">Abschnitte verwalten…</button>
-        </div>
-        <p class="ei-hint">Angelegt wird «+ Neu…» im Auswahlfeld der Tabelle, mitten im Tippen.</p>
-      </div>
-
-      <div class="ei-sec" data-ein-tab="sync" hidden>
-        <h3 class="ei-h">GitHub-Schlüssel</h3>
-        <label class="ei-feld">
-          <input type="password" id="sync-token" autocomplete="off" spellcheck="false" placeholder="github_pat_…" aria-label="GitHub-Schlüssel"></label>
-        <div class="ei-row">
-          <button class="btn" id="sync-verbinden">Verbinden</button>
-          <button class="btn" id="sync-trennen">Trennen</button>
-        </div>
-        <p class="ei-hint" id="sync-info"></p>
-        <p class="ei-hint">Schlüssel anlegen: GitHub → Settings → Developer settings → Fine-grained tokens. Nur das Repo «Bauzeitenplan-Daten» wählen, Berechtigung «Contents: Read and write». Der Schlüssel bleibt in diesem Browser und wird nie exportiert.</p>
-      </div>
-    </div>
   </div>
 </div>
 

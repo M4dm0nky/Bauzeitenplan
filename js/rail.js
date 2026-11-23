@@ -17,12 +17,13 @@ import { el } from './dom.js';
 
 export function createRail(root, { on = {} } = {}) {
   let ebene = 'bau';
+  let einOffen = false;   // die Einrichten-Seite ist offen: «Einrichten» gedrückt, kein Modus
 
   /** Ein Moduseintrag: großes Ziel, Zeichen über Wort. */
   function modus(name, zeichen, wort) {
     const b = el('button', 'rail-m');
     b.type = 'button';
-    b.setAttribute('aria-pressed', String(ebene === name));
+    b.setAttribute('aria-pressed', String(ebene === name && !einOffen));
     b.append(el('span', 'rail-z', zeichen), el('span', 'rail-w', wort));
     b.onclick = () => on.modus?.(name);
     return b;
@@ -37,6 +38,7 @@ export function createRail(root, { on = {} } = {}) {
     const ein = el('button', 'rail-m rail-ein');
     ein.type = 'button';
     ein.id = 'rail-ein';
+    ein.setAttribute('aria-pressed', String(einOffen));
     ein.append(el('span', 'rail-z', '⚙'), el('span', 'rail-w', 'Einrichten'));
     ein.onclick = () => on.einrichten?.();
     root.append(ein);
@@ -46,6 +48,11 @@ export function createRail(root, { on = {} } = {}) {
     render,
     setEbene(e) {
       ebene = e === 'show' ? 'show' : 'bau';
+      render();
+    },
+    /** Die Seite «Einrichten» ist offen/zu — dann ist sie der gedrückte Eintrag. */
+    setEinrichten(offen) {
+      einOffen = !!offen;
       render();
     },
   };
