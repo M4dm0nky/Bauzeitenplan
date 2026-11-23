@@ -215,8 +215,8 @@ daneben und einem Punkt am Tag, auf dem du gerade bist. Im Bauzeitenplan
 springt die Achse dorthin, im Showablauf wechselt der Showtag.
 
 Ganz unten das Zahnrad: **Einrichten** ist eine eigene Seite mit fünf Bereichen —
-Projekt (Name, Ort, Adresse, Anfahrt, Kunde, Ansprechpartner, Zeitzone, Zeitraum),
-Phasen, Gewerke & Bühnen, **Personal & Maschinen**, **Arten & Abschnitte**. Jeder
+Projekt (Name, Ort, Adresse, Anfahrt, Kunde, Ansprechpartner, Zeitzone),
+Zeitraum & Phasen, Gewerke & Bühnen, **Personal & Maschinen**, **Arten & Abschnitte**. Jeder
 Bereich zeigt seinen Stand (✓ fertig, ⚠ Warnung, ○ offen). Passt ein Teil nicht
 mehr in den Zeitraum, warnt die Seite, und ein Knopf übernimmt die Hülle. Nach
 «Neu» führt dich die Seite einmal Schritt für Schritt durch (Zurück/Weiter,
@@ -227,7 +227,7 @@ Ansprechpartner stehen auch im Kopf der Tagesblätter. Die schnellen Wege bleibe
 daneben bestehen — eine Bezeichnung legst du weiter mit „+ Neu…" im Auswahlfeld
 an, mitten im Tippen; Einrichten ist der Weg zum Aufräumen danach.
 
-**Plan verschieben:** Einrichten → Projekt (Zeitraum) → «Plan verschieben…». Der ganze Plan
+**Plan verschieben:** Einrichten → Zeitraum & Phasen → «Plan verschieben…». Der ganze Plan
 (Vorgänge, Phasen, Rahmen) rutscht um Tage und Stunden:Minuten (`1:30`, `-0:30` oder reine Minuten wie `90`),
 negative Werte ziehen vor. Die Tage zählen über den Kalender, die Uhrzeit bleibt, auch über die Zeitumstellung.
 Eine Vorschau zeigt den neuen Aufbaubeginn; Grenzen sind 36 500 Tage und 10 080 Minuten.

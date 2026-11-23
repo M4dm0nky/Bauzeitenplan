@@ -631,7 +631,7 @@ schwebende «Verwalten» der Tabelle benutzt. Der Status (`einrichtStatus`,
 DOM-frei in `js/einrichten-status.js`) ist abgeleitet, nie gespeichert; nur
 `project.eingerichtet` merkt, ob das geführte Einrichten schon durchlief
 (alte Pläne: `true`). Der Zeitraum ist jederzeit änderbar; Teile außerhalb
-warnen, und «Zeitraum anpassen» übernimmt die Hülle (`zeitraumHuelle`) mit einem ⌘Z.
+warnen, und «Zeitraum auf … setzen» übernimmt die Hülle (`zeitraumHuelle`) mit einem ⌘Z.
 
 ## Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand
 

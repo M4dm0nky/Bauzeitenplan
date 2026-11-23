@@ -9,7 +9,7 @@ nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
 - **Eigene Seite statt Fenster:** Projekt, Phasen, Gewerke & Bühnen, Personal & Maschinen, Arten & Abschnitte mit Status ✓ ⚠ ○. Gewerke, Bühnen, Personal, Maschinen, Arten und Abschnitte sind direkt dort bearbeitbar; der Plan dahinter behält Ausschnitt und Zoom.
 - **Neue Projektangaben:** Adresse, Anfahrt, Kunde und Ansprechpartner (Name, Rolle, Telefon); alte Pläne öffnen unverändert.
-- **Zeitraum jederzeit änderbar:** Teile außerhalb warnen; «Zeitraum anpassen» übernimmt die Hülle mit einem ⌘Z. Mini-Zeitachse zeigt die Lage.
+- **Zeitraum jederzeit änderbar:** Teile außerhalb warnen; «Zeitraum auf … setzen» übernimmt die Hülle mit einem ⌘Z. Mini-Zeitachse zeigt die Lage.
 - **Erstes Einrichten:** Nach «Neu» führt die Seite in fünf Schritten (Zurück/Weiter, «Fertig»).
 - **Projektmenü «📁 Projekt» in der Kopfzeile:** Neu, Projekte, Import, Export, Speicherort. Der Speicherort ist ein eigener Dialog.
 - **Tagesblätter:** Ort, Adresse und Ansprechpartner im Kopf (ohne Kunde und Anfahrt); der Titel schrumpft zuerst, nichts wird abgeschnitten.
