@@ -458,6 +458,17 @@ body { margin: 0; }
 .bd-group td { font-weight: 600; padding-top: 10px; }
 .bd-z.is-over { color: var(--crit); font-weight: 600; }
 .bd-empty { padding: 16px 4px; }
+.bd-offen { margin: 0 0 14px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; max-height: 42vh; overflow-y: auto; }
+.bd-offen-h { font-weight: 700; }
+.bd-offen-leer { opacity: .8; }
+.bd-og { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-weight: 600; }
+.bd-og-t { flex: 1 1 auto; }
+.bd-oz { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bd-oz-t { flex: 1 1 200px; }
+.bd-best td { opacity: .85; }
+/* Bedarfsstatus: Symbol trägt die Aussage, die Farbe unterstreicht sie (Farben je Theme). */
+.res-st { flex: none; display: inline-block; min-width: 1.6em; text-align: center; padding: 0 5px; border-radius: 9px; font-weight: 700; line-height: 1.5; }
+.res-st-b { flex: none; padding: 1px 7px; }
 .tb-r input, .tb-r select {
   width: 100%; border: 0; background: none; font: inherit; color: inherit;
   padding: 4px 6px; min-width: 0;

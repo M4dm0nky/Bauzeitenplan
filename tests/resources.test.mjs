@@ -1,4 +1,4 @@
-import { ressourcen, resGruppen, resLabel, resKind, deckung, bedarfsRaster, rasterGrenzen, scheibeIndex } from '../js/resources.js';
+import { ressourcen, resGruppen, resLabel, resKind, deckung, bedarfsRaster, offeneBedarfe, rasterGrenzen, scheibeIndex } from '../js/resources.js';
 import { toMin } from '../js/schedule.js';
 import { RES_EINGEBAUT, RES_KATEGORIEN } from '../js/res-katalog.js';
 import { createStore } from '../js/store.js';
@@ -270,6 +270,49 @@ test('resGruppen ohne Treffer ist leer; ohne query alle Gruppen der Art', () => 
 test('resLabel/resKind kennen eingebaute', () => {
   assert.equal(resLabel('m-tele-14', { project: {} }), 'Teleskoplader starr 14 m');
   assert.equal(resKind('m-tele-14', { project: {} }), 'maschine');
+});
+
+
+console.log('\nBedarfsstatus: offeneBedarfe / bestaetigt im Raster');
+const stS = (tasks) => ({ project: {}, gewerke: [{ id: 'g1', name: 'A', sort: 1 }, { id: 'g2', name: 'B', sort: 0 }], tasks });
+const tk = (id, gewerk, start, end, res, over = {}) => ({ id, gewerk, title: id, start, end, res, ...over });
+test('offeneBedarfe: nur angefragte (oder fehlende) Zeilen, keine bestätigten, keine Bereitstellung, kein ohneTermin', () => {
+  const s = stS([
+    tk('a', 'g1', '2026-05-04T08:00', '2026-05-04T12:00', [
+      { rid: 'p-runner', n: 2, von: null, bis: null },
+      { rid: 'p-elektro', n: 1, von: null, bis: null, status: 'bestaetigt' },
+      { rid: 'p-rigger', n: 1, von: null, bis: null, status: 'abgelehnt' },
+      { rid: 'p-stagehand', n: 1, von: null, bis: null, status: 'angefragt' },
+    ]),
+    tk('b', 'g1', '2026-05-04T08:00', '2026-05-04T12:00', [{ rid: 'p-runner', n: 9, von: null, bis: null }], { bereitstellung: true }),
+    tk('c', 'g1', null, null, [{ rid: 'p-runner', n: 4, von: null, bis: null }]),
+  ]);
+  const o = offeneBedarfe(s);
+  assert.equal(o.length, 1);
+  assert.deepEqual(o[0].eintraege.map((e) => [e.taskId, e.index, e.rid, e.n]), [['a', 0, 'p-runner', 2], ['a', 3, 'p-stagehand', 1]]);
+});
+test('offeneBedarfe gruppiert nach Gewerk (sort), Tag, Beginn; Tag aus von, sonst Vorgangsstart', () => {
+  const s = stS([
+    tk('a', 'g1', '2026-05-05T09:00', '2026-05-05T10:00', [{ rid: 'p-runner', n: 1, von: null, bis: null }]),
+    tk('b', 'g2', '2026-05-06T09:00', '2026-05-06T10:00', [{ rid: 'p-runner', n: 1, von: null, bis: null }]),
+    tk('c', 'g2', '2026-05-04T22:00', '2026-05-05T02:00', [{ rid: 'p-runner', n: 1, von: '2026-05-05T00:30', bis: '2026-05-05T02:00' }]),
+    tk('d', 'g2', '2026-05-05T08:00', '2026-05-05T10:00', [{ rid: 'p-runner', n: 1, von: null, bis: null }]),
+  ]);
+  const o = offeneBedarfe(s);
+  assert.deepEqual(o.map((g) => [g.gewerk, g.tag]), [['g2', '2026-05-05'], ['g2', '2026-05-06'], ['g1', '2026-05-05']]);
+  assert.deepEqual(o[0].eintraege.map((e) => e.taskId), ['c', 'd']);
+});
+test('bedarfsRaster zählt bestaetigt nur für bestätigte Bedarfszeilen', () => {
+  const t = [
+    tk('a', 'g1', '2026-05-04T08:00', '2026-05-04T10:00', [
+      { rid: 'p-runner', n: 3, von: null, bis: null, status: 'bestaetigt' },
+      { rid: 'p-runner', n: 2, von: null, bis: null },
+      { rid: 'p-runner', n: 5, von: null, bis: null, status: 'abgelehnt' },
+    ]),
+  ];
+  const von = toMin('2026-05-04T08:00');
+  const r = bedarfsRaster(t, [{ id: 'p-runner', label: 'Runner', kind: 'personal' }], { kind: 'personal', von, bis: von + 120, schritt: 60 });
+  assert.deepEqual(r[0].slots.map((x) => [x.bedarf, x.bestaetigt]), [[10, 3], [10, 3]]);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

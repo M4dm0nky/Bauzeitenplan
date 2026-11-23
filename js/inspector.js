@@ -11,7 +11,7 @@ import { artOf, abschnittOf, abschnitte, showTagVon } from './ebene.js';
 import { fmtPuffer, engpassText, kettenEnde, verknuepft, PUFFER_UNVERKNUEPFT } from './timeaxis.js';
 import { el, toInput, STATUS } from './dom.js';
 import { resLabel, resKind, deckung, RES_KINDS } from './resources.js';
-import { openResPicker, resNeuOpt } from './res-picker.js';
+import { openResPicker, resNeuOpt, resStatusMarke, ablehnenOpt } from './res-picker.js';
 import { aufbauPhase } from './phasen.js';
 
 const DEP_TYPES = [
@@ -675,6 +675,25 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
       }),
     });
     row.append(rsel);
+
+    // Bedarfsstatus: Symbol + zwei Knöpfe. Eine Bereitstellung ist Angebot, kein Bedarf.
+    if (!t.bereitstellung) {
+      row.append(resStatusMarke(z));
+      const st = (status, notiz) => send({ type: 'setResStatus', id: t.id, index: idx, status, notiz, am: new Date().toISOString() });
+      if (z.status !== 'bestaetigt') {
+        const ja = el('button', 'btn res-st-b', '✓');
+        ja.type = 'button'; ja.title = 'Bestätigen'; ja.setAttribute('aria-label', 'Bestätigen');
+        ja.onclick = () => st('bestaetigt');
+        row.append(ja);
+      }
+      if (z.status !== 'abgelehnt') {
+        const nein = el('button', 'btn res-st-b', '✕');
+        nein.type = 'button'; nein.title = 'Ablehnen'; nein.setAttribute('aria-label', 'Ablehnen');
+        nein.onclick = () => openNeuFragen(ablehnenOpt((wert) => ({
+          type: 'setResStatus', id: t.id, index: idx, status: 'abgelehnt', notiz: wert, am: new Date().toISOString() })), nein, () => {});
+        row.append(nein);
+      }
+    }
 
     // Zeitfenster: «(ganzer Vorgang)» ist die Vorgabe (von/bis null) — dabei
     // tippt niemand ein Datum. Ein Klick klappt zwei Zeitfelder auf.

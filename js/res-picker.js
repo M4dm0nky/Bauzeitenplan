@@ -9,7 +9,7 @@
 // ein Rechteck statt eines Knotens — Panel und Tabelle bauen nach jedem Befehl
 // neu auf, der Anker ist dann abgehängt.
 import { el } from './dom.js';
-import { resGruppen } from './resources.js';
+import { resGruppen, resStatusInfo } from './resources.js';
 import { RES_KATEGORIEN } from './res-katalog.js';
 
 let zuMerker = null;
@@ -17,6 +17,22 @@ let zuMerker = null;
 /** Steht gerade ein Picker offen? Die schwebenden Kästen der Tabelle fragen das,
  * damit Escape nur den obersten schließt. */
 export const resPickerOffen = () => !!zuMerker;
+
+/** Das Statuszeichen einer Zuweisung (⏳ ✓ ✕, Farbe nur zusätzlich). Bereitstellungen
+ * haben keinen Status — dort ruft niemand das hier auf. */
+export function resStatusMarke(z) {
+  const i = resStatusInfo(z);
+  const m = el('span', 'res-st res-st-' + i.status, i.symbol);
+  m.title = i.titel;
+  m.setAttribute('role', 'img');
+  m.setAttribute('aria-label', i.titel);
+  return m;
+}
+
+/** Optionen für `neuFragen` beim Ablehnen: ein optionaler Grund. `baue(wert)` liefert den Befehl. */
+export function ablehnenOpt(baue) {
+  return { titel: 'Ablehnen — Grund (optional)', okText: 'Ablehnen', buildCmd: (wert) => baue(String(wert || '').trim()) };
+}
 
 /** Optionen für `neuFragen`: Name UND Kategorie (nur die der eigenen Art,
  * Vorgabe «Eigene …»). Der Befehl bekommt `kat` zum Namen dazu. */

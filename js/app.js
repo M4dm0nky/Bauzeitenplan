@@ -284,7 +284,10 @@ function mount() {
     neuGewerk: (anker, art) => addGewerk(anker, art),
     neuFragen: (opt, ankerEl, fertig) => table.openNeuFragen(opt, ankerEl, fertig),
   });
-  bedarf = createBedarf($('bd'), { store, onEinrichten: (tab) => openEinrichten(tab) });
+  bedarf = createBedarf($('bd'), {
+    store, onEinrichten: (tab) => openEinrichten(tab),
+    neuFragen: (opt, ankerEl, fertig) => table.openNeuFragen(opt, ankerEl, fertig),
+  });
   inspector = createInspector($('ins'), {
     store,
     onError: (msg) => toast(msg, 'bad'),

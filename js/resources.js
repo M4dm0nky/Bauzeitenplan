@@ -13,7 +13,8 @@
 // ganz normaler Vorgang, dessen `res` nicht Bedarf ist, sondern Angebot — der
 // Pool, aus dem andere Vorgänge ihre Zuweisung nehmen.
 
-import { toMin, ohneTermin } from './schedule.js';
+import { toMin, toDate, ohneTermin } from './schedule.js';
+import { local } from './conflicts.js';
 import { nachSort } from './ebene.js';
 import { RES_KATEGORIEN, RES_EINGEBAUT } from './res-katalog.js';
 
@@ -170,7 +171,7 @@ export function scheibeIndex(grenzen, m, exklusiv = false) {
  * teilweise berühren, zählen für diese Scheibe voll — bei stündlichem Raster
  * eine praxistaugliche Näherung, kein Anspruch auf Minutenschärfe.
  *
- * @returns {{rid:string, label:string, slots:{bedarf:number, verfuegbar:number, frei:number}[]}[]}
+ * @returns {{rid:string, label:string, slots:{bedarf:number, bestaetigt:number, verfuegbar:number, frei:number}[]}[]}
  */
 export function bedarfsRaster(tasks, resList, { kind, von, bis, schritt = 60 } = {}) {
   // Zahl-Schritt: Division (schnell, Stundenraster). 'tag': Kalendertage, deren
@@ -184,7 +185,7 @@ export function bedarfsRaster(tasks, resList, { kind, von, bis, schritt = 60 } =
   const liste = kind ? resList.filter((r) => r.kind === kind) : resList;
   const out = liste.map((r) => ({
     rid: r.id, label: r.label,
-    slots: Array.from({ length: n }, () => ({ bedarf: 0, verfuegbar: 0, frei: 0 })),
+    slots: Array.from({ length: n }, () => ({ bedarf: 0, bestaetigt: 0, verfuegbar: 0, frei: 0 })),
   }));
   const byRid = new Map(out.map((o) => [o.rid, o]));
 
@@ -201,10 +202,60 @@ export function bedarfsRaster(tasks, resList, { kind, von, bis, schritt = 60 } =
       const i1 = grenzen ? scheibeBis(b) : Math.min(n - 1, Math.ceil((b - von) / schritt) - 1);
       for (let i = i0; i <= i1; i++) {
         if (t.bereitstellung) row.slots[i].verfuegbar += z.n;
-        else row.slots[i].bedarf += z.n;
+        else {
+          row.slots[i].bedarf += z.n;
+          if (z.status === 'bestaetigt') row.slots[i].bestaetigt += z.n;
+        }
       }
     }
   }
   for (const row of out) for (const s of row.slots) s.frei = s.verfuegbar - s.bedarf;
   return out;
+}
+
+/** Anzeige eines Bedarfsstatus: Symbol UND Klartext (Status nie nur über Farbe).
+ * Fehlendes `status` = angefragt. `titel` ist der Tooltip, abgelehnt mit Notiz. */
+const RES_STATUS_ANZEIGE = {
+  angefragt: { symbol: '⏳', text: 'Angefragt' },
+  bestaetigt: { symbol: '✓', text: 'Bestätigt' },
+  abgelehnt: { symbol: '✕', text: 'Abgelehnt' },
+};
+export function resStatusInfo(z) {
+  const status = RES_STATUS_ANZEIGE[z && z.status] ? z.status : 'angefragt';
+  const a = RES_STATUS_ANZEIGE[status];
+  const notiz = z && z.notiz ? ': ' + z.notiz : '';
+  return { status, symbol: a.symbol, text: a.text, titel: a.text + notiz };
+}
+
+/**
+ * Alle noch nicht bestätigten Bedarfszeilen (Status `angefragt` oder fehlend —
+ * «abgelehnt» ist entschieden und steht nicht mehr offen), gruppiert nach
+ * Gewerk und Kalendertag des Zeilenbeginns (lokale Zeit; `von` null = Vorgangsstart).
+ * Bereitstellungen (Angebot, kein Bedarf) und Vorgänge ohne Termin zählen nicht.
+ * Sortiert: Gewerk-`sort` (nachSort-Regel), Tag, Beginn, Reihenfolge am Vorgang.
+ *
+ * @returns {{gewerk:string, tag:string, eintraege:{taskId:string, index:number, rid:string, n:number, von:(string|null), bis:(string|null)}[]}[]}
+ */
+export function offeneBedarfe(state) {
+  const gewerke = nachSort((state && state.gewerke) || []);
+  const pos = new Map(gewerke.map((g, i) => [g.id, i]));
+  const gruppen = new Map();
+  for (const t of (state && state.tasks) || []) {
+    if (t.bereitstellung || ohneTermin(t)) continue;
+    (t.res || []).forEach((z, index) => {
+      if (z.status && z.status !== 'angefragt') return;
+      const beginn = spanne(t, z).von;
+      const tag = local(toDate(beginn)).slice(0, 10);
+      const key = t.gewerk + '|' + tag;
+      if (!gruppen.has(key)) gruppen.set(key, { gewerk: t.gewerk, tag, eintraege: [] });
+      gruppen.get(key).eintraege.push({ taskId: t.id, index, rid: z.rid, n: z.n, von: z.von ?? null, bis: z.bis ?? null, _m: beginn });
+    });
+  }
+  const out = [...gruppen.values()];
+  for (const g of out) {
+    g.eintraege.sort((a, b) => a._m - b._m);   // stabil: gleicher Beginn bleibt in Plan-Reihenfolge
+    for (const e of g.eintraege) delete e._m;
+  }
+  const p = (g) => pos.get(g.gewerk) ?? Infinity;
+  return out.sort((a, b) => p(a) - p(b) || (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0));
 }

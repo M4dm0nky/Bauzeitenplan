@@ -516,3 +516,9 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .ein-erst .ein-nav button { border-bottom: 0; border-right: 1px solid var(--rule); }
 .ein-erst .ein-nav button:last-child { border-right: 0; }
 .ein-schritt { border-top: 1px solid var(--rule); }
+
+/* Bedarfsstatus: Pille mit Symbol, Farbe aus den Statustokens (grün/gelb/rot). */
+.res-st-angefragt { background: var(--ein-warn); color: var(--ein-warn-t); }
+.res-st-bestaetigt { background: var(--ein-ok); color: var(--ein-ok-t); }
+.res-st-abgelehnt { background: var(--crit); color: var(--panel); }
+.bd-offen { background: var(--panel); border: 1px solid var(--line, var(--rule-2, currentColor)); color: var(--ink); }

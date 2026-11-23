@@ -14,7 +14,7 @@ import { el, toInput, STATUS } from './dom.js';
 import { sichtGewerke, punktTypen, abschnitte, abschnittLabel, amTag, imAbschnitt } from './ebene.js';
 import { mountAuswahlListe } from './listen-editor.js';
 import { ressourcen, resKind } from './resources.js';
-import { openResPicker, resNeuOpt, resPickerOffen } from './res-picker.js';
+import { openResPicker, resNeuOpt, resPickerOffen, resStatusMarke } from './res-picker.js';
 import { aufbauPhase } from './phasen.js';
 
 // Die Spalten hängen an der Ebene (js/ebene.js). Sie stehen an EINER Stelle und
@@ -731,7 +731,7 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
       box.append(el('div', 'tb-neuart-k', opt.auswahlTitel || ''), sel);
     }
 
-    const ok = el('button', 'btn btn-p', 'Anlegen');
+    const ok = el('button', 'btn btn-p', opt.okText || 'Anlegen');
     const ab = el('button', 'btn', 'Abbrechen');
     const reihe = el('div', 'tb-neuart-a');
     reihe.append(ab, ok);
@@ -912,7 +912,9 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
         weg.title = 'Zuweisung entfernen';
         weg.onclick = () => { send({ type: 'setTaskRes', id: task.id, index: idx, value: null }); zeichne(); };
 
-        zeile.append(nIn, rsel, weg);
+        zeile.append(nIn, rsel);
+        if (!now.bereitstellung) zeile.append(resStatusMarke(z));
+        zeile.append(weg);
         box.append(zeile);
       });
 

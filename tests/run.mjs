@@ -295,7 +295,9 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // Kontextmenü (Zoom, Tag, Projektmenü, Rechtsklick): fehlte in Board, Blueprint und Studio.
     'mn-i', 'mn-sep',
     // Such-Auswahl Helfer/Maschinen: schwebende Fläche, Suchfeld, Kategorie-Kopf, Eintrag.
-    'rp-pop', 'rp-kopf', 'rp-item', 'rp-such'];
+    'rp-pop', 'rp-kopf', 'rp-item', 'rp-such',
+    // Bedarfsstatus (⏳ ✓ ✕) und der Bereich «Offene Bedarfe».
+    'res-st-angefragt', 'res-st-bestaetigt', 'res-st-abgelehnt', 'bd-offen'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

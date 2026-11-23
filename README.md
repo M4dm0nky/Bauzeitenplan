@@ -363,7 +363,7 @@ js/
   inspector.js          Seitenpanel (mit Verknüpfungs-Suche)
   menu.js               Kontextmenü — trägt auch die Tageswahl
   rail.js               Die Schiene links: der Modus, drei Einträge
-  bedarf.js             Bedarfsansicht: Personal- oder Maschinenbedarf
+  bedarf.js             Bedarfsansicht: Personal- oder Maschinenbedarf, mit «Offene Bedarfe» (⏳ bestätigen/ablehnen)
   print.js              Tagesblätter (A3 quer) — eigene Seite, print.html
 styles/
   base.css              Nur Geometrie + Verhalten. Dazu die Gewerk-Farben.
@@ -418,7 +418,7 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | Eigene Arten für Zeiteinträge, je Art die Blattzeile wählbar |
 | ✅ | Eigene Abschnitte (Load-in, Soundcheck, Aftershow …) |
 | ✅ | Arten und Abschnitte verwalten: umbenennen, sortieren, löschen |
-| ✅ | Personal & Maschinen je Vorgang, Bereitstellungen, Bedarfsraster nach Tag/Stunde |
+| ✅ | Personal & Maschinen je Vorgang, Bereitstellungen, Bedarfsraster nach Tag/Stunde, Bedarfsstatus ⏳ ✓ ✕ und Übersicht «Offene Bedarfe» |
 | ✅ | Zwei getrennte Modi: die Schiene links, je Modus nur seine eigenen Knöpfe |
 | ✅ | «Einrichten» als eigene Seite (fünf Bereiche, geführter Erststart) · Tageswahl nur über Tage, die es gibt |
 | → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen |

@@ -3616,6 +3616,98 @@ await ctxE.close();
   });
 }
 
+console.log('\nBEDARF-STATUS (⏳ ✓ ✕, Offene Bedarfe)');
+await festivalMitDaten(page, 'Bedarf-Status', { loadIn: '2026-10-05T06:00' });
+await page.waitForTimeout(1000);
+await zumPlan(page);
+await page.locator('[data-view="gantt"]').click();
+await page.waitForTimeout(400);
+await page.locator('.bz-bar').first().click();
+await page.waitForTimeout(300);
+const bsOffen = () => page.locator('.bd-oz', { hasText: 'Runner' }).count();
+const bsPanel = async () => {   // Gantt, ersten Balken wählen: Panel zeigt dessen Zuweisungen
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(300);
+  await page.locator('.bz-bar').first().click();
+  await page.waitForTimeout(300);
+};
+let bsVorher = 0;
+await check('Zuweisung anlegen → im Panel ⏳ (Symbol, nicht nur Farbe) mit Klartext im title', async () => {
+  await page.locator('.ins-res-add', { hasText: 'Personal' }).click();
+  await page.waitForTimeout(150);
+  await page.locator('.rp-such').fill('Runner');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  const m = page.locator('.ins-res-row .res-st').last();
+  if ((await m.textContent()).trim() !== '⏳') return 'Symbol: ' + (await m.textContent());
+  if (!(await m.getAttribute('title')).startsWith('Angefragt')) return 'title: ' + (await m.getAttribute('title'));
+  return true;
+});
+await check('«Offene Bedarfe» zeigt die Zeile; «✓ Bestätigen» → Zeile verschwindet, Panel zeigt ✓', async () => {
+  await page.locator('[data-view="bedarf"]').click();
+  await page.locator('[data-bedarf="personal"]').click();
+  await page.waitForTimeout(300);
+  bsVorher = await bsOffen();
+  if (bsVorher < 1) return 'Runner nicht in «Offene Bedarfe»';
+  await page.screenshot({ path: join(here, 'shots', 'bedarf-offen.png') });
+  await page.locator('#theme-toggle').click();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: join(here, 'shots', 'bedarf-offen-dunkel.png') });
+  await page.locator('#theme-toggle').click();
+  await page.waitForTimeout(200);
+  await page.locator('.bd-oz', { hasText: 'Runner' }).last().locator('.bd-ja').click();
+  await page.waitForTimeout(300);
+  if ((await bsOffen()) !== bsVorher - 1) return 'Zeile blieb: ' + bsVorher + ' → ' + (await bsOffen());
+  await bsPanel();
+  const m = page.locator('.ins-res-row .res-st').last();
+  return (await m.textContent()).trim() === '✓' ? true : 'Panel: ' + (await m.textContent());
+});
+await check('Anzahl ändern → wieder ⏳; ✓ im Panel, dann ein Undo → ⏳', async () => {
+  await page.locator('.ins-res-n').last().fill('3');
+  await page.locator('.ins-res-n').last().press('Tab');
+  await page.waitForTimeout(300);
+  let m = page.locator('.ins-res-row .res-st').last();
+  if ((await m.textContent()).trim() !== '⏳') return 'nach Änderung: ' + (await m.textContent());
+  await page.locator('.ins-res-row').last().locator('.res-st-b[title="Bestätigen"]').click();
+  await page.waitForTimeout(300);
+  m = page.locator('.ins-res-row .res-st').last();
+  if ((await m.textContent()).trim() !== '✓') return 'nach ✓: ' + (await m.textContent());
+  await page.locator('#undo').click();
+  await page.waitForTimeout(300);
+  m = page.locator('.ins-res-row .res-st').last();
+  return (await m.textContent()).trim() === '⏳' ? true : 'nach Undo: ' + (await m.textContent());
+});
+await check('Ablehnen fragt einen Grund (kein Browser-Dialog); ✕ mit Notiz im title; Zeile fällt aus «Offene Bedarfe»', async () => {
+  await page.locator('.ins-res-row').last().locator('.res-st-b[title="Ablehnen"]').click();
+  await page.waitForTimeout(200);
+  await page.locator('.tb-neuart-n').fill('kein Personal frei');
+  await page.locator('.tb-neuart-a .btn-p').click();
+  await page.waitForTimeout(300);
+  const m = page.locator('.ins-res-row .res-st').last();
+  if ((await m.textContent()).trim() !== '✕') return 'Symbol: ' + (await m.textContent());
+  if (!(await m.getAttribute('title')).includes('kein Personal frei')) return 'Notiz fehlt im title';
+  await page.locator('[data-view="bedarf"]').click();
+  await page.waitForTimeout(300);
+  return (await bsOffen()) === bsVorher - 1 ? true : 'abgelehnte Zeile noch offen: ' + (await bsOffen());
+});
+await check('«Alle bestätigen» je Gruppe = EIN Undo-Schritt', async () => {
+  const n = await page.locator('.bd-oz').count();
+  if (n < 2) return 'weniger als zwei offene Zeilen (' + n + ') — Fixture ohne Bedarf?';
+  const g = page.locator('.bd-og').first();
+  const inGruppe = await page.evaluate(() => {
+    const k = document.querySelector('.bd-og'); let c = 0;
+    for (let x = k.nextElementSibling; x && x.classList.contains('bd-oz'); x = x.nextElementSibling) c++;
+    return c;
+  });
+  await g.locator('.bd-alle').click();
+  await page.waitForTimeout(300);
+  const nach = await page.locator('.bd-oz').count();
+  if (nach !== n - inGruppe) return 'offen ' + n + ' → ' + nach + ' (Gruppe ' + inGruppe + ')';
+  await page.locator('#undo').click();
+  await page.waitForTimeout(300);
+  return (await page.locator('.bd-oz').count()) === n ? true : 'ein Undo stellte nicht alle her';
+});
+
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 

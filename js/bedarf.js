@@ -8,10 +8,11 @@ import { toMin, toDate } from './schedule.js';
 import { planSpanne } from './timeaxis.js';
 import { local } from './conflicts.js';
 import { sichtTasks, amTag, programmFenster } from './ebene.js';
-import { ressourcen, bedarfsRaster, rasterGrenzen } from './resources.js';
+import { ressourcen, bedarfsRaster, rasterGrenzen, offeneBedarfe, resLabel, resKind } from './resources.js';
+import { resStatusMarke, ablehnenOpt } from './res-picker.js';
 import { el } from './dom.js';
 
-export function createBedarf(root, { store, onEinrichten } = {}) {
+export function createBedarf(root, { store, onEinrichten, neuFragen } = {}) {
   root.classList.add('bd');
   let ebene = 'bau';
   let ausBlend = new Set();
@@ -23,9 +24,12 @@ export function createBedarf(root, { store, onEinrichten } = {}) {
     root.replaceChildren();
     const S = store.state;
     const resList = ressourcen(S, kind);
-    if (!resList.length) {
+    // Leer heißt: im Plan ist noch kein Bedarf dieser Art zugewiesen. (Die Liste der
+    // Bezeichnungen ist nie leer — der eingebaute Katalog ist immer da.)
+    const hatBedarf = S.tasks.some((t) => (t.res || []).some((z) => resKind(z.rid, S) === kind));
+    if (!hatBedarf) {
       const leer = el('div', 'bd-empty',
-        'Noch keine ' + (kind === 'personal' ? 'Personal-' : 'Maschinen-') + 'Bezeichnung angelegt. ');
+        'Noch kein ' + (kind === 'personal' ? 'Personal' : 'Maschinen') + 'bedarf zugewiesen. ');
       if (onEinrichten) {
         const b = el('button', 'btn btn-p', 'Personal & Maschinen einrichten…');
         b.onclick = () => onEinrichten('res');
@@ -54,6 +58,8 @@ export function createBedarf(root, { store, onEinrichten } = {}) {
     const n = raster[0] ? raster[0].slots.length : 0;
     if (!n) { root.append(el('div', 'bd-empty', 'Kein Zeitraum zu zeigen.')); return; }
 
+    root.append(offenBlock(S, tasks));
+
     const wrap = el('div', 'bd-scroll');
     const table = el('table', 'bd-t');
 
@@ -69,11 +75,57 @@ export function createBedarf(root, { store, onEinrichten } = {}) {
       tbody.append(gruppenkopf(row.label));
       tbody.append(zahlenzeile('bd-bereit', 'bereit', row.slots.map((s) => s.verfuegbar)));
       tbody.append(zahlenzeile('bd-belegt', 'belegt', row.slots.map((s) => s.bedarf)));
+      tbody.append(zahlenzeile('bd-best', '✓ bestätigt', row.slots.map((s) => s.bestaetigt)));
       tbody.append(zahlenzeile('bd-frei', 'frei', row.slots.map((s) => s.frei), true));
     }
     table.append(tbody);
     wrap.append(table);
     root.append(wrap);
+  }
+
+  // «Offene Bedarfe»: alles, was noch nicht bestätigt ist (angefragt), je Gewerk und
+  // Tag, nur für die gezeigte Art und die sichtbaren Vorgänge. Bestätigen/Ablehnen
+  // laufen über den Store; «Alle bestätigen» ist EIN Befehl und damit EIN ⌘Z.
+  function offenBlock(S, sichtbar) {
+    const ids = new Set(sichtbar.map((t) => t.id));
+    const gruppen = offeneBedarfe(S)
+      .map((g) => ({ ...g, eintraege: g.eintraege.filter((e) => ids.has(e.taskId) && resKind(e.rid, S) === kind) }))
+      .filter((g) => g.eintraege.length);
+    const box = el('div', 'bd-offen');
+    box.append(el('div', 'bd-offen-h', '⏳ Offene Bedarfe'));
+    if (!gruppen.length) {
+      box.append(el('div', 'bd-offen-leer', 'Nichts offen — alle Anfragen sind bestätigt oder abgelehnt.'));
+      return box;
+    }
+    const am = () => new Date().toISOString();
+    for (const g of gruppen) {
+      const gw = S.gewerke.find((x) => x.id === g.gewerk);
+      const kopf = el('div', 'bd-og');
+      const [, mo, d] = g.tag.split('-');
+      kopf.append(el('span', 'bd-og-t', (gw ? gw.name : g.gewerk) + ' · ' + d + '.' + mo + '.'));
+      const alle = el('button', 'btn bd-alle', '✓ Alle bestätigen');
+      alle.onclick = () => store.apply({
+        type: 'setResStatusMehrere', status: 'bestaetigt', am: am(),
+        eintraege: g.eintraege.map((e) => ({ id: e.taskId, index: e.index })),
+      });
+      kopf.append(alle);
+      box.append(kopf);
+      for (const e of g.eintraege) {
+        const t = S.tasks.find((x) => x.id === e.taskId);
+        const z = (t.res || [])[e.index] || {};
+        const zeile = el('div', 'bd-oz');
+        zeile.dataset.task = e.taskId;
+        zeile.append(resStatusMarke(z), el('span', 'bd-oz-t', e.n + '× ' + resLabel(e.rid, S) + ' — ' + t.title));
+        const ja = el('button', 'btn bd-ja', '✓ Bestätigen');
+        ja.onclick = () => store.apply({ type: 'setResStatus', id: e.taskId, index: e.index, status: 'bestaetigt', am: am() });
+        const nein = el('button', 'btn bd-nein', '✕ Ablehnen');
+        nein.onclick = () => neuFragen && neuFragen(ablehnenOpt((wert) => ({
+          type: 'setResStatus', id: e.taskId, index: e.index, status: 'abgelehnt', notiz: wert, am: am() })), nein, () => {});
+        zeile.append(ja, nein);
+        box.append(zeile);
+      }
+    }
+    return box;
   }
 
   function gruppenkopf(name) {
