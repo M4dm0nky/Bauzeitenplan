@@ -586,9 +586,22 @@ Gabelstapler …) stehen in `project.ressourcen` (`kind: 'personal'|'maschine'`)
 und reisen im Export mit, genau wie Eintragsarten und Abschnitte — und gehen
 denselben Verwaltungsweg: `addRessource` plus dieselben drei generischen
 Befehle `setAuswahlLabel`/`removeAuswahl`/`reorderAuswahl` mit
-`liste:'ressourcen'`. **Anders als bei Arten und Abschnitten gibt es keine
-eingebauten** — «Stagehand» heißt bei der nächsten Produktion «Helfer», eine
-Vorgabe wäre nur eine weitere Löschkandidatin. `res` MUSS durch `addTask` —
+`liste:'ressourcen'`. **Eingebaute gibt es seit 2026-11-23 doch** (vorher
+bewusst nicht: «Stagehand» heißt bei der nächsten Produktion «Helfer», eine
+Vorgabe wäre nur eine weitere Löschkandidatin). Marco will die Standardgeräte
+der Vermieter fest: `js/res-katalog.js` (`RES_KATEGORIEN`, `RES_EINGEBAUT`,
+stabile ids, ein Test pinnt sie) führt Helfer und Maschinen in Kategorien;
+eigene Bezeichnungen bleiben in `project.ressourcen` (mit `kat`), `migrate`
+legt gleichnamige eigene in die eingebaute um, damit nichts doppelt steht.
+Zuweisen läuft über die gruppierte Such-Auswahl `res-picker.js`, nicht über
+ein `<select>`.
+
+**Bedarfsstatus angefragt/bestätigt/abgelehnt** steht an der Zeile in
+`t.res[]`. Ändert sich Menge oder Zeit einer bestätigten Zeile wirklich,
+fällt der Status auf «angefragt» zurück: sonst stünde «bestätigt» für etwas,
+das der Vermieter nie so bestätigt hat — eine Lüge im Plan. Ein Eintippen
+desselben Werts ändert nichts. Bereitstellungs-Vorgänge haben keinen Status.
+«Offene Bedarfe» (`offeneBedarfe`) zeigt nur angefragte Zeilen. `res` MUSS durch `addTask` —
 was der Handler nicht aufzählt, fällt beim Anlegen still weg, dieselbe Falle
 wie bei `abschnitt`.
 

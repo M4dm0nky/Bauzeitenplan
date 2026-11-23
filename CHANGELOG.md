@@ -3,6 +3,15 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unveröffentlicht
+
+- **Helfer und Maschinen aus festem Katalog:** Standardbezeichnungen der Vermieter in Kategorien (`js/res-katalog.js`), eigene Bezeichnungen bekommen eine Kategorie; gleichnamige eigene Einträge in alten Plänen werden in die eingebaute umgelegt.
+- **Such-Auswahl statt Auswahlliste:** Zuweisen in Seitenpanel und Tabelle über `openResPicker` (gruppiert, suchbar), «+ Neu…» fragt Name und Kategorie.
+- **Bedarfsstatus ⏳ angefragt, ✓ bestätigt, ✕ abgelehnt:** Symbol und Farbe; Ablehnen fragt den Grund. Ändert sich Menge oder Zeit, fällt der Status auf «angefragt» zurück.
+- **«Offene Bedarfe» in der Bedarfsansicht:** je Gewerk und Tag, bestätigen je Zeile oder «Alle bestätigen» (ein Undo); das Raster zeigt bestätigt/offen.
+- **Leere Bedarfsansicht** heißt jetzt: kein Bedarf dieser Art zugewiesen.
+- **Theme-Tokens:** Blueprint und Studio ergänzt; `tests/run.mjs` prüft statisch, dass jede `var(--x)` definiert ist.
+
 ## 0.24.1 — 2026-11-23
 
 - **Board-Theme, Dunkelmodus:** Kopfzeile und Schiene waren weiße Schrift auf fast weißer Fläche. Beide haben jetzt eigene Blockfarben (`--block`, `--block-t`): hell wie bisher schwarz, dunkel ein dunkler Block mit heller Schrift.
