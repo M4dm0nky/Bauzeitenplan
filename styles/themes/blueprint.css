@@ -66,7 +66,6 @@ body {
 .kpi:last-child { border-right: 0; }
 .kpi-v { font-size: 17px; font-weight: 500; line-height: 1.1; }
 .kpi-k { font-size: 8.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); margin-top: 2px; }
-.kpi:last-child .kpi-v { color: var(--crit); }
 
 .hd-bar { padding: 0 18px 12px; gap: 10px; flex-wrap: wrap; }
 .seg { border: 1px solid var(--line-2); background: var(--paper); }
@@ -149,10 +148,6 @@ body {
 .vz-txt.is-late { color: var(--crit); font-weight: 700; }
 .vz-txt.is-early { color: var(--live-run, #1a7a46); font-weight: 700; }
 .bz-lab-projekt { background: var(--paper); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--cyan); }
-.bz-crit-tag {
-  flex: none; font-size: 7.5px; letter-spacing: .1em; padding: 1px 3px;
-  border: 1px solid var(--crit); color: var(--crit);
-}
 
 /* ── Spuren ───────────────────────────────────────────────────────────────── */
 .bz-canvas { background: var(--sheet); }
@@ -200,7 +195,6 @@ body {
 .bz[data-ebene="show"] .bz-st-geplant .bz-bar-t { color: var(--ink); }
 .bz-conf-tag { background: var(--crit); color: #fff; font-size: 9px; }
 .bz-bar:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
-.bz-bar.is-crit { border-width: 1.75px; border-color: var(--crit); box-shadow: 0 0 0 2px color-mix(in srgb, var(--crit) 14%, transparent); }
 
 .bz-slack {
   border: 1px dashed var(--line-2); border-left: 0; border-radius: 0 1px 1px 0;
@@ -214,7 +208,6 @@ body {
 .bz-mini { background: color-mix(in srgb, var(--gw) 30%, var(--sheet)); border: 1px solid var(--gw); border-radius: 1px; height: 11px; }
 
 .bz-ms-d { background: var(--gw); border: 1.25px solid var(--ink); width: 10px; height: 10px; }
-.bz-ms.is-crit .bz-ms-d { border-color: var(--crit); }
 .bz-ms-t { font-size: 9px; color: var(--ink-2); letter-spacing: .04em; }
 .bz-ms-projekt .bz-ms-d { background: var(--cyan); border-color: var(--ink); width: 13px; height: 13px; margin-left: -6.5px; }
 .bz-ms-projekt .bz-ms-t { color: var(--cyan); text-transform: uppercase; letter-spacing: .1em; font-size: 9px; }
@@ -240,9 +233,7 @@ body {
 
 /* ── Pfeile ───────────────────────────────────────────────────────────────── */
 .bz-dep { stroke: var(--ink-3); stroke-width: 1; opacity: .6; }
-.bz-dep.is-crit { stroke: var(--crit); stroke-width: 1.4; opacity: .95; }
 .bz-ah path { fill: var(--ink-3); }
-.bz-ah-c path { fill: var(--crit); }
 /* Verknüpfen per Ziehen. Ein gesperrtes Ziel wird ABGEBLENDET, nicht umgefärbt:
    Farbe allein trägt die Aussage nicht, und Rot hieße hier «Fehler» statt
    «geht nicht». Der Griff trägt einen Ring in Panelfarbe, damit er auch auf
@@ -278,8 +269,6 @@ kbd {
   font: inherit; border: 1px solid var(--line-2); background: var(--paper);
   padding: 0 3px; margin-right: 2px; color: var(--ink-2);
 }
-.ft-crit { margin-left: auto; display: flex; align-items: center; gap: 5px; color: var(--crit); }
-.ft-crit i { width: 14px; height: 0; border-top: 1.75px solid var(--crit); display: block; }
 
 /* ── Schiene: Modus + Zeitnavigation ─────────────────────────────────────── */
 .rail { background: var(--sheet); border-right: 1.5px solid var(--line-2); }

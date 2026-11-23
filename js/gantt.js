@@ -385,8 +385,6 @@ export function createGantt(root, opts = {}) {
         // Zeile mit vierzehn Balken die Aussage des ersten.
         const alle = r.s.tasks;
         const konflikte = alle.filter((x) => CONFLICTS.has(x.id));
-        const kritisch = alle.filter((x) => (SCHED.get(x.id) || {}).critical);
-        const offenKrit = kritisch.filter((x) => !x.ackCrit);
         if (r.child) lab.classList.add('is-child');
         // Elternvorgang: Ein-/Ausklapp-Pfeil, wie beim Gewerk (collapsed[taskId]).
         if (r.parent) {
@@ -446,15 +444,6 @@ export function createGantt(root, opts = {}) {
           c.title = konflikte.length === 1
             ? '«' + konflikte[0].title + '» ' + conf.message
             : konflikte.length + ' Termine im Konflikt';
-          lab.append(c);
-        } else if (kritisch.length && !offenKrit.length) {
-          // Kritisch, aber abgehakt — ruhige Marke statt rotem KRIT.
-          const c = el('span', 'bz-crit-tag is-ack', '✓');
-          c.title = 'Kritisch, als gesehen abgehakt';
-          lab.append(c);
-        } else if (offenKrit.length) {
-          const c = el('span', 'bz-crit-tag', 'KRIT');
-          c.title = 'Auf dem kritischen Pfad — kein Puffer';
           lab.append(c);
         }
         // Wie viele Termine traegt die Zeile? Bei einem einzelnen bleibt der Platz
@@ -532,12 +521,11 @@ export function createGantt(root, opts = {}) {
         for (const t of r.s.tasks) {
           if (ohneTermin(t)) continue;          // keine Marke, kein Griff, kein Pfeilanker
           const lane = r.s.laneOf.get(t.id) || 0;
-          const s = SCHED.get(t.id) || { critical: false, float: 0 };
+          const s = SCHED.get(t.id) || { float: 0 };
           if (t.milestone) {
             const d = el('div', 'bz-ms');
             d.style.setProperty('--gw', gewerkVar(slotVon(t, r.g)));
             d.style.setProperty('--lane', lane);
-            d.classList.toggle('is-crit', s.critical);
             d.dataset.at = toMin(t.start);
             // Wie der Balken mit Tab erreichbar: eine Raute ist genauso
             // auswählbar, und sie zu überspringen hieße, dass ein Meilenstein
@@ -557,7 +545,6 @@ export function createGantt(root, opts = {}) {
             b.style.setProperty('--gw-t', gewerkInkVar(bslot));
             b.style.setProperty('--lane', lane);
             if (gewerkTexture(bslot)) b.dataset.tex = '1';
-            b.classList.toggle('is-crit', s.critical);
             b.classList.toggle('is-conflict', CONFLICTS.has(t.id));
             b.classList.toggle('is-estimated', !!t.estimated);
             b.dataset.from = toMin(t.start); b.dataset.to = toMin(t.end);
@@ -1078,7 +1065,7 @@ export function createGantt(root, opts = {}) {
   }
 
   // „Zeigen": den Vorgang sichtbar machen — Gewerk und ggf. Elternvorgang
-  // aufklappen, auswählen, hinscrollen. Für die Prüf-Liste (kritisch/Konflikt).
+  // aufklappen, auswählen, hinscrollen. Für die Prüf-Liste (Konflikt).
   // Nach einem Sprung («Zeigen», Suche) hört das Live-Folgen kurz auf: sonst risse
   // der nächste Tick die Ansicht nach höchstens 15 s vom Treffer weg. Danach
   // folgt sie wieder von selbst; Live bleibt an, die JETZT-Linie tickt weiter.
@@ -1150,13 +1137,11 @@ export function createGantt(root, opts = {}) {
     depLayer.replaceChildren();
     depPaths = [];
     const defs = svgEl('defs');
-    for (const [id, cls] of [['bz-ah', 'bz-ah'], ['bz-ah-c', 'bz-ah-c']]) {
-      const mk = svgEl('marker', {
-        id, class: cls, markerWidth: 6, markerHeight: 6, refX: 5, refY: 3, orient: 'auto',
-      });
-      mk.append(svgEl('path', { d: 'M0,0 L6,3 L0,6 z' }));
-      defs.append(mk);
-    }
+    const mk = svgEl('marker', {
+      id: 'bz-ah', class: 'bz-ah', markerWidth: 6, markerHeight: 6, refX: 5, refY: 3, orient: 'auto',
+    });
+    mk.append(svgEl('path', { d: 'M0,0 L6,3 L0,6 z' }));
+    defs.append(mk);
     depLayer.append(defs);
 
     for (const d of S.deps) {
@@ -1165,10 +1150,9 @@ export function createGantt(root, opts = {}) {
       // Bei zugeklappter Gruppe auf den Sammelbalken umlenken
       const ra = visualRow(a), rb = visualRow(b);
       if (!ra || !rb) continue;
-      const crit = SCHED.get(d.from)?.critical && SCHED.get(d.to)?.critical;
       const p = svgEl('path', {
-        class: 'bz-dep' + (crit ? ' is-crit' : ''),
-        'marker-end': crit ? 'url(#bz-ah-c)' : 'url(#bz-ah)',
+        class: 'bz-dep',
+        'marker-end': 'url(#bz-ah)',
       });
       p.dataset.dep = d.id;
       // Ein 1,5 px breiter Pfad ist nicht zu treffen. Darunter liegt ein
@@ -1477,7 +1461,7 @@ export function createGantt(root, opts = {}) {
   // ── Tooltip ─────────────────────────────────────────────────────────────────
   function hideTip() { tip.classList.remove('is-on'); }
   function bindTip(node, t) {
-    const s = SCHED.get(t.id) || { critical: false, float: 0 };
+    const s = SCHED.get(t.id) || { float: 0 };
     const g = gwById.get(t.gewerk);
     const show = () => {
       tip.replaceChildren();
@@ -1501,7 +1485,7 @@ export function createGantt(root, opts = {}) {
       }
       const conf = CONFLICTS.get(t.id);
       if (conf) add('Konflikt', conf.message);
-      add('Puffer', s.critical ? 'kritischer Pfad' : fmtFloat(s.float));
+      add('Puffer', fmtFloat(s.float));
       if (!t.milestone && t.progress > 0) add('Fortschritt', t.progress + ' %');
       tip.append(dl);
       tip.classList.add('is-on');
@@ -1883,23 +1867,20 @@ export function createGantt(root, opts = {}) {
       // BESTAND zählt, was zu sehen ist — sonst meldete die Kopfzeile im
       // Showablauf 353 Vorgänge über einem Blatt mit 33 Zeilen.
       //
-      // WARNUNGEN (kritisch, Konflikte) bleiben planweit. Sie sind Aussagen über
+      // WARNUNGEN (Konflikte) bleiben planweit. Sie sind Aussagen über
       // den Plan, nicht über den Ausschnitt; eine Ansicht zu wechseln darf sie
       // nicht wegdrücken. Und sie müssen zur Prüf-Liste passen, die über
-      // conflicts()/criticals() ebenfalls den ganzen Plan zeigt — zwei Zähler
+      // conflicts() ebenfalls den ganzen Plan zeigt — zwei Zähler
       // nebeneinander wären genau der Fehler, den die Regel verbietet.
-      const crit = S.tasks.filter((t) => (SCHED.get(t.id) || {}).critical && !t.ackCrit).length;
       const done = VT.filter((t) => t.status === 'fertig').length;
       const run = VT.filter((t) => t.status === 'laeuft').length;
       const crew = VT.filter((t) => t.status === 'laeuft').reduce((a, t) => a + personalSum(t, S), 0);
-      return { total: VT.length, crit, done, run, crew, gewerke: VG.length, conflicts: CONFLICTS.size };
+      return { total: VT.length, done, run, crew, gewerke: VG.length, conflicts: CONFLICTS.size };
     },
     relayout: layout,
     refresh,
     select,
     reveal,
-    // Alle kritischen Vorgänge (ids), abgehakt oder nicht — für die Prüf-Liste.
-    criticals: () => S.tasks.filter((t) => (SCHED.get(t.id) || {}).critical).map((t) => t.id),
     get selected() { return selected; },
     setLive(on) {
       live = !!on;

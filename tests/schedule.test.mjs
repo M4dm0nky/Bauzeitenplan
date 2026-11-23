@@ -72,24 +72,20 @@ test('mehrere Vorgänger: der späteste bindet', () => {
 });
 
 console.log('\nBackward-Pass & Puffer');
-test('straffe Kette hat Puffer 0 und ist kritisch', () => {
+test('straffe Kette hat Puffer 0', () => {
   const tasks = [t('a', '2026-07-13T08:00', '2026-07-13T12:00'), t('b', '2026-07-13T12:00', '2026-07-13T16:00')];
   const R = computeSchedule(tasks, [{ from: 'a', to: 'b', type: 'FS', lag: 0 }]);
   assert.equal(R.get('a').float, 0);
-  assert.equal(R.get('a').critical, true);
-  assert.equal(R.get('b').critical, true);
+  assert.equal(R.get('b').float, 0);
 });
 test('Vorgänger mit Luft bekommt echten Puffer ausgewiesen', () => {
   // a endet 12:00, b startet erst 20:00 → 8h Puffer für a
   const tasks = [t('a', '2026-07-13T08:00', '2026-07-13T12:00'), t('b', '2026-07-13T20:00', '2026-07-13T22:00')];
   const R = computeSchedule(tasks, [{ from: 'a', to: 'b', type: 'FS', lag: 0 }]);
   assert.equal(R.get('a').float, H(8));
-  // Einziges Netz aus einer Kette: die Kette IST der kritische Pfad, auch wenn
-  // gegenüber dem Anker Luft bleibt.
-  assert.equal(R.get('a').critical, true);
 });
 
-test('konkurrierende Ketten: nur die mit dem geringsten Puffer ist kritisch', () => {
+test('konkurrierende Ketten: die engere hat weniger Puffer', () => {
   const tasks = [
     t('eng1', '2026-07-13T08:00', '2026-07-13T12:00'),
     t('eng2', '2026-07-13T12:00', '2026-07-13T23:00'), // endet 1h vor Ziel
@@ -103,14 +99,10 @@ test('konkurrierende Ketten: nur die mit dem geringsten Puffer ist kritisch', ()
     { from: 'lose1', to: 'lose2', type: 'FS', lag: 0 },
     { from: 'lose2', to: 'ziel', type: 'FS', lag: 0 },
   ]);
-  assert.equal(R.get('eng1').critical, true, 'engere Kette ist kritisch');
-  assert.equal(R.get('lose1').critical, false, 'lockere Kette hat mehr Puffer');
   assert.equal(R.get('lose1').float > R.get('eng1').float, true);
 });
 
-test('verankerter Zielmeilenstein zieht den minFloat nicht auf 0', () => {
-  // Regressionstest: `ziel` ist Senke → Puffer 0 per Ankerregel. Zählte er in
-  // den minFloat, wäre kein einziger Vorgänger je kritisch.
+test('verankerter Zielmeilenstein: Anker hat Puffer 0, Vorgänger echten', () => {
   const tasks = [
     t('a', '2026-07-13T08:00', '2026-07-13T12:00'),
     t('ziel', '2026-07-15T00:00', '2026-07-15T00:00'),
@@ -118,7 +110,6 @@ test('verankerter Zielmeilenstein zieht den minFloat nicht auf 0', () => {
   const R = computeSchedule(tasks, [{ from: 'a', to: 'ziel', type: 'FS', lag: 0 }]);
   assert.equal(R.get('ziel').float, 0, 'Anker selbst hat Puffer 0');
   assert.ok(R.get('a').float > 0, 'a hat echten Puffer bis zum Ziel');
-  assert.equal(R.get('a').critical, true, 'trotzdem kritisch — es ist die bindende Kette');
 });
 
 test('Puffer erbt sich nicht über eine SF-Kante an eine Senke rückwärts', () => {
@@ -137,10 +128,9 @@ test('Puffer erbt sich nicht über eine SF-Kante an eine Senke rückwärts', () 
   ]);
   assert.ok(R.get('zelt').float > 0, 'zelt ist keine Senke und hat echten Puffer bis zum Ziel');
 });
-test('isolierter Vorgang ist nie kritisch', () => {
+test('isolierter Vorgang: Senke, auf eigenem Ende verankert', () => {
   const R = computeSchedule([t('a', '2026-07-13T08:00', '2026-07-13T12:00')], []);
-  assert.equal(R.get('a').float, 0, 'Senke → auf eigenem Ende verankert');
-  assert.equal(R.get('a').critical, false, 'aber ohne Verknüpfung kein kritischer Pfad');
+  assert.equal(R.get('a').float, 0);
 });
 test('Meilenstein (Dauer 0) bricht die Kette nicht', () => {
   const tasks = [
@@ -153,8 +143,8 @@ test('Meilenstein (Dauer 0) bricht die Kette nicht', () => {
     { from: 'm', to: 'b', type: 'FS', lag: 0 },
   ]);
   assert.equal(R.get('m').es, R.get('m').ef, 'Meilenstein hat Dauer 0');
-  assert.equal(R.get('a').critical, true);
-  assert.equal(R.get('m').critical, true);
+  assert.equal(R.get('a').float, 0);
+  assert.equal(R.get('m').float, 0);
 });
 test('Puffer über eine Kette bleibt konsistent (kein Doppelzählen)', () => {
   const tasks = [
@@ -173,7 +163,7 @@ test('Puffer über eine Kette bleibt konsistent (kein Doppelzählen)', () => {
 console.log('\nRobustheit');
 test('Abhängigkeit auf unbekannte ID wird ignoriert statt zu werfen', () => {
   const R = computeSchedule([t('a', '2026-07-13T08:00', '2026-07-13T12:00')], [{ from: 'a', to: 'weg', type: 'FS', lag: 0 }]);
-  assert.equal(R.get('a').critical, false);
+  assert.equal(R.get('a').float, 0);
 });
 test('Sommerzeit: Dauer über den DST-Sprung bleibt in Echtzeit korrekt', () => {
   // 2026-10-25 03:00 CEST → 02:00 CET. 01:00–04:00 lokal sind real 4h.
@@ -522,7 +512,7 @@ test('computeSchedule: terminlose fehlen im Ergebnis, nichts wird NaN', () => {
   const deps = [{ from: 'a', to: 'o', type: 'FS', lag: 0 }, { from: 'o', to: 'c', type: 'FS', lag: 0 }];
   const R = computeSchedule(tasks, deps);
   assert.equal(R.has('o'), false);
-  assert.ok(Number.isFinite(R.get('a').es) && Number.isFinite(R.get('c').lf) && Number.isFinite(R.minFloat));
+  assert.ok(Number.isFinite(R.get('a').es) && Number.isFinite(R.get('c').lf));
   assert.equal(R.get('c').es, toMin('2026-07-13T10:00'));
 });
 test('computeSchedule: ein Ring über terminlose wird weiter erkannt', () => {
@@ -531,7 +521,6 @@ test('computeSchedule: ein Ring über terminlose wird weiter erkannt', () => {
 test('computeSchedule: Plan ohne terminierte Vorgänge ist leer, kein Fehler', () => {
   const R = computeSchedule([OT('o', 'o')], []);
   assert.equal(R.size, 0);
-  assert.equal(R.minFloat, 0);
 });
 test('seriesRows: terminlose bleiben als Zeile erhalten (hinten, ohne Spur)', () => {
   const rows = seriesRows([OT('o', 'Rigging'), t('a', '2026-07-13T08:00', '2026-07-13T10:00')].map((v, i) => ({ ...v, title: i ? 'Licht' : 'Rigging' })));

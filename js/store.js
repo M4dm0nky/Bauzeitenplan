@@ -106,7 +106,7 @@ export function verschiebeZeit(iso, tage, minuten) {
 // neues Feld in den Plan und in den Export.
 const SCHREIBBAR = new Set([
   'title', 'gewerk', 'start', 'end', 'milestone', 'progress', 'status', 'notes',
-  'bereitstellung', 'ackCrit', 'ackConflictMin', 'estimated',
+  'bereitstellung', 'ackConflictMin', 'estimated',
   'punktTyp', 'anforderungen', 'material', 'kontakt', 'fuer', 'slot', 'abschnitt',
 ]);
 
@@ -353,7 +353,7 @@ const HANDLERS = {
       // durch — vorher fielen sie beim Anlegen still weg (Duplizieren, Import).
       slot: t.slot ?? null, punktTyp: t.punktTyp ?? 'act', estimated: !!t.estimated,
       anforderungen: t.anforderungen ?? '', material: t.material ?? '', kontakt: t.kontakt ?? '',
-      ackCrit: !!t.ackCrit, ackConflictMin: t.ackConflictMin ?? null,
+      ackConflictMin: t.ackConflictMin ?? null,
     });
     return ok({ id });
   },

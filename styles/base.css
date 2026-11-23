@@ -553,7 +553,7 @@ body { margin: 0; }
 .dlg-t-d { display: block; }
 .dlg-act { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 
-/* ── Prüf-Liste (kritisch & Konflikte) ───────────────────────────────────────
+/* ── Prüf-Liste (Konflikte) ───────────────────────────────────────
    Nur Geometrie. Ein Eintrag zeigt Name/Grund links, die Knöpfe rechts; wird es
    eng, brechen die Knöpfe unter den Text. */
 .rv-body { display: flex; flex-direction: column; gap: 16px; margin-top: 12px; max-height: 62vh; overflow: auto; }
@@ -566,7 +566,6 @@ body { margin: 0; }
 .rv-acts { display: flex; gap: 5px; flex: none; }
 .rv-acts .btn { padding: 4px 9px; }
 .rv-all { margin-top: 2px; align-self: flex-start; }
-.kpi.is-clickable { cursor: pointer; }
 
 /* ── Hinweis ────────────────────────────────────────────────────────────────── */
 .toast {
@@ -754,7 +753,7 @@ body { margin: 0; }
 }
 
 /* Version in der Fußzeile — leise, aber auffindbar. */
-.ft-ver { font-variant-numeric: tabular-nums; cursor: help; }
+.ft-ver { margin-left: auto; font-variant-numeric: tabular-nums; cursor: help; }
 
 /* ── Handy & Tablet ───────────────────────────────────────────────────────────
    Von Haus aus ist die Seite desktop-fest: fixe 320-px-Seitenleiste, breiter Kopf,
@@ -798,7 +797,7 @@ body { margin: 0; }
 
   /* Kopf auf Handybreite: ~470 px belegten ihn früher, die Hälfte des Bildes.
      Der Ort fällt weg (steht im Plan selbst), der Titel bleibt EINE Zeile mit
-     «…», die Kennzahlen stehen kompakt in EINER Reihe — «kritisch» und die
+     «…», die Kennzahlen stehen kompakt in EINER Reihe — die
      Konflikte sind Warnungen und bleiben sichtbar. Die Gruppen .hd-zoom und
      .hd-right lösen sich auf (display: contents), damit ihre Knöpfe mit denen
      der Leiste in dieselben Zeilen fließen statt je eine eigene zu füllen.
@@ -877,7 +876,7 @@ body { margin: 0; }
   /* Tastatur-Hinweise sind am Touch-Gerät sinnlos — Platz für den Plan. */
   /* `.ft .ft-keys`: die Themes setzen `.ft-keys { display: flex }` später und
      mit gleicher Stärke — das nackte `.ft-keys` verlor dagegen. Die Zeile trägt
-     auch «kritischer Pfad» und die Version; beides passt nicht in eine kurze
+     auch die Version; beides passt nicht in eine kurze
      Zeile, also fällt sie ganz weg. */
   .ft .ft-keys { display: none; }
   /* Minimap kompakt: 20 Bänder zu je 5 px nahmen ~100 px, ein Fünftel des Bildes. */

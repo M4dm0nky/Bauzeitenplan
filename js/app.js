@@ -369,11 +369,7 @@ function mount() {
     { liste: 'abschnitte', titel: 'Abschnitte verwalten' }, $('ei-abschnitte-verwalten'));
   // Der Konflikt-Knopf zeigt jetzt die Liste, statt blind alle zu verschieben —
   // im Popup entscheidet man je Konflikt (zeigen · lösen · ist ok) oder auf einmal.
-  $('resolve').onclick = () => openReview('konflikt');
-  // Die „kritisch"-Kachel im Kopf öffnet dieselbe Liste beim Kritisch-Abschnitt.
-  $('kpis').addEventListener('click', (e) => {
-    if (e.target.closest('[data-kpi="kritisch"]')) openReview('kritisch');
-  });
+  $('resolve').onclick = () => openReview();
 
   // ── Tastatur ──
   document.addEventListener('keydown', (e) => {
@@ -1397,8 +1393,7 @@ function refreshChrome() {
     [ebene === 'show' ? 'Zeiteinträge' : 'Vorgänge', st.total],
     ['läuft', st.run],
     ['Crew', st.crew],
-    ['kritisch', st.crit, 'kritisch'],
-  ].map(([k, v, key]) => `<div class="kpi${key ? ' is-clickable' : ''}"${key ? ` data-kpi="${key}" title="Kritische Vorgänge prüfen"` : ''}><div class="kpi-v">${v}</div><div class="kpi-k">${k}</div></div>`).join('');
+  ].map(([k, v]) => `<div class="kpi"><div class="kpi-v">${v}</div><div class="kpi-k">${k}</div></div>`).join('');
 
   const conf = gantt.conflicts();   // der Gantt hat sie gerade gerechnet
   const rb = $('resolve');
@@ -1778,11 +1773,11 @@ function showShiftDialog() {
 }
 
 // ── Prüf-Liste ────────────────────────────────────────────────────────────────
-// Zeigt, WELCHE Vorgänge kritisch bzw. im Konflikt sind, und lässt je Eintrag
-// entscheiden: zeigen (auswählen + hinscrollen), lösen (früheste Lage) oder als
-// „ist ok"/„gesehen" abhaken. Eine Quelle: gantt.conflicts()/criticals().
+// Zeigt, WELCHE Vorgänge im Konflikt sind, und lässt je Eintrag entscheiden:
+// zeigen (auswählen + hinscrollen), lösen (früheste Lage) oder als „ist ok"
+// abhaken. Eine Quelle: gantt.conflicts().
 let reviewClose = null;
-function openReview(focus) {
+function openReview() {
   if (reviewClose) reviewClose();          // immer nur eine Liste offen
   const dlg = el('div', 'dlg');
   const box = el('div', 'dlg-box rv');
@@ -1850,33 +1845,6 @@ function openReview(focus) {
       ks.append(all);
     }
     bodyEl.append(ks);
-
-    // ── Kritisch ──
-    const crit = gantt.criticals().map(byId).filter(Boolean);
-    const offen = crit.filter((t) => !t.ackCrit).length;
-    const cs = el('div', 'rv-sec rv-sec-kritisch');
-    cs.append(el('h3', 'rv-h', 'Kritisch' + (offen ? ' (' + offen + ')' : '')));
-    cs.append(el('p', 'rv-note', 'Kein Puffer — bestimmt das Enddatum. Kein Fehler; abhaken bringt Ruhe rein.'));
-    if (!crit.length) cs.append(el('p', 'rv-empty', 'Kein Vorgang ohne Puffer.'));
-    for (const t of crit) {
-      const row = el('div', 'rv-row' + (t.ackCrit ? ' is-ack' : ''));
-      const txt = el('div', 'rv-txt');
-      txt.append(el('div', 'rv-name', t.title));
-      const acts = el('div', 'rv-acts');
-      const show = el('button', 'btn', 'Zeigen'); show.onclick = () => showTask(t.id);
-      if (t.ackCrit) {
-        const un = el('button', 'btn', 'Doch prüfen');
-        un.onclick = () => apply({ type: 'setTaskField', id: t.id, field: 'ackCrit', value: false });
-        acts.append(show, un);
-      } else {
-        const seen = el('button', 'btn', 'Gesehen');
-        seen.onclick = () => apply({ type: 'setTaskField', id: t.id, field: 'ackCrit', value: true });
-        acts.append(show, seen);
-      }
-      row.append(txt, acts);
-      cs.append(row);
-    }
-    bodyEl.append(cs);
   }
 
   renderBody();
@@ -1885,8 +1853,6 @@ function openReview(focus) {
   dlg.onclick = (e) => { if (e.target === dlg) finish(); };
   document.addEventListener('keydown', onKey);
   document.body.append(dlg);
-  bodyEl.querySelector(focus === 'kritisch' ? '.rv-sec-kritisch' : '.rv-sec-konflikt')
-    ?.scrollIntoView({ block: 'start' });
 }
 
 $('undo').onclick = () => store && store.undo();

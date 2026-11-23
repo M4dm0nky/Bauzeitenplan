@@ -231,6 +231,23 @@ check('die App holt keinen mitgelieferten Plan (kein BUNDLED/openBundled, fetch 
   return treffer.length ? treffer.join(' | ') : true;
 });
 
+check('«kritisch» ist entfernt (js: kein critical/ackCrit/criticals/minFloat/KRIT/is-crit, Themes: keine Kritisch-Regeln)', () => {
+  // Überlappung bleibt ein Konflikt; einen kritischen Pfad gibt es nicht mehr.
+  // Zeilenbasiert wie die fetch-Sperre: ganze Kommentarzeilen fallen weg.
+  const ohneKommentar = (s) => s.split('\n').filter((z) => !/^\s*(\/\/|\*|\/\*)/.test(z)).join('\n');
+  const treffer = [];
+  for (const f of JS_FILES) {
+    // Einzige Ausnahme: persistence.js löscht das Altfeld beim Laden.
+    const m = ohneKommentar(js(f)).replace(/^\s*delete t\.ackCrit;\s*$/m, '').match(/\.critical\b|ackCrit|criticals\(|minFloat|KRIT|is-crit/);
+    if (m) treffer.push('js/' + f + ': ' + m[0]);
+  }
+  for (const f of readdirSync(join(root, 'styles/themes'))) {
+    const m = readFileSync(join(root, 'styles/themes', f), 'utf8').match(/is-crit|bz-crit-tag|ft-crit/);
+    if (m) treffer.push('styles/themes/' + f + ': ' + m[0]);
+  }
+  return treffer.length ? treffer.join(' | ') : true;
+});
+
 check('jedes Theme gestaltet alle Bausteine der Engine', () => {
   // Fängt den Fall, dass ein neuer Baustein in gantt.js entsteht und ein Theme
   // ihn nicht kennt — dann fehlt er dort unsichtbar.

@@ -291,8 +291,8 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     let sched = null;
     try { sched = computeSchedule(store.state.tasks, store.state.deps).get(t.id); } catch { /* Ring */ }
     if (sched) {
-      const r = el('div', 'ins-ro' + (sched.critical ? ' is-crit' : ''));
-      r.textContent = sched.critical ? 'auf dem kritischen Pfad — kein Puffer' : fmtFloat(sched.float);
+      const r = el('div', 'ins-ro');
+      r.textContent = fmtFloat(sched.float);
       root.append(field('Puffer', r));
     }
 

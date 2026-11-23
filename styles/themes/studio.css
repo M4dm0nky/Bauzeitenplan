@@ -4,7 +4,7 @@
 
 /* Der Neutralton ist zum Akzent hin gebogen (Salbei statt Cream) — bewusst weg
    vom Cream/Serif/Terrakotta-Dreiklang. Rot ist hier KEIN Akzent, sondern
-   ausschließlich semantisch: kritischer Pfad. */
+   ausschließlich semantisch: Verzug, Fehler, Löschen. */
 :root {
   --bg:      #eaeee9;
   --card:    #fbfcfa;
@@ -61,7 +61,6 @@ body {
   font-family: 'Charter', 'Iowan Old Style', Georgia, serif;
 }
 .kpi-k { font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-top: 5px; }
-.kpi:last-child .kpi-v { color: var(--crit); }
 
 .hd-bar { padding: 0 0 16px; gap: 10px; flex-wrap: wrap; }
 .seg { background: var(--card-2); border: 1px solid var(--line); border-radius: 999px; padding: 2px; gap: 1px; }
@@ -143,11 +142,6 @@ body {
 .vz-txt.is-late { color: var(--crit); font-weight: 700; }
 .vz-txt.is-early { color: var(--live-run, #1a7a46); font-weight: 700; }
 .bz-lab-projekt { background: var(--card-2); font-weight: 600; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
-.bz-crit-tag {
-  flex: none; font-size: 8px; font-weight: 700; letter-spacing: .09em;
-  padding: 2px 5px; border-radius: 4px;
-  background: color-mix(in srgb, var(--crit) 12%, transparent); color: var(--crit);
-}
 
 /* ── Spuren ───────────────────────────────────────────────────────────────── */
 .bz-canvas { background: var(--card); }
@@ -188,7 +182,6 @@ body {
 .bz[data-ebene="show"] .bz-st-geplant .bz-bar-t { color: var(--gw-t); text-shadow: none; }
 .bz[data-ebene="show"] .bz-bar.is-narrow .bz-bar-t { color: var(--ink-2); text-shadow: none; }
 .bz-bar:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.bz-bar.is-crit { box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--crit); }
 
 .bz-slack {
   background: repeating-linear-gradient(45deg, var(--line) 0 3px, transparent 3px 7px);
@@ -202,7 +195,6 @@ body {
 .bz-mini { background: var(--gw); border-radius: 4px; box-shadow: 0 0 0 2px var(--card-2); opacity: .75; }
 
 .bz-ms-d { border-radius: 2px; box-shadow: 0 0 0 2px var(--card); width: 12px; height: 12px; margin-left: -6px; }
-.bz-ms.is-crit .bz-ms-d { box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--crit); }
 .bz-ms-t { font-size: 11px; color: var(--ink-2); font-weight: 500; padding-left: 11px; }
 .bz-ms-projekt .bz-ms-d { background: var(--ink); width: 15px; height: 15px; margin-left: -7.5px; }
 .bz-ms-projekt .bz-ms-t { color: var(--ink); font-weight: 700; letter-spacing: .04em; }
@@ -224,9 +216,7 @@ body {
 
 /* ── Pfeile ───────────────────────────────────────────────────────────────── */
 .bz-dep { stroke: var(--ink-3); stroke-width: 1.25; opacity: .42; }
-.bz-dep.is-crit { stroke: var(--crit); stroke-width: 1.75; opacity: .9; }
 .bz-ah path { fill: var(--ink-3); }
-.bz-ah-c path { fill: var(--crit); }
 /* Verknüpfen per Ziehen. Ein gesperrtes Ziel wird ABGEBLENDET, nicht umgefärbt:
    Farbe allein trägt die Aussage nicht, und Rot hieße hier «Fehler» statt
    «geht nicht». Der Griff trägt einen Ring in Panelfarbe, damit er auch auf
@@ -269,8 +259,6 @@ kbd {
   border-radius: 4px; padding: 1px 4px; margin-right: 2px; color: var(--ink-2);
   box-shadow: 0 1px 0 var(--line-2);
 }
-.ft-crit { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--crit); font-weight: 500; }
-.ft-crit i { width: 16px; height: 3px; border-radius: 2px; background: var(--crit); display: block; }
 
 /* ── Schiene: Modus + Zeitnavigation ─────────────────────────────────────── */
 .rail { background: var(--card); border-right: 1px solid var(--line); }

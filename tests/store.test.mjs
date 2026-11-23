@@ -1213,7 +1213,7 @@ test('addTask setzt die Defaults von migrate', () => {
   assert.equal(t.punktTyp, 'act');
   assert.equal(t.slot, null);
   assert.equal(t.estimated, false);
-  assert.equal(t.ackCrit, false);
+  assert.equal('ackCrit' in t, false);
   assert.equal(t.ackConflictMin, null);
   for (const k of ['anforderungen', 'material', 'kontakt']) assert.equal(t[k], '', k);
 });

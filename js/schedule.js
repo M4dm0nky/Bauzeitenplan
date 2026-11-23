@@ -303,25 +303,19 @@ export function luftDerVerknuepfung(dep, von, nach) {
 }
 
 /**
- * Rechnet ES/EF/LS/LF/Puffer und markiert den kritischen Pfad.
+ * Rechnet ES/EF/LS/LF/Puffer.
  *
  * Ankerregel: Vorgänge ohne Nachfolger werden auf ihrem geplanten Ende
  * verankert — der zugesagte Termin IST die Deadline. Genau so wird ein
  * Bauzeitenplan in der Praxis gelesen.
  *
- * Kritisch ist die Kette mit dem GERINGSTEN Puffer im Netz, nicht starr
- * "Puffer == 0". Sobald das Projekt einen Zielmeilenstein mit Vorlauf hat
- * (z.B. Puffer bis Doors), ist streng genommen kein Vorgang bei null — die
- * bindende Kette ist trotzdem die, auf die es ankommt. Bei einem straff
- * durchgeplanten Netz ist minFloat 0 und die Regel entspricht der klassischen.
- *
- * Isolierte Vorgänge (weder Vorgänger noch Nachfolger) können per Definition
- * keinen kritischen Pfad bilden und werden nicht markiert.
+ * Einen «kritischen Pfad» gibt es nicht: Überlappung verknüpfter Vorgänge
+ * meldet `findConflicts` (conflicts.js) als Konflikt.
  *
  * Je Vorgang `engpass`: die Verknüpfung mit der kleinsten Luft (Gleichstand:
  * erste in `deps`-Reihenfolge) oder null ohne terminierten Nachbarn.
  *
- * @returns {Map<string, {es,ef,ls,lf,float,critical,engpass}>} mit .minFloat am Ergebnis
+ * @returns {Map<string, {es,ef,ls,lf,float,engpass}>}
  */
 export function computeSchedule(tasks, deps) {
   const byId = new Map(tasks.map((t) => [t.id, t]));
@@ -376,20 +370,7 @@ export function computeSchedule(tasks, deps) {
     r.lf = lf;
     r.ls = lf - D;
     r.float = r.ls - r.es;
-    r.isolated = predOf.get(id).length === 0 && succOf.get(id).length === 0;
-    r.anchored = succOf.get(id).length === 0; // Puffer 0 nur wegen der Ankerregel
   }
-
-  // ── Kritischer Pfad = Kette mit dem geringsten Puffer ────────────────────────
-  // Verankerte Senken sind ausgenommen: ihr Puffer ist per Ankerregel immer 0
-  // und trägt keine Information. Zählte man sie mit, zöge allein der
-  // Zielmeilenstein den minFloat auf 0 und kein Vorgang davor wäre je kritisch.
-  const connected = [...R.values()].filter((r) => !r.isolated);
-  const scored = connected.filter((r) => !r.anchored);
-  const basis = scored.length ? scored : connected;
-  const minFloat = basis.length ? Math.min(...basis.map((r) => r.float)) : 0;
-  for (const r of R.values()) r.critical = !r.isolated && r.float <= minFloat;
-  R.minFloat = minFloat;
 
   // ── Engpass: knappste Verknüpfung je Vorgang ─────────────────────────────────
   for (const [id, r] of R) {

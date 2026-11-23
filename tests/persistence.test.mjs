@@ -27,7 +27,7 @@ const fakeStorage = () => {
 const plan = (name = 'Test') => ({
   project: { id: 'p1', name, venue: 'Halle', start: '2026-07-13T00:00', end: '2026-07-20T00:00', timezone: 'Europe/Berlin', punktTypen: [], abschnitte: [] },
   gewerke: [{ id: 'g1', name: 'Bühne', sort: 0, slot: 0, art: 'gewerk' }],
-  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackCrit: false, ackConflictMin: null, punktTyp: 'act', anforderungen: '', material: '', kontakt: '', slot: null, abschnitt: 'show', fuer: null }],
+  tasks: [{ id: 't1', gewerk: 'g1', title: 'Podest', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant', crew: 4, notes: '', estimated: false, parent: null, ackConflictMin: null, punktTyp: 'act', anforderungen: '', material: '', kontakt: '', slot: null, abschnitt: 'show', fuer: null }],
   deps: [],
 });
 
@@ -356,6 +356,14 @@ test('Anforderungen und Material überleben Export → Import', () => {
   });
   const back = deserialize(serialize(raw));
   assert.deepEqual(back.plan.tasks[0], migriert(raw).tasks[0]);
+});
+
+test('Altplan mit ackCrit lädt ohne Fehler, das Feld entfällt', () => {
+  const raw = plan();
+  raw.tasks[0].ackCrit = true;
+  const r = deserialize(serialize(raw));
+  assert.equal(r.ok, true);
+  assert.equal('ackCrit' in r.plan.tasks[0], false);
 });
 
 test('eigene Eintragsarten überleben Export → Import', () => {
