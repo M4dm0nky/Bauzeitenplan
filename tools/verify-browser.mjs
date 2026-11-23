@@ -191,9 +191,18 @@ for (const pg of PAGES) {
     if (n < 20) return `nur ${n} Pfeile`;
     return bad === 0 ? true : `${bad} Pfade mit NaN/leer`;
   });
-  await check('kritischer Pfad markiert', async () => {
-    const n = await page.locator('.bz-bar.is-crit, .bz-ms.is-crit').count();
-    return n > 8 ? true : `nur ${n} kritische Marken`;
+  await check('kein «kritisch» mehr; Tooltip nennt den Engpass', async () => {
+    const n = await page.locator('.is-crit').count();
+    if (n !== 0) return `${n} .is-crit-Marken`;
+    const bars = page.locator('.bz-bar');
+    for (let i = 0; i < Math.min(await bars.count(), 40); i++) {
+      await page.mouse.move(5, 5);
+      if (!(await bars.nth(i).hover({ timeout: 1500 }).then(() => true, () => false))) continue;
+      await page.waitForTimeout(120);
+      const t = await page.locator('.bz-tip.is-on').first().textContent().catch(() => '');
+      if (/Luft (bis|nach) .+\(|überlappt|schließt direkt an/.test(t)) return true;
+    }
+    return 'kein Tooltip mit Engpass';
   });
   await check('Auto-Scroll zu Heute (nicht am Anfang stehengeblieben)', async () => {
     const sl = await page.locator('.bz-scroll').evaluate((n) => n.scrollLeft);

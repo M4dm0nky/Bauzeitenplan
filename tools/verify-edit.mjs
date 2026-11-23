@@ -238,35 +238,6 @@ await check('⌘Z nimmt das Abhaken zurück (Konflikt wieder da)', async () => {
 await undoOhneFeld();  // auch das Vorziehen zurück
 await page.waitForTimeout(400);
 
-console.log('\nPRÜF-LISTE: KRITISCH');
-await check('«kritisch»-Kachel öffnet die Liste mit kritischen Vorgängen', async () => {
-  await page.locator('[data-kpi="kritisch"]').click();
-  await page.waitForTimeout(300);
-  return (await page.locator('.rv-sec-kritisch .rv-row').count()) >= 1 ? true : 'keine kritischen Vorgänge in der Liste';
-});
-await page.screenshot({ path: join(here, 'shots', 'edit-4c-kritisch.png') });
-await check('«Gesehen» senkt die kritisch-Zahl; ⌘Z bringt sie zurück', async () => {
-  const before = Number(await page.locator('[data-kpi="kritisch"] .kpi-v').textContent());
-  await page.locator('.rv-sec-kritisch .rv-row .btn', { hasText: 'Gesehen' }).first().click();
-  await page.waitForTimeout(400);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(200);
-  const after = Number(await page.locator('[data-kpi="kritisch"] .kpi-v').textContent());
-  if (!(after < before)) return `kritisch nicht gesunken (${before} → ${after})`;
-  await undoOhneFeld();
-  await page.waitForTimeout(400);
-  const back = Number(await page.locator('[data-kpi="kritisch"] .kpi-v').textContent());
-  return back === before ? true : `⌘Z hat kritisch nicht zurückgeholt (${after} → ${back})`;
-});
-await check('«Zeigen» springt zum Vorgang und wählt ihn im Gantt aus', async () => {
-  await page.locator('[data-kpi="kritisch"]').click();
-  await page.waitForTimeout(300);
-  await page.locator('.rv-sec-kritisch .rv-row .btn', { hasText: 'Zeigen' }).first().click();
-  await page.waitForTimeout(500);
-  if ((await page.locator('.rv-body').count()) !== 0) return 'Prüf-Liste blieb offen';
-  return (await page.locator('.bz-lab.is-sel, .bz-bar.is-sel, .bz-ms.is-sel').count()) >= 1 ? true : 'nichts ausgewählt';
-});
-
 console.log('\nDAUERHAFTIGKEIT');
 await check('nach Neuladen ist das Projekt noch da', async () => {
   await page.waitForTimeout(1200);
@@ -441,9 +412,10 @@ await check('Name im Panel ändern zieht in den Gantt durch', async () => {
   const n = await page.evaluate(() => [...document.querySelectorAll('.bz-lab-name')].map((x) => x.textContent));
   return n.includes('Panel-Test') ? true : 'Gantt kennt den neuen Namen nicht';
 });
-await check('Panel zeigt Puffer bzw. kritischen Pfad', async () => {
+await check('Panel zeigt Puffer und Engpass', async () => {
   const t = await page.locator('.ins-f', { hasText: 'Puffer' }).textContent();
-  return /Puffer|kritisch/i.test(t) ? true : 'kein Puffer im Panel: ' + t;
+  if (!/Puffer|Kettenende/.test(t)) return 'kein Puffer im Panel: ' + t;
+  return (await page.locator('.ins-f', { hasText: 'Engpass' }).count()) >= 1 ? true : 'kein Engpass im Panel';
 });
 await check('Verknüpfungen stehen im Panel', async () =>
   (await page.locator('.ins-deps').count()) === 1 ? true : 'kein Verknüpfungsblock');
@@ -657,6 +629,23 @@ await check('nach dem Ziehen räumt die App restlos auf', async () => {
   if (r.geist) return 'Gummiband bleibt stehen';
   if (r.marken) return `${r.marken} Markierungen bleiben stehen`;
   return r.flag ? 'data-linking bleibt gesetzt' : true;
+});
+
+// Erst hier gibt es eine Verknüpfung (die Fixture bringt keine mit).
+await check('Mouseover über einen verknüpften Balken nennt die knappste Verknüpfung', async () => {
+  for (const id of [vonId, nachId]) {
+    const bar = page.locator(`.bz-bar[data-task="${id}"]`).first();
+    await page.mouse.move(5, 5);
+    if (!(await bar.hover({ timeout: 3000 }).then(() => true, () => false))) continue;
+    await page.waitForTimeout(200);
+    const t = await page.locator('.bz-tip.is-on').first().textContent().catch(() => '');
+    if (/Luft (bis|nach) .+\(|überlappt|schließt direkt an/.test(t)) {
+      await page.screenshot({ path: join(here, 'shots', 'edit-8b-engpass.png') });
+      await page.mouse.move(5, 5);
+      return true;
+    }
+  }
+  return 'kein Tooltip mit Engpass an den Balken der neuen Verknüpfung';
 });
 
 await check('was einen Ring ergäbe, ist gesperrt — der Store sagt nicht erst hinterher nein', async () => {

@@ -1,4 +1,4 @@
-import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM, rasterMin, schnapp, gezogen, planMinute, naechsteMitternacht, planSpanne } from '../js/timeaxis.js';
+import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM, rasterMin, schnapp, gezogen, planMinute, naechsteMitternacht, planSpanne, engpassText, fmtPuffer, fmtFloat } from '../js/timeaxis.js';
 import assert from 'node:assert/strict';
 import { toMin } from '../js/schedule.js';
 
@@ -279,6 +279,33 @@ test('planSpanne: terminloser Vorgang und Phase ohne Zeit ändern nichts', () =>
 test('planSpanne: Plan innerhalb des Projekts lässt es unverändert', () => {
   const r = planSpanne(P({ tasks: [{ id: 'a', start: '2027-08-01T08:00', end: '2027-08-01T10:00' }] }));
   assert.deepEqual(r, { von: T('2027-07-26T00:00'), bis: T('2027-08-12T06:00') });
+});
+
+console.log('\nEngpass und Puffer');
+const titel = (id) => ({ s2: 'Steelday 2', an: 'Anlieferung' }[id]);
+test('engpassText: Nachfolger mit Luft', () => {
+  assert.equal(engpassText({ nachbarId: 's2', richtung: 'nach', typ: 'FS', luft: 900 }, titel), '15 h Luft bis Steelday 2 (Ende → Start)');
+});
+test('engpassText: Vorgänger mit Luft', () => {
+  assert.equal(engpassText({ nachbarId: 'an', richtung: 'vor', typ: 'FS', luft: 1140 }, titel), '19 h Luft nach Anlieferung (Ende → Start)');
+});
+test('engpassText: Luft 0 schließt direkt an', () => {
+  assert.equal(engpassText({ nachbarId: 's2', richtung: 'nach', typ: 'FS', luft: 0 }, titel), '0 min Luft — Steelday 2 schließt direkt an');
+  assert.equal(engpassText({ nachbarId: 'an', richtung: 'vor', typ: 'FS', luft: 0 }, titel), '0 min Luft — schließt direkt an Anlieferung an');
+});
+test('engpassText: negative Luft = Überlappung', () => {
+  assert.equal(engpassText({ nachbarId: 's2', richtung: 'nach', typ: 'FS', luft: -120 }, titel), 'überlappt Steelday 2 um 2 h');
+});
+test('engpassText: Typ-Wörter', () => {
+  const t = (typ) => engpassText({ nachbarId: 's2', richtung: 'nach', typ, luft: 60 }, titel);
+  assert.equal(t('SS'), '1 h Luft bis Steelday 2 (Start → Start)');
+  assert.equal(t('FF'), '1 h Luft bis Steelday 2 (Ende → Ende)');
+  assert.equal(t('SF'), '1 h Luft bis Steelday 2 (Start → Ende)');
+});
+test('engpassText: null bleibt null', () => assert.equal(engpassText(null, titel), null));
+test('fmtPuffer: Kettenende nur ohne Nachfolger', () => {
+  assert.equal(fmtPuffer({ float: 0 }, false), '— Kettenende');
+  assert.equal(fmtPuffer({ float: 900 }, true), fmtFloat(900));
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

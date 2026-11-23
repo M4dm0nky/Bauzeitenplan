@@ -170,6 +170,28 @@ export const fmtFloat = (min) => {
   return Math.round(h / 24) + ' Tage Puffer';
 };
 
+const TYP_WORT = { FS: 'Ende → Start', SS: 'Start → Start', FF: 'Ende → Ende', SF: 'Start → Ende' };
+/**
+ * Die knappste Verknüpfung eines Vorgangs als Satz (null ohne Verknüpfung).
+ * `titelVon(id)` liefert den Namen des Nachbarn — so bleibt die Funktion DOM-
+ * und store-frei. richtung 'nach' = der Nachbar ist der Nachfolger.
+ */
+export function engpassText(e, titelVon) {
+  if (!e) return null;
+  const nach = e.richtung === 'nach';
+  const name = titelVon(e.nachbarId);
+  if (e.luft < 0) return 'überlappt ' + name + ' um ' + fmtDur(-e.luft);
+  if (e.luft === 0) return '0 min Luft — ' + (nach ? name + ' schließt direkt an' : 'schließt direkt an ' + name + ' an');
+  return fmtDur(e.luft) + ' Luft ' + (nach ? 'bis ' : 'nach ') + name + ' (' + TYP_WORT[e.typ] + ')';
+}
+/**
+ * Puffer-Zeile. `hatNachfolger` = false nur für ein Kettenende: der Vorgang
+ * hat einen Vorgänger, aber keinen Nachfolger. Ohne jede Verknüpfung ruft der
+ * Aufrufer mit true auf (dort ist «kein Puffer» die ehrliche Antwort).
+ */
+export const fmtPuffer = (sched, hatNachfolger) =>
+  !hatNachfolger && sched.float <= 0 ? '— Kettenende' : fmtFloat(sched.float);
+
 // ── Balken ziehen: reine Rechnung (Minuten = echte Epochenminuten, wie toMin) ──
 
 /** Rasterschritt in Minuten je Zoomstufe: Stunden/Tage 15 min, Wochen 1 h, Monate 1 Tag. */

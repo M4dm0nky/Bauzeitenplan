@@ -22,7 +22,7 @@ const personalSum = (t, state) =>
     .reduce((a, z) => a + z.n, 0);
 import {
   ZOOM, clampZoom, zoomAnchored, nearestPreset, fitPx, tickScale, ticksFor,
-  weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat, rasterMin, gezogen, naechsteMitternacht, planSpanne,
+  weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat, engpassText, fmtPuffer, rasterMin, gezogen, naechsteMitternacht, planSpanne,
 } from './timeaxis.js';
 
 // T0/T1/NOW/TOTAL_MIN hingen früher als Modul-Konstanten an einem festen
@@ -1485,7 +1485,10 @@ export function createGantt(root, opts = {}) {
       }
       const conf = CONFLICTS.get(t.id);
       if (conf) add('Konflikt', conf.message);
-      add('Puffer', fmtFloat(s.float));
+      const hatVor = S.deps.some((d) => d.to === t.id), hatNach = S.deps.some((d) => d.from === t.id);
+      add('Puffer', fmtPuffer(s, hatNach || !hatVor));
+      const eng = engpassText(s.engpass, (id) => (S.tasks.find((x) => x.id === id) || {}).title || id);
+      if (eng) add('Engpass', eng);
       if (!t.milestone && t.progress > 0) add('Fortschritt', t.progress + ' %');
       tip.append(dl);
       tip.classList.add('is-on');
