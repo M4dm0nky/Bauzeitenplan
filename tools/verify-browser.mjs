@@ -18,6 +18,7 @@ import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
 import { planLaden } from './plan-fixture.mjs';
+import { kontrast } from './farbpruefung.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -96,6 +97,65 @@ const fingerprint = (page) => page.evaluate(() => {
 });
 const prints = new Map(); // Fingerabdruck → Seitenname
 const setZoom = async (page, z) => { await page.click('#zoom-stufe'); await page.locator('.mn .mn-i', { hasText: z[0].toUpperCase() + z.slice(1) }).click(); };
+
+
+// ── Gerenderter Kontrast der Blöcke (Kopfzeile, Schiene, Legende, Fußzeile) ───
+// Anlass: Theme «board» im Dunkelmodus, weiße Schrift auf fast weißer Fläche.
+// Die Prüfung rechnet am ECHTEN Pixelzustand: Schriftfarbe (mit Deckkraft aller
+// Vorfahren) gegen den ersten deckenden Hintergrund (halbtransparente Schichten
+// werden durchgemischt). Schwelle 3,0 (UI/große Schrift).
+// Übersprungen wird NUR: :disabled, aria-hidden, unsichtbar/ohne Fläche, und
+// leere Eingabefelder (zeigen nur den Platzhalter) und Elemente mit
+// Hintergrundbild/-verlauf (Farbe dort nicht bestimmbar).
+const KONTRAST_MIN = 3.0;
+const rgbaOf = (c) => { const m = c.match(/[\d.]+/g).map(Number); return { r: m[0], g: m[1], b: m[2], a: m.length > 3 ? m[3] : 1 }; };
+const mixOn = (f, u) => ({ r: f.r * f.a + u.r * (1 - f.a), g: f.g * f.a + u.g * (1 - f.a), b: f.b * f.a + u.b * (1 - f.a), a: 1 });
+const hexOf = (c) => '#' + [c.r, c.g, c.b].map((x) => Math.round(x).toString(16).padStart(2, '0')).join('');
+async function kontrastFehler(page, label) {
+  const items = await page.evaluate(() => {
+    const out = [];
+    const sel = '.hd, .rail, .legend, .ft';
+    const seen = new Set();
+    for (const blk of document.querySelectorAll(sel)) for (const e of [blk, ...blk.querySelectorAll('*')]) {
+      if (seen.has(e)) continue; seen.add(e);
+      const tag = e.tagName.toLowerCase();
+      if (['svg', 'path', 'script', 'style'].includes(tag) || e.closest('svg')) continue;
+      const own = [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+      const ctl = ['button', 'input', 'select', 'label'].includes(tag);
+      const text = own ? [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ').trim() : (e.value || e.textContent || e.getAttribute('aria-label') || '').trim();
+      if (tag === 'input' && !e.value) continue; // leeres Feld: nur Platzhalter, keine Schrift
+      if (!own && !(ctl && text)) continue;
+      const cs = getComputedStyle(e), r = e.getBoundingClientRect();
+      if (cs.visibility === 'hidden' || r.width < 1 || r.height < 1) continue;
+      if (e.matches(':disabled') || e.closest('[aria-hidden="true"]')) continue;
+      let op = 1, layers = [], skip = false, opaque = false;
+      for (let p = e; p; p = p.parentElement) {
+        const c = getComputedStyle(p);
+        op *= parseFloat(c.opacity);
+        if (!opaque) {
+          if (c.backgroundImage !== 'none') { skip = true; break; }
+          layers.push(c.backgroundColor);
+          const m = c.backgroundColor.match(/[\d.]+/g);
+          if (m && (m.length < 4 || parseFloat(m[3]) >= 1)) opaque = true;
+        }
+      }
+      if (skip) continue;
+      const cls = typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\s+/).join('.') : '';
+      out.push({ sel: tag + (e.id ? '#' + e.id : '') + cls, text: text.slice(0, 24), color: cs.color, op, layers, opaque });
+    }
+    return out;
+  });
+  const bad = [];
+  for (const it of items) {
+    // Grund: weiß, wenn keine deckende Schicht gefunden wurde
+    let bg = it.opaque ? { r: 0, g: 0, b: 0, a: 1 } : { r: 255, g: 255, b: 255, a: 1 };
+    for (const l of it.layers.reverse()) { const c = rgbaOf(l); if (c.a > 0) bg = mixOn(c, bg); }
+    const fg = rgbaOf(it.color); fg.a *= it.op;
+    const ratio = kontrast(hexOf(mixOn(fg, bg)), hexOf(bg));
+    if (ratio < KONTRAST_MIN) bad.push(`${label}: ${it.sel} "${it.text}" ${ratio.toFixed(2)}`);
+  }
+  return bad;
+}
 
 const browser = await firefox.launch({ executablePath: exe });
 let problems = 0;
@@ -348,6 +408,11 @@ for (const pg of PAGES) {
   });
   await page.click('#fold');
 
+  await check('Schrift in Kopfzeile, Schiene, Legende, Fußzeile hält 3:1 (hell)', async () => {
+    const bad = await kontrastFehler(page, v + '/hell');
+    return bad.length ? bad.slice(0, 8).join(' | ') : true;
+  });
+
   // Dunkelmodus
   const dark = await browser.newPage({ viewport: { width: 1600, height: 950 }, colorScheme: 'dark' });
   await dark.goto(pg.url);
@@ -358,6 +423,11 @@ for (const pg of PAGES) {
     await dark.waitForTimeout(900);
   }
   await dark.screenshot({ path: join(shots, `${v}-dark.png`) });
+  {
+    const bad = await kontrastFehler(dark, v + '/dunkel');
+    if (bad.length) { console.log('    ✗ Schrift in Kopfzeile, Schiene, Legende, Fußzeile hält 3:1 (dunkel): ' + bad.slice(0, 8).join(' | ')); problems++; }
+    else console.log('    ✓ Schrift in Kopfzeile, Schiene, Legende, Fußzeile hält 3:1 (dunkel)');
+  }
   await dark.close();
 
   if (errors.length) { console.log('    ✗ Fehler auf der Seite:'); errors.slice(0, 6).forEach((e) => console.log('        ' + e)); problems += errors.length; }

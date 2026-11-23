@@ -7,7 +7,7 @@
   --sheet:   #f7fafd;
   --ink:     #17324d;
   --ink-2:   #46647f;
-  --ink-3:   #7f97ac;
+  --ink-3:   #6b8499;
   --line:    #c3d6e8;
   --line-2:  #a9c3dc;
   --cyan:    #0d6f9e;
@@ -284,7 +284,7 @@ kbd {
 .rail-wort { font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink-3); }
 .rail-m { color: var(--ink-2); border-bottom: 1.5px solid var(--line); }
 .rail-m:hover { background: var(--paper); color: var(--ink); }
-.rail-m[aria-pressed="true"] { background: var(--cyan); color: #fff; }
+.rail-m[aria-pressed="true"] { background: var(--cyan); color: var(--sheet); }
 .rail-z { font-size: 19px; }
 .rail-w { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
 .rail-ein { margin-top: auto; border-top: 1.5px solid var(--line); border-bottom: 0; }
