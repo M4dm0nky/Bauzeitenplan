@@ -1474,6 +1474,16 @@ test('setProjectField prüft kontakte', () => {
   assert.equal(s.canUndo, false);
   assert.equal(s.state.project.kontakte, undefined);
 });
+test('setProjectField lehnt leeres/ungültiges Datum für Beginn und Ende ab', () => {
+  for (const [field, value] of [['start', ''], ['end', ''], ['end', 'quatsch'], ['start', 'quatsch']]) {
+    const s = createStore(seed());
+    const vorher = JSON.stringify(s.state.project);
+    const r = s.apply({ type: 'setProjectField', field, value });
+    assert.equal(r.ok, false, field + '=' + value);
+    assert.equal(JSON.stringify(s.state.project), vorher);
+    assert.equal(s.canUndo, false);
+  }
+});
 test('setProjectField prüft die Zeitzone', () => {
   const s = createStore(seed());
   assert.equal(s.apply({ type: 'setProjectField', field: 'timezone', value: 'Europe/Berlin' }).ok, true);

@@ -822,6 +822,7 @@ const HANDLERS = {
     }
     if (cmd.field === 'name' && !String(cmd.value || '').trim()) return 'Das Projekt braucht einen Namen.';
     if (['start', 'end'].includes(cmd.field)) {
+      if (!Number.isFinite(toMin(cmd.value))) return 'Ungültiges Datum.';
       const next = { ...state.project, [cmd.field]: cmd.value };
       if (new Date(next.end).getTime() <= new Date(next.start).getTime()) return 'Das Projektende muss nach dem Start liegen.';
     }
