@@ -36,6 +36,7 @@ const HUELLE = [
   'js/bedarf.js',
   'js/conflicts.js',
   'js/dom.js',
+  'js/einrichten-status.js',
   'js/entwurf.js',
   'js/ebene.js',
   'js/gantt.js',
