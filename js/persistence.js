@@ -78,6 +78,13 @@ export function migrate(plan) {
   if (!Array.isArray(p.project.abschnitte)) p.project.abschnitte = [];
   // Und die selbst angelegten Bezeichnungen für Personal & Maschinen.
   if (!Array.isArray(p.project.ressourcen)) p.project.ressourcen = [];
+  // Angaben der Einrichten-Seite. Ein Altplan ist eingerichtet: er hat schon
+  // Inhalt, die Seite soll ihn nicht als «noch offen» zeigen.
+  p.project.adresse ??= '';
+  p.project.anfahrt ??= '';
+  p.project.kunde ??= '';
+  if (!Array.isArray(p.project.kontakte)) p.project.kontakte = [];
+  p.project.eingerichtet ??= true;
 
   // Der Farbplatz ist Identität und muss stabil sein — beim Umsortieren darf
   // sich nichts umfärben. Bestandsdaten bekommen ihn aus der Reihenfolge.

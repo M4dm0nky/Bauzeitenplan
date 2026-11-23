@@ -176,6 +176,9 @@ function kaskadeIds(state, ids) {
 }
 
 const ok = (extra = {}) => ({ ok: true, ...extra });
+
+// Die Felder, die setProjectField anfassen darf (id, punktTypen … haben eigene Befehle).
+const PROJEKT_FELDER = ['name', 'venue', 'timezone', 'start', 'end', 'adresse', 'anfahrt', 'kunde', 'kontakte', 'eingerichtet'];
 const err = (msg) => ({ ok: false, error: msg });
 
 let idSeq = 0;
@@ -800,6 +803,23 @@ const HANDLERS = {
   },
 
   setProjectField(state, cmd) {
+    if (!PROJEKT_FELDER.includes(cmd.field)) return 'Dieses Feld lässt sich nicht ändern: ' + cmd.field;
+    if (cmd.field === 'timezone') {
+      try { new Intl.DateTimeFormat('de', { timeZone: cmd.value }); }
+      catch { return 'Unbekannte Zeitzone: ' + cmd.value; }
+    }
+    if (cmd.field === 'eingerichtet' && typeof cmd.value !== 'boolean') return 'Eingerichtet ist ja oder nein.';
+    if (cmd.field === 'kontakte') {
+      if (!Array.isArray(cmd.value)) return 'Die Kontakte müssen eine Liste sein.';
+      const text = (x) => String(x ?? '').trim();
+      const liste = [];
+      for (const k of cmd.value) {
+        if (!k || typeof k !== 'object' || !text(k.id)) return 'Jeder Kontakt braucht eine id.';
+        liste.push({ id: text(k.id), name: text(k.name), rolle: text(k.rolle), tel: text(k.tel) });
+      }
+      state.project.kontakte = liste;
+      return ok();
+    }
     if (cmd.field === 'name' && !String(cmd.value || '').trim()) return 'Das Projekt braucht einen Namen.';
     if (['start', 'end'].includes(cmd.field)) {
       const next = { ...state.project, [cmd.field]: cmd.value };

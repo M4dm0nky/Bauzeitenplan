@@ -1455,5 +1455,43 @@ test('verschiebeZeit: Tage nach Wanduhr, Minuten echt (Umstellung 25./26.10.2026
   assert.equal(verschiebeZeit(null, 3, 3), null);
 });
 
+console.log('\nProjektangaben');
+test('setProjectField lehnt unbekannte Felder ab', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'setProjectField', field: 'id', value: 'x' });
+  assert.equal(r.ok, false); assert.equal(s.canUndo, false);
+  assert.equal(s.state.project.id, 'p1');
+});
+test('setProjectField prüft kontakte', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setProjectField', field: 'kontakte', value: 'x' }).ok, false);
+  assert.equal(s.apply({ type: 'setProjectField', field: 'kontakte', value: [{ name: 'A' }] }).ok, false);
+  assert.equal(s.canUndo, false);
+  const r = s.apply({ type: 'setProjectField', field: 'kontakte', value: [{ id: 'k1', name: ' Ann ', rolle: null, tel: 12 }] });
+  assert.equal(r.ok, true);
+  assert.deepEqual(s.state.project.kontakte, [{ id: 'k1', name: 'Ann', rolle: '', tel: '12' }]);
+  s.undo();
+  assert.equal(s.canUndo, false);
+  assert.equal(s.state.project.kontakte, undefined);
+});
+test('setProjectField prüft die Zeitzone', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setProjectField', field: 'timezone', value: 'Europe/Berlin' }).ok, true);
+  const r = s.apply({ type: 'setProjectField', field: 'timezone', value: 'Mars/Olymp' });
+  assert.equal(r.ok, false); assert.equal(r.error, 'Unbekannte Zeitzone: Mars/Olymp');
+});
+test('setProjectField eingerichtet nur boolesch', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setProjectField', field: 'eingerichtet', value: 'ja' }).ok, false);
+  assert.equal(s.apply({ type: 'setProjectField', field: 'eingerichtet', value: false }).ok, true);
+});
+test('Zeitraum ändern verschiebt nichts', () => {
+  const s = createStore(seed());
+  const vor = JSON.stringify([s.state.tasks, s.state.phases]);
+  assert.equal(s.apply({ type: 'setProjectField', field: 'start', value: '2026-07-01T00:00' }).ok, true);
+  assert.equal(s.apply({ type: 'setProjectField', field: 'end', value: '2026-08-01T00:00' }).ok, true);
+  assert.equal(JSON.stringify([s.state.tasks, s.state.phases]), vor);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

@@ -40,6 +40,7 @@ const migriert = (p) => {
   const q = JSON.parse(JSON.stringify(p));
   q.project.ressourcen = [{ id: 'crew', label: 'Crew', kind: 'personal' }];
   q.phases = [];   // migrate legt die Liste immer an
+  Object.assign(q.project, { adresse: '', anfahrt: '', kunde: '', kontakte: [], eingerichtet: true });   // ebenso die Projektangaben
   for (const t of q.tasks) {
     if (!t.crew) continue;
     t.res = [{ rid: 'crew', n: t.crew, von: null, bis: null }];
@@ -707,6 +708,27 @@ test('deserialize: totes parent und parent-Kette werden abgelehnt', () => {
 test('migrate: project.now (Demo-Uhr) fällt weg', () => {
   const p = plan(); p.project.now = '2026-08-05T12:00';
   assert.equal('now' in migrate(p).project, false);
+});
+
+test('migrate ergänzt fehlende Projektangaben', () => {
+  const m = migrate(plan()).project;
+  assert.equal(m.adresse, ''); assert.equal(m.anfahrt, ''); assert.equal(m.kunde, '');
+  assert.deepEqual(m.kontakte, []);
+  assert.equal(m.eingerichtet, true);
+});
+test('migrate lässt vorhandene Projektangaben stehen', () => {
+  const k = [{ id: 'k1', name: 'Ann', rolle: 'PL', tel: '0171' }];
+  const p = plan(); Object.assign(p.project, { eingerichtet: false, kontakte: k, adresse: 'A', anfahrt: 'B', kunde: 'C' });
+  const m = migrate(p).project;
+  assert.equal(m.eingerichtet, false); assert.deepEqual(m.kontakte, k);
+  assert.equal(m.adresse, 'A'); assert.equal(m.anfahrt, 'B'); assert.equal(m.kunde, 'C');
+  const q = plan(); q.project.kontakte = 'kaputt';
+  assert.deepEqual(migrate(q).project.kontakte, []);
+});
+test('kontakte überstehen Export und Import', () => {
+  const k = [{ id: 'k1', name: 'Ann', rolle: 'PL', tel: '0171' }];
+  const p = plan(); p.project.kontakte = k;
+  assert.deepEqual(deserialize(serialize(p)).plan.project.kontakte, k);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
