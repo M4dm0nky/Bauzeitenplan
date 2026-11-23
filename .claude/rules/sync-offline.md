@@ -18,3 +18,4 @@ Local-first: Plan in `localStorage`; privates Repo `M4dm0nky/Bauzeitenplan-Daten
 - **Hochladen gebündelt:** frühestens 10 s nach dem Speichern, sofort bei `visibilitychange → hidden` und Projektwechsel; höchstens EIN Nachlauf.
 - **Kein Netz/falscher Schlüssel bricht den Start nie** (`#sync-state` gelb/rot).
 - **Prüfen:** `tools/verify-sync.mjs` (gefälschte API); `--echt` mit `BZP_TOKEN`.
+- **Der Speicherort steht im Dialog `#sync-dlg`** (Projektmenü → «Speicherort…», `#sync-oeffnen`; `openEinrichten('sync')` öffnet ihn), nicht mehr auf der Einrichten-Seite. Schlüssel und `#sync-state` leben dort; Escape/«Schließen» schließen nur den Dialog.

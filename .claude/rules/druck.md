@@ -14,3 +14,4 @@ paths:
 - **Running-Order-Blatt kennt den Abschnitt** (Setup · Show · beides; `?abschnitt=`); Bauzeitenplan-Blätter zeigen nie Bühnen.
 - **Running-Order-Blatt = LISTE** (`roBlatt`), leere Felder als Linie, Zeilenhöhe GEWICHTET (Umbau 0,62).
 - **`Element.append()` gibt `undefined` zurück:** erst füllen, dann anhängen.
+- **Blattkopf: `kopfAngaben(project)` (print.js)** liefert Ort, Adresse und Ansprechpartner (`.pr-head-a`, eine Zeile); **nie Kunde und Anfahrt** (Crew-Blatt). Bei Platzmangel schrumpft zuerst der Titel; Abschneiden prüft `verify-print.mjs` per `scrollWidth`.

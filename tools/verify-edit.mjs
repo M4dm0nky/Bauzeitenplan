@@ -361,7 +361,7 @@ await check(`das ${HUES + 1}. Gewerk (Platz ${HUES}) bekommt Schraffur`, async (
   // HUES besetzt ist — dann muss es GENAU EINEN schraffierten Punkt geben.
   // Der Store lehnt Namensdubletten ab, deshalb jedes Mal ein eigener Name.
   const start = await page.locator('.legend-i').count();
-  // «+ Gewerk» steht im Einrichten-Fenster, Reiter «Gewerke & Bühnen».
+  // «+ Gewerk» steht auf der Einrichten-Seite, Bereich «Gewerke & Bühnen» (`baender`).
   await einrichten(page, 'baender');
   for (let slot = start; slot <= HUES; slot++) {
     // Eigener Kasten statt window.prompt — Name tippen, «Anlegen» klicken.
@@ -1415,7 +1415,7 @@ await check('Export lädt eine JSON-Datei herunter', async () => {
 // Der ganze Umbau von v0.12.0 hat EIN Versprechen: man sieht nur, was im
 // aktiven Modus etwas bedeutet, und der andere Modus ist einen Klick weit.
 // Diese vier Prüfungen halten genau das fest.
-console.log('\nBEDIENKONZEPT (Schiene + Einrichten-Fenster)');
+console.log('\nBEDIENKONZEPT (Schiene + Einrichten-Seite)');
 
 await check('Einrichten schließen — der Plan steht unverändert dahinter', async () => {
   // Das Fenster ist vom Export-Test her noch offen.

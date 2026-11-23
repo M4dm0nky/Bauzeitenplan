@@ -602,11 +602,43 @@ Zuweisung anlegen, geprüft in `tests/persistence.test.mjs`. Die vier Vorlagen
 — `planFromTemplate` übersetzt ihr `crew`-Extra deshalb selbst in `res` und
 trägt die Bezeichnung «Crew» ins neue Projekt.
 
+## Einrichten als eigene Seite, aber im selben Modus
+
+Marco wollte Einrichten als eigene Seite statt als Fenster: mehr Platz, fünf
+Bereiche mit Status (✓ ⚠ ○), Ort, Adresse und Ansprechpartner im Projekt und ein
+geführtes erstes Einrichten nach «Neu». Die Umsetzung ist ein **Modus derselben
+App** (`#ein-seite`, `js/einrichten.js`, wie die Bedarfsansicht), keine zweite
+HTML-Datei. Gründe:
+
+- **Ein Store, ein Undo.** Eine zweite Seite hätte einen zweiten Planstand und
+  zwei Tabs, die sich überschreiben; so bleibt jede Änderung ein Befehl, ein ⌘Z.
+- **Sync läuft weiter.** Keine zweite Seite, die den Abgleich neu verdrahten muss.
+- **Kein Eintrag in `version.mjs`/`HUELLE`.** Jede ausgelieferte HTML-Seite
+  müsste dort und in der Versionsprüfung stehen.
+- **Der Ausschnitt bleibt.** Der Gantt wird nur verborgen, nicht abgebaut: `.col.ist-ein`
+  setzt `visibility:hidden` und nimmt `.work` aus dem Fluss. `display:none` wäre
+  der Breite-0-Fehler von v0.11.0 (siehe unten); beim Zurückwechseln stehen
+  Scroll und Zoom wie vorher.
+- Die alte Begründung für das Fenster («Ausschnitt bleibt») ist damit weiter erfüllt.
+
+**Was daraus folgt.** Der Speicherort ist kein Bereich, sondern der Dialog
+`#sync-dlg` (selten gebraucht, Technik statt Planung). Projekt anlegen, wechseln,
+Import und Export wanderten in das Projektmenü der Kopfzeile (`#proj-knopf`),
+weil sie nichts mit dem Einrichten EINES Plans zu tun haben. Gewerke, Bühnen,
+Personal, Maschinen, Arten und Abschnitte sind auf der Seite direkt bearbeitbar:
+`mountAuswahlListe` (`js/listen-editor.js`) ist DIE eine Liste, die auch das
+schwebende «Verwalten» der Tabelle benutzt. Der Status (`einrichtStatus`,
+DOM-frei in `js/einrichten-status.js`) ist abgeleitet, nie gespeichert; nur
+`project.eingerichtet` merkt, ob das geführte Einrichten schon durchlief
+(alte Pläne: `true`). Der Zeitraum ist jederzeit änderbar; Teile außerhalb
+warnen, und «Zeitraum anpassen» übernimmt die Hülle (`zeitraumHuelle`) mit einem ⌘Z.
+
 ## Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand
 
-> **Stand v0.12.0 überholt.** `setReiter()` und die Reiterleiste gibt es nicht
-> mehr — «Einrichten» ist ein Fenster, das über die Schiene links geöffnet wird
-> (siehe weiter unten). Der Abschnitt bleibt stehen, weil der Breite-0-Fehler
+> **Stand v0.12.0 überholt, seit der Einrichten-Seite erneut.** `setReiter()` und
+> die Reiterleiste gibt es nicht mehr; «Einrichten» war ein Fenster (v0.12.0) und
+> ist seit der Einrichten-Seite ein Modus derselben App (siehe «Einrichten als
+> eigene Seite, aber im selben Modus» weiter unten). Der Abschnitt bleibt stehen, weil der Breite-0-Fehler
 > darin bis heute im Code abgesichert ist (`projektEinpassenAusstehend`) und
 > seine Lehre für jeden versteckten Container gilt.
 
@@ -686,7 +718,7 @@ der Playwright-Klick auf den letzten lief in einen Timeout. Ein Fehler, der
 ohne die neue Verwendung nie aufgefallen wäre — das Kontextmenü der Gewerke hat
 sieben Einträge.
 
-**Warum «Einrichten» ein Fenster wurde**Warum «Einrichten» ein Fenster wurde und keine Seite blieb:** Als eigene
+**Warum «Einrichten» in v0.12.0 ein Fenster wurde und keine Seite blieb (überholt, siehe «Einrichten als eigene Seite, aber im selben Modus»):** Als eigene
 Seite ersetzte es den Arbeitsbereich, und jeder Blick in die Verwaltung kostete
 den Ausschnitt, auf den man gerade schaute. Genau daraus entstand in v0.11.0 der
 Breite-0-Fehler beim Projektwechsel (siehe oben). Als `.dlg` über dem Plan
@@ -722,16 +754,12 @@ und blendet ihn im anderen aus.
 
 **Die Knöpfe sind dieselben Elemente, nur umgezogen — keine zweite Verdrahtung.**`#export`, `#import`, `#new-proj`, `#proj-menu`, `#add-gewerk`,
 `#theme-toggle` behalten ihre ids und ihre Handler aus `mount()`/Modulebene;
-sie stehen seit v0.12.0 im Fenster `#ein-dlg`, je Reiter eine `.ei-sec` mit
-`data-ein-tab`. Wer eine dieser ids programmatisch anklickt (Prüfwerkzeuge!),
-muss vorher `#rail-ein` klicken UND den Reiter, in dem der Knopf liegt
-(`[data-ein="baender"]` für `#add-gewerk`) — sonst ist er unsichtbar und der
-Playwright-Klick schlägt fehl. `tools/verify-edit.mjs` macht das vor.
+standen seit v0.12.0 im Fenster `#ein-dlg`; `#export`, `#import`, `#new-proj`, `#proj-menu` sind inzwischen Einträge des Projektmenüs (`#proj-knopf`), `#add-gewerk` liegt im Bereich `baender` der Einrichten-Seite. Wer eine dieser ids programmatisch anklickt (Prüfwerkzeuge!), geht über `tools/ui-helfer.mjs` (`einrichten(page, bereich)`, `projektMenue(page, id)`, `zumPlan(page)`) — sonst ist sie unsichtbar und der Playwright-Klick schlägt fehl.
 
 **Verwalten-Kästen lassen sich von außen öffnen.**`table.openVerwalten(opt,
 ankerEl)` und `table.openNeuFragen(opt, ankerEl, fertig)` rufen dieselben
-privaten Funktionen wie das Auswahlfeld in der Tabelle — das Einrichten-Fenster
-bekommt damit „Arten verwalten…", „Abschnitte verwalten…" und „Personal &
+privaten Funktionen wie das Auswahlfeld in der Tabelle — die Einrichten-Seite
+bekam damit „Arten verwalten…", „Abschnitte verwalten…" und „Personal &
 Maschinen verwalten…" GESCHENKT, ohne die Kasten-Logik (rename, sortieren,
 löschen, Fokus, Escape, Klick daneben) ein zweites Mal zu schreiben.
 
@@ -803,7 +831,8 @@ Die Regeln stehen in `CLAUDE.md`; hier steht, warum. Wo das Thema schon einen ei
 | Die Deckungslücke wird NUR gemeldet, wenn der Vorgang überhaupt eine Zuweisung dieser Art hat. | «Personal & Maschinen: Anzahlen statt Namen, Bereitstellung als Vorgang» |
 | Die Schiene links trägt den MODUS — und sonst nichts | «Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand» |
 | Der Tag wird über den Kalender-Knopf gewählt, und angeboten wird NUR, was im Plan steht | «Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand» |
-| Einrichten ist ein FENSTER über dem Plan, keine Seite | «Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand» |
+| Einrichten ist eine SEITE, aber ein MODUS derselben App, keine zweite HTML-Datei | «Einrichten als eigene Seite, aber im selben Modus» |
+| Der Plan wird beim Öffnen von Einrichten verborgen (`visibility`), nie `display:none` | «Einrichten als eigene Seite, aber im selben Modus» |
 | Die Tabelle bleibt EIN Modul | «Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand» |
 | Zwei gleich aussehende Segmentgruppen nebeneinander sind EINE Gruppe, egal was der Code meint. | «Der Abschnitt: Setup und Show sind zwei Abläufe DERSELBEN Bühne» |
 | Personal und Maschinen stehen in DERSELBEN Verwalten-Liste, nicht in zwei getrennten. | «Ansicht und Einrichten: zwei Bereiche, kein zweiter Zustand» |
@@ -822,7 +851,7 @@ auf «Monate» über einer Stundenachse, ein Soundcheck, den die Vorgabe auf
 19:40 setzte — eine Stunde vor den Act statt an den Nachmittag —, vierzehn
 Bautage in der Schiene, die «Showablauf» und «Einrichten» unter den Fensterrand
 schoben, und ein leerer grauer Kasten rechts neben den Reitern im
-Einrichten-Fenster. Für jeden gibt es jetzt eine Prüfung — der nächste Fehler
+Einrichten-Fenster (damals noch ein Fenster). Für jeden gibt es jetzt eine Prüfung — der nächste Fehler
 dieser Art hat aber noch keine.
 
 ### Neue Bausteine gehören in die `needed`-Liste in `tests/run.mjs`.
@@ -1279,7 +1308,7 @@ läuft über `askDialog({title, message, buttons})` (app.js, liefert den `value`
 des gewählten Knopfs, `null` bei Abbruch); eine Namenseingabe mitten im Tippen
 läuft über den schwebenden Kasten `tb-neuart` (`neuFragen` in table.js,
 exportiert als `table.openNeuFragen(opt, ankerEl, fertig)` für Aufrufer
-außerhalb der Tabelle — Panel, Einrichten-Fenster). `neuFragen` akzeptiert neben
+außerhalb der Tabelle — Panel, Einrichten-Seite). `neuFragen` akzeptiert neben
 `cmd` (Name landet als `label` obenauf) auch `buildCmd(wert, kompakt)`, wenn
 der Name woanders im Befehl gehört (`addGewerk` z. B. in `gewerk.name`).
 `grep -rn "window\.prompt\|[^.]prompt(\|confirm(\|alert(" js/*.js` muss leer

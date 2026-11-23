@@ -1,4 +1,4 @@
-// Screenshot der Einrichten-Seite in zwei Themes (dunkel/hell) — Sichtprüfung.
+// Screenshot der Einrichten-Seite in allen fünf Themes (dunkel, dazu studio hell) — Sichtprüfung. Aufruf: node tools/shot-einrichten.mjs → tools/shots/einrichten-*.png.
 import { firefox } from 'playwright-core';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,7 +20,7 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const BASE = 'http://127.0.0.1:' + server.address().port;
 const browser = await firefox.launch({ executablePath: mustFirefox() });
 try {
-  for (const [theme, scheme] of [['console', 'dark'], ['studio', 'light']]) {
+  for (const [theme, scheme] of [['console', 'dark'], ['blueprint', 'dark'], ['studio', 'dark'], ['board', 'dark'], ['callboard', 'dark'], ['studio', 'light']]) {
     const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: scheme, timezoneId: 'Europe/Berlin' });
     await planLaden(ctx, 'festival-mit-daten.json');
     const page = await ctx.newPage();

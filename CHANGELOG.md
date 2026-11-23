@@ -3,6 +3,18 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unveröffentlicht
+
+**Einrichten ist eine eigene Seite mit fünf Bereichen und führt nach «Neu» durch das erste Einrichten.**
+
+- **Eigene Seite statt Fenster:** Projekt, Phasen, Gewerke & Bühnen, Personal & Maschinen, Arten & Abschnitte mit Status ✓ ⚠ ○. Gewerke, Bühnen, Personal, Maschinen, Arten und Abschnitte sind direkt dort bearbeitbar; der Plan dahinter behält Ausschnitt und Zoom.
+- **Neue Projektangaben:** Adresse, Anfahrt, Kunde und Ansprechpartner (Name, Rolle, Telefon); alte Pläne öffnen unverändert.
+- **Zeitraum jederzeit änderbar:** Teile außerhalb warnen; «Zeitraum anpassen» übernimmt die Hülle mit einem ⌘Z. Mini-Zeitachse zeigt die Lage.
+- **Erstes Einrichten:** Nach «Neu» führt die Seite in fünf Schritten (Zurück/Weiter, «Fertig»).
+- **Projektmenü «📁 Projekt» in der Kopfzeile:** Neu, Projekte, Import, Export, Speicherort. Der Speicherort ist ein eigener Dialog.
+- **Tagesblätter:** Ort, Adresse und Ansprechpartner im Kopf (ohne Kunde und Anfahrt); der Titel schrumpft zuerst, nichts wird abgeschnitten.
+- **Kleinigkeiten:** Menüs (`.mn`) in Studio, Board und Blueprint gestaltet; Abhängigkeitslinien stören die Seite nicht mehr; Suchfeld auf schmalen Bildschirmen 40 px.
+
 ## 0.23.0 — 2026-11-23
 
 **«Kritisch» entfällt; stattdessen Puffer und Engpass. Die Achse spannt über den ganzen Plan.**

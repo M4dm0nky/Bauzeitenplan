@@ -3,6 +3,7 @@ paths:
   - "js/store.js"
   - "js/ebene.js"
   - "js/table.js"
+  - "js/listen-editor.js"
   - "tests/store.test.mjs"
 ---
 
@@ -15,3 +16,4 @@ paths:
 - Neue Art/Abschnitt entsteht im Auswahlfeld der Tabelle («+ Neue Art…»/«Neu»), an keinem zweiten Ort.
 - **`store.js` führt die eingebauten Arten DOPPELT;** `tests/store.test.mjs` vergleicht gegen `PUNKT_TYPEN` (doppelt nur mit Test).
 - **Eigene Abschnitte** (`project.abschnitte`, `abschnitte(state)`) FILTERN weiter nur nach Setup/Show; Sortierung nach frühestem Eintrag, leere hinten.
+- **Verwalten-Liste = `mountAuswahlListe` (`js/listen-editor.js`)**, eine Stelle für das schwebende «Verwalten» der Tabelle UND die eingebetteten Listen der Einrichten-Seite (Option `kind` filtert Personal/Maschinen; Sortieren schickt trotzdem ALLE ids an `reorderAuswahl`). Keine zweite Listenlogik.

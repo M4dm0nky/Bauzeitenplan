@@ -4,6 +4,7 @@ paths:
   - "js/conflicts.js"
   - "js/persistence.js"
   - "js/phasen.js"
+  - "js/einrichten-status.js"
   - "js/phasen-editor.js"
   - "js/schedule.js"
   - "tools/make-amk.mjs"
@@ -26,3 +27,4 @@ paths:
 - **Show-Tage:** JEDE Show-Phase ist genau EIN Show-Tag (`showTage(phases)` → `{phase, n}`, nach Start durchnummeriert), auch wenn sie über Mitternacht in den Folgetag läuft (Marco: «Fr 18:00–Sa 02:00» ist Show-Tag 1). Nie pro Kalendertag zählen. **«heute»** rechnet gegen die echte Uhr (`liveInfo().now`), nie gegen den Versatz.
 - **Import prüft nur id, Art und Spanne** — die Überlappungsregel gilt nur im Store (Altpläne mit geratener gleicher Art dürfen sich überlappen); Phasen ohne lesbare Zeiten entfallen in `migrate`, `deserialize` meldet das als `hinweis`.
 - **Neue Phasen-Farben** = Tokens `--ph-<art>`/`--ph-t` in ALLEN fünf Themes, drei Scopes (hell, `prefers-color-scheme: dark`, `[data-theme=dark]`); Schrift >= 4,5:1 prüft `tests/run.mjs` aus den Tokens.
+- **Projektfelder `adresse`, `anfahrt`, `kunde`, `kontakte` `[{id,name,rolle,tel}]`, `eingerichtet`** (Boolean) laufen durch Export, Import, Sync. `migrate`: fehlend → `''`/`[]`/`true` (alte Pläne gelten als eingerichtet). Schreiben nur über `setProjectField` (Feld-Whitelist `PROJEKT_FELDER`, Prüfung VOR der Änderung: Zeitzone, `kontakte` ganze Liste, `eingerichtet` boolesch). Status der Einrichten-Seite ist abgeleitet (`einrichtStatus`, `js/einrichten-status.js`, DOM-frei), nie gespeichert.

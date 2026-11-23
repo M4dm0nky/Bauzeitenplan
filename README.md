@@ -17,7 +17,7 @@ mit Lag), Meilensteine, Puffer/Engpass, Undo/Redo, Auto-Save, JSON-Export.
 
 **Dazugekommen (bis v0.12.1):** **Die Schiene links** — Bauzeitenplan und
 Showablauf sind zwei getrennte Modi mit je eigener Leiste, eigener Tabelle und
-eigenem Tageswähler, «Einrichten» als Fenster über dem Plan · **Personal & Maschinen** je
+eigenem Tageswähler, «Einrichten» als eigene Seite · **Personal & Maschinen** je
 Vorgang — eigene Bezeichnungen, Anzahl und Zeitfenster, dazu
 **Bereitstellungen** (ein Pool ohne Vorgangs-Funktion) und die Reiter
 **Personalbedarf**/**Maschinenbedarf** · Gewerke per Drag & Drop umsortieren · Gantt und
@@ -151,7 +151,7 @@ sonst drucken die Balken weiß.
 Rechner — und sie sind weg. Es gibt kein Backend und keine Anmeldung: der
 **JSON-Export ist die einzige Sicherung**. Nutze ihn.
 
-**Daten-Repo und zwei Tabs.** Ist ein Projekt im GitHub-Daten-Repo (Einrichten →
+**Daten-Repo und zwei Tabs.** Ist ein Projekt im GitHub-Daten-Repo (Projektmenü →
 Speicherort) nicht mehr vorhanden, fragt die App, bevor sie es lokal löscht: «Lokal
 löschen» oder «Behalten und neu hochladen». Ist das Repo selbst nicht erreichbar,
 wird nichts gelöscht. Öffnest du denselben Plan in zwei Tabs, fragt der andere Tab
@@ -214,16 +214,20 @@ bietet nur Tage an, an denen im Plan auch etwas steht — mit der Kalenderwoche
 daneben und einem Punkt am Tag, auf dem du gerade bist. Im Bauzeitenplan
 springt die Achse dorthin, im Showablauf wechselt der Showtag.
 
-Ganz unten das Zahnrad: **Einrichten** öffnet als Fenster über dem Plan, mit
-sechs Reitern — Projekt (anlegen/wechseln, Export/Import, Drucken, Hell/Dunkel),
-Phasen, Gewerke & Bühnen, **Personal & Maschinen**, **Arten & Abschnitte**,
-Speicherort. Der Plan
-bleibt dahinter stehen; „Fertig" gibt dir genau den Ausschnitt zurück, bei dem
-du warst. Die schnellen Wege bleiben daneben bestehen — eine Bezeichnung legst
-du weiter mit „+ Neu…" im Auswahlfeld an, mitten im Tippen; Einrichten ist der
-Weg zum Aufräumen danach.
+Ganz unten das Zahnrad: **Einrichten** ist eine eigene Seite mit fünf Bereichen —
+Projekt (Name, Ort, Adresse, Anfahrt, Kunde, Ansprechpartner, Zeitzone, Zeitraum),
+Phasen, Gewerke & Bühnen, **Personal & Maschinen**, **Arten & Abschnitte**. Jeder
+Bereich zeigt seinen Stand (✓ fertig, ⚠ Warnung, ○ offen). Passt ein Teil nicht
+mehr in den Zeitraum, warnt die Seite, und ein Knopf übernimmt die Hülle. Nach
+«Neu» führt dich die Seite einmal Schritt für Schritt durch (Zurück/Weiter,
+«Fertig»). Der Plan bleibt dahinter stehen; „Zum Plan" gibt dir genau den
+Ausschnitt zurück, bei dem du warst. Projekt anlegen/wechseln, Import/Export und
+den Speicherort findest du im Menü «📁 Projekt» in der Kopfzeile. Ort, Adresse und
+Ansprechpartner stehen auch im Kopf der Tagesblätter. Die schnellen Wege bleiben
+daneben bestehen — eine Bezeichnung legst du weiter mit „+ Neu…" im Auswahlfeld
+an, mitten im Tippen; Einrichten ist der Weg zum Aufräumen danach.
 
-**Plan verschieben:** Einrichten → Projekt → «Plan verschieben…». Der ganze Plan
+**Plan verschieben:** Einrichten → Projekt (Zeitraum) → «Plan verschieben…». Der ganze Plan
 (Vorgänge, Phasen, Rahmen) rutscht um Tage und Stunden:Minuten (`1:30`, `-0:30` oder reine Minuten wie `90`),
 negative Werte ziehen vor. Die Tage zählen über den Kalender, die Uhrzeit bleibt, auch über die Zeitumstellung.
 Eine Vorschau zeigt den neuen Aufbaubeginn; Grenzen sind 36 500 Tage und 10 080 Minuten.
@@ -416,7 +420,7 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | Arten und Abschnitte verwalten: umbenennen, sortieren, löschen |
 | ✅ | Personal & Maschinen je Vorgang, Bereitstellungen, Bedarfsraster nach Tag/Stunde |
 | ✅ | Zwei getrennte Modi: die Schiene links, je Modus nur seine eigenen Knöpfe |
-| ✅ | «Einrichten» als Fenster über dem Plan · Tageswahl nur über Tage, die es gibt |
+| ✅ | «Einrichten» als eigene Seite (fünf Bereiche, geführter Erststart) · Tageswahl nur über Tage, die es gibt |
 | → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen |
 | | Ansichten & Export: öffentlicher Link, PDF/ICS |
 | ❄️ | PocketBase, Login, Rollen — auf Eis, Stand im Branch `pocketbase-vorbereitung` |

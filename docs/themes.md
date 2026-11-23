@@ -153,8 +153,8 @@ Alles andere daran erbt oder braucht keine Farbe:
   Textgrößen und Trennlinien, und ein Theme, das sie ausließe, sähe etwas
   gröber aus — nicht kaputt. `rail-sp` (der Abstandhalter vor dem Zahnrad)
   ist reine Geometrie und steht nur in `base.css`.
-- Das **Einrichten-Fenster** trägt `dlg`/`dlg-box`, seine Reiterleiste `seg`,
-  die Bedarfs-Unterwahl ebenfalls `seg`. Kein Theme musste dafür eine Zeile
+- Die **Einrichten-Seite** (`#ein-seite`) trägt `seg` für ihre Bereichsleiste,
+  der Speicherort-Dialog `dlg`/`dlg-box`, die Bedarfs-Unterwahl ebenfalls `seg`. Kein Theme musste dafür eine Zeile
   dazulernen — dasselbe Vorgehen wie beim Versatz-Stepper.
 - Der **Kalender-Knopf** ist ein `btn`, seine Auswahl das vorhandene
   Kontextmenü `mn`. Auch hier: kein neuer Name.
