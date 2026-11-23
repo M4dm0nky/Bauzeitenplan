@@ -69,10 +69,10 @@
 }
 
 .pr-head { display: flex; align-items: baseline; gap: 8mm; padding-bottom: 2mm; border-bottom: .5mm solid var(--pr-ink); }
-.pr-head-t { font-size: 5mm; font-weight: 700; }
-.pr-head-a { font-size: 3.4mm; color: var(--pr-mute); flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pr-head-d { font-size: 5mm; font-weight: 600; margin-left: auto; }
-.pr-head-n { font-size: 3.2mm; color: var(--pr-mute); font-variant-numeric: tabular-nums; }
+.pr-head-t { font-size: 5mm; font-weight: 700; flex: 0 100 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }  /* schrumpft zuerst: die Angaben haben Vorrang */
+.pr-head-a { font-size: 3.4mm; color: var(--pr-mute); flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-head-d { flex: none; white-space: nowrap; font-size: 5mm; font-weight: 600; margin-left: auto; }
+.pr-head-n { flex: none; white-space: nowrap; font-size: 3.2mm; color: var(--pr-mute); font-variant-numeric: tabular-nums; }
 
 /* Zeitachse */
 .pr-axis { display: flex; height: 5mm; align-items: flex-end; }

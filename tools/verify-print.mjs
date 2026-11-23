@@ -352,9 +352,12 @@ console.log('\nPROJEKTANGABEN IM KOPF');
     const m = await import('/js/persistence.js');
     const pl = m.deserialize(orig).plan;
     if (mit) {
-      pl.project.adresse = 'Hauptstr. 1';
+      pl.project.venue = 'Theresienwiese';
+      pl.project.adresse = 'Bavariaring 1, 80336 München';
       pl.project.kunde = 'Kunde GmbH';
-      pl.project.kontakte = [{ id: 'k1', name: 'Ann', rolle: 'PL', tel: '0171' }];
+      pl.project.kontakte = [{ id: 'k1', name: 'Ann Beispiel', rolle: 'Produktionsleitung', tel: '0171 1234567' },
+        { id: 'k2', name: 'Bo Muster', rolle: 'Technik', tel: '0160 7654321' }];
+      if (mit === 'lang') pl.project.kontakte.push({ id: 'k3', name: 'Cornelia Langername-Beispielfrau', rolle: 'Sicherheitsbeauftragte', tel: '+49 89 1234567-890' });
     }
     m.createRepo(window.localStorage).save(pl);
   }, [KT_TEXT, mit]);
@@ -372,14 +375,11 @@ console.log('\nPROJEKTANGABEN IM KOPF');
     await check(name + ': Kopf zeigt Adresse und Ansprechpartner, Kunde nicht, gleiche Höhe', async () => {
       const h = await kopfHoehe(u);
       const a = await p.locator('.pr-sheet .pr-head-a').first().textContent();
-      if (!/Hauptstr\. 1/.test(a) || !/Ann · PL · 0171/.test(a)) return 'Kopf: ' + a;
+      if (!/Bavariaring 1/.test(a) || !/Ann Beispiel · Produktionsleitung · 0171 1234567/.test(a)) return 'Kopf: ' + a;
       if (/Kunde GmbH/.test(await p.locator('.pr-sheet .pr-head').first().textContent())) return 'Kunde steht im Kopf';
       if (Math.abs(h - ohne[u]) > 1) return 'Kopf ' + ohne[u] + ' -> ' + h + ' px';
-      const rand = await p.locator('.pr-sheet .pr-head').first().evaluate((hd) => {
-        const r = hd.getBoundingClientRect();
-        return [...hd.children].some((c) => c.getBoundingClientRect().right > r.right + 1);
-      });
-      if (rand) return 'Kopf läuft über den Blattrand';
+      const abg = await p.locator('.pr-sheet .pr-head-a').first().evaluate((x) => x.scrollWidth > x.clientWidth);
+      if (abg) return 'Angaben im Kopf abgeschnitten (scrollWidth > clientWidth)';
       await p.locator('.pr-sheet').first().screenshot({ path: join(here, 'shots', 'druck-kopf-' + (u.includes('show') ? 'ro' : 'bau') + '.png') });
       return true;
     });
