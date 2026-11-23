@@ -290,6 +290,19 @@ export function topoSort(taskIds, deps) {
 }
 
 /**
+ * Luft einer Verknüpfung in Minuten: wie viel Spielraum zwischen den GEPLANTEN
+ * Zeiten bleibt, bis die Verknüpfung (inkl. Wartezeit) greift. Negativ = die
+ * Verknüpfung wird im Plan verletzt (Überlappung).
+ */
+export function luftDerVerknuepfung(dep, von, nach) {
+  const lag = dep.lag ?? 0;
+  if (dep.type === 'SS') return toMin(nach.start) - (toMin(von.start) + lag);
+  if (dep.type === 'FF') return toMin(nach.end) - (toMin(von.end) + lag);
+  if (dep.type === 'SF') return toMin(nach.end) - (toMin(von.start) + lag);
+  return toMin(nach.start) - (toMin(von.end) + lag); // FS
+}
+
+/**
  * Rechnet ES/EF/LS/LF/Puffer und markiert den kritischen Pfad.
  *
  * Ankerregel: Vorgänge ohne Nachfolger werden auf ihrem geplanten Ende
@@ -305,7 +318,10 @@ export function topoSort(taskIds, deps) {
  * Isolierte Vorgänge (weder Vorgänger noch Nachfolger) können per Definition
  * keinen kritischen Pfad bilden und werden nicht markiert.
  *
- * @returns {Map<string, {es,ef,ls,lf,float,critical}>} mit .minFloat am Ergebnis
+ * Je Vorgang `engpass`: die Verknüpfung mit der kleinsten Luft (Gleichstand:
+ * erste in `deps`-Reihenfolge) oder null ohne terminierten Nachbarn.
+ *
+ * @returns {Map<string, {es,ef,ls,lf,float,critical,engpass}>} mit .minFloat am Ergebnis
  */
 export function computeSchedule(tasks, deps) {
   const byId = new Map(tasks.map((t) => [t.id, t]));
@@ -374,6 +390,20 @@ export function computeSchedule(tasks, deps) {
   const minFloat = basis.length ? Math.min(...basis.map((r) => r.float)) : 0;
   for (const r of R.values()) r.critical = !r.isolated && r.float <= minFloat;
   R.minFloat = minFloat;
+
+  // ── Engpass: knappste Verknüpfung je Vorgang ─────────────────────────────────
+  for (const [id, r] of R) {
+    let best = null;
+    const kand = [
+      ...predOf.get(id).map((d) => ({ d, nachbarId: d.from, richtung: 'vor' })),
+      ...succOf.get(id).map((d) => ({ d, nachbarId: d.to, richtung: 'nach' })),
+    ].sort((x, y) => valid.indexOf(x.d) - valid.indexOf(y.d));
+    for (const k of kand) {
+      const luft = luftDerVerknuepfung(k.d, byId.get(k.d.from), byId.get(k.d.to));
+      if (!best || luft < best.luft) best = { depId: k.d.id, nachbarId: k.nachbarId, richtung: k.richtung, typ: k.d.type, luft };
+    }
+    r.engpass = best;
+  }
 
   return R;
 }

@@ -1,4 +1,4 @@
-import { computeSchedule, topoSort, toMin, byStart, candidateGroups, suchTreffer, seriesRows, tagesScheiben, reachable, spanFehler, ohneTermin } from '../js/schedule.js';
+import { computeSchedule, topoSort, toMin, byStart, candidateGroups, suchTreffer, seriesRows, tagesScheiben, reachable, spanFehler, ohneTermin, luftDerVerknuepfung } from '../js/schedule.js';
 import assert from 'node:assert/strict';
 
 let pass = 0, fail = 0;
@@ -572,6 +572,42 @@ test('suchTreffer findet terminlose, nach den terminierten', () => {
   const l = [OT('o', 'Podest ohne'), { ...t('a', '2026-07-13T08:00', '2026-07-13T10:00'), gewerk: 'g1', title: 'Podest' }];
   const r = suchTreffer({ tasks: l, gewerke: g, query: 'podest' });
   assert.deepEqual(r.groups[0].items.map((v) => v.id), ['a', 'o']);
+});
+
+console.log('\nengpass');
+const D = (d, h, m = 0) => `2026-08-${String(d).padStart(2, '0')}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+test('luftDerVerknuepfung je Typ (lag 30)', () => {
+  const a = t('a', D(10, 8), D(10, 10)), b = t('b', D(10, 11), D(10, 12));
+  const L = (type) => luftDerVerknuepfung({ from: 'a', to: 'b', type, lag: 30 }, a, b);
+  assert.equal(L('FS'), 30);
+  assert.equal(L('SS'), 150);
+  assert.equal(L('FF'), 90);
+  assert.equal(L('SF'), 210);
+});
+test('engpass: Festwiese-Form, knappere Kante gewinnt', () => {
+  const tasks = [t('anl', D(9, 6), D(9, 14)), t('s1', D(10, 9), D(10, 18)), t('s2', D(11, 9), D(11, 18))];
+  const deps = [{ from: 'anl', to: 's1', type: 'FS', lag: 0 }, { from: 's1', to: 's2', type: 'FS', lag: 0 }];
+  const R = computeSchedule(tasks, deps);
+  const e = R.get('s1').engpass;
+  assert.equal(e.nachbarId, 's2'); assert.equal(e.richtung, 'nach'); assert.equal(e.typ, 'FS'); assert.equal(e.luft, 900);
+  assert.equal(R.get('s2').engpass.luft, 900); assert.equal(R.get('s2').engpass.richtung, 'vor');
+});
+test('engpass: depId kommt aus dep.id', () => {
+  const R = computeSchedule([t('a', D(10, 8), D(10, 10)), t('b', D(10, 11), D(10, 12))], [{ id: 'k1', from: 'a', to: 'b', type: 'FS', lag: 0 }]);
+  assert.equal(R.get('a').engpass.depId, 'k1');
+});
+test('engpass: Überlappung ergibt negative Luft', () => {
+  const R = computeSchedule([t('a', D(10, 8), D(10, 10)), t('b', D(10, 9), D(10, 11))], [{ from: 'a', to: 'b', type: 'FS', lag: 0 }]);
+  assert.equal(R.get('a').engpass.luft, -60);
+});
+test('engpass: Meilenstein direkt nach Vorgänger hat Luft 0', () => {
+  const R = computeSchedule([t('a', D(10, 8), D(10, 10)), t('m', D(10, 10), D(10, 10))], [{ from: 'a', to: 'm', type: 'FS', lag: 0 }]);
+  assert.equal(R.get('m').engpass.luft, 0);
+});
+test('engpass: unverknüpft oder nur terminloser Nachbar ergibt null', () => {
+  const R = computeSchedule([t('a', D(10, 8), D(10, 10)), t('x', null, null), t('z', D(10, 8), D(10, 9))], [{ from: 'a', to: 'x', type: 'FS', lag: 0 }]);
+  assert.equal(R.get('a').engpass, null);
+  assert.equal(R.get('z').engpass, null);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
