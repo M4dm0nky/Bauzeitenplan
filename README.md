@@ -13,7 +13,7 @@ der Load-In läuft stundengenau.
 
 **Benutzbar.** Projekte anlegen (Vorlagen), befüllen, bearbeiten — alles im
 Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
-mit Lag), Meilensteine, kritischer Pfad, Undo/Redo, Auto-Save, JSON-Export.
+mit Lag), Meilensteine, Puffer/Engpass, Undo/Redo, Auto-Save, JSON-Export.
 
 **Dazugekommen (bis v0.12.1):** **Die Schiene links** — Bauzeitenplan und
 Showablauf sind zwei getrennte Modi mit je eigener Leiste, eigener Tabelle und
@@ -22,8 +22,8 @@ Vorgang — eigene Bezeichnungen, Anzahl und Zeitfenster, dazu
 **Bereitstellungen** (ein Pool ohne Vorgangs-Funktion) und die Reiter
 **Personalbedarf**/**Maschinenbedarf** · Gewerke per Drag & Drop umsortieren · Gantt und
 Tabelle in gleicher Reihenfolge (nach Startzeit) · **Untervorgänge** (einklappbar,
-Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für kritische
-Vorgänge und Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
+Elternvorgang als Hülle) · **Handy/Tablet-tauglich** · **Prüf-Liste** für
+Konflikte (sehen, zeigen, lösen oder abhaken) · **Verknüpfungs-Suche**
 statt endlosem Dropdown · Hell/Dunkel-Umschalter im Kopf · **Tagesblätter zum
 Drucken** · **Showablauf-Ebene** (siehe unten) · **Verknüpfen per Ziehen** im Gantt ·
 **Live-Versatz** («wir hängen 5 Minuten hinterher») · **eigene Arten für
@@ -265,11 +265,11 @@ entfernt sie, `⌘Z` holt sie zurück.
 nicht fest. Im Panel gibt es dazu ein Häkchen «Dauer geschätzt» zum Abhaken,
 sobald die echte Zahl da ist.
 
-**Konflikte & kritischer Pfad:** Verletzt ein Vorgang eine Abhängigkeit, wird er
-rot markiert und sagt im Klartext, woran es liegt. Die **„kritisch"-Kachel** im Kopf
-und der **Konflikt-Knopf** öffnen eine **Prüf-Liste**: je Eintrag **Zeigen** (springt
-hin), bei Konflikten **Lösen** (nur diesen auf den frühestmöglichen Termin) oder
-**Ist ok** (abhaken), bei kritischen **Gesehen**. „Alle auflösen" bleibt als
+**Konflikte & Puffer:** Verletzt ein Vorgang eine Abhängigkeit (etwa durch Überlappung),
+wird er rot markiert und sagt im Klartext, woran es liegt. Der **Konflikt-Knopf** öffnet
+eine **Prüf-Liste**: je Eintrag **Zeigen** (springt hin), **Lösen** (nur diesen auf den
+frühestmöglichen Termin) oder **Ist ok** (abhaken). Mouseover und Seitenpanel nennen
+den **Puffer** und den **Engpass** (knappste Verknüpfung, z. B. «15 h Luft bis Steelday 2»). „Alle auflösen" bleibt als
 Abkürzung. Nichts verschiebt sich hinter deinem Rücken; ein `⌘Z` nimmt jede
 Auflösung komplett zurück.
 
@@ -347,7 +347,7 @@ js/
   store.js              Zustand + Befehle + Undo/Redo — DOM-frei
   gantt.js              Render-Engine (DOM, Zoom, Pfeile, Tooltip, Minimap)
   table.js              Tabellen-Editor
-  schedule.js           Terminrechnung: CPM, Topo-Sort, kritischer Pfad — DOM-frei
+  schedule.js           Terminrechnung: CPM, Topo-Sort, Puffer + Engpass — DOM-frei
   conflicts.js          Konflikte, Dauer-Kurzform, Uhrzeit-Eingabe — DOM-frei
   timeaxis.js           Zeit ↔ Pixel, Zoomstufen, Ticks, Kalenderwochen — DOM-frei
   templates.js          Vier Vorlagen (Festival, Tour, Corporate, Messe) + leerer Plan
@@ -399,12 +399,12 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 
 | | |
 |---|---|
-| ✅ | Darstellung: Gantt, vier Zoomstufen, Abhängigkeiten, kritischer Pfad |
+| ✅ | Darstellung: Gantt, vier Zoomstufen, Abhängigkeiten, Puffer/Engpass |
 | ✅ | Befüllen & Bearbeiten: Vorlagen, Tabelle, Konflikte, Undo, Speichern |
 | ✅ | Live-Modus: Zeitlinie läuft, Verzug, laufende Vorgänge · Panel · Rechtsklick-Menü |
 | ✅ | Gewerke per Drag & Drop · gleiche Reihenfolge Gantt = Tabelle (nach Start) |
 | ✅ | Untervorgänge (Eltern = Hülle, einklappbar) · Handy/Tablet-tauglich |
-| ✅ | Prüf-Liste (kritisch & Konflikte sehen/zeigen/abhaken) · Verknüpfungs-Suche |
+| ✅ | Prüf-Liste (Konflikte sehen/zeigen/abhaken) · Verknüpfungs-Suche |
 | ✅ | Tagesblätter zum Drucken (ein A3 quer je Tag) |
 | ✅ | Showablauf: Bühnen, Anforderungen/Material, Live-Kopfzeile, Running-Order-Blatt |
 | ✅ | Setup und Show als eigene Ansichten · Soundchecks als Zeiteinträge mit Balken |

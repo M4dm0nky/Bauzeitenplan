@@ -27,3 +27,5 @@ paths:
 - **Touch: erst 300 ms halten, dann ziehen**; vorher Bewegung > 8 px = Wischen; Halten ohne Bewegung öffnet das Balkenmenü (natives `contextmenu` ist im Zug unterdrückt). Alt+←/→ verschiebt, Alt+Shift+←/→ ändert das Ende (je ein Befehl).
 - **Zeitraster rastert die VERSCHIEBUNG, nicht die Lage** (`gezogen`): Uhrzeit bleibt; ab 1440 ganze Kalendertage über `new Date(y,m,d+n,hh,mm)`.
 - **Zug robust:** Capture auf `root`, Knoten bei Neuaufbau frisch holen; Maus ohne Taste beendet den Zug; fremde Pointer ignorieren; `touchmove`-Blocker einmal dauerhaft (`passive:false`).
+- **Die Achse spannt über `planSpanne(state)`** (timeaxis.js, DOM-frei): Projektzeitraum ∪ alle datierten Vorgänge ∪ alle Phasen; Gantt (Achse, Wochenendbänder), Bedarf (Tagesraster) und Druck (Rückfall) nutzen dieselbe Funktion, nie `project.start..end` allein.
+- **Mouseover und Panel zeigen «Puffer» und «Engpass»** aus `computeSchedule` (`engpass`, `fmtPuffer`, `kettenEnde`, `engpassText`); «kritisch» gibt es nicht mehr (Struktursperre in `tests/run.mjs`).

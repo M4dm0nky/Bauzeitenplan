@@ -3,6 +3,14 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unveröffentlicht
+
+**«Kritisch» entfällt; stattdessen Puffer und Engpass. Die Achse spannt über den ganzen Plan.**
+
+- **Kein «kritisch» mehr:** Kachel, KRIT-Marke, rote Pfeile, Legende, «Kritisch»-Teil der Prüf-Liste und «Gesehen» sind weg (Anlass: Plan «Festwiese 2027», Steelday 1/2 standen rot bei 15 h Luft). Überlappung verknüpfter Vorgänge bleibt ein Konflikt. Alte Pläne laden weiter, `ackCrit` wird verworfen.
+- **Puffer und Engpass:** Mouseover und Seitenpanel zeigen den echten Puffer («— Kettenende» am Ende einer Kette) und die knappste Verknüpfung, z. B. «15 h Luft bis Steelday 2 (Ende → Start)» oder «überlappt X um 2 h».
+- **Achse über den ganzen Plan (`planSpanne`):** Projektzeitraum, alle datierten Vorgänge und alle Phasen; Phasen nach dem Projektende werden nicht mehr abgeschnitten. Gilt auch für Wochenendbänder, Bedarfsraster und den Druck-Rückfall.
+
 ## 0.22.0 — 2026-11-22
 
 **Die App holt keinen Plan mehr von selbst: Pläne kommen nur über Neu/Vorlage, Import oder Sync.**

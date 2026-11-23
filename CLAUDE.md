@@ -80,8 +80,8 @@ Details je Thema in `.claude/rules/` (Frontmatter `paths:`); dort stehen die Reg
 | | |
 |---|---|
 | `js/gantt.js` | Render-Engine: DOM, Zoom, Pfeile |
-| `js/schedule.js` | CPM, Topo-Sort, kritischer Pfad — **DOM-frei** |
-| `js/timeaxis.js` | Zeit ↔ Pixel, Zoomstufen, Ticks, KW — **DOM-frei** |
+| `js/schedule.js` | CPM, Topo-Sort, Puffer + Engpass (`engpass`, `luftDerVerknuepfung`) — **DOM-frei** |
+| `js/timeaxis.js` | Zeit ↔ Pixel, Zoomstufen, Ticks, KW, `planSpanne` — **DOM-frei** |
 | `js/app.js` | Verdrahtung; bewusst dünn |
 | `js/store.js` | Zustand + Befehle + Undo — **DOM-frei** |
 | `js/conflicts.js` | Konflikte + Dauer-Kurzform — **DOM-frei** |
@@ -99,7 +99,7 @@ Details je Thema in `.claude/rules/` (Frontmatter `paths:`); dort stehen die Reg
 | `js/rail.js` | Die Schiene (Modus) |
 | `js/sync.js` | GitHub-Contents-Client + `abgleich()` — **DOM-frei** |
 
-Warum was so ist: `docs/entscheidungen.md` (auch kritischer Pfad: verankerte Senken fallen aus dem minFloat).
+Warum was so ist: `docs/entscheidungen.md` (auch «Kritisch entfiel»: Puffer + Engpass statt kritischer Pfad).
 
 ## Fahrplan
 

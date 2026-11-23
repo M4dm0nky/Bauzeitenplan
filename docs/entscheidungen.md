@@ -9,7 +9,7 @@ Warum Dinge so sind, wie sie sind. Nur das, was sich aus dem Code nicht ablesen 
 | Zeitachse | Vier Zoomstufen: Monate / Wochen / Tage / Stunden | Der Zeitraum spannt Monate, der Load-In läuft stundengenau. Ein Raster kann beides nicht. |
 | Backend | **Keines.** Reine statische Auslieferung, localStorage + JSON-Export | Eine vorbereitete PocketBase-Schicht wurde in v0.8.0 aus `main` entfernt (siehe unten). Kommt der Bedarf zurück, wird es eine **eigene** Instanz, keine Kopplung an Crewplaner: übernommen werden Muster und Erfahrungen, nicht die Daten. |
 | Gantt-Zeilen | Zwei Ebenen: Band (aufklappbar) → Vorgänge | Entspricht dem klassischen Bauzeitenplan. Das Band ist je nach Plan-Ebene ein Gewerk oder eine Bühne. |
-| Abhängigkeiten | Von Anfang an, alle vier Typen + kritischer Pfad | — |
+| Abhängigkeiten | Von Anfang an, alle vier Typen + Puffer/Engpass (kritischer Pfad entfiel 2026-11-23) | — |
 | Build-Step | Keiner. Native ES-Module. | Konsistent zu Crewplaner und Personalplan. |
 
 ## Zoomstufen sind nach Sichtbarkeit bemessen, nicht nach runden Zahlen
@@ -32,25 +32,24 @@ Seit v0.1.1 zieht der **„Tage"-Knopf einen einzelnen Kalendertag über die vol
 Breite auf** (`fitDay`, linksbündig auf 00:00) statt fixer px/min — die 0,25 oben ist
 der historische Ausgangswert, nicht mehr das aktuelle Verhalten der Tagesstufe.
 
-## Der kritische Pfad braucht einen echten Zielmeilenstein
+## Kritisch entfiel (2026-11-23)
 
-Die naive Ankerregel — „Vorgänge ohne Nachfolger enden an ihrem geplanten Termin" —
-macht **jede Kettenendstelle zwangsläufig kritisch**. Ergebnis war: 27 von 39
-Vorgängen markiert, also nutzlos.
+Der Begriff «kritisch» (CPM-Puffer <= kleinster Puffer, Kachel, KRIT-Marke, rote Pfeile)
+ist gestrichen. Anlass: Plan «Festwiese 2027» — Steelday 1 und 2 standen rot, obwohl
+zwischen ihnen 15 h Luft lagen. Die Zahl sagte nichts Brauchbares: der kleinste Puffer
+im Netz ist relativ, nicht «gefährlich», und die frühere Sonderregel (verankerte Senken
+aus dem minFloat) war nur Flickwerk dafür.
 
-Lösung, zweiteilig:
-
-1. Ein Zielmeilenstein (`doors`), auf den alle Gewerke münden. Der Abstand zum
-   eigenen Ende ist der Puffer des Gewerks.
-2. `critical = float <= minFloat`, wobei **verankerte Senken aus dem minFloat
-   herausfallen**. Sonst zöge allein der Zielmeilenstein (Puffer 0 per Definition)
-   den minFloat auf null und kein Vorgänger wäre je kritisch.
-
-Ergebnis: eine saubere Kette Bühne → Rigging → Ton/Video/Pyro. Licht hat 22 h Puffer,
-die Genehmigungen Wochen. Bei einem straff durchgeplanten Netz ist minFloat 0 und die
-Regel entspricht der klassischen CPM.
-
-Regressionstests dafür stehen in `tests/schedule.test.mjs`.
+- **Überlappung verknüpfter Vorgänge bleibt ein Konflikt** (`findConflicts`), mit
+  Lösen/Abhaken. Das ist die einzige Warnung.
+- **Stattdessen Information:** `computeSchedule` liefert je Vorgang den `engpass`
+  (knappste Verknüpfung: `depId, nachbarId, richtung, typ, luft`; `luftDerVerknuepfung`).
+  Mouseover und Panel zeigen «Puffer» (echte Zahl, `fmtPuffer`; «— Kettenende» bei
+  Vorgang mit Vorgänger, aber ohne Nachfolger, `kettenEnde`) und «Engpass»
+  (`engpassText`, z. B. «15 h Luft bis Steelday 2 (Ende → Start)» oder «überlappt X um 2 h»).
+- **Weg:** `critical`/`minFloat`, `gantt.criticals()`, Kachel, KRIT, Fußzeilen-Legende,
+  «Kritisch»-Teil der Prüf-Liste, `ackCrit` (alte Pläne laden, das Feld fällt weg).
+  Eine Struktursperre in `tests/run.mjs` hält die Namen aus `js/` und den Themes heraus.
 
 ## Gewerk-Farben sind gerechnet
 
@@ -81,7 +80,7 @@ Rigging (`#1baf7a`), Licht (`#eda100`) und Ton (`#e87ba4`) liegen auf hellem Gru
 
 - **jeder Balken trägt eine sichtbare Beschriftung** (`gantt.js` → `bz-bar-t`),
 - die Legende trägt Namen, nicht nur Farbpunkte,
-- der kritische Pfad ist zusätzlich durch das `KRIT`-Kürzel markiert, nicht nur rot.
+- Konflikte sind zusätzlich durch ihre Marke gekennzeichnet, nicht nur rot (das frühere `KRIT`-Kürzel entfiel mit «kritisch»).
 
 Wer die Balkenbeschriftung entfernt, bricht die Barrierefreiheit.
 
@@ -164,7 +163,7 @@ wird tageweise gedruckt, deshalb steht dieselbe Tätigkeit mehrfach in der Quell
 das sind keine verschiedenen Vorgänge. 353 Vorgänge ergeben **153 Zeilen**
 (Zeilenzahl ohne Bündelung: siehe oben).
 Überlappen sich zwei Termine einer Serie, bekommen sie **Spuren** (`--lane`,
-Zeilenhöhe `rowH × lanes`) — sonst lägen sie übereinander. Marken (Konflikt, KRIT)
+Zeilenhöhe `rowH × lanes`) — sonst lägen sie übereinander. Marken (Konflikt)
 gelten für die Zeile als Ganzes, Umbenennen benennt die ganze Serie um. **Die
 Tabelle bleibt flach**: sie ist der Editor, dort gehört jeder Termin einzeln
 bearbeitbar. Beide Ansichten sortieren weiter über `byStart`.
@@ -1185,9 +1184,9 @@ DENSELBEN Tag gereicht, sonst zeigt derselbe Plan zwei verschiedene Tage.
 
 `gantt.stats()` meldet Vorgänge,
 Bänder, laufend und Crew aus der sichtbaren Ebene — sonst stünden 353 Vorgänge über
-einem Blatt mit 17 Zeilen. Kritisch und Konflikte bleiben planweit: sie sind Aussagen
+einem Blatt mit 17 Zeilen. Konflikte bleiben planweit: sie sind Aussagen
 über den Plan, nicht über den Ausschnitt, und müssen zur Prüf-Liste passen, die über
-`conflicts()`/`criticals()` ebenfalls alles zeigt. Zwei Zähler nebeneinander wären
+`conflicts()` ebenfalls alles zeigt. Zwei Zähler nebeneinander wären
 genau der Fehler, den die Eine-Quelle-Regel verbietet.
 
 ### Kein Typ steht doppelt
@@ -1239,13 +1238,12 @@ wird GEWICHTET gerechnet (Umbauzeilen zählen 0,62), sonst bleibt ein Viertel le
 
 ### Abhaken ist eine menschliche Aussage über eine gerechnete Warnung — persistiert, signaturgebunden.
 
-`ackCrit` (bool) nimmt einen kritischen Vorgang aus der
-kritisch-Zahl; `ackConflictMin` (Minuten) akzeptiert eine Konfliktgröße. `findConflicts`
+`ackConflictMin` (Minuten) akzeptiert eine Konfliktgröße (`ackCrit` entfiel mit «kritisch», alte Pläne laden, das Feld fällt weg). `findConflicts`
 überspringt den Konflikt nur, solange `shortBy <= ackConflictMin + EPS` — wird er
 GRÖSSER, meldet er sich wieder (kein stilles Wegdrücken). Läuft über `setTaskField`
 (Undo, Persistenz). **Eine Quelle:** Zählung, Prüf-Liste und `resolveConflictsCmd`
-lesen alle `findConflicts` — nie einen zweiten Zähler danebenstellen. „Kritisch" bleibt
-Information (kein automatisches Verschieben), nur die Sichtbarkeit wird abhakbar.
+lesen alle `findConflicts` — nie einen zweiten Zähler danebenstellen. Nichts verschiebt
+sich automatisch, nur die Sichtbarkeit wird abhakbar.
 
 ### `bz-bereit` (die Kontur der Bereitstellung) braucht KEINE Theme-Anpassung.
 
