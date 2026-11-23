@@ -11,8 +11,8 @@ import { entwurfBinden } from './entwurf.js';
 import { toMin, toDate, byStart, ohneTermin } from './schedule.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { el, toInput, STATUS } from './dom.js';
-import { sichtGewerke, punktTypen, abschnitte, abschnittLabel, nachSort, amTag, imAbschnitt } from './ebene.js';
-import { benutztVon } from './store.js';
+import { sichtGewerke, punktTypen, abschnitte, abschnittLabel, amTag, imAbschnitt } from './ebene.js';
+import { mountAuswahlListe } from './listen-editor.js';
 import { ressourcen, resKind } from './resources.js';
 import { aufbauPhase } from './phasen.js';
 
@@ -793,76 +793,17 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     window.addEventListener('keydown', aufTaste, true);
     document.addEventListener('pointerdown', aussen, true);
 
-    const zeichne = () => {
-      // In DERSELBEN Reihenfolge wie das Auswahlfeld: `reorderAuswahl` setzt nur
-      // `sort`, es dreht das Array nicht um. Ohne das Sortieren hier bliebe die
-      // Liste nach einem Klick auf ↑ sichtbar unverändert — und man klickte
-      // weiter, bis die Reihenfolge irgendwo landete.
-      const eigene = nachSort(store.state.project[opt.liste]);
-      box.replaceChildren();
-      box.append(el('div', 'tb-neuart-h', opt.titel));
-
-      if (!eigene.length) {
-        box.append(el('div', 'tb-verw-leer', 'Noch nichts Eigenes angelegt.'));
-      }
-      for (const [i, x] of eigene.entries()) {
-        const zeile = el('div', 'tb-verw-z');
-
-        const nam = el('input', 'tb-verw-n');
-        nam.value = x.label;
-        nam.setAttribute('aria-label', 'Name');
-        nam.onchange = () => {
-          const r = send({ type: 'setAuswahlLabel', liste: opt.liste, id: x.id, label: nam.value });
-          zeichne();                       // auch bei Ablehnung: zurück auf den echten Stand
-          if (r && r.ok === false) nam.focus();
-        };
-
-        const hoch = el('button', 'tb-verw-b', '↑');
-        hoch.title = 'Nach oben';
-        hoch.disabled = i === 0;
-        const runter = el('button', 'tb-verw-b', '↓');
-        runter.title = 'Nach unten';
-        runter.disabled = i === eigene.length - 1;
-        const tausche = (j) => {
-          const ids = eigene.map((e) => e.id);
-          [ids[i], ids[j]] = [ids[j], ids[i]];
-          send({ type: 'reorderAuswahl', liste: opt.liste, ids });
-          zeichne();
-        };
-        hoch.onclick = () => tausche(i - 1);
-        runter.onclick = () => tausche(i + 1);
-
-        // Wie viele hängen dran? Der STORE zählt — er weiß, welches Feld am
-        // Vorgang auf diese Liste zeigt. Wüsste die Verwaltung es auch, wären es
-        // zwei Wahrheiten, und bei einer dritten Liste vergisst man eine davon.
-        const benutzt = benutztVon(store.state, opt.liste, x.id);
-        const weg = el('button', 'tb-verw-b tb-verw-x', '×');
-        if (benutzt) {
-          weg.disabled = true;
-          weg.title = `Wird von ${benutzt} ${benutzt === 1 ? 'Zeiteintrag' : 'Zeiteinträgen'} benutzt`;
-        } else {
-          weg.title = 'Löschen';
-          weg.onclick = () => { send({ type: 'removeAuswahl', liste: opt.liste, id: x.id }); zeichne(); };
-        }
-
-        // Ressourcen mischen Personal und Maschinen in EINER Liste (Sortieren
-        // ist geteilt über die ganze Liste — reorderAuswahl verlangt ALLE ids,
-        // eine Ebene tiefer als «nur Personal» ginge das nicht). Ein Kürzel
-        // sagt wenigstens, was man vor sich hat.
-        if (x.kind) zeile.append(el('span', 'tb-verw-kind', x.kind === 'maschine' ? '⚙' : '👤'));
-        zeile.append(nam, hoch, runter, weg);
-        box.append(zeile);
-      }
-
-      const fertig = el('button', 'btn btn-p', 'Fertig');
-      fertig.onclick = zu;
-      const reihe = el('div', 'tb-neuart-a');
-      reihe.append(fertig);
-      box.append(reihe);
-      platziere(box, ankerRect);
-    };
-
-    zeichne();
+    box.append(el('div', 'tb-neuart-h', opt.titel));
+    const inhalt = el('div', 'tb-verw-liste');
+    const fertig = el('button', 'btn btn-p', 'Fertig');
+    fertig.onclick = zu;
+    const reihe = el('div', 'tb-neuart-a');
+    reihe.append(fertig);
+    box.append(inhalt, reihe);
+    mountAuswahlListe(inhalt, {
+      store, send, liste: opt.liste, leerText: 'Noch nichts Eigenes angelegt.',
+      nachZeichnen: () => platziere(box, ankerRect),
+    });
   }
 
   // ── Ressourcen-Zelle ────────────────────────────────────────────────────────

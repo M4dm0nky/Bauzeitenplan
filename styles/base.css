@@ -700,6 +700,7 @@ body { margin: 0; }
 /* Verwalten: je Zeile Name, ↑↓ und ×. Die Knöpfe sind quadratisch und
    fingergroß — auf dem Tablet steht man sonst zwischen zwei Zielen. */
 .tb-verw { min-width: 300px; }
+.tb-verw-liste { display: flex; flex-direction: column; gap: 8px; }
 .tb-verw-z { display: flex; align-items: center; gap: 4px; }
 .tb-verw-kind { flex: none; }
 .tb-verw-n { flex: 1; min-width: 0; padding: 4px 6px; font: inherit; }

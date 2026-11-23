@@ -41,6 +41,7 @@ const HUELLE = [
   'js/ebene.js',
   'js/gantt.js',
   'js/inspector.js',
+  'js/listen-editor.js',
   'js/live.js',
   'js/menu.js',
   'js/palette.js',

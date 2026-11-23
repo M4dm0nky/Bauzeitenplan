@@ -2876,6 +2876,37 @@ console.log('\nZEITUMSTELLUNG');
   });
 }
 
+console.log('\nAUSWAHLLISTE (listen-editor.js)');
+await check('Personal-Liste getrennt sortieren: ↑ tauscht nur mit Personal, Maschinen bleiben stehen', async () => {
+  await page.goto(BASE + '/index.html?plan=leer&ansicht=bau');
+  await page.waitForSelector('.bz-t-major', { timeout: 20000 });
+  const r = await page.evaluate(async () => {
+    const pers = await import('/js/persistence.js');
+    const { createStore } = await import('/js/store.js');
+    const { mountAuswahlListe } = await import('/js/listen-editor.js');
+    const repo = pers.createRepo(window.localStorage);
+    const store = createStore(repo.load(repo.getActive()));
+    const ids = {};
+    for (const [k, label, kind] of [['p1', 'P1', 'personal'], ['m1', 'M1', 'maschine'], ['p2', 'P2', 'personal']]) {
+      ids[k] = store.apply({ type: 'addRessource', label, kind }).id;
+    }
+    const host = document.createElement('div');
+    host.id = 'le-test';
+    document.body.append(host);
+    const liste = mountAuswahlListe(host, { store, send: (c) => store.apply(c), liste: 'ressourcen', kind: 'personal', leerText: 'leer' });
+    const namen = () => [...host.querySelectorAll('.tb-verw-n')].map((n) => n.value);
+    const vorher = namen();
+    host.querySelectorAll('.tb-verw-z')[1].querySelectorAll('.tb-verw-b')[0].click();   // P2 ↑
+    const sortiert = [...store.state.project.ressourcen].sort((a, b) => (a.sort ?? 1e9) - (b.sort ?? 1e9)).map((x) => x.label);
+    const nachher = namen();
+    liste.refresh();
+    host.remove();
+    return { vorher, nachher, sortiert };
+  });
+  const ok = r.vorher.join() === 'P1,P2' && r.nachher.join() === 'P2,P1' && r.sortiert.join() === 'P2,M1,P1';
+  return ok ? true : JSON.stringify(r);
+});
+
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 
