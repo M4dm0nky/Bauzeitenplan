@@ -1620,12 +1620,60 @@ test('Bereitstellung lehnt setResStatus ab', () => {
   assert.equal(r.ok, false);
   assert.ok(JSON.stringify(r).includes('Eine Bereitstellung hat keinen Status.'));
 });
+test('Untervorgang verschieben: eigener Status fällt zurück, Geschwister bleibt', () => {
+  const sd = seed();
+  sd.tasks = [
+    { id: 'p', gewerk: 'buehne', title: 'Sammel', start: '2026-07-13T08:00', end: '2026-07-13T16:00', milestone: false, progress: 0, status: 'geplant' },
+    { id: 'k1', gewerk: 'buehne', parent: 'p', title: 'K1', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant',
+      res: [{ rid: 'p-runner', n: 1, von: null, bis: null, status: 'bestaetigt', bestaetigtAm: AM }] },
+    { id: 'k2', gewerk: 'buehne', parent: 'p', title: 'K2', start: '2026-07-13T12:00', end: '2026-07-13T16:00', milestone: false, progress: 0, status: 'geplant',
+      res: [{ rid: 'p-runner', n: 1, von: null, bis: null, status: 'bestaetigt', bestaetigtAm: AM }] },
+  ];
+  sd.deps = [];
+  const s = createStore(sd);
+  assert.equal(s.apply({ type: 'moveTask', id: 'k1', start: '2026-07-13T07:00', end: '2026-07-13T11:00' }).ok, true);
+  assert.equal('status' in taskById(s, 'k1').res[0], false);
+  assert.equal(taskById(s, 'k2').res[0].status, 'bestaetigt');
+});
+test('Sammelvorgang: ändert sich die Hülle, fällt ein Status am Elternvorgang zurück (reflowParents)', () => {
+  const sd = seed();
+  sd.tasks = [
+    { id: 'p', gewerk: 'buehne', title: 'Sammel', start: '2026-07-13T08:00', end: '2026-07-13T16:00', milestone: false, progress: 0, status: 'geplant',
+      res: [{ rid: 'p-runner', n: 1, von: null, bis: null, status: 'bestaetigt', bestaetigtAm: AM }] },
+    { id: 'k1', gewerk: 'buehne', parent: 'p', title: 'K1', start: '2026-07-13T08:00', end: '2026-07-13T12:00', milestone: false, progress: 0, status: 'geplant' },
+    { id: 'k2', gewerk: 'buehne', parent: 'p', title: 'K2', start: '2026-07-13T12:00', end: '2026-07-13T16:00', milestone: false, progress: 0, status: 'geplant' },
+  ];
+  sd.deps = [];
+  const s = createStore(sd);
+  // Hülle bleibt gleich (K1 wandert innerhalb): Status bleibt.
+  s.apply({ type: 'moveTask', id: 'k1', start: '2026-07-13T08:00', end: '2026-07-13T11:00' });
+  assert.equal(taskById(s, 'p').res[0].status, 'bestaetigt');
+  // Hülle ändert sich (K2 endet später): Status fällt zurück.
+  s.apply({ type: 'moveTask', id: 'k2', start: '2026-07-13T12:00', end: '2026-07-13T18:00' });
+  assert.equal(taskById(s, 'p').end, '2026-07-13T18:00');
+  assert.equal('status' in taskById(s, 'p').res[0], false);
+});
+test('setTaskRes: value ohne von/bis-Felder behält den Status (undefined = null)', () => {
+  const s = mitRes();
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM });
+  assert.equal(s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: { rid: 'p-stagehand', n: 4 } }).ok, true);
+  assert.equal(taskById(s, 'a').res[0].status, 'bestaetigt');
+});
+test('setResStatus: Index außerhalb / unbekannter Vorgang werden abgelehnt, nichts bleibt', () => {
+  const s = mitRes(); s.markSaved();
+  const u = s.canUndo;
+  assert.equal(s.apply({ type: 'setResStatus', id: 'a', index: 7, status: 'bestaetigt' }).ok, false);
+  assert.equal(s.apply({ type: 'setResStatus', id: 'a', index: -1, status: 'bestaetigt' }).ok, false);
+  assert.equal(s.apply({ type: 'setResStatus', id: 'nix', index: 0, status: 'bestaetigt' }).ok, false);
+  assert.equal(s.canUndo, u); assert.equal(s.dirty, false);
+});
 test('setResStatusMehrere: alles oder nichts, ein Undo-Schritt', () => {
   const s = mitRes();
   s.markSaved();
+  const undoVorher = s.canUndo;
   const schlecht = s.apply({ type: 'setResStatusMehrere', status: 'bestaetigt', am: AM, eintraege: [{ id: 'a', index: 0 }, { id: 'a', index: 9 }] });
   assert.equal(schlecht.ok, false);
-  assert.equal(s.dirty, false);
+  assert.equal(s.dirty, false); assert.equal(s.canUndo, undoVorher);
   assert.equal('status' in taskById(s, 'a').res[0], false);
   const r = s.apply({ type: 'setResStatusMehrere', status: 'bestaetigt', am: AM, eintraege: [{ id: 'a', index: 0 }, { id: 'a', index: 1 }] });
   assert.equal(r.ok, true);
