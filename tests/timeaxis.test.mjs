@@ -1,6 +1,6 @@
 import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM, rasterMin, schnapp, gezogen, planMinute, naechsteMitternacht, planSpanne, engpassText, fmtPuffer, fmtFloat, kettenEnde, verknuepft, PUFFER_UNVERKNUEPFT } from '../js/timeaxis.js';
 import assert from 'node:assert/strict';
-import { toMin } from '../js/schedule.js';
+import { toMin, computeSchedule } from '../js/schedule.js';
 
 let pass = 0, fail = 0;
 const test = (name, fn) => {
@@ -307,22 +307,33 @@ test('fmtPuffer: Kettenende nur ohne Nachfolger', () => {
   assert.equal(fmtPuffer({ float: 0 }, false), '— Kettenende');
   assert.equal(fmtPuffer({ float: 900 }, true), fmtFloat(900));
 });
-test('kettenEnde: nur mit Vorgänger und ohne Nachfolger', () => {
-  assert.equal(kettenEnde([{ from: 'a', to: 'x' }], 'x'), true);
-  assert.equal(kettenEnde([], 'x'), false);
-  assert.equal(kettenEnde([{ from: 'x', to: 'b' }], 'x'), false);
-  assert.equal(kettenEnde([{ from: 'a', to: 'x' }, { from: 'x', to: 'b' }], 'x'), false);
+test('kettenEnde: nur mit Vorgänger und ohne Nachfolger (aus der Rechnung)', () => {
+  assert.equal(kettenEnde({ hatVor: true, hatNach: false }), true);
+  assert.equal(kettenEnde({ hatVor: false, hatNach: false }), false);
+  assert.equal(kettenEnde({ hatVor: false, hatNach: true }), false);
+  assert.equal(kettenEnde({ hatVor: true, hatNach: true }), false);
 });
-test('fmtPuffer + kettenEnde: Kettenende nur mit Vorgänger, ohne Links Puffertext', () => {
+test('verknuepft: false ohne datierten Nachbarn, true bei Vorgänger oder Nachfolger', () => {
+  assert.equal(verknuepft({ hatVor: false, hatNach: false }), false);
+  assert.equal(verknuepft({ hatVor: true, hatNach: false }), true);
+  assert.equal(verknuepft({ hatVor: false, hatNach: true }), true);
+});
+test('Naht: datierter Vorgang mit nur terminlosem Nachbarn ist unverknüpft, kein Kettenende', () => {
+  const tk = (id, s, e) => ({ id, title: id, start: s, end: e });
+  const R = computeSchedule([tk('a', '2026-08-10T08:00:00', '2026-08-10T10:00:00'), tk('b', null, null)], [{ from: 'b', to: 'a', type: 'FS', lag: 0 }]);
+  assert.equal(verknuepft(R.get('a')), false);
+  assert.equal(kettenEnde(R.get('a')), false);
+  const R2 = computeSchedule([tk('a', '2026-08-10T08:00:00', '2026-08-10T10:00:00'), tk('c', '2026-08-11T08:00:00', '2026-08-11T10:00:00')], [{ from: 'a', to: 'c', type: 'FS', lag: 0 }]);
+  assert.equal(kettenEnde(R2.get('c')), true);
+  assert.equal(kettenEnde(R2.get('a')), false);
+});
+test('fmtPuffer + kettenEnde: Kettenende nur mit Vorgänger, sonst Puffertext', () => {
   const s = { float: 0 };
-  assert.equal(fmtPuffer(s, !kettenEnde([{ from: 'a', to: 'x' }], 'x')), '— Kettenende');
-  assert.equal(fmtPuffer(s, !kettenEnde([], 'x')), fmtFloat(0));
+  assert.equal(fmtPuffer(s, !kettenEnde({ hatVor: true, hatNach: false })), '— Kettenende');
+  assert.equal(fmtPuffer(s, !kettenEnde({ hatVor: false, hatNach: false })), fmtFloat(0));
 });
-test('verknuepft: false ohne jede Verknüpfung, true bei Vorgänger oder Nachfolger', () => {
-  assert.equal(verknuepft([], 'x'), false);
-  assert.equal(verknuepft([{ from: 'a', to: 'b' }], 'x'), false);
-  assert.equal(verknuepft([{ from: 'a', to: 'x' }], 'x'), true);
-  assert.equal(verknuepft([{ from: 'x', to: 'b' }], 'x'), true);
+test('engpassText: unbekannter Typ fällt auf den Rohwert zurück', () => {
+  assert.equal(engpassText({ nachbarId: 's2', richtung: 'nach', typ: 'XX', luft: 60 }, titel), '1 h Luft bis Steelday 2 (XX)');
 });
 test('Panel-Text für unverknüpfte Vorgänge ist fest', () => assert.equal(PUFFER_UNVERKNUEPFT, '— keine Verknüpfung'));
 

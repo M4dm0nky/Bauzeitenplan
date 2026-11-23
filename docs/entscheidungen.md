@@ -47,6 +47,10 @@ aus dem minFloat) war nur Flickwerk dafür.
   Mouseover und Panel zeigen «Puffer» (echte Zahl, `fmtPuffer`; «— Kettenende» bei
   Vorgang mit Vorgänger, aber ohne Nachfolger, `kettenEnde`) und «Engpass»
   (`engpassText`, z. B. «15 h Luft bis Steelday 2 (Ende → Start)» oder «überlappt X um 2 h»).
+- **Unverknüpft:** Ein Vorgang ohne Verknüpfung zu einem DATIERTEN Vorgang zeigt im
+  Mouseover keine Puffer-Zeile, im Panel «— keine Verknüpfung» (`verknuepft`). `kettenEnde`
+  und `verknuepft` lesen `hatVor`/`hatNach` aus `computeSchedule` (gleiche Nachbarschaft wie
+  `engpass`), nicht die rohen `deps`: terminlose Nachbarn zählen nicht.
 - **Weg:** `critical`/`minFloat`, `gantt.criticals()`, Kachel, KRIT, Fußzeilen-Legende,
   «Kritisch»-Teil der Prüf-Liste, `ackCrit` (alte Pläne laden, das Feld fällt weg).
   Eine Struktursperre in `tests/run.mjs` hält die Namen aus `js/` und den Themes heraus.

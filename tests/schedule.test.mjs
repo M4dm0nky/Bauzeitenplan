@@ -599,5 +599,14 @@ test('engpass: unverknüpft oder nur terminloser Nachbar ergibt null', () => {
   assert.equal(R.get('z').engpass, null);
 });
 
+test('hatVor/hatNach zählen nur Verknüpfungen zwischen zwei DATIERTEN Vorgängen (gleiche Rechnung wie engpass)', () => {
+  const R = computeSchedule([t('a', D(10, 8), D(10, 10)), t('b', null, null), t('c', D(11, 8), D(11, 10))],
+    [{ from: 'a', to: 'b', type: 'FS', lag: 0 }, { from: 'b', to: 'c', type: 'FS', lag: 0 }]);
+  for (const id of ['a', 'c']) { assert.equal(R.get(id).hatVor, false); assert.equal(R.get(id).hatNach, false); assert.equal(R.get(id).engpass, null); }
+  const R2 = computeSchedule([t('a', D(10, 8), D(10, 10)), t('c', D(11, 8), D(11, 10))], [{ from: 'a', to: 'c', type: 'FS', lag: 0 }]);
+  assert.equal(R2.get('a').hatNach, true); assert.equal(R2.get('a').hatVor, false);
+  assert.equal(R2.get('c').hatVor, true); assert.equal(R2.get('c').hatNach, false);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

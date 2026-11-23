@@ -292,8 +292,7 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     try { sched = computeSchedule(store.state.tasks, store.state.deps).get(t.id); } catch { /* Ring */ }
     if (sched) {
       const r = el('div', 'ins-ro');
-      r.textContent = verknuepft(store.state.deps, t.id)
-        ? fmtPuffer(sched, !kettenEnde(store.state.deps, t.id)) : PUFFER_UNVERKNUEPFT;
+      r.textContent = verknuepft(sched) ? fmtPuffer(sched, !kettenEnde(sched)) : PUFFER_UNVERKNUEPFT;
       root.append(field('Puffer', r));
       const eng = engpassText(sched.engpass, (id) => (store.state.tasks.find((x) => x.id === id) || {}).title || id);
       if (eng) {

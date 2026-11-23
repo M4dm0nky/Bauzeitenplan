@@ -315,7 +315,7 @@ export function luftDerVerknuepfung(dep, von, nach) {
  * Je Vorgang `engpass`: die Verknüpfung mit der kleinsten Luft (Gleichstand:
  * erste in `deps`-Reihenfolge) oder null ohne terminierten Nachbarn.
  *
- * @returns {Map<string, {es,ef,ls,lf,float,engpass}>}
+ * @returns {Map<string, {es,ef,ls,lf,float,engpass,hatVor,hatNach}>}
  */
 export function computeSchedule(tasks, deps) {
   const byId = new Map(tasks.map((t) => [t.id, t]));
@@ -384,6 +384,9 @@ export function computeSchedule(tasks, deps) {
       if (!best || luft < best.luft) best = { depId: k.d.id, nachbarId: k.nachbarId, richtung: k.richtung, typ: k.d.type, luft };
     }
     r.engpass = best;
+    // Dieselbe Nachbarschaft wie der Engpass: nur Verknüpfungen zwischen zwei datierten Vorgängen.
+    r.hatVor = predOf.get(id).length > 0;
+    r.hatNach = succOf.get(id).length > 0;
   }
 
   return R;

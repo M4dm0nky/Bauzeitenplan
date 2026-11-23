@@ -9,6 +9,7 @@ nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
 - **Kein «kritisch» mehr:** Kachel, KRIT-Marke, rote Pfeile, Legende, «Kritisch»-Teil der Prüf-Liste und «Gesehen» sind weg (Anlass: Plan «Festwiese 2027», Steelday 1/2 standen rot bei 15 h Luft). Überlappung verknüpfter Vorgänge bleibt ein Konflikt. Alte Pläne laden weiter, `ackCrit` wird verworfen.
 - **Puffer und Engpass:** Mouseover und Seitenpanel zeigen den echten Puffer («— Kettenende» am Ende einer Kette) und die knappste Verknüpfung, z. B. «15 h Luft bis Steelday 2 (Ende → Start)» oder «überlappt X um 2 h».
+- **Unverknüpfte Vorgänge:** Mouseover ohne Puffer-Zeile, Panel «— keine Verknüpfung». «Verknüpft» heißt: mit einem DATIERTEN Vorgang verknüpft (Puffer, Kettenende und Engpass kommen aus derselben Rechnung); ein datierter Vorgang neben nur terminlosen Nachbarn gilt als unverknüpft.
 - **Achse über den ganzen Plan (`planSpanne`):** Projektzeitraum, alle datierten Vorgänge und alle Phasen; Phasen nach dem Projektende werden nicht mehr abgeschnitten. Gilt auch für Wochenendbänder, Bedarfsraster und den Druck-Rückfall.
 
 ## 0.22.0 — 2026-11-22

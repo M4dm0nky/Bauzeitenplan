@@ -182,20 +182,19 @@ export function engpassText(e, titelVon) {
   const name = titelVon(e.nachbarId);
   if (e.luft < 0) return 'überlappt ' + name + ' um ' + fmtDur(-e.luft);
   if (e.luft === 0) return '0 min Luft — ' + (nach ? name + ' schließt direkt an' : 'schließt direkt an ' + name + ' an');
-  return fmtDur(e.luft) + ' Luft ' + (nach ? 'bis ' : 'nach ') + name + ' (' + TYP_WORT[e.typ] + ')';
+  return fmtDur(e.luft) + ' Luft ' + (nach ? 'bis ' : 'nach ') + name + ' (' + (TYP_WORT[e.typ] || e.typ) + ')';
 }
-/**
- * Puffer-Zeile. `hatNachfolger` = false nur für ein Kettenende: der Vorgang
- * hat einen Vorgänger, aber keinen Nachfolger. Ohne jede Verknüpfung ruft der
- * Aufrufer mit true auf (dort ist «kein Puffer» die ehrliche Antwort).
- */
-/** Kettenende: mindestens ein Vorgänger, aber kein Nachfolger (DOM-frei, aus den Verknüpfungen). */
-export const kettenEnde = (deps, id) =>
-  deps.some((d) => d.to === id) && !deps.some((d) => d.from === id);
-/** Hat der Vorgang überhaupt eine Verknüpfung (Vorgänger oder Nachfolger)? Ohne sagt ein Puffer nichts. */
-export const verknuepft = (deps, id) => deps.some((d) => d.to === id || d.from === id);
-/** Panel-Text für einen Vorgang ohne jede Verknüpfung (statt eines irreführenden «kein Puffer»). */
+/** Kettenende: mindestens ein datierter Vorgänger, aber kein datierter Nachfolger. `s` = Eintrag aus computeSchedule (DOM-frei). */
+export const kettenEnde = (s) => !!s.hatVor && !s.hatNach;
+/** Hat der Vorgang eine Verknüpfung zu einem DATIERTEN Vorgang? Ohne sagt ein Puffer nichts. */
+export const verknuepft = (s) => !!s.hatVor || !!s.hatNach;
+/** Panel-Text für einen Vorgang ohne Verknüpfung zu einem datierten Vorgang (statt eines irreführenden «kein Puffer»). */
 export const PUFFER_UNVERKNUEPFT = '— keine Verknüpfung';
+/**
+ * Puffer-Zeile für einen verknüpften Vorgang (Aufrufer prüft vorher `verknuepft`).
+ * `hatNachfolger` = false nur für ein Kettenende (`kettenEnde`): dort ist Puffer 0
+ * kein Mangel, sondern das Ende der Kette → «— Kettenende» statt «kein Puffer».
+ */
 export const fmtPuffer = (sched, hatNachfolger) =>
   !hatNachfolger && sched.float <= 0 ? '— Kettenende' : fmtFloat(sched.float);
 

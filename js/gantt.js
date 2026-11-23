@@ -1381,6 +1381,8 @@ export function createGantt(root, opts = {}) {
       // Kalendertage; zeigt die Ansicht nur einen (Showablauf), ragte es
       // 1400 px über den Canvas hinaus und machte den Scroller genau so viel
       // breiter — der Tag rutschte aus dem Bild und rechts klaffte Grau.
+      // Neu gerechnet statt T0/T1: im Showablauf sind die das Programmfenster, die Bänder gehören aber zum ganzen Plan
+      // (und `sp` lebt in der Rechenfunktion oben, nicht hier).
       const plan = planSpanne(S);
       for (const w of weekendBands(toDate(plan.von), toDate(plan.bis))) {
         const a = x(Math.max(T0, Math.round(w.from.getTime() / 60000)));
@@ -1461,7 +1463,7 @@ export function createGantt(root, opts = {}) {
   // ── Tooltip ─────────────────────────────────────────────────────────────────
   function hideTip() { tip.classList.remove('is-on'); }
   function bindTip(node, t) {
-    const s = SCHED.get(t.id) || { float: 0 };
+    const s = SCHED.get(t.id);
     const g = gwById.get(t.gewerk);
     const show = () => {
       tip.replaceChildren();
@@ -1485,9 +1487,10 @@ export function createGantt(root, opts = {}) {
       }
       const conf = CONFLICTS.get(t.id);
       if (conf) add('Konflikt', conf.message);
-      // Ohne Verknüpfung sagt ein Puffer nichts (Ankerregel liefert 0): keine Zeile.
-      if (verknuepft(S.deps, t.id)) add('Puffer', fmtPuffer(s, !kettenEnde(S.deps, t.id)));
-      const eng = engpassText(s.engpass, (id) => (S.tasks.find((x) => x.id === id) || {}).title || id);
+      // Ohne Verknüpfung zu einem datierten Vorgang sagt ein Puffer nichts (Ankerregel liefert 0);
+      // ohne Rechnung (Ring) gibt es keinen Eintrag: dann ebenfalls keine Zeile.
+      if (s && verknuepft(s)) add('Puffer', fmtPuffer(s, !kettenEnde(s)));
+      const eng = s && engpassText(s.engpass, (id) => (S.tasks.find((x) => x.id === id) || {}).title || id);
       if (eng) add('Engpass', eng);
       if (!t.milestone && t.progress > 0) add('Fortschritt', t.progress + ' %');
       tip.append(dl);

@@ -631,7 +631,7 @@ await check('nach dem Ziehen räumt die App restlos auf', async () => {
   return r.flag ? 'data-linking bleibt gesetzt' : true;
 });
 
-// Erst hier gibt es eine Verknüpfung (die Fixture bringt keine mit).
+// Erst hier gibt es eine Verknüpfung (festivalMitDaten bringt zwar Verknüpfungen mit, aber nicht zwischen diesen beiden Vorgängen).
 await check('Mouseover über einen verknüpften Balken nennt die knappste Verknüpfung', async () => {
   for (const id of [vonId, nachId]) {
     const bar = page.locator(`.bz-bar[data-task="${id}"]`).first();
@@ -2387,6 +2387,25 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
     if (!(await pv.locator('#ins').isVisible())) return 'Panel bleibt zu';
     const v = await pv.locator('#ins input[type=datetime-local]').evaluateAll((l) => l.map((i) => i.value));
     return v.length === 2 && v.every((x) => x === '') ? true : 'Felder: ' + JSON.stringify(v);
+  });
+  await check('Datierter Vorgang mit nur terminlosen Nachbarn: Panel «— keine Verknüpfung», Mouseover ohne Puffer-Zeile', async () => {
+    const felder = pv.locator('#ins input[type=datetime-local]');
+    // Termine im Panel sind ein Entwurf: erst ✓ speichert.
+    await felder.nth(0).fill('2027-05-10T08:00');
+    await felder.nth(1).fill('2027-05-10T10:00');
+    await pv.locator('.ins-termin .en-ok').click();
+    await pv.waitForTimeout(500);
+    const t = await pv.locator('.ins-f', { hasText: 'Puffer' }).first().textContent().catch(() => '');
+    if (!/keine Verknüpfung/.test(t)) return 'Panel: «' + t + '» statt «— keine Verknüpfung»';
+    const bar = pv.locator('.bz-bar').first();
+    await pv.mouse.move(5, 5);
+    await bar.hover({ timeout: 3000 });
+    await pv.waitForTimeout(200);
+    const tip = await pv.locator('.bz-tip.is-on').first().textContent().catch(() => '');
+    await pv.mouse.move(5, 5);
+    await undoOhneFeld(pv);   // der Plan bleibt für die Folgeprüfungen terminlos
+    await pv.waitForTimeout(300);
+    return tip && !/Puffer|Kettenende/.test(tip) ? true : 'Mouseover: «' + tip + '»';
   });
   await check('Tabelle: Datums- und Dauerfelder leer, kein «null»', async () => {
     await pv.locator('[data-view="tabelle"]').click();

@@ -238,12 +238,17 @@ check('«kritisch» ist entfernt (js: kein critical/ackCrit/criticals/minFloat/K
   const treffer = [];
   for (const f of JS_FILES) {
     // Einzige Ausnahme: persistence.js löscht das Altfeld beim Laden.
-    const m = ohneKommentar(js(f)).replace(/^\s*delete t\.ackCrit;\s*$/m, '').match(/\.critical\b|ackCrit|criticals\(|minFloat|KRIT|is-crit/);
+    const m = ohneKommentar(js(f)).replace(/^\s*delete t\.ackCrit;\s*$/m, '').match(/\.critical\b|\bcritical\s*:|\{\s*critical\s*[,}]|,\s*critical\s*[,}]|\.crit\b|ackCrit|criticals\(|minFloat|KRIT|is-crit/);
     if (m) treffer.push('js/' + f + ': ' + m[0]);
   }
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const m = readFileSync(join(root, 'styles/themes', f), 'utf8').match(/is-crit|bz-crit-tag|ft-crit/);
     if (m) treffer.push('styles/themes/' + f + ': ' + m[0]);
+  }
+  // Auch die ausgelieferten Seiten und die Grundformatierung: Kachel, Legende, Marken.
+  for (const f of ['index.html', 'print.html', 'styles/base.css']) {
+    const m = readFileSync(join(root, f), 'utf8').match(/ft-crit|data-kpi="kritisch"|is-crit|bz-crit/);
+    if (m) treffer.push(f + ': ' + m[0]);
   }
   return treffer.length ? treffer.join(' | ') : true;
 });
