@@ -3,7 +3,7 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
-## Unveröffentlicht
+## 0.24.1 — 2026-11-23
 
 - **Board-Theme, Dunkelmodus:** Kopfzeile und Schiene waren weiße Schrift auf fast weißer Fläche. Beide haben jetzt eigene Blockfarben (`--block`, `--block-t`): hell wie bisher schwarz, dunkel ein dunkler Block mit heller Schrift.
 - **Kontrastprüfung gerendert:** `verify-browser` misst in allen Themes, hell und dunkel, die Schrift in Kopfzeile, Schiene, Legende und Fußzeile (mind. 3:1). Dabei gefunden und behoben: Tertiärschrift (`--ink-3`) in Blueprint und Studio hell, gedrückter Schienenknopf in Blueprint dunkel.
