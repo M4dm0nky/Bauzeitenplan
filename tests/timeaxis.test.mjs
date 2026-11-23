@@ -1,4 +1,4 @@
-import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM, rasterMin, schnapp, gezogen, planMinute, naechsteMitternacht, planSpanne, engpassText, fmtPuffer, fmtFloat, kettenEnde } from '../js/timeaxis.js';
+import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM, rasterMin, schnapp, gezogen, planMinute, naechsteMitternacht, planSpanne, engpassText, fmtPuffer, fmtFloat, kettenEnde, verknuepft, PUFFER_UNVERKNUEPFT } from '../js/timeaxis.js';
 import assert from 'node:assert/strict';
 import { toMin } from '../js/schedule.js';
 
@@ -318,6 +318,13 @@ test('fmtPuffer + kettenEnde: Kettenende nur mit Vorgänger, ohne Links Pufferte
   assert.equal(fmtPuffer(s, !kettenEnde([{ from: 'a', to: 'x' }], 'x')), '— Kettenende');
   assert.equal(fmtPuffer(s, !kettenEnde([], 'x')), fmtFloat(0));
 });
+test('verknuepft: false ohne jede Verknüpfung, true bei Vorgänger oder Nachfolger', () => {
+  assert.equal(verknuepft([], 'x'), false);
+  assert.equal(verknuepft([{ from: 'a', to: 'b' }], 'x'), false);
+  assert.equal(verknuepft([{ from: 'a', to: 'x' }], 'x'), true);
+  assert.equal(verknuepft([{ from: 'x', to: 'b' }], 'x'), true);
+});
+test('Panel-Text für unverknüpfte Vorgänge ist fest', () => assert.equal(PUFFER_UNVERKNUEPFT, '— keine Verknüpfung'));
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

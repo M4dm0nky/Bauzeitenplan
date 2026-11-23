@@ -192,6 +192,10 @@ export function engpassText(e, titelVon) {
 /** Kettenende: mindestens ein Vorgänger, aber kein Nachfolger (DOM-frei, aus den Verknüpfungen). */
 export const kettenEnde = (deps, id) =>
   deps.some((d) => d.to === id) && !deps.some((d) => d.from === id);
+/** Hat der Vorgang überhaupt eine Verknüpfung (Vorgänger oder Nachfolger)? Ohne sagt ein Puffer nichts. */
+export const verknuepft = (deps, id) => deps.some((d) => d.to === id || d.from === id);
+/** Panel-Text für einen Vorgang ohne jede Verknüpfung (statt eines irreführenden «kein Puffer»). */
+export const PUFFER_UNVERKNUEPFT = '— keine Verknüpfung';
 export const fmtPuffer = (sched, hatNachfolger) =>
   !hatNachfolger && sched.float <= 0 ? '— Kettenende' : fmtFloat(sched.float);
 

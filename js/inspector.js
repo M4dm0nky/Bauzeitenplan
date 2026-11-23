@@ -8,7 +8,7 @@ import { entwurfBinden } from './entwurf.js';
 import { toMin, toDate, computeSchedule, candidateGroups, ohneTermin } from './schedule.js';
 import { gewerkVar, gewerkTexture, hueVon, slotAus, HUES, MAX_SLOTS } from './palette.js';
 import { artOf, abschnittOf, abschnitte, showTagVon } from './ebene.js';
-import { fmtPuffer, engpassText, kettenEnde } from './timeaxis.js';
+import { fmtPuffer, engpassText, kettenEnde, verknuepft, PUFFER_UNVERKNUEPFT } from './timeaxis.js';
 import { el, toInput, STATUS } from './dom.js';
 import { ressourcen, resKind, deckung, RES_KINDS } from './resources.js';
 import { aufbauPhase } from './phasen.js';
@@ -292,7 +292,8 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     try { sched = computeSchedule(store.state.tasks, store.state.deps).get(t.id); } catch { /* Ring */ }
     if (sched) {
       const r = el('div', 'ins-ro');
-      r.textContent = fmtPuffer(sched, !kettenEnde(store.state.deps, t.id));
+      r.textContent = verknuepft(store.state.deps, t.id)
+        ? fmtPuffer(sched, !kettenEnde(store.state.deps, t.id)) : PUFFER_UNVERKNUEPFT;
       root.append(field('Puffer', r));
       const eng = engpassText(sched.engpass, (id) => (store.state.tasks.find((x) => x.id === id) || {}).title || id);
       if (eng) {

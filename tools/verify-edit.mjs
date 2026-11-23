@@ -414,7 +414,7 @@ await check('Name im Panel ändern zieht in den Gantt durch', async () => {
 });
 await check('Panel zeigt Puffer und Engpass', async () => {
   const t = await page.locator('.ins-f', { hasText: 'Puffer' }).textContent();
-  if (!/Puffer|Kettenende/.test(t)) return 'kein Puffer im Panel: ' + t;
+  if (!/Puffer|Kettenende|keine Verknüpfung/.test(t)) return 'kein Puffer im Panel: ' + t;
   return (await page.locator('.ins-f', { hasText: 'Engpass' }).count()) >= 1 ? true : 'kein Engpass im Panel';
 });
 await check('Verknüpfungen stehen im Panel', async () =>
