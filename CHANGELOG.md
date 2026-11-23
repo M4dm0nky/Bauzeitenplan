@@ -3,7 +3,7 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
-## Unveröffentlicht
+## 0.23.0 — 2026-11-23
 
 **«Kritisch» entfällt; stattdessen Puffer und Engpass. Die Achse spannt über den ganzen Plan.**
 
