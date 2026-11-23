@@ -731,5 +731,32 @@ test('kontakte überstehen Export und Import', () => {
   assert.deepEqual(deserialize(serialize(p)).plan.project.kontakte, k);
 });
 
+console.log('\nEingebaute Bezeichnungen (Migration)');
+const altMitRes = (res, ressourcen) => {
+  const p = JSON.parse(JSON.stringify(plan()));
+  p.tasks[0].crew = 0;
+  p.tasks[0].res = res;
+  p.project.ressourcen = ressourcen;
+  return p;
+};
+test('eigene «Stagehand» geht in der eingebauten auf, Anzahl bleibt', () => {
+  const p = altMitRes([{ rid: 'sh', n: 3, von: null, bis: null }], [{ id: 'sh', label: ' stagehand ', kind: 'personal' }]);
+  const m = migrate(p);
+  assert.equal(m.project.ressourcen.some((r) => r.id === 'sh'), false);
+  assert.deepEqual(m.tasks[0].res[0], { rid: 'p-stagehand', n: 3, von: null, bis: null });
+});
+test('Migration ist idempotent', () => {
+  const p = altMitRes([{ rid: 'sh', n: 3, von: null, bis: null }], [{ id: 'sh', label: 'Stagehand', kind: 'personal' }]);
+  const a = migrate(p);
+  const b = migrate(JSON.parse(JSON.stringify(a)));
+  assert.deepEqual(b, a);
+});
+test('gleichnamig, aber andere Art bleibt unangetastet', () => {
+  const p = altMitRes([{ rid: 'sh', n: 1, von: null, bis: null }], [{ id: 'sh', label: 'Stagehand', kind: 'maschine' }]);
+  const m = migrate(p);
+  assert.deepEqual(m.project.ressourcen.map((r) => r.id), ['sh']);
+  assert.equal(m.tasks[0].res[0].rid, 'sh');
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

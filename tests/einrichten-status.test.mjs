@@ -49,8 +49,8 @@ test('Vorgang genau auf project.end zählt nicht als außerhalb (Grenze)', () =>
   s.tasks[0].end = '2027-08-12T00:01';
   assert.equal(ausserhalb(s).vorgaenge, 1);
 });
-test('leerer Plan: projekt ok, phasen leer, baender leer, res leer, arten leer', () => {
-  assert.deepEqual(einrichtStatus(plan()), { projekt: 'ok', phasen: 'leer', baender: 'leer', res: 'leer', arten: 'leer' });
+test('leerer Plan: projekt ok, phasen leer, baender leer, res ok (eingebaute), arten leer', () => {
+  assert.deepEqual(einrichtStatus(plan()), { projekt: 'ok', phasen: 'leer', baender: 'leer', res: 'ok', arten: 'leer' });
 });
 test('Projekt ohne Namen → projekt leer', () => {
   assert.equal(einrichtStatus(plan({ project: { name: '  ' } })).projekt, 'leer');

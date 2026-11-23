@@ -1045,7 +1045,7 @@ console.log('\nPersonal & Maschinen');
 
 test('addRessource legt eine Bezeichnung an, die im Plan bleibt', () => {
   const s = createStore(seed());
-  const r = s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  const r = s.apply({ type: 'addRessource', label: 'Hallenhelfer', kind: 'personal' });
   assert.equal(r.ok, true);
   assert.equal(s.state.project.ressourcen.length, 1);
   assert.equal(s.state.project.ressourcen[0].kind, 'personal');
@@ -1064,7 +1064,7 @@ test('addRessource lehnt doppelte Bezeichnungen ab, unabhängig von Groß/Klein'
 
 test('setTaskRes hängt eine Zuweisung an, für den ganzen Vorgang', () => {
   const s = createStore(seed());
-  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  s.apply({ type: 'addRessource', label: 'Hallenhelfer', kind: 'personal' });
   const rid = s.state.project.ressourcen[0].id;
   const r = s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 6, von: null, bis: null } });
   assert.equal(r.ok, true);
@@ -1078,7 +1078,7 @@ test('setTaskRes lehnt eine unbekannte Bezeichnung ab', () => {
 
 test('setTaskRes lehnt eine Anzahl von 0 oder darunter ab', () => {
   const s = createStore(seed());
-  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  s.apply({ type: 'addRessource', label: 'Hallenhelfer', kind: 'personal' });
   const rid = s.state.project.ressourcen[0].id;
   assert.equal(s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 0, von: null, bis: null } }).ok, false);
   assert.equal(s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: -2, von: null, bis: null } }).ok, false);
@@ -1088,7 +1088,7 @@ test('setTaskRes lehnt ein Zeitfenster außerhalb des Vorgangs ab', () => {
   // Vorgang a läuft 08:00–12:00 — ein Helfer, der vor dem Vorgang anfängt, ist
   // ein Tippfehler, kein Fall (docs/entscheidungen.md).
   const s = createStore(seed());
-  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  s.apply({ type: 'addRessource', label: 'Hallenhelfer', kind: 'personal' });
   const rid = s.state.project.ressourcen[0].id;
   const r = s.apply({ type: 'setTaskRes', id: 'a', index: null,
     value: { rid, n: 2, von: '2026-07-13T07:00', bis: '2026-07-13T10:00' } });
@@ -1097,7 +1097,7 @@ test('setTaskRes lehnt ein Zeitfenster außerhalb des Vorgangs ab', () => {
 
 test('setTaskRes: die Lücke bleibt aus, wenn das Fenster den ganzen Vorgang deckt', () => {
   const s = createStore(seed());
-  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  s.apply({ type: 'addRessource', label: 'Hallenhelfer', kind: 'personal' });
   const rid = s.state.project.ressourcen[0].id;
   const r = s.apply({ type: 'setTaskRes', id: 'a', index: null,
     value: { rid, n: 2, von: '2026-07-13T08:00', bis: '2026-07-13T10:00' } });
@@ -1106,7 +1106,7 @@ test('setTaskRes: die Lücke bleibt aus, wenn das Fenster den ganzen Vorgang dec
 
 test('setTaskRes mit value:null löscht die Zuweisung am Index', () => {
   const s = createStore(seed());
-  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  s.apply({ type: 'addRessource', label: 'Hallenhelfer', kind: 'personal' });
   const rid = s.state.project.ressourcen[0].id;
   s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 2, von: null, bis: null } });
   const r = s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: null });
@@ -1121,7 +1121,7 @@ test('setTaskField lehnt das Feld res ab — Zuweisungen laufen über setTaskRes
 
 test('Ressourcen gehen denselben Verwaltungsweg wie Arten und Abschnitte', () => {
   const s = createStore(seed());
-  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  s.apply({ type: 'addRessource', label: 'Hallenhelfer', kind: 'personal' });
   const rid = s.state.project.ressourcen[0].id;
   assert.equal(s.apply({ type: 'setAuswahlLabel', liste: 'ressourcen', id: rid, label: 'Helfer' }).ok, true);
   assert.equal(s.state.project.ressourcen[0].label, 'Helfer');
@@ -1241,7 +1241,7 @@ console.log('\nZuweisungs-Fenster folgen dem Vorgang');
 // Vorgang 'a' (13.07. 08–12) bekommt eine Zuweisung mit Fenster.
 const mitFenster = (von, bis) => {
   const s = createStore(seed());
-  s.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  s.apply({ type: 'addRessource', label: 'Hallenhelfer', kind: 'personal' });
   const rid = s.state.project.ressourcen[0].id;
   const r = s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 2, von, bis } });
   assert.equal(r.ok, true, r.error);
@@ -1359,7 +1359,7 @@ test('setTaskField: bei einem terminlosen Vorgang bleibt ein einzelnes Datum ung
 });
 test('Zuweisungsfenster: ohne Termin werden sie zu «ganzer Vorgang», ein Fenster ist dort nicht setzbar', () => {
   const s = createStore(seed());
-  s.apply({ type: "addRessource", label: "Stagehand", kind: "personal" });
+  s.apply({ type: "addRessource", label: 'Hallenhelfer', kind: "personal" });
   const rid = s.state.project.ressourcen[0].id;
   s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid, n: 2, von: '2026-07-13T09:00', bis: '2026-07-13T10:00' } });
   s.apply({ type: 'moveTask', id: 'a', start: null, end: null });
@@ -1501,6 +1501,39 @@ test('Zeitraum ändern verschiebt nichts', () => {
   assert.equal(s.apply({ type: 'setProjectField', field: 'start', value: '2026-07-01T00:00' }).ok, true);
   assert.equal(s.apply({ type: 'setProjectField', field: 'end', value: '2026-08-01T00:00' }).ok, true);
   assert.equal(JSON.stringify([s.state.tasks, s.state.phases]), vor);
+});
+
+console.log('\nEingebaute Bezeichnungen (Store)');
+test('setTaskRes mit eingebauter Bezeichnung geht ohne eigene Liste', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'p-stagehand', n: 2, von: null, bis: null } }).ok, true);
+  assert.equal((s.state.project.ressourcen || []).length, 0);
+});
+test('addRessource gegen eingebaute: doppelter Name abgelehnt', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addRessource', label: 'Gabelstapler bis 3,5 t', kind: 'maschine' });
+  assert.equal(r.ok, false);
+  assert.ok(String(r.error || r.fehler || r.message || JSON.stringify(r)).includes('Diese Bezeichnung gibt es schon: '));
+});
+test('addRessource mit kat wird mit kat gespeichert, ohne kat → eigene-m', () => {
+  const s = createStore(seed());
+  assert.equal(s.apply({ type: 'addRessource', label: 'Bagger', kind: 'maschine', kat: 'stapler' }).ok, true);
+  assert.equal(s.state.project.ressourcen[0].kat, 'stapler');
+  s.apply({ type: 'addRessource', label: 'Walze', kind: 'maschine' });
+  assert.equal(s.state.project.ressourcen[1].kat, 'eigene-m');
+});
+test('addRessource: Kategorie einer anderen Art wird abgelehnt, nichts angelegt', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addRessource', label: 'Bagger', kind: 'maschine', kat: 'helfer' });
+  assert.equal(r.ok, false);
+  assert.ok(JSON.stringify(r).includes('Unbekannte Kategorie: helfer'));
+  assert.equal((s.state.project.ressourcen || []).length, 0);
+});
+test('removeAuswahl einer eingebauten Bezeichnung: «fest eingebaut»', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'removeAuswahl', liste: 'ressourcen', id: 'm-raupe' });
+  assert.equal(r.ok, false);
+  assert.ok(JSON.stringify(r).includes('fest eingebaut'));
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

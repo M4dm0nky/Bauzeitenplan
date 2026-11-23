@@ -1,5 +1,6 @@
-import { ressourcen, resLabel, resKind, deckung, bedarfsRaster, rasterGrenzen, scheibeIndex } from '../js/resources.js';
+import { ressourcen, resGruppen, resLabel, resKind, deckung, bedarfsRaster, rasterGrenzen, scheibeIndex } from '../js/resources.js';
 import { toMin } from '../js/schedule.js';
+import { RES_EINGEBAUT, RES_KATEGORIEN } from '../js/res-katalog.js';
 import { createStore } from '../js/store.js';
 import assert from 'node:assert/strict';
 
@@ -22,8 +23,9 @@ const state = () => ({
 console.log('\nRessourcen: Bezeichnungen');
 test('ressourcen(state, kind) filtert nach Art', () => {
   const s = state();
-  assert.deepEqual(ressourcen(s, 'maschine').map((r) => r.id), ['stapler']);
-  assert.equal(ressourcen(s, 'personal').length, 2);
+  const eigene = (k) => ressourcen(s, k).filter((r) => !r.eingebaut);
+  assert.deepEqual(eigene('maschine').map((r) => r.id), ['stapler']);
+  assert.equal(eigene('personal').length, 2);
 });
 test('resLabel gibt den Namen, Unbekanntes bleibt die Kennung', () => {
   const s = state();
@@ -77,7 +79,7 @@ test('Bereitstellung zählt als verfügbar, ein normaler Vorgang als Bedarf', ()
     res: [{ rid: 'stagehand', n: 10, von: null, bis: null }] };
   const sido = { id: 'sido', bereitstellung: false, start: '2026-08-30T20:00', end: '2026-08-30T21:00',
     res: [{ rid: 'stagehand', n: 6, von: null, bis: null }] };
-  const raster = bedarfsRaster([pool, sido], ressourcen(s, 'personal'),
+  const raster = bedarfsRaster([pool, sido], ressourcen(s, 'personal').filter((r) => !r.eingebaut),
     { kind: 'personal', von: toMin('2026-08-30T08:00'), bis: toMin('2026-08-30T22:00'), schritt: 60 });
   const row = raster.find((r) => r.rid === 'stagehand');
   const i20 = (toMin('2026-08-30T20:00') - toMin('2026-08-30T08:00')) / 60;
@@ -91,7 +93,7 @@ test('Überbuchung ergibt eine negative Frei-Zahl', () => {
     res: [{ rid: 'stagehand', n: 4, von: null, bis: null }] };
   const bedarf = { id: 'x', bereitstellung: false, start: '2026-08-30T10:00', end: '2026-08-30T11:00',
     res: [{ rid: 'stagehand', n: 6, von: null, bis: null }] };
-  const raster = bedarfsRaster([pool, bedarf], ressourcen(s, 'personal'),
+  const raster = bedarfsRaster([pool, bedarf], ressourcen(s, 'personal').filter((r) => !r.eingebaut),
     { kind: 'personal', von: toMin('2026-08-30T08:00'), bis: toMin('2026-08-30T22:00'), schritt: 60 });
   const row = raster.find((r) => r.rid === 'stagehand');
   const i10 = (toMin('2026-08-30T10:00') - toMin('2026-08-30T08:00')) / 60;
@@ -99,7 +101,7 @@ test('Überbuchung ergibt eine negative Frei-Zahl', () => {
 });
 test('bedarfsRaster ohne kind-Filter nimmt die übergebene Liste wie sie ist', () => {
   const s = state();
-  const raster = bedarfsRaster([], ressourcen(s), { von: 0, bis: 60, schritt: 60 });
+  const raster = bedarfsRaster([], ressourcen(s).filter((r) => !r.eingebaut), { von: 0, bis: 60, schritt: 60 });
   assert.equal(raster.length, 3);
 });
 
@@ -110,12 +112,12 @@ test('bedarfsRaster folgt einem verschobenen Vorgang', () => {
     tasks: [{ id: 'x', gewerk: 'g', title: 'X', start: '2026-08-30T08:00', end: '2026-08-30T12:00', milestone: false, progress: 0, status: 'geplant' }],
     deps: [],
   });
-  st.apply({ type: 'addRessource', label: 'Stagehand', kind: 'personal' });
+  st.apply({ type: 'addRessource', label: 'Hallenhelfer', kind: 'personal' });
   const rid = st.state.project.ressourcen[0].id;
   st.apply({ type: 'setTaskRes', id: 'x', index: null, value: { rid, n: 3, von: '2026-08-30T09:00', bis: '2026-08-30T10:00' } });
   st.apply({ type: 'moveTask', id: 'x', start: '2026-08-30T14:00', end: '2026-08-30T18:00' });
   const v = toMin('2026-08-30T08:00');
-  const raster = bedarfsRaster(st.state.tasks, ressourcen(st.state, 'personal'), { kind: 'personal', von: v, bis: v + 600, schritt: 60 });
+  const raster = bedarfsRaster(st.state.tasks, ressourcen(st.state, 'personal').filter((r) => !r.eingebaut), { kind: 'personal', von: v, bis: v + 600, schritt: 60 });
   const slots = raster.find((r) => r.rid === rid).slots;
   assert.equal(slots[1].bedarf, 0);   // altes Fenster 09–10: leer
   assert.equal(slots[7].bedarf, 3);   // neues Fenster 15–16
@@ -216,6 +218,58 @@ test('scheibeIndex: grenzen.length === 1 und === 2 → 0', () => {
   assert.equal(scheibeIndex([600], 700, true), 0);
   assert.equal(scheibeIndex([600, 660], 700), 0);
   assert.equal(scheibeIndex([600, 660], 600, true), 0);
+});
+
+console.log('\nEingebaute Bezeichnungen');
+test('eingebaute ids sind stabil (Export-Lesbarkeit)', () => {
+  assert.deepEqual(RES_EINGEBAUT.map((r) => r.id), [
+    'm-stapler-bis35','m-stapler-ueber35','m-gelstapler-bis35','m-gelstapler-ueber35',
+    'm-tele-7','m-tele-14','m-tele-17','m-tele-rotor',
+    'm-schere-8','m-schere-10','m-schere-12','m-schere-14',
+    'm-gelschere-10','m-gelschere-12','m-gelschere-15','m-gelschere-18',
+    'm-gelenk-16','m-gelenk-20','m-gelenk-26','m-raupe','m-lkw-buehne',
+    'm-mobilkran','m-radlader','m-hubwagen',
+    'p-stagehand','p-rigger','p-groundrigger','p-staplerfahrer','p-elektro','p-runner']);
+});
+test('jede eingebaute zeigt auf eine Kategorie derselben Art', () => {
+  for (const r of RES_EINGEBAUT) {
+    const k = RES_KATEGORIEN.find((c) => c.id === r.kat);
+    assert.ok(k, r.id + ' ohne Kategorie');
+    assert.equal(k.kind, r.kind, r.id);
+  }
+  assert.deepEqual(RES_KATEGORIEN.slice(-2).map((k) => k.id), ['eigene-m', 'eigene-p']);
+});
+test('ressourcen ohne eigene = eingebaute einer Art', () => {
+  assert.equal(ressourcen({ project: {} }, 'maschine').length, 24);
+  assert.equal(ressourcen({ project: {} }, 'personal').length, 6);
+});
+test('eigene ohne kat landen in eigene-m, hinter den eingebauten', () => {
+  const l = ressourcen({ project: { ressourcen: [{ id: 'x', label: 'Bagger', kind: 'maschine' }] } }, 'maschine');
+  const z = l[l.length - 1];
+  assert.equal(z.id, 'x'); assert.equal(z.kat, 'eigene-m'); assert.equal(z.eingebaut, false);
+  assert.equal(l[0].eingebaut, true);
+});
+test('eigene mit gültigem kat stehen hinter den eingebauten ihrer Kategorie', () => {
+  const l = ressourcen({ project: { ressourcen: [{ id: 'x', label: 'Bagger', kind: 'maschine', kat: 'stapler' }] } }, 'maschine');
+  assert.deepEqual(l.slice(0, 5).map((r) => r.id), ['m-stapler-bis35','m-stapler-ueber35','m-gelstapler-bis35','m-gelstapler-ueber35','x']);
+});
+test('resGruppen «12» findet Halle 12 m und Gelände 12 m, Köpfe bleiben', () => {
+  const g = resGruppen({ project: {} }, 'maschine', '12');
+  assert.deepEqual(g.map((x) => x.kat), ['schere-halle', 'schere-gelaende']);
+  assert.deepEqual(g.flatMap((x) => x.items.map((i) => i.id)), ['m-schere-12', 'm-gelschere-12']);
+});
+test('resGruppen Treffer im Kategorienamen liefert die ganze Kategorie', () => {
+  const g = resGruppen({ project: {} }, 'maschine', ' Stapler ');
+  assert.deepEqual(g.map((x) => x.kat), ['stapler']);
+  assert.equal(g[0].items.length, 4);
+});
+test('resGruppen ohne Treffer ist leer; ohne query alle Gruppen der Art', () => {
+  assert.deepEqual(resGruppen({ project: {} }, 'maschine', 'zzz'), []);
+  assert.equal(resGruppen({ project: {} }, 'personal').length, 1);
+});
+test('resLabel/resKind kennen eingebaute', () => {
+  assert.equal(resLabel('m-tele-14', { project: {} }), 'Teleskoplader starr 14 m');
+  assert.equal(resKind('m-tele-14', { project: {} }), 'maschine');
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

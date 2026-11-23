@@ -12,6 +12,7 @@
 import { topoSort, toMin, toDate, spanFehler, ohneTermin } from './schedule.js';
 import { MAX_SLOTS } from './palette.js';
 import { local } from './conflicts.js';
+import { RES_EINGEBAUT, RES_KATEGORIEN } from './res-katalog.js';
 import { phaseFehler, istPhasenArt } from './phasen.js';
 
 // Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
@@ -47,7 +48,7 @@ const ABSCHNITTE_EINGEBAUT = [['setup', 'Setup'], ['show', 'Show']];
 const LISTEN = {
   punktTypen: { eingebaut: TYPEN_EINGEBAUT, taskFeld: 'punktTyp' },
   abschnitte: { eingebaut: ABSCHNITTE_EINGEBAUT, taskFeld: 'abschnitt' },
-  ressourcen: { eingebaut: [], zaehlt: (t, id) => (t.res || []).some((z) => z.rid === id) },
+  ressourcen: { eingebaut: RES_EINGEBAUT.map((r) => [r.id, r.label]), zaehlt: (t, id) => (t.res || []).some((z) => z.rid === id) },
 };
 const abschnittOderArt = (L, id) => (L.eingebaut.find(([k]) => k === id) || [id, id])[1];
 
@@ -72,9 +73,10 @@ const abschnittBekannt = (state, v) =>
   ABSCHNITTE_EINGEBAUT.some(([k]) => k === v)
   || ((state.project && state.project.abschnitte) || []).some((a) => a.id === v);
 
-/** Kennt der Plan diese Ressource (Personal/Maschine)? Keine eingebauten. */
+/** Kennt der Plan diese Ressource (Personal/Maschine)? Eingebaute zählen mit. */
 const resBekannt = (state, id) =>
-  ((state.project && state.project.ressourcen) || []).some((r) => r.id === id);
+  RES_EINGEBAUT.some((r) => r.id === id)
+  || ((state.project && state.project.ressourcen) || []).some((r) => r.id === id);
 
 // Die Status-Werte, aus demselben Grund wie die Arten doppelt geführt (dom.js
 // ist DOM-Schicht, der Kern zeigt nicht dorthin). Ein Test in
@@ -634,19 +636,22 @@ const HANDLERS = {
   },
 
   /**
-   * Eine eigene Bezeichnung für Personal oder Maschinen anlegen (Stagehand,
-   * Gabelstapler …). Anders als Eintragsarten/Abschnitte gibt es KEINE
-   * eingebauten — «Stagehand» heißt bei der nächsten Produktion «Helfer», eine
-   * Vorgabe wäre also nur eine weitere Löschkandidatin.
+   * Eine eigene Bezeichnung für Personal oder Maschinen anlegen. Die festen
+   * stehen im Katalog (res-katalog.js); hier kommt nur Eigenes dazu, optional
+   * in einer Kategorie derselben Art (`kat`), sonst «Eigene …».
    *
    * Steht im Plan (`project.ressourcen`) und reist im Export mit — ohne die
    * Namensliste sähe der Empfänger nur `rid:"stagehand"`.
    */
   addRessource(state, cmd) {
+    const kind = cmd.kind === 'maschine' ? 'maschine' : 'personal';
+    // Validierung VOR der Änderung: eine falsche Kategorie legt nichts an.
+    if (cmd.kat != null && !RES_KATEGORIEN.some((k) => k.id === cmd.kat && k.kind === kind))
+      return 'Unbekannte Kategorie: ' + cmd.kat;
     return neuerEintrag(state, {
-      feld: 'ressourcen', eingebaut: [], praefix: 'r',
+      feld: 'ressourcen', eingebaut: LISTEN.ressourcen.eingebaut, praefix: 'r',
       fehlt: 'Die Bezeichnung braucht einen Namen.', doppelt: 'Diese Bezeichnung gibt es schon: ',
-      label: cmd.label, extra: { kind: cmd.kind === 'maschine' ? 'maschine' : 'personal' },
+      label: cmd.label, extra: { kind, kat: cmd.kat ?? (kind === 'maschine' ? 'eigene-m' : 'eigene-p') },
     });
   },
 

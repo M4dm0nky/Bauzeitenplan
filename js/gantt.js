@@ -11,14 +11,14 @@ import { runningAt, offeneVerspaetungen, verschoben } from './live.js';
 import { sichtGewerke, programmFenster, amTag, imAbschnitt, programmTage, buehnenIds } from './ebene.js';
 import { gewerkVar, gewerkTexture, gewerkInkVar } from './palette.js';
 import { el, svgEl } from './dom.js';
-import { resLabel } from './resources.js';
+import { resLabel, resKind } from './resources.js';
 import { aufbauPhase, showTage, phaseLabel } from './phasen.js';
 
 // Summe der Personal-Zuweisungen eines Vorgangs — ersetzt die frühere blanke
 // Zahl `crew`. Maschinen zählen hier nicht mit: die Kopfzeile fragte schon
 // vorher nur nach Personen.
 const personalSum = (t, state) =>
-  (t.res || []).filter((z) => (state.project.ressourcen || []).find((r) => r.id === z.rid)?.kind !== 'maschine')
+  (t.res || []).filter((z) => resKind(z.rid, state) !== 'maschine')
     .reduce((a, z) => a + z.n, 0);
 import {
   ZOOM, clampZoom, zoomAnchored, nearestPreset, fitPx, tickScale, ticksFor,

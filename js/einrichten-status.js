@@ -28,7 +28,7 @@ export function einrichtStatus(state) {
     projekt: (p.name || '').trim() ? 'ok' : 'leer',
     phasen: (a => a.phasen + a.vorgaenge)(ausserhalb(state)) > 0 ? 'warn' : (state.phases || []).length ? 'ok' : 'leer',
     baender: (state.gewerke || []).some((g) => artOf(g) === 'gewerk') ? 'ok' : 'leer',
-    res: (p.ressourcen || []).length ? 'ok' : 'leer',
+    res: 'ok',   // eingebaute Bezeichnungen gibt es immer
     arten: (p.punktTypen || []).length || (p.abschnitte || []).length ? 'ok' : 'leer',
   };
 }

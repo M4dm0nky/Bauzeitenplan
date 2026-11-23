@@ -8,6 +8,7 @@
 
 import { VERSION } from './version.js';
 import { spanFehler, topoSort } from './schedule.js';
+import { RES_EINGEBAUT } from './res-katalog.js';
 import { artAusName, istPhasenArt, phasenFehler, phaseLabel } from './phasen.js';
 
 export const SCHEMA_VERSION = 1;
@@ -157,6 +158,26 @@ export function migrate(plan) {
     }
   }
   for (const t of p.tasks) delete t.crew;
+
+  // Eine eigene Bezeichnung, die so heißt wie eine eingebaute (gleiche Art,
+  // Groß/Klein und Leerraum egal), geht in der eingebauten auf: Zuweisungen
+  // zeigen danach auf die feste id, der eigene Eintrag entfällt — sonst stünde
+  // «Stagehand» zweimal in der Auswahl. Idempotent: beim zweiten Lauf gibt es
+  // den eigenen Eintrag nicht mehr. Läuft NACH `crew` (dessen «Crew» ist keine
+  // eingebaute und bleibt).
+  const norm = (l) => String(l || '').trim().toLowerCase();
+  const umbenennen = new Map();
+  for (const r of p.project.ressourcen) {
+    const fest = RES_EINGEBAUT.find((e) => e.kind === r.kind && norm(e.label) === norm(r.label));
+    if (fest) umbenennen.set(r.id, fest.id);
+  }
+  if (umbenennen.size) {
+    p.project.ressourcen = p.project.ressourcen.filter((r) => !umbenennen.has(r.id));
+    for (const t of p.tasks) {
+      if (!Array.isArray(t.res)) continue;
+      for (const z of t.res) if (umbenennen.has(z.rid)) z.rid = umbenennen.get(z.rid);
+    }
+  }
 
   for (const t of p.tasks) {
     t.milestone = !!t.milestone;

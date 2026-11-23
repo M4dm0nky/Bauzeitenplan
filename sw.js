@@ -51,6 +51,7 @@ const HUELLE = [
   'js/phasen.js',
   'js/print.js',
   'js/rail.js',
+  'js/res-katalog.js',
   'js/resources.js',
   'js/schedule.js',
   'js/store.js',

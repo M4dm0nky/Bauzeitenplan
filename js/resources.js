@@ -3,9 +3,9 @@
 // die weiß, was eine Ressource ist — Inspector, Tabelle, Gantt und die beiden
 // Bedarfs-Reiter fragen, sie entscheiden nicht selbst.
 //
-// Eine Bezeichnung (»Stagehand«, »Gabelstapler«) steht im PLAN
-// (`project.ressourcen`), wie punktTypen/abschnitte — sie reist im Export mit,
-// sonst sähe ein Empfänger nur eine Kennung `rid:"stagehand"`.
+// Feste Bezeichnungen kommen aus `res-katalog.js` (stabile ids). Eigene stehen
+// im PLAN (`project.ressourcen`, mit `kat`) und reisen im Export mit, sonst
+// sähe ein Empfänger nur eine Kennung `rid:"stagehand"`.
 //
 // Am Vorgang steht `t.res = [{rid, n, von, bis}]`. `von`/`bis` = null heißt
 // »der ganze Vorgang« — der Normalfall. Gesetzt sind es Zeitstempel wie
@@ -15,24 +15,54 @@
 
 import { toMin, ohneTermin } from './schedule.js';
 import { nachSort } from './ebene.js';
+import { RES_KATEGORIEN, RES_EINGEBAUT } from './res-katalog.js';
 
 export const RES_KINDS = [['personal', 'Personal'], ['maschine', 'Maschine']];
 
-/** Alle Ressourcen einer Art, in ihrer Reihenfolge (nachSort — dieselbe Regel
- * wie bei Eintragsarten und Abschnitten). Ohne `kind` alle. */
+const eigeneKat = (kind) => (kind === 'maschine' ? 'eigene-m' : 'eigene-p');
+
+/** Alle Ressourcen einer Art: erst die eingebauten (Katalog), dann die eigenen
+ * des Plans (nachSort — dieselbe Regel wie bei Eintragsarten und Abschnitten),
+ * geordnet nach Kategorie. Eigene ohne gültiges `kat` landen in «Eigene …».
+ * Ohne `kind` alle. */
 export function ressourcen(state, kind) {
   const alle = (state && state.project && state.project.ressourcen) || [];
-  const gefiltert = kind ? alle.filter((r) => r.kind === kind) : alle;
-  return nachSort(gefiltert);
+  const eigene = nachSort(kind ? alle.filter((r) => r.kind === kind) : alle).map((r) => {
+    const k = RES_KATEGORIEN.find((c) => c.id === r.kat && c.kind === r.kind);
+    return { ...r, kat: k ? k.id : eigeneKat(r.kind), eingebaut: false };
+  });
+  const fest = (kind ? RES_EINGEBAUT.filter((r) => r.kind === kind) : RES_EINGEBAUT).map((r) => ({ ...r, eingebaut: true }));
+  const out = [];
+  for (const k of RES_KATEGORIEN) {
+    out.push(...fest.filter((r) => r.kat === k.id), ...eigene.filter((r) => r.kat === k.id));
+  }
+  return out;
 }
 
+/** Die Auswahl nach Kategorien gruppiert, gefiltert durch `query` (trim,
+ * Kleinschreibung). Treffer im Kategorienamen liefert die ganze Kategorie,
+ * Treffer im Eintragsnamen nur diesen Eintrag. Leere Gruppen fallen weg. */
+export function resGruppen(state, kind, query = '') {
+  const q = String(query || '').trim().toLowerCase();
+  const alle = ressourcen(state, kind);
+  const gruppen = [];
+  for (const k of RES_KATEGORIEN) {
+    if (k.kind !== kind) continue;
+    const items = alle.filter((r) => r.kat === k.id);
+    const katTreffer = !q || k.label.toLowerCase().includes(q);
+    const sicht = katTreffer ? items : items.filter((r) => r.label.toLowerCase().includes(q));
+    if (sicht.length) gruppen.push({ kat: k.id, label: k.label, items: sicht });
+  }
+  return gruppen;
+}
+
+const finde = (rid, state) => ressourcen(state).find((r) => r.id === rid);
+
 /** Anzeigename einer Ressource. Unbekanntes bleibt unverändert stehen. */
-export const resLabel = (rid, state) =>
-  (((state && state.project && state.project.ressourcen) || []).find((r) => r.id === rid) || { label: rid }).label;
+export const resLabel = (rid, state) => (finde(rid, state) || { label: rid }).label;
 
 /** Zu welcher Art gehört eine Ressource? Unbekanntes zählt als Personal. */
-export const resKind = (rid, state) =>
-  (((state && state.project && state.project.ressourcen) || []).find((r) => r.id === rid) || {}).kind || 'personal';
+export const resKind = (rid, state) => (finde(rid, state) || {}).kind || 'personal';
 
 /**
  * Das Zeitfenster EINER Zuweisung in Minuten seit Epoche — `von`/`bis` = null
