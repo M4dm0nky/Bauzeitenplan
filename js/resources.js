@@ -213,6 +213,20 @@ export function bedarfsRaster(tasks, resList, { kind, von, bis, schritt = 60 } =
   return out;
 }
 
+/**
+ * Nur die Bezeichnungen, die in diesen Vorgängen vorkommen (Bedarf ODER Angebot einer
+ * Bereitstellung; Vorgänge ohne Termin zählen wie im Raster nicht). Der eingebaute Katalog
+ * hat rund dreißig Einträge — das Raster zeigt nur, was der Plan tatsächlich braucht.
+ */
+export function genutzteRessourcen(tasks, resList) {
+  const benutzt = new Set();
+  for (const t of tasks || []) {
+    if (ohneTermin(t)) continue;
+    for (const z of t.res || []) benutzt.add(z.rid);
+  }
+  return resList.filter((r) => benutzt.has(r.id));
+}
+
 /** Anzeige eines Bedarfsstatus: Symbol UND Klartext (Status nie nur über Farbe).
  * Fehlendes `status` = angefragt. `titel` ist der Tooltip, abgelehnt mit Notiz. */
 const RES_STATUS_ANZEIGE = {

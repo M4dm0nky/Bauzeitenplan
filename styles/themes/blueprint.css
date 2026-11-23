@@ -15,6 +15,11 @@
   --now:     #d1341f;
   --mm:      rgba(120,160,195,.30);
   --mm-5:    rgba(96,140,180,.46);
+  /* Namen, die Menü, Dialoge, Auswahl und Bedarf theme-übergreifend benutzen — hier auf die
+     eigenen Flächen abgebildet (folgt dem Dunkelmodus mit, da var() am :root aufgelöst wird). */
+  --panel:   var(--sheet);
+  --panel2:  var(--paper);
+  --rule:    var(--line);
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {

@@ -102,7 +102,7 @@ body {
 .buehnen { font-size: 12px; color: var(--ink-2); }
 .buehne-i:has(input:not(:checked)) { color: var(--ink-3); opacity: .6; }
 .buehnen-leer { font-size: 11px; color: var(--ink-3); }
-.showhead { background: var(--panel); border-bottom: 2px solid var(--rule); }
+.showhead { background: var(--panel); border-bottom: 2px solid var(--line-2); }
 .sh-f { background: var(--panel2); }
 .sh-k { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-3); }
 .sh-v { font-size: 22px; font-weight: 800; color: var(--ink); line-height: 1.2; }

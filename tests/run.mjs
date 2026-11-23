@@ -313,6 +313,27 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
 const kommtVor = (text, sym) =>
   new RegExp('(?<![\\w$])' + sym.replace(/[$]/g, '\\$') + '(?![\\w$])').test(text);
 
+check('jedes var(--x) ohne Rückfall in einem Theme ist dort oder in base.css definiert', () => {
+  // Fängt den Fall, dass ein Theme ein Token eines ANDEREN Themes benutzt (z. B. --panel
+  // in Blueprint/Studio): die Eigenschaft fiele still weg, Fläche und Kontrast fehlten.
+  // Geladen wird immer base.css + genau ein Theme (index.html).
+  const defs = (t) => new Set([...t.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map((m) => m[1]));
+  const base = readFileSync(join(root, 'styles/base.css'), 'utf8');
+  // Zur Laufzeit per JS gesetzt (palette.js, gantt.js) — gehören keinem Theme.
+  const baseDefs = new Set([...defs(base), '--gw', '--gw-t', '--grid-day', '--grid-hour']);
+  const bad = [];
+  for (const f of readdirSync(join(root, 'styles/themes'))) {
+    const t = readFileSync(join(root, 'styles/themes', f), 'utf8');
+    const d = defs(t);
+    const fehlt = new Set();
+    for (const m of t.replaceAll(/\/\*[\s\S]*?\*\//g, '').matchAll(/var\(\s*(--[a-z0-9-]+)\s*\)/gi)) {
+      if (!d.has(m[1]) && !baseDefs.has(m[1])) fehlt.add(m[1]);
+    }
+    if (fehlt.size) bad.push(f + ': ' + [...fehlt].join(', '));
+  }
+  return bad.length ? bad.join(' | ') : true;
+});
+
 check('kein Modul importiert etwas, das es nicht benutzt', () => {
   const bad = [];
   for (const f of JS_FILES) {

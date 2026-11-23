@@ -8,8 +8,8 @@ import { toMin, toDate } from './schedule.js';
 import { planSpanne } from './timeaxis.js';
 import { local } from './conflicts.js';
 import { sichtTasks, amTag, programmFenster } from './ebene.js';
-import { ressourcen, bedarfsRaster, rasterGrenzen, offeneBedarfe, resLabel, resKind } from './resources.js';
-import { resStatusMarke, ablehnenOpt } from './res-picker.js';
+import { ressourcen, bedarfsRaster, rasterGrenzen, offeneBedarfe, genutzteRessourcen, resLabel, resKind } from './resources.js';
+import { resStatusMarke, ablehnenOpt, resStatusCmd } from './res-picker.js';
 import { el } from './dom.js';
 
 export function createBedarf(root, { store, onEinrichten, neuFragen } = {}) {
@@ -26,7 +26,7 @@ export function createBedarf(root, { store, onEinrichten, neuFragen } = {}) {
     const resList = ressourcen(S, kind);
     // Leer heißt: im Plan ist noch kein Bedarf dieser Art zugewiesen. (Die Liste der
     // Bezeichnungen ist nie leer — der eingebaute Katalog ist immer da.)
-    const hatBedarf = S.tasks.some((t) => (t.res || []).some((z) => resKind(z.rid, S) === kind));
+    const hatBedarf = S.tasks.some((t) => !t.bereitstellung && (t.res || []).some((z) => resKind(z.rid, S) === kind));
     if (!hatBedarf) {
       const leer = el('div', 'bd-empty',
         'Noch kein ' + (kind === 'personal' ? 'Personal' : 'Maschinen') + 'bedarf zugewiesen. ');
@@ -53,7 +53,7 @@ export function createBedarf(root, { store, onEinrichten, neuFragen } = {}) {
       label = (m) => local(toDate(m)).slice(5, 10);
     }
 
-    const raster = bedarfsRaster(tasks, resList, { kind, von, bis, schritt });
+    const raster = bedarfsRaster(tasks, genutzteRessourcen(tasks, resList), { kind, von, bis, schritt });
     const grenzen = rasterGrenzen(von, bis, schritt);   // Kopfzeile aus denselben Grenzen wie das Raster
     const n = raster[0] ? raster[0].slots.length : 0;
     if (!n) { root.append(el('div', 'bd-empty', 'Kein Zeitraum zu zeigen.')); return; }
@@ -97,7 +97,6 @@ export function createBedarf(root, { store, onEinrichten, neuFragen } = {}) {
       box.append(el('div', 'bd-offen-leer', 'Nichts offen — alle Anfragen sind bestätigt oder abgelehnt.'));
       return box;
     }
-    const am = () => new Date().toISOString();
     for (const g of gruppen) {
       const gw = S.gewerke.find((x) => x.id === g.gewerk);
       const kopf = el('div', 'bd-og');
@@ -105,7 +104,7 @@ export function createBedarf(root, { store, onEinrichten, neuFragen } = {}) {
       kopf.append(el('span', 'bd-og-t', (gw ? gw.name : g.gewerk) + ' · ' + d + '.' + mo + '.'));
       const alle = el('button', 'btn bd-alle', '✓ Alle bestätigen');
       alle.onclick = () => store.apply({
-        type: 'setResStatusMehrere', status: 'bestaetigt', am: am(),
+        type: 'setResStatusMehrere', status: 'bestaetigt', am: new Date().toISOString(),
         eintraege: g.eintraege.map((e) => ({ id: e.taskId, index: e.index })),
       });
       kopf.append(alle);
@@ -117,10 +116,9 @@ export function createBedarf(root, { store, onEinrichten, neuFragen } = {}) {
         zeile.dataset.task = e.taskId;
         zeile.append(resStatusMarke(z), el('span', 'bd-oz-t', e.n + '× ' + resLabel(e.rid, S) + ' — ' + t.title));
         const ja = el('button', 'btn bd-ja', '✓ Bestätigen');
-        ja.onclick = () => store.apply({ type: 'setResStatus', id: e.taskId, index: e.index, status: 'bestaetigt', am: am() });
+        ja.onclick = () => store.apply(resStatusCmd(e.taskId, e.index, 'bestaetigt'));
         const nein = el('button', 'btn bd-nein', '✕ Ablehnen');
-        nein.onclick = () => neuFragen && neuFragen(ablehnenOpt((wert) => ({
-          type: 'setResStatus', id: e.taskId, index: e.index, status: 'abgelehnt', notiz: wert, am: am() })), nein, () => {});
+        nein.onclick = () => neuFragen && neuFragen(ablehnenOpt(e.taskId, e.index), nein, () => {});
         zeile.append(ja, nein);
         box.append(zeile);
       }

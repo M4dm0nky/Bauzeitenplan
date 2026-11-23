@@ -1,4 +1,4 @@
-import { ressourcen, resGruppen, resLabel, resKind, deckung, bedarfsRaster, offeneBedarfe, rasterGrenzen, scheibeIndex } from '../js/resources.js';
+import { ressourcen, resGruppen, resLabel, resKind, deckung, bedarfsRaster, offeneBedarfe, genutzteRessourcen, rasterGrenzen, scheibeIndex } from '../js/resources.js';
 import { toMin } from '../js/schedule.js';
 import { RES_EINGEBAUT, RES_KATEGORIEN } from '../js/res-katalog.js';
 import { createStore } from '../js/store.js';
@@ -313,6 +313,17 @@ test('bedarfsRaster zählt bestaetigt nur für bestätigte Bedarfszeilen', () =>
   const von = toMin('2026-05-04T08:00');
   const r = bedarfsRaster(t, [{ id: 'p-runner', label: 'Runner', kind: 'personal' }], { kind: 'personal', von, bis: von + 120, schritt: 60 });
   assert.deepEqual(r[0].slots.map((x) => [x.bedarf, x.bestaetigt]), [[10, 3], [10, 3]]);
+});
+
+test('genutzteRessourcen: nur Bezeichnungen mit Zuweisung (Bedarf oder Bereitstellung), ohne Termin zählt nicht', () => {
+  const list = [{ id: 'a', kind: 'maschine' }, { id: 'b', kind: 'maschine' }, { id: 'c', kind: 'maschine' }, { id: 'd', kind: 'maschine' }];
+  const t = [
+    tk('x', 'g1', '2026-05-04T08:00', '2026-05-04T10:00', [{ rid: 'a', n: 1, von: null, bis: null }]),
+    tk('y', 'g1', '2026-05-04T08:00', '2026-05-04T10:00', [{ rid: 'b', n: 2, von: null, bis: null }], { bereitstellung: true }),
+    tk('z', 'g1', null, null, [{ rid: 'c', n: 1, von: null, bis: null }]),
+  ];
+  assert.deepEqual(genutzteRessourcen(t, list).map((r) => r.id), ['a', 'b']);
+  assert.deepEqual(genutzteRessourcen([], list), []);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

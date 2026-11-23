@@ -3649,6 +3649,9 @@ await check('«Offene Bedarfe» zeigt die Zeile; «✓ Bestätigen» → Zeile v
   await page.waitForTimeout(300);
   bsVorher = await bsOffen();
   if (bsVorher < 1) return 'Runner nicht in «Offene Bedarfe»';
+  // Das Raster zeigt nur Bezeichnungen, die im Plan vorkommen (nicht den ganzen Katalog).
+  const gruppen = await page.locator('.bd-group').allTextContents();
+  if (gruppen.length > 4 || !gruppen.some((g) => g.includes('Runner'))) return 'Raster-Gruppen: ' + gruppen.join(' | ');
   await page.screenshot({ path: join(here, 'shots', 'bedarf-offen.png') });
   await page.locator('#theme-toggle').click();
   await page.waitForTimeout(300);

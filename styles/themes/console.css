@@ -135,7 +135,7 @@ body {
 .tb-verw-b { border: 1px solid var(--rule-2); background: var(--panel2); color: var(--ink-2); }
 .tb-verw-b:hover:not(:disabled) { color: var(--ink); border-color: var(--ink); }
 .tb-verw-x:hover:not(:disabled) { color: var(--crit); border-color: var(--crit); }
-.tb-verw-leer { color: var(--muted, var(--ink-3)); }
+.tb-verw-leer { color: var(--muted); }
 
 /* ── Versatz-Stepper ──────────────────────────────────────────────────────── */
 /* Dieselbe Sprache wie die Live-Leiste: Delay rot, Vorlauf grün. Die Knöpfe

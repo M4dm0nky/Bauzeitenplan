@@ -29,9 +29,17 @@ export function resStatusMarke(z) {
   return m;
 }
 
-/** Optionen für `neuFragen` beim Ablehnen: ein optionaler Grund. `baue(wert)` liefert den Befehl. */
-export function ablehnenOpt(baue) {
-  return { titel: 'Ablehnen — Grund (optional)', okText: 'Ablehnen', buildCmd: (wert) => baue(String(wert || '').trim()) };
+/** Optionen für `neuFragen` beim Ablehnen: ein optionaler Grund. */
+export function ablehnenOpt(id, index) {
+  return {
+    titel: 'Ablehnen — Grund (optional)', okText: 'Ablehnen',
+    buildCmd: (wert) => resStatusCmd(id, index, 'abgelehnt', String(wert || '').trim()),
+  };
+}
+
+/** Der Befehl für einen Statuswechsel. `am` setzt die Oberfläche (der Store ist uhrfrei). */
+export function resStatusCmd(id, index, status, notiz) {
+  return { type: 'setResStatus', id, index, status, ...(notiz ? { notiz } : {}), am: new Date().toISOString() };
 }
 
 /** Optionen für `neuFragen`: Name UND Kategorie (nur die der eigenen Art,
