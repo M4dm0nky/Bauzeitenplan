@@ -3,7 +3,7 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
-## Unveröffentlicht
+## 0.24.0 — 2026-11-23
 
 **Einrichten ist eine eigene Seite mit fünf Bereichen und führt nach «Neu» durch das erste Einrichten.**
 
