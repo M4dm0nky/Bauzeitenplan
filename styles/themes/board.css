@@ -199,7 +199,7 @@ body {
 /* ── Bänder ───────────────────────────────────────────────────────────────── */
 .bz-we { background: var(--panel2); }
 .bz-phase { border-left: 2px solid var(--line); }
-.bz-axis-phase { border-bottom: 2px solid var(--line-2); background: var(--ink); }
+.bz-axis-phase { border-bottom: 2px solid var(--line-2); background: var(--block); }
 .bz-ph { border-left: 2px solid rgba(255,255,255,.25); }
 .bz-ph-t { font-size: 9px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: rgba(255,255,255,.65); padding: 0 10px; }
 .bz-corner-cap { font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); padding-left: 10px; }
