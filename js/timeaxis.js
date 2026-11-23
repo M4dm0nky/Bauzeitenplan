@@ -189,6 +189,9 @@ export function engpassText(e, titelVon) {
  * hat einen Vorgänger, aber keinen Nachfolger. Ohne jede Verknüpfung ruft der
  * Aufrufer mit true auf (dort ist «kein Puffer» die ehrliche Antwort).
  */
+/** Kettenende: mindestens ein Vorgänger, aber kein Nachfolger (DOM-frei, aus den Verknüpfungen). */
+export const kettenEnde = (deps, id) =>
+  deps.some((d) => d.to === id) && !deps.some((d) => d.from === id);
 export const fmtPuffer = (sched, hatNachfolger) =>
   !hatNachfolger && sched.float <= 0 ? '— Kettenende' : fmtFloat(sched.float);
 
