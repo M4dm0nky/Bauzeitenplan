@@ -345,6 +345,48 @@ console.log('\nVORGÄNGE OHNE TERMIN');
   }
 }
 
+console.log('\nPROJEKTANGABEN IM KOPF');
+{
+  // Ort, Adresse, Ansprechpartner stehen im Kopf beider Blattarten, einzeilig (Höhe unverändert).
+  const setzen = async (mit) => p.evaluate(async ([orig, mit]) => {
+    const m = await import('/js/persistence.js');
+    const pl = m.deserialize(orig).plan;
+    if (mit) {
+      pl.project.adresse = 'Hauptstr. 1';
+      pl.project.kunde = 'Kunde GmbH';
+      pl.project.kontakte = [{ id: 'k1', name: 'Ann', rolle: 'PL', tel: '0171' }];
+    }
+    m.createRepo(window.localStorage).save(pl);
+  }, [KT_TEXT, mit]);
+  const kopfHoehe = async (url) => {
+    await p.goto(BASE + url);
+    await p.waitForSelector('.pr-sheet', { timeout: 15000 });
+    await p.waitForTimeout(400);
+    return p.locator('.pr-sheet .pr-head').first().evaluate((h) => h.getBoundingClientRect().height);
+  };
+  const ohne = {};
+  await setzen(false);
+  for (const u of ['/print.html?ebene=bau', '/print.html?ebene=show']) ohne[u] = await kopfHoehe(u);
+  await setzen(true);
+  for (const [name, u] of [['Tagesblatt', '/print.html?ebene=bau'], ['Running Order', '/print.html?ebene=show']]) {
+    await check(name + ': Kopf zeigt Adresse und Ansprechpartner, Kunde nicht, gleiche Höhe', async () => {
+      const h = await kopfHoehe(u);
+      const a = await p.locator('.pr-sheet .pr-head-a').first().textContent();
+      if (!/Hauptstr\. 1/.test(a) || !/Ann · PL · 0171/.test(a)) return 'Kopf: ' + a;
+      if (/Kunde GmbH/.test(await p.locator('.pr-sheet .pr-head').first().textContent())) return 'Kunde steht im Kopf';
+      if (Math.abs(h - ohne[u]) > 1) return 'Kopf ' + ohne[u] + ' -> ' + h + ' px';
+      const rand = await p.locator('.pr-sheet .pr-head').first().evaluate((hd) => {
+        const r = hd.getBoundingClientRect();
+        return [...hd.children].some((c) => c.getBoundingClientRect().right > r.right + 1);
+      });
+      if (rand) return 'Kopf läuft über den Blattrand';
+      await p.locator('.pr-sheet').first().screenshot({ path: join(here, 'shots', 'druck-kopf-' + (u.includes('show') ? 'ro' : 'bau') + '.png') });
+      return true;
+    });
+  }
+  await setzen(false);
+}
+
 if (errors.length) { console.log('\n  ✗ Fehler:'); errors.slice(0, 5).forEach((e) => console.log('      ' + e)); bad += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 await b.close(); server.close();

@@ -284,6 +284,28 @@ function zeichneBlaetter() {
   tage.forEach((tag, i) => wrap.append(blatt(tag, tasks, i + 1, tage.length)));
 }
 
+/** Ort, Adresse und Ansprechpartner für den Blattkopf (Kunde und Anfahrt nie: Crew-Blatt). */
+export function kopfAngaben(project) {
+  const p = project || {};
+  const teile = [p.venue, p.adresse].map((x) => String(x || '').trim()).filter(Boolean);
+  for (const k of p.kontakte || []) {
+    const z = [k.name, k.rolle, k.tel].map((x) => String(x || '').trim()).filter(Boolean).join(' · ');
+    if (z) teile.push(z);
+  }
+  return teile;
+}
+
+/** Kopfzeile eines Blattes: Titel, Angaben (eine Zeile), Datum, Blattnummer. */
+function kopfZeile(titel, d, nr, gesamt) {
+  const head = el('div', 'pr-head');
+  head.append(el('span', 'pr-head-t', titel));
+  const ang = kopfAngaben(PLAN.project).join(' · ');
+  if (ang) head.append(el('span', 'pr-head-a', ang));
+  head.append(el('span', 'pr-head-d', fmtDay(d) + ' ' + d.getFullYear()));
+  head.append(el('span', 'pr-head-n', 'Blatt ' + nr + ' von ' + gesamt));
+  return head;
+}
+
 // ── Running-Order-Blatt ─────────────────────────────────────────────────────
 // Eine LISTE, kein Zeitstrahl. Genau so liest man einen Showablauf: von oben
 // nach unten, Uhrzeit voran. Ein Gantt über zehn Stunden mit siebzehn Zeilen
@@ -297,14 +319,10 @@ function roBlatt({ tag, b, drauf }, nr, gesamt) {
   sheet.dataset.tag = tag;
   sheet.dataset.buehne = b.id;
 
-  const head = el('div', 'pr-head');
   const d = new Date(tag + 'T12:00');
   const absName = (ABSCHNITTE.find(([k]) => k === wahl.abschnitt) || [])[1];
-  head.append(el('span', 'pr-head-t',
-    PLAN.project.name + ' · ' + b.name + (absName ? ' · ' + absName : '')));
-  head.append(el('span', 'pr-head-d', fmtDay(d) + ' ' + d.getFullYear()));
-  head.append(el('span', 'pr-head-n', 'Blatt ' + nr + ' von ' + gesamt));
-  sheet.append(head);
+  sheet.append(kopfZeile(
+    PLAN.project.name + ' · ' + b.name + (absName ? ' · ' + absName : ''), d, nr, gesamt));
 
   const body = el('div', 'pr-body');
 
@@ -401,12 +419,8 @@ function blatt(tag, tasks, nr, gesamt) {
   const pct = (min) => ((min - wVon) / spanne) * 100;
 
   // ── Kopf ──
-  const head = el('div', 'pr-head');
   const d = new Date(tag + 'T12:00');
-  head.append(el('span', 'pr-head-t', PLAN.project.name));
-  head.append(el('span', 'pr-head-d', fmtDay(d) + ' ' + d.getFullYear()));
-  head.append(el('span', 'pr-head-n', 'Blatt ' + nr + ' von ' + gesamt));
-  sheet.append(head);
+  sheet.append(kopfZeile(PLAN.project.name, d, nr, gesamt));
 
   // ── Zeitachse ──
   const axis = el('div', 'pr-axis');

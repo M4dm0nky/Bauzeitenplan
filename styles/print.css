@@ -70,6 +70,7 @@
 
 .pr-head { display: flex; align-items: baseline; gap: 8mm; padding-bottom: 2mm; border-bottom: .5mm solid var(--pr-ink); }
 .pr-head-t { font-size: 5mm; font-weight: 700; }
+.pr-head-a { font-size: 3.4mm; color: var(--pr-mute); flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pr-head-d { font-size: 5mm; font-weight: 600; margin-left: auto; }
 .pr-head-n { font-size: 3.2mm; color: var(--pr-mute); font-variant-numeric: tabular-nums; }
 

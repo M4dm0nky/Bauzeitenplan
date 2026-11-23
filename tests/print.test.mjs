@@ -10,7 +10,7 @@ globalThis.location = { search: '' };
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.fetch = () => Promise.reject(new Error('kein Netz im Test'));
 
-const { notizFuerDruck, tageZwischen, fensterFuer, ohneTerminHinweis } = await import('../js/print.js');
+const { notizFuerDruck, tageZwischen, fensterFuer, ohneTerminHinweis, kopfAngaben } = await import('../js/print.js');
 const { plan } = await import('../tools/make-klassentreffen.mjs');
 import assert from 'node:assert/strict';
 
@@ -107,6 +107,17 @@ test('ohneTerminHinweis: Abschnitt filtert (Setup-Blatt zählt keine Show-Eintr�
   const t = [{ id: 'a', start: null, end: null, abschnitt: 'setup' }, { id: 'b', start: null, end: null, abschnitt: 'show' }];
   assert.equal(ohneTerminHinweis(t, 'setup'), '1 Eintrag ohne Termin nicht gedruckt');
   assert.equal(ohneTerminHinweis(t, 'alle'), '2 Einträge ohne Termin nicht gedruckt');
+});
+
+console.log('\nTagesblätter — Kopfangaben');
+test('kopfAngaben ohne Angaben ist leer', () => {
+  assert.deepEqual(kopfAngaben({ name: 'X', venue: '', adresse: '', kontakte: [] }), []);
+  assert.deepEqual(kopfAngaben({ name: 'X' }), []);
+});
+test('kopfAngaben Reihenfolge, leere Teile und leere Kontakte entfallen, Kunde nie', () => {
+  assert.deepEqual(kopfAngaben({ venue: 'Festwiese', adresse: 'Hauptstr. 1', anfahrt: 'Tor 3', kunde: 'X',
+    kontakte: [{ name: 'Ann', rolle: 'PL', tel: '0171' }, { name: '', rolle: '', tel: '' }, { name: 'Bo', rolle: '', tel: '0160' }] }),
+  ['Festwiese', 'Hauptstr. 1', 'Ann · PL · 0171', 'Bo · 0160']);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
