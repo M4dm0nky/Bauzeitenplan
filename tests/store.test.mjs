@@ -1,4 +1,4 @@
-import { createStore, STATUS_IDS, verschiebeZeit } from '../js/store.js';
+import { createStore, STATUS_IDS, verschiebeZeit, RES_STATUS } from '../js/store.js';
 import { toMin, toDate } from '../js/schedule.js';
 import { local } from '../js/conflicts.js';
 import assert from 'node:assert/strict';
@@ -1534,6 +1534,104 @@ test('removeAuswahl einer eingebauten Bezeichnung: «fest eingebaut»', () => {
   const r = s.apply({ type: 'removeAuswahl', liste: 'ressourcen', id: 'm-raupe' });
   assert.equal(r.ok, false);
   assert.ok(JSON.stringify(r).includes('fest eingebaut'));
+});
+
+console.log('\nBedarfsstatus');
+const mitRes = () => {
+  const s = createStore(seed());
+  s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'p-stagehand', n: 4, von: null, bis: null } });
+  s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'p-runner', n: 2, von: null, bis: null } });
+  return s;
+};
+const AM = '2026-07-01T10:00:00.000Z';
+test('setResStatus bestätigt, Undo holt angefragt zurück', () => {
+  const s = mitRes();
+  const r = s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM, notiz: 'Mail von Herrn X' });
+  assert.equal(r.ok, true);
+  const z = taskById(s, 'a').res[0];
+  assert.equal(z.status, 'bestaetigt'); assert.equal(z.bestaetigtAm, AM); assert.equal(z.notiz, 'Mail von Herrn X');
+  assert.ok(s.undo());
+  assert.equal('status' in taskById(s, 'a').res[0], false);
+  assert.equal('bestaetigtAm' in taskById(s, 'a').res[0], false);
+});
+test('angefragt entfernt bestaetigtAm; Notiz wird gekürzt, leer entfernt', () => {
+  const s = mitRes();
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'abgelehnt', am: AM, notiz: 'x'.repeat(300) });
+  assert.equal(taskById(s, 'a').res[0].notiz.length, 200);
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'angefragt', notiz: '  ' });
+  const z = taskById(s, 'a').res[0];
+  assert.deepEqual(Object.keys(z).sort(), ['bis', 'n', 'rid', 'von']);
+});
+test('RES_STATUS: genau die drei Werte', () => {
+  assert.deepEqual(RES_STATUS, ['angefragt', 'bestaetigt', 'abgelehnt']);
+});
+test('unbekannter Status hinterlässt nichts', () => {
+  const s = mitRes();
+  const undoVorher = s.canUndo; s.markSaved();
+  const r = s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'vielleicht' });
+  assert.equal(r.ok, false);
+  assert.ok(JSON.stringify(r).includes('Unbekannter Status: vielleicht'));
+  assert.equal(s.canUndo, undoVorher); assert.equal(s.dirty, false);
+});
+test('Anzahl ändern setzt bestätigt zurück, gleiche Werte nicht', () => {
+  const s = mitRes();
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM });
+  s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: { rid: 'p-stagehand', n: 4, von: null, bis: null } });
+  assert.equal(taskById(s, 'a').res[0].status, 'bestaetigt');
+  s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: { rid: 'p-stagehand', n: 5, von: null, bis: null } });
+  assert.equal('status' in taskById(s, 'a').res[0], false);
+  assert.equal('bestaetigtAm' in taskById(s, 'a').res[0], false);
+});
+test('Vorgang verschieben setzt bestätigt zurück, gleiche Zeit nicht', () => {
+  const s = mitRes();
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM });
+  s.apply({ type: 'moveTask', id: 'a', start: '2026-07-13T08:00', end: '2026-07-13T12:00' });
+  assert.equal(taskById(s, 'a').res[0].status, 'bestaetigt');
+  s.apply({ type: 'moveTask', id: 'a', start: '2026-07-13T09:00', end: '2026-07-13T13:00' });
+  assert.equal('status' in taskById(s, 'a').res[0], false);
+});
+test('Ende ändern (setTaskField end) setzt zurück, gleiche Zeit nicht', () => {
+  const s = mitRes();
+  s.apply({ type: 'setResStatus', id: 'a', index: 1, status: 'abgelehnt', am: AM });
+  s.apply({ type: 'setTaskField', id: 'a', field: 'end', value: '2026-07-13T12:00' });
+  assert.equal(taskById(s, 'a').res[1].status, 'abgelehnt');
+  s.apply({ type: 'setTaskField', id: 'a', field: 'end', value: '2026-07-13T13:00' });
+  assert.equal('status' in taskById(s, 'a').res[1], false);
+});
+test('shiftPlan setzt Status zurück', () => {
+  const s = mitRes();
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM });
+  assert.equal(s.apply({ type: 'shiftPlan', tage: 1, minuten: 0 }).ok, true);
+  assert.equal('status' in taskById(s, 'a').res[0], false);
+});
+test('duplicateTask: Kopie ohne Status, Original behält ihn', () => {
+  const s = mitRes();
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM, notiz: 'ok' });
+  const id = s.apply({ type: 'duplicateTask', id: 'a' }).id;
+  assert.equal(taskById(s, 'a').res[0].status, 'bestaetigt');
+  assert.deepEqual(Object.keys(taskById(s, id).res[0]).sort(), ['bis', 'n', 'rid', 'von']);
+});
+test('Bereitstellung lehnt setResStatus ab', () => {
+  const s = mitRes();
+  s.apply({ type: 'removeDep', id: 'd1' });   // Bereitstellung verträgt keine Verknüpfung
+  assert.equal(s.apply({ type: 'setTaskField', id: 'b', field: 'bereitstellung', value: true }).ok, true);
+  s.apply({ type: 'setTaskRes', id: 'b', index: null, value: { rid: 'p-runner', n: 1, von: null, bis: null } });
+  const r = s.apply({ type: 'setResStatus', id: 'b', index: 0, status: 'bestaetigt', am: AM });
+  assert.equal(r.ok, false);
+  assert.ok(JSON.stringify(r).includes('Eine Bereitstellung hat keinen Status.'));
+});
+test('setResStatusMehrere: alles oder nichts, ein Undo-Schritt', () => {
+  const s = mitRes();
+  s.markSaved();
+  const schlecht = s.apply({ type: 'setResStatusMehrere', status: 'bestaetigt', am: AM, eintraege: [{ id: 'a', index: 0 }, { id: 'a', index: 9 }] });
+  assert.equal(schlecht.ok, false);
+  assert.equal(s.dirty, false);
+  assert.equal('status' in taskById(s, 'a').res[0], false);
+  const r = s.apply({ type: 'setResStatusMehrere', status: 'bestaetigt', am: AM, eintraege: [{ id: 'a', index: 0 }, { id: 'a', index: 1 }] });
+  assert.equal(r.ok, true);
+  assert.deepEqual(taskById(s, 'a').res.map((z) => z.status), ['bestaetigt', 'bestaetigt']);
+  assert.ok(s.undo());
+  assert.deepEqual(taskById(s, 'a').res.map((z) => 'status' in z), [false, false]);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

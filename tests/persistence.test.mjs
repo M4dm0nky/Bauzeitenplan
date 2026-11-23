@@ -176,6 +176,12 @@ test('Export enthält Schema-Version und Plan', () => {
   assert.equal(j.schema, SCHEMA_VERSION);
   assert.equal(j.project.name, 'Test');
 });
+test('Bedarfsstatus (status, notiz, bestaetigtAm) reist durch Export → Import', () => {
+  const p = plan();
+  p.tasks[0].res = [{ rid: 'p-runner', n: 2, von: null, bis: null, status: 'bestaetigt', notiz: 'Mail', bestaetigtAm: '2026-07-01T10:00:00.000Z' }];
+  const z = deserialize(serialize(p)).plan.tasks[0].res[0];
+  assert.deepEqual([z.status, z.notiz, z.bestaetigtAm], ['bestaetigt', 'Mail', '2026-07-01T10:00:00.000Z']);
+});
 test('Export → Import ergibt denselben Plan', () => {
   const back = deserialize(serialize(plan()));
   assert.deepEqual(back.plan, migriert(plan()));

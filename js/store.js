@@ -228,12 +228,30 @@ function neuerEintrag(state, { feld, eingebaut, praefix, fehlt, doppelt, label: 
 // Zustand hinterlassen, nicht auf den Undo-Stapel und nichts als ungesichert
 // markieren.
 
+// Bedarfsstatus: `angefragt` ist der Normalfall und steht NICHT im Feld (fehlt =
+// angefragt). Die drei Felder zusammen entfernen = zurück auf «angefragt».
+// Die EINE Stelle für den Rückfall bei Zeitänderung und geänderter Zeile.
+export const RES_STATUS = ['angefragt', 'bestaetigt', 'abgelehnt'];
+const STATUS_FELDER = ['status', 'notiz', 'bestaetigtAm'];
+const ohneStatus = (z) => {
+  const c = { ...z };
+  for (const f of STATUS_FELDER) delete c[f];
+  return c;
+};
+function statusZurueck(t) {
+  if (Array.isArray(t.res)) t.res = t.res.map(ohneStatus);
+}
+
 // Zuweisungs-Fenster (`t.res[].von/bis`) folgen ihrem Vorgang. Gerufen NACH
 // erfolgreicher Prüfung, innerhalb desselben Befehls — ein ⌘Z holt Vorgang und
 // Fenster gemeinsam zurück. Gleiche (echte) Dauer = Verschiebung: Fenster
 // wandern um dieselben Minuten. Sonst wird beschnitten; ein Fenster, das danach
 // leer wäre, wird zu `null` (= ganzer Vorgang). Meilensteine bleiben unberührt.
 function resNachziehen(t, altStart, altEnd) {
+  // Eine echte Zeitänderung entwertet jede Bestätigung: der Vermieter hat andere
+  // Zeiten zugesagt. Verglichen wird per toMin, nicht über die Zeichenkette.
+  const zeit = (iso) => (iso == null ? null : toMin(iso));
+  if (zeit(altStart) !== zeit(t.start) || zeit(altEnd) !== zeit(t.end)) statusZurueck(t);
   if (t.milestone || !Array.isArray(t.res) || !t.res.length) return;
   // Ohne Termin gibt es keinen Vorgang, in dem ein Fenster liegen könnte: alle
   // Fenster werden zu «ganzer Vorgang». Aus «ohne Termin» heraus waren sie schon null.
@@ -252,6 +270,28 @@ function resNachziehen(t, altStart, altEnd) {
     if (bis <= von) return { ...z, von: null, bis: null };
     return { ...z, von: local(toDate(von)), bis: local(toDate(bis)) };
   });
+}
+
+function resStatusPruefen(state, cmd) {
+  if (!RES_STATUS.includes(cmd.status)) return 'Unbekannter Status: ' + cmd.status;
+  const t = state.tasks.find((x) => x.id === cmd.id);
+  if (!t) return 'Vorgang nicht gefunden.';
+  if (t.bereitstellung) return 'Eine Bereitstellung hat keinen Status.';
+  if (!Number.isInteger(cmd.index) || !Array.isArray(t.res) || cmd.index < 0 || cmd.index >= t.res.length)
+    return 'Zuweisung nicht gefunden.';
+  return null;
+}
+
+function resStatusSetzen(state, cmd, id, index) {
+  const t = state.tasks.find((x) => x.id === id);
+  const z = ohneStatus(t.res[index]);
+  const notiz = String(cmd.notiz ?? '').trim().slice(0, 200);
+  if (cmd.status !== 'angefragt') {
+    z.status = cmd.status;
+    if (cmd.am) z.bestaetigtAm = cmd.am;
+  }
+  if (notiz) z.notiz = notiz;
+  t.res = t.res.map((x, i) => (i === index ? z : x));
 }
 
 const checkSpan = (start, end, milestone) => spanFehler(start, end, { milestone });
@@ -548,7 +588,10 @@ const HANDLERS = {
     // so. Mit denselben Vorgängern stünde sie sofort im Konflikt, und niemand
     // will beim Duplizieren einen roten Plan. Weil das Fehlen im Bild nicht zu
     // sehen ist, sagt es app.js dem Nutzer per Toast.
-    state.tasks.push({ ...t, id, title: t.title + ' (Kopie)' });
+    const kopie = { ...t, id, title: t.title + ' (Kopie)' };
+    // Die Kopie ist eine neue Anfrage: Status des Originals gilt nicht für sie.
+    if (Array.isArray(kopie.res)) kopie.res = kopie.res.map(ohneStatus);
+    state.tasks.push(kopie);
     return ok({ id });
   },
 
@@ -592,6 +635,7 @@ const HANDLERS = {
     const schieb = (iso) => verschiebeZeit(iso, tage, minuten);
     for (const t of state.tasks) {
       t.start = schieb(t.start); t.end = schieb(t.end);
+      statusZurueck(t);   // der ganze Plan wandert: keine Bestätigung gilt mehr
       for (const z of t.res || []) { z.von = schieb(z.von); z.bis = schieb(z.bis); }
     }
     for (const ph of state.phases || []) { ph.start = schieb(ph.start); ph.end = schieb(ph.end); }
@@ -691,10 +735,39 @@ const HANDLERS = {
       if (idx == null) list.push(eintrag);
       else {
         if (idx < 0 || idx >= list.length) return 'Zuweisung nicht gefunden.';
-        list[idx] = eintrag;
+        // Bleibt die Zeile inhaltlich gleich, bleibt ihr Status; sonst gilt eine
+        // neue Anfrage (Status-Felder fallen weg).
+        const alt = list[idx];
+        const gleich = alt.rid === eintrag.rid && alt.n === eintrag.n
+          && (alt.von ?? null) === eintrag.von && (alt.bis ?? null) === eintrag.bis;
+        if (gleich) { list[idx] = { ...alt }; }
+        else list[idx] = eintrag;
       }
     }
     t.res = list;
+    return ok();
+  },
+
+  /**
+   * Bedarfsstatus einer Zuweisung setzen (angefragt / bestätigt / abgelehnt).
+   * `am` kommt vom Aufrufer (ISO-String): der Store bleibt uhrfrei.
+   */
+  setResStatus(state, cmd) {
+    const f = resStatusPruefen(state, cmd);
+    if (f) return f;
+    resStatusSetzen(state, cmd, cmd.id, cmd.index);
+    return ok();
+  },
+
+  // Alle Einträge zuerst prüfen (alles oder nichts), dann setzen: «Alle
+  // bestätigen» ist EIN Befehl, EIN Undo-Schritt.
+  setResStatusMehrere(state, cmd) {
+    if (!Array.isArray(cmd.eintraege) || !cmd.eintraege.length) return 'Keine Zuweisungen angegeben.';
+    for (const e of cmd.eintraege) {
+      const f = resStatusPruefen(state, { ...cmd, id: e.id, index: e.index });
+      if (f) return f;
+    }
+    for (const e of cmd.eintraege) resStatusSetzen(state, cmd, e.id, e.index);
     return ok();
   },
 
