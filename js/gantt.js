@@ -22,7 +22,7 @@ const personalSum = (t, state) =>
     .reduce((a, z) => a + z.n, 0);
 import {
   ZOOM, clampZoom, zoomAnchored, nearestPreset, fitPx, tickScale, ticksFor,
-  weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat, rasterMin, gezogen, naechsteMitternacht,
+  weekendBands, fmtTime, fmtDay, fmtDur, fmtFloat, rasterMin, gezogen, naechsteMitternacht, planSpanne,
 } from './timeaxis.js';
 
 // T0/T1/NOW/TOTAL_MIN hingen früher als Modul-Konstanten an einem festen
@@ -135,8 +135,10 @@ export function createGantt(root, opts = {}) {
     // die Datumszeile der Achse links angeschnitten.
     const z = ebene === 'bau' ? null : programmFenster(VT);
     fensterDa = !!z;
-    T0 = z ? z.von : toMin(S.project.start);
-    T1 = z ? z.bis : toMin(S.project.end);
+    // Bauzeitenplan: die Achse spannt über Projekt, Vorgänge UND Phasen (planSpanne).
+    const sp = z ? null : planSpanne(S);
+    T0 = z ? z.von : sp.von;
+    T1 = z ? z.bis : sp.bis;
     TOTAL_MIN = Math.max(1, T1 - T0);
     NOW = readNow();
     byId = new Map(S.tasks.map((t) => [t.id, t]));
@@ -1395,7 +1397,7 @@ export function createGantt(root, opts = {}) {
       // Kalendertage; zeigt die Ansicht nur einen (Showablauf), ragte es
       // 1400 px über den Canvas hinaus und machte den Scroller genau so viel
       // breiter — der Tag rutschte aus dem Bild und rechts klaffte Grau.
-      for (const w of weekendBands(new Date(S.project.start), new Date(S.project.end))) {
+      for (const w of weekendBands(toDate(planSpanne(S).von), toDate(planSpanne(S).bis))) {
         const a = x(Math.max(T0, Math.round(w.from.getTime() / 60000)));
         const b = x(Math.min(T1, Math.round(w.to.getTime() / 60000)));
         if (b <= a) continue;

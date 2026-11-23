@@ -13,7 +13,7 @@
 
 import { createRepo } from './persistence.js';
 import { tagesScheiben, naechsterTag, seriesRows, toMin, toDate, ohneTermin } from './schedule.js';
-import { ticksFor, fmtDay } from './timeaxis.js';
+import { ticksFor, fmtDay, planSpanne } from './timeaxis.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { local } from './conflicts.js';
 import { el, $ } from './dom.js';
@@ -588,8 +588,9 @@ ladePlan().then((plan) => {
   if (ab === 'setup' || ab === 'show' || ab === 'alle') wahl.abschnitt = ab;
   baender().forEach((g) => wahl.gewerke.add(g.id));
   const alle = gewaehlteTasks().map((t) => toMin(t.start));
-  const min = alle.length ? Math.min(...alle) : toMin(PLAN.project.start);
-  const max = alle.length ? Math.max(...gewaehlteTasks().map((t) => toMin(t.end))) : toMin(PLAN.project.end);
+  const sp = planSpanne(PLAN);   // Rückfall ohne gewählte Vorgänge: ganze Plan-Spanne
+  const min = alle.length ? Math.min(...alle) : sp.von;
+  const max = alle.length ? Math.max(...gewaehlteTasks().map((t) => toMin(t.end))) : sp.bis;
   wahl.von = local(toDate(min)).slice(0, 10);
   wahl.bis = local(toDate(max)).slice(0, 10);
   wahl.fenster = { von: 0, bis: 24 };

@@ -5,6 +5,7 @@
 // gerendert.
 
 import { toMin, toDate } from './schedule.js';
+import { planSpanne } from './timeaxis.js';
 import { local } from './conflicts.js';
 import { sichtTasks, amTag, programmFenster } from './ebene.js';
 import { ressourcen, bedarfsRaster, rasterGrenzen } from './resources.js';
@@ -44,7 +45,7 @@ export function createBedarf(root, { store, onEinrichten } = {}) {
       von = fenster.von; bis = fenster.bis; schritt = 60;
       label = (m) => local(toDate(m)).slice(11, 16);
     } else {
-      von = toMin(S.project.start); bis = toMin(S.project.end); schritt = 'tag';
+      ({ von, bis } = planSpanne(S)); schritt = 'tag';
       label = (m) => local(toDate(m)).slice(5, 10);
     }
 

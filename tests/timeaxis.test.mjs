@@ -1,4 +1,4 @@
-import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM, rasterMin, schnapp, gezogen, planMinute, naechsteMitternacht } from '../js/timeaxis.js';
+import { zoomAnchored, ticksFor, isoWeek, tickScale, nearestPreset, clampZoom, weekendBands, fitPx, ZOOM, rasterMin, schnapp, gezogen, planMinute, naechsteMitternacht, planSpanne } from '../js/timeaxis.js';
 import assert from 'node:assert/strict';
 import { toMin } from '../js/schedule.js';
 
@@ -250,6 +250,35 @@ test('naechsteMitternacht: 29.03.2026 (Beginn der Sommerzeit) hat 23 Stunden', (
 test('naechsteMitternacht: 23:59 und 00:00 am Monatsende', () => {
   assert.equal(naechsteMitternacht(T('2026-08-30T23:59')), T('2026-08-31T00:00'));
   assert.equal(naechsteMitternacht(T('2026-08-31T00:00')), T('2026-09-01T00:00'));
+});
+
+console.log('\nplanSpanne');
+const P = (extra = {}) => ({ project: { start: '2027-07-26T00:00', end: '2027-08-12T06:00' }, tasks: [], phases: [], ...extra });
+test('planSpanne: Phase nach Projektende verlängert die Achse', () => {
+  const r = planSpanne(P({ phases: [{ id: 'ph1', art: 'abbau', start: '2027-08-20T08:00', end: '2027-08-30T19:00' }] }));
+  assert.equal(r.bis, T('2027-08-30T19:00'));
+  assert.equal(r.von, T('2027-07-26T00:00'));
+});
+test('planSpanne: Vorgang vor Projektstart verlängert nach links', () => {
+  const r = planSpanne(P({ tasks: [{ id: 'a', start: '2027-07-20T08:00', end: '2027-07-20T10:00' }] }));
+  assert.equal(r.von, T('2027-07-20T08:00'));
+  assert.equal(r.bis, T('2027-08-12T06:00'));
+});
+test('planSpanne: Vorgang nach Projektende verlängert nach rechts', () => {
+  const r = planSpanne(P({ tasks: [{ id: 'a', start: '2027-08-13T08:00', end: '2027-08-14T10:00' }] }));
+  assert.equal(r.bis, T('2027-08-14T10:00'));
+});
+test('planSpanne: leerer Plan = Projektzeitraum', () => {
+  assert.deepEqual(planSpanne(P()), { von: T('2027-07-26T00:00'), bis: T('2027-08-12T06:00') });
+  assert.deepEqual(planSpanne({ project: P().project }), { von: T('2027-07-26T00:00'), bis: T('2027-08-12T06:00') });
+});
+test('planSpanne: terminloser Vorgang und Phase ohne Zeit ändern nichts', () => {
+  const r = planSpanne(P({ tasks: [{ id: 'a', start: null, end: null }, { id: 'b' }], phases: [{ id: 'p', art: 'abbau', start: null, end: null }] }));
+  assert.deepEqual(r, { von: T('2027-07-26T00:00'), bis: T('2027-08-12T06:00') });
+});
+test('planSpanne: Plan innerhalb des Projekts lässt es unverändert', () => {
+  const r = planSpanne(P({ tasks: [{ id: 'a', start: '2027-08-01T08:00', end: '2027-08-01T10:00' }] }));
+  assert.deepEqual(r, { von: T('2027-07-26T00:00'), bis: T('2027-08-12T06:00') });
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

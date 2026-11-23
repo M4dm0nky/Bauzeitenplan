@@ -1,3 +1,5 @@
+import { toMin } from './schedule.js';
+
 // ── Zeitachse: Zeit ↔ Pixel, Zoom, Tick-Erzeugung ─────────────────────────────
 // Reine Funktionen, kein DOM. Ein einziges Konzept trägt alle Zoomstufen:
 // pxPerMinute. Die Stufen sind nur Presets darauf.
@@ -239,4 +241,21 @@ export function gezogen({ start, end, modus, deltaMin, schritt, milestone }) {
 }
 
 /** Umkehrung von xp(): Pixel → Planminute. Versatz verschiebt den Ablauf, also zurückrechnen. */
+/**
+ * Die Achse des Bauzeitenplans: Hülle aus Projektzeitraum, allen Vorgängen mit
+ * Termin und allen Phasen. Nur `project.start/end` zu nehmen schnitt alles ab,
+ * was über das Projektende hinausragt (Phase bis 30.08. bei Projektende 12.08.).
+ * Terminlose Vorgänge/Phasen zählen nicht. Minuten wie `toMin`.
+ */
+export function planSpanne(state) {
+  let von = toMin(state.project.start), bis = toMin(state.project.end);
+  const hinzu = (a, b) => {
+    if (a) von = Math.min(von, toMin(a));
+    if (b) bis = Math.max(bis, toMin(b));
+  };
+  for (const t of state.tasks || []) hinzu(t.start, t.end);
+  for (const p of state.phases || []) hinzu(p.start, p.end);
+  return { von, bis };
+}
+
 export const planMinute = (xPx, { T0, px, versatz = 0 }) => xPx / px + T0 - versatz;

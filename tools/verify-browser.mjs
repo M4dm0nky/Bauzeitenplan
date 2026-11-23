@@ -539,6 +539,43 @@ for (const pg of PAGES) {
   await m.close();
 }
 
+// ── Phase nach Projektende ───────────────────────────────────────────────────
+// Die Achse spannte nur project.start…end: eine Phase dahinter fehlte (Fall:
+// Projektende 12.08., Phasen bis 30.08.). Der Store ist in der Seite nicht
+// erreichbar, darum legt ein zweites Init-Skript die Phase im gespeicherten Plan
+// an, bevor die App lädt (Form wie addPhase: id, art, name, start, end).
+{
+  console.log('\nPHASE NACH PROJEKTENDE (Achse = planSpanne)');
+  const m = await browser.newPage({ viewport: { width: 1600, height: 950 } });
+  const id = await planLaden(m);
+  await m.addInitScript(`try {
+    const k = 'bzp_p_' + ${JSON.stringify(id)};
+    if (localStorage.getItem('bzp_phase_nach_ende') !== '1') {
+      localStorage.setItem('bzp_phase_nach_ende', '1');
+      const p = JSON.parse(localStorage.getItem(k));
+      const ende = new Date(p.project.end);
+      const fmt = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      const a = new Date(ende.getTime() + 10 * 86400000), b = new Date(ende.getTime() + 12 * 86400000);
+      (p.phases ||= []).push({ id: 'ph-nach-ende', art: 'abbau', name: '', start: fmt(a), end: fmt(b) });
+      localStorage.setItem(k, JSON.stringify(p));
+    }
+  } catch (e) {}`);
+  await m.goto(BASE + '/index.html?plan=leer', { waitUntil: 'load', timeout: 30000 });
+  await m.waitForSelector('.bz-lab', { timeout: 20000 });
+  await m.waitForTimeout(argBase ? 1600 : 800);
+  const r = await m.evaluate(() => {
+    const n = document.querySelector('.bz-ph[data-phase="ph-nach-ende"]');
+    const c = document.querySelector('.bz-canvas');
+    if (!n) return { da: false };
+    const b = n.getBoundingClientRect(), cb = c.getBoundingClientRect();
+    return { da: true, w: Math.round(b.width), links: Math.round(b.left - cb.left), cw: Math.round(cb.width) };
+  });
+  if (r.da && r.w > 0 && r.links < r.cw) console.log(`    ✓ Phase nach Projektende sichtbar (Breite ${r.w} px, left ${r.links} < Canvas ${r.cw})`);
+  else { console.log('    ✗ Phase nach Projektende sichtbar: ' + JSON.stringify(r)); problems++; }
+  await m.screenshot({ path: join(shots, 'phase-nach-ende.png') });
+  await m.close();
+}
+
 // ── Handy-Kopf in allen fünf Themes, beide Modi ──────────────────────────────
 // Der Kopf belegte auf 390×844 ~470 px (Board: 574) — die Hälfte des Bildes.
 // Ziel: ≤ 285 px, ohne dass ein Bedienelement wegfällt. Themes überschreiben
