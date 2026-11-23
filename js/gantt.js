@@ -1397,7 +1397,8 @@ export function createGantt(root, opts = {}) {
       // Kalendertage; zeigt die Ansicht nur einen (Showablauf), ragte es
       // 1400 px über den Canvas hinaus und machte den Scroller genau so viel
       // breiter — der Tag rutschte aus dem Bild und rechts klaffte Grau.
-      for (const w of weekendBands(toDate(planSpanne(S).von), toDate(planSpanne(S).bis))) {
+      const plan = planSpanne(S);
+      for (const w of weekendBands(toDate(plan.von), toDate(plan.bis))) {
         const a = x(Math.max(T0, Math.round(w.from.getTime() / 60000)));
         const b = x(Math.min(T1, Math.round(w.to.getTime() / 60000)));
         if (b <= a) continue;

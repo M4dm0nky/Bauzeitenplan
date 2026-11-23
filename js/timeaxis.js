@@ -240,7 +240,6 @@ export function gezogen({ start, end, modus, deltaMin, schritt, milestone }) {
   return { start, end };
 }
 
-/** Umkehrung von xp(): Pixel → Planminute. Versatz verschiebt den Ablauf, also zurückrechnen. */
 /**
  * Die Achse des Bauzeitenplans: Hülle aus Projektzeitraum, allen Vorgängen mit
  * Termin und allen Phasen. Nur `project.start/end` zu nehmen schnitt alles ab,
@@ -258,4 +257,5 @@ export function planSpanne(state) {
   return { von, bis };
 }
 
+/** Umkehrung von xp(): Pixel → Planminute. Versatz verschiebt den Ablauf, also zurückrechnen. */
 export const planMinute = (xPx, { T0, px, versatz = 0 }) => xPx / px + T0 - versatz;
