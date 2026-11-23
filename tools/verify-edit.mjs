@@ -3257,6 +3257,155 @@ await check('Speicherort: «☁ Speicherort…» öffnet #sync-dlg mit Schlüsse
   return (await page.locator('#sync-dlg').isVisible()) ? 'Klick daneben schließt nicht' : true;
 });
 
+console.log('\nRESSOURCEN-AUSWAHL (res-picker.js)');
+await festivalMitDaten(page, 'Res-Auswahl', { loadIn: '2026-10-05T06:00' });
+await page.waitForTimeout(1000);
+await zumPlan(page);
+await page.locator('[data-view="gantt"]').click();
+await page.waitForTimeout(400);
+await page.locator('.bz-bar').first().click();
+await page.waitForTimeout(300);
+// Ausgangslage: Undo-Stapel leer, damit «kein Undo-Eintrag» überhaupt fehlschlagen kann.
+for (let i = 0; i < 40 && !(await page.locator('#undo').isDisabled()); i++) await page.locator('#undo').click();
+const rpZeilen = () => page.locator('.ins-res-row').count();
+const rpOeffne = async (wort) => {
+  await page.locator('.ins-res-add', { hasText: wort }).click();
+  await page.waitForTimeout(150);
+};
+await check('Picker: «+ Maschine» öffnet ihn mit 7 Kategorie-Köpfen und fokussiertem Suchfeld', async () => {
+  await rpOeffne('Maschine');
+  if (!(await page.locator('.rp-pop').isVisible())) return 'Picker nicht sichtbar';
+  const koepfe = await page.locator('.rp-kopf').allTextContents();
+  if (koepfe.length !== 7) return koepfe.length + ' Köpfe: ' + koepfe.join(' | ');
+  if (!(await page.locator('.rp-such').evaluate((n) => n === document.activeElement))) return 'Suchfeld ohne Fokus';
+  await page.screenshot({ path: join(here, 'shots', 'rp-offen.png') });
+  return true;
+});
+await check('Picker: «12» tippen → genau 2 Einträge, Kategorien bleiben als Kopf; Enter weist «Scherenbühne 12 m» zu', async () => {
+  const vorher = await rpZeilen();
+  await page.locator('.rp-such').fill('12');
+  await page.waitForTimeout(100);
+  const items = await page.locator('.rp-item').allTextContents();
+  if (items.length !== 2) return 'Einträge: ' + items.join(' | ');
+  if ((await page.locator('.rp-kopf').count()) !== 2) return 'Köpfe nach Filter: ' + (await page.locator('.rp-kopf').count());
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  if (await page.locator('.rp-pop').count()) return 'Picker bleibt nach Enter offen';
+  if ((await rpZeilen()) !== vorher + 1) return 'Zuweisungen ' + vorher + ' → ' + (await rpZeilen());
+  const txt = (await page.locator('.ins-res-r').last().textContent()).trim();
+  if (txt !== 'Scherenbühne 12 m ▾') return 'Zuweisung: «' + txt + '»';
+  if (await page.locator('#undo').isDisabled()) return 'Zuweisung ohne Undo-Eintrag';
+  return true;
+});
+await check('Picker: Pfeiltaste ↓ bewegt die Markierung, ↑ zurück', async () => {
+  await rpOeffne('Maschine');
+  const aktiv = () => page.locator('.rp-item.is-aktiv').first().textContent();
+  const a = await aktiv();
+  await page.keyboard.press('ArrowDown');
+  const b = await aktiv();
+  await page.keyboard.press('ArrowUp');
+  const c = await aktiv();
+  await page.keyboard.press('Escape');
+  return (a !== b && a === c) ? true : [a, b, c].join(' / ');
+});
+await check('Picker: Escape schließt ohne Änderung — keine Zuweisung, kein Undo-Eintrag', async () => {
+  await undoOhneFeld();
+  await page.waitForTimeout(250);
+  if (!(await page.locator('#undo').isDisabled())) return 'Vorbedingung: Undo-Stapel nicht leer';
+  const vorher = await rpZeilen();
+  await rpOeffne('Maschine');
+  await page.locator('.rp-such').fill('Mobil');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  if (await page.locator('.rp-pop').count()) return 'Picker nach Escape offen';
+  if ((await rpZeilen()) !== vorher) return 'Zuweisung entstand trotz Escape';
+  return (await page.locator('#undo').isDisabled()) ? true : 'Escape hinterließ einen Undo-Eintrag';
+});
+await check('Picker: Klick außerhalb schließt ohne Änderung', async () => {
+  const vorher = await rpZeilen();
+  await rpOeffne('Personal');
+  await page.mouse.click(5, 300);
+  await page.waitForTimeout(150);
+  if (await page.locator('.rp-pop').count()) return 'Picker nach Klick daneben offen';
+  return (await rpZeilen()) === vorher && (await page.locator('#undo').isDisabled()) ? true : 'Änderung trotz Klick daneben';
+});
+await check('Picker: Suche ohne Treffer zeigt «Keine Treffer» und «+ Neu…»; Neu fragt Name UND Kategorie', async () => {
+  await rpOeffne('Maschine');
+  await page.locator('.rp-such').fill('zzzzqq');
+  await page.waitForTimeout(100);
+  if ((await page.locator('.rp-leer').textContent()).trim() !== 'Keine Treffer') return '«Keine Treffer» fehlt';
+  if (!(await page.locator('.rp-neu').isVisible())) return '«+ Neu…» fehlt';
+  await page.locator('.rp-neu').click();
+  await page.waitForTimeout(150);
+  if (!(await page.locator('.tb-neuart').isVisible())) return 'Namensdialog fehlt';
+  const opts = await page.locator('.tb-neuart-sel option').allTextContents();
+  if (opts.length !== 8) return 'Kategorien: ' + opts.join(' | ');
+  if ((await page.locator('.tb-neuart-sel').inputValue()) !== 'eigene-m') return 'Vorgabe ist nicht «Eigene Maschinen»';
+  // Persönlicher Stapel Helfer-Kategorie darf NICHT erscheinen (andere Art).
+  if (opts.includes('Helfer')) return 'Helfer-Kategorie bei Maschinen';
+  await page.locator('.tb-neuart-n').fill('Kettenbagger');
+  await page.locator('.tb-neuart-sel').selectOption('sonstiges');
+  await page.locator('.tb-neuart-a .btn-p').click();
+  await page.waitForTimeout(300);
+  const txt = (await page.locator('.ins-res-r').last().textContent()).trim();
+  if (txt !== 'Kettenbagger ▾') return 'Zuweisung: «' + txt + '»';
+  // Kategorie kam an: unter «Sonstiges» gruppiert.
+  await rpOeffne('Maschine');
+  await page.locator('.rp-such').fill('Kettenbagger');
+  const kopf = await page.locator('.rp-kopf').allTextContents();
+  await page.keyboard.press('Escape');
+  return kopf.join() === 'Sonstiges' ? true : 'Kopf: ' + kopf.join();
+});
+await check('Picker: Zeile am Vorgang tauscht die Bezeichnung (aktuelle markiert)', async () => {
+  await page.locator('.ins-res-r').last().click();
+  await page.waitForTimeout(150);
+  if (!(await page.locator('.rp-item.is-aktuell').textContent()).includes('Kettenbagger')) return 'aktuelle nicht markiert';
+  await page.locator('.rp-such').fill('Radlader');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  const txt = (await page.locator('.ins-res-r').last().textContent()).trim();
+  return txt === 'Radlader ▾' ? true : 'Zeile: «' + txt + '»';
+});
+await check('Tabelle: Kasten «Personal & Maschinen» — Picker darin schließt den Kasten nicht; Escape erst Picker, dann Kasten', async () => {
+  await page.locator('[data-view="tabelle"]').click();
+  await page.waitForTimeout(400);
+  await page.locator('.tb-res-btn').first().click();
+  await page.waitForTimeout(200);
+  if (!(await page.locator('.tb-res-box').isVisible())) return 'Kasten öffnet nicht';
+  await page.locator('.tb-res-box .btn', { hasText: '+ Personal' }).click();
+  await page.waitForTimeout(150);
+  if (!(await page.locator('.rp-pop').isVisible())) return 'Picker nicht sichtbar';
+  if ((await page.locator('.rp-kopf').count()) !== 2) return 'Personal-Köpfe: ' + (await page.locator('.rp-kopf').count()) + ' (erwartet Helfer + Eigenes Personal)';
+  await page.locator('.rp-item', { hasText: 'Runner' }).click();
+  await page.waitForTimeout(250);
+  if (!(await page.locator('.tb-res-box').isVisible())) return 'Klick im Picker schloss den Kasten';
+  if (!(await page.locator('.tb-res-pick', { hasText: 'Runner' }).count())) return 'Runner nicht zugewiesen';
+  await page.locator('.tb-res-box .btn', { hasText: '+ Maschine' }).click();
+  await page.waitForTimeout(150);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  if (await page.locator('.rp-pop').count()) return 'Escape ließ den Picker offen';
+  if (!(await page.locator('.tb-res-box').isVisible())) return 'Escape schloss auch den Kasten';
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  return (await page.locator('.tb-res-box').count()) ? 'zweites Escape schließt den Kasten nicht' : true;
+});
+await check('Verwalten-Liste: eingebaute gruppiert und schreibgeschützt (🔒), eigene mit Kategorie darunter bearbeitbar', async () => {
+  await einrichten(page, 'res');
+  const m = page.locator('.ein-liste[data-kind="maschine"]');
+  if ((await m.locator('.tb-verw-fitem').count()) !== 24) return 'eingebaute Maschinen: ' + (await m.locator('.tb-verw-fitem').count());
+  if ((await page.locator('.ein-liste[data-kind="personal"] .tb-verw-fitem').count()) !== 6) return 'eingebaute Helfer: ' + (await page.locator('.ein-liste[data-kind="personal"] .tb-verw-fitem').count());
+  if (await m.locator('.tb-verw-fest input, .tb-verw-fest button').count()) return 'eingebaute haben Eingabefelder/Knöpfe';
+  if (!(await m.locator('.tb-verw-fitem', { hasText: 'Scherenbühne 12 m' }).count())) return 'Scherenbühne 12 m fehlt';
+  if (!(await m.locator('.tb-verw-fitem').first().textContent()).includes('🔒')) return 'kein Schloss';
+  // Das Namensfeld trägt den Wert als Eigenschaft, nicht als Attribut: per evaluate lesen.
+  const kat = await m.locator('.tb-verw-z').evaluateAll((zs) =>
+    (zs.find((z) => z.querySelector('.tb-verw-n').value === 'Kettenbagger')?.querySelector('.tb-verw-kat')?.textContent || '').trim());
+  if (kat !== 'Sonstiges') return 'Kategorie der eigenen: «' + kat + '»';
+  await page.screenshot({ path: join(here, 'shots', 'rp-verwalten.png') });
+  return true;
+});
+
 // Bereich 4 und 5 brauchen Ressourcen OHNE `kind` (Altdaten): sie zählen als Personal.
 await festivalMitDaten(page, 'Bereiche-Test', { loadIn: '2026-10-05T06:00', ressourcen: [
   { id: 'r_alt', label: 'Alt-Eintrag' }, { id: 'r_gabel', label: 'Gabelstapler', kind: 'maschine' }] });

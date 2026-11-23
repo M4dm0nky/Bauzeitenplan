@@ -14,6 +14,7 @@ import { el, toInput, STATUS } from './dom.js';
 import { sichtGewerke, punktTypen, abschnitte, abschnittLabel, amTag, imAbschnitt } from './ebene.js';
 import { mountAuswahlListe } from './listen-editor.js';
 import { ressourcen, resKind } from './resources.js';
+import { openResPicker, resNeuOpt, resPickerOffen } from './res-picker.js';
 import { aufbauPhase } from './phasen.js';
 
 // Die Spalten hängen an der Ebene (js/ebene.js). Sie stehen an EINER Stelle und
@@ -680,8 +681,11 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
    *
    * @param {HTMLElement} anker   Auswahlfeld, an dem der Kasten ausgerichtet wird
    * @param {object} opt          { titel, kompaktFeld, cmd } — oder statt `cmd`
-   *   ein `buildCmd(wert, kompakt)`, wenn der Name nicht als `label` obenauf
-   *   gehört (z. B. `addGewerk`, das ihn in `gewerk.name` erwartet).
+   *   ein `buildCmd(wert, kompakt, auswahl)`, wenn der Name nicht als `label`
+   *   obenauf gehört (z. B. `addGewerk`, das ihn in `gewerk.name` erwartet).
+   *   Optional `auswahl: [{wert, label}]` (+ `auswahlTitel`, `auswahlVorgabe`):
+   *   eine zweite Wahl unter dem Namen (Kategorie einer Ressource); ohne
+   *   `buildCmd` landet sie als `kat` im Befehl.
    * @param {(id:string)=>void} fertig
    *
    * Hängt an `document.body`, nicht in die Tabelle: ein `render()` würde es
@@ -713,6 +717,20 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
       box.append(feld);
     }
 
+    // Kurze feste Liste (Kategorien einer Art, höchstens acht): ein <select> genügt.
+    let sel = null;
+    if (opt.auswahl) {
+      sel = el('select', 'tb-neuart-sel');
+      sel.setAttribute('aria-label', opt.auswahlTitel || 'Auswahl');
+      for (const a of opt.auswahl) {
+        const o = el('option', null, a.label);
+        o.value = a.wert;
+        sel.append(o);
+      }
+      if (opt.auswahlVorgabe) sel.value = opt.auswahlVorgabe;
+      box.append(el('div', 'tb-neuart-k', opt.auswahlTitel || ''), sel);
+    }
+
     const ok = el('button', 'btn btn-p', 'Anlegen');
     const ab = el('button', 'btn', 'Abbrechen');
     const reihe = el('div', 'tb-neuart-a');
@@ -734,8 +752,8 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
     const aussen = (e) => { if (!box.contains(e.target)) zu(); };
     function anlegen() {
       const cmd = opt.buildCmd
-        ? opt.buildCmd(feld.value, hk ? hk.checked : undefined)
-        : { ...opt.cmd, label: feld.value, kompakt: hk ? hk.checked : undefined };
+        ? opt.buildCmd(feld.value, hk ? hk.checked : undefined, sel ? sel.value : undefined)
+        : { ...opt.cmd, label: feld.value, kompakt: hk ? hk.checked : undefined, ...(sel ? { kat: sel.value } : {}) };
       const r = send(cmd);
       // Abgelehnt (leer oder doppelt): stehen lassen, der Fehler steht schon
       // oben. Sonst verschwände die Eingabe kommentarlos.
@@ -828,8 +846,6 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
 
   const resName = (rid) => (ressourcen(store.state).find((r) => r.id === rid) || { label: rid }).label;
 
-  const NEUE_RES = '__neu__';
-
   /** Der schwebende Kasten mit den Zuweisungen eines Vorgangs. */
   function resKasten(anker, task) {
     const ankerRect = anker.getBoundingClientRect();
@@ -844,8 +860,10 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
       if (kastenZu === zu) kastenZu = null;
     };
     kastenZu = zu;
-    const aufTaste = (e) => { if (e.key === 'Escape') { e.preventDefault(); zu(); } };
-    const aussen = (e) => { if (!box.contains(e.target)) zu(); };
+    // Der Picker hängt an body, nicht in diesem Kasten: ein Klick darin ist kein
+    // «außerhalb», und Escape schließt zuerst nur ihn.
+    const aufTaste = (e) => { if (e.key === 'Escape' && !resPickerOffen()) { e.preventDefault(); zu(); } };
+    const aussen = (e) => { if (!box.contains(e.target) && !e.target.closest?.('.rp-pop')) zu(); };
     window.addEventListener('keydown', aufTaste, true);
     document.addEventListener('pointerdown', aussen, true);
 
@@ -868,34 +886,27 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
           zeichne();
         };
 
-        const rsel = el('select', 'tb-verw-n');
-        for (const r of ressourcen(store.state, kind)) {
-          const o = el('option', null, r.label);
-          o.value = r.id;
-          if (r.id === z.rid) o.selected = true;
-          rsel.append(o);
-        }
-        const neu = el('option', null, '+ Neu…'); neu.value = NEUE_RES;
-        rsel.append(neu);
-        rsel.onchange = () => {
-          if (rsel.value === NEUE_RES) {
-            // neuFragen() ersetzt diesen Kasten (nur EIN schwebender Kasten
-            // gleichzeitig, wie überall sonst) — das Rechteck deshalb VORHER
-            // sichern, `rsel` selbst ist gleich abgehängt (dieselbe Regel wie
-            // bei platziere()).
+        // Such-Auswahl statt <select>: der Katalog ist zu lang für eine Aufklappliste.
+        const rsel = el('button', 'tb-verw-n tb-res-pick', resName(z.rid) + ' ▾');
+        rsel.type = 'button';
+        rsel.setAttribute('aria-label', 'Bezeichnung wählen');
+        rsel.onclick = () => openResPicker({
+          anker: rsel, kind, state: store.state, aktuell: z.rid,
+          onWahl: (rid) => {
+            send({ type: 'setTaskRes', id: task.id, index: idx, value: { rid, n: z.n, von: z.von, bis: z.bis } });
+            zeichne();
+          },
+          // neuFragen() ersetzt diesen Kasten (nur EIN schwebender Kasten
+          // gleichzeitig) — das Rechteck deshalb VORHER sichern, `rsel` selbst
+          // ist gleich abgehängt (dieselbe Regel wie bei platziere()).
+          onNeu: () => {
             const rect = rsel.getBoundingClientRect();
-            neuFragen({ getBoundingClientRect: () => rect }, {
-              titel: 'Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + ')',
-              cmd: { type: 'addRessource', kind },
-            }, (id) => {
+            neuFragen({ getBoundingClientRect: () => rect }, resNeuOpt(kind), (id) => {
               send({ type: 'setTaskRes', id: task.id, index: idx, value: { rid: id, n: z.n, von: z.von, bis: z.bis } });
               resKasten(anker, task);   // frisch öffnen, mit der neuen Bezeichnung
             });
-            return;
-          }
-          send({ type: 'setTaskRes', id: task.id, index: idx, value: { rid: rsel.value, n: z.n, von: z.von, bis: z.bis } });
-          zeichne();
-        };
+          },
+        });
 
         const weg = el('button', 'tb-verw-b tb-verw-x', '×');
         weg.title = 'Zuweisung entfernen';
@@ -905,25 +916,21 @@ export function createTable(root, { store, onConflicts, onHinweis, onGewerkAnleg
         box.append(zeile);
       });
 
+      // «+ Personal» / «+ Maschine» öffnen die Such-Auswahl (nicht mehr: ersten Eintrag nehmen).
       const addBtn = (kind, label) => {
         const b = el('button', 'btn', label);
-        b.onclick = () => {
-          const vorhanden = ressourcen(store.state, kind);
-          if (!vorhanden.length) {
-            // `anker` bleibt angehängt (er hat resKasten geöffnet, liegt also
-            // außerhalb dieses Kastens) — kein Rechteck-Vorabfang nötig.
-            neuFragen(anker, {
-              titel: 'Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + ')',
-              cmd: { type: 'addRessource', kind },
-            }, (rid) => {
-              send({ type: 'setTaskRes', id: task.id, index: null, value: { rid, n: 1, von: null, bis: null } });
-              resKasten(anker, task);
-            });
-            return;
-          }
-          send({ type: 'setTaskRes', id: task.id, index: null, value: { rid: vorhanden[0].id, n: 1, von: null, bis: null } });
-          zeichne();
-        };
+        b.onclick = () => openResPicker({
+          anker: b, kind, state: store.state,
+          onWahl: (rid) => {
+            send({ type: 'setTaskRes', id: task.id, index: null, value: { rid, n: 1, von: null, bis: null } });
+            zeichne();
+          },
+          // `anker` (der Knopf der Zelle) bleibt angehängt — kein Rechteck-Vorabfang nötig.
+          onNeu: () => neuFragen(anker, resNeuOpt(kind), (rid) => {
+            send({ type: 'setTaskRes', id: task.id, index: null, value: { rid, n: 1, von: null, bis: null } });
+            resKasten(anker, task);
+          }),
+        });
         return b;
       };
       const reihe = el('div', 'tb-neuart-a');

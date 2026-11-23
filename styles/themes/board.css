@@ -125,6 +125,14 @@ body {
 .tb-neuart-n { border: 1px solid var(--line-2); background: var(--panel2); color: var(--ink); }
 .tb-neuart-h { color: var(--ink); }
 .tb-neuart-k { color: var(--ink-2); }
+/* Such-Auswahl Helfer/Maschinen: Fläche, Kategorie-Kopf, Eintrag (Treffer/aktuell). */
+.rp-pop { background: var(--panel); border: 1px solid var(--line-2); box-shadow: 0 14px 40px -10px rgba(0,0,0,.45); color: var(--ink); }
+.rp-such { border: 1px solid var(--line-2); background: var(--panel2); color: var(--ink); }
+.rp-kopf { background: var(--panel); color: var(--ink-2); border-bottom: 1px solid var(--line-2); }
+.rp-item:hover, .rp-item.is-aktiv { background: var(--panel2); outline: 1px solid var(--line-2); }
+.rp-item.is-aktuell { font-weight: 700; }
+.rp-neu { border: 1px dashed var(--line-2); background: none; color: var(--ink); }
+.tb-neuart-sel { border: 1px solid var(--line-2); background: var(--panel2); color: var(--ink); }
 .tb-verw-n { border: 1px solid var(--line-2); background: var(--panel2); color: var(--ink); }
 .tb-verw-b { border: 1px solid var(--line-2); background: var(--panel2); color: var(--ink-2); }
 .tb-verw-b:hover:not(:disabled) { color: var(--ink); border-color: var(--ink); }

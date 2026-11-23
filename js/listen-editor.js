@@ -9,6 +9,7 @@
 import { el } from './dom.js';
 import { nachSort } from './ebene.js';
 import { benutztVon } from './store.js';
+import { RES_KATEGORIEN, RES_EINGEBAUT } from './res-katalog.js';
 
 /**
  * Hängt die Zeilen einer Auswahlliste in `container`.
@@ -35,6 +36,26 @@ export function mountAuswahlListe(container, { store, send, liste, kind, leerTex
   // einem neuen Knoten = kein click). Handler lesen frisch aus dem Store.
   const zeilen = new Map();   // id → { zeile, nam, hoch, runter, weg, art }
   const leer = el('div', 'tb-verw-leer', leerText);
+
+  // Die eingebauten Helfer/Maschinen (Katalog) stehen gruppiert und schreibgeschützt
+  // OBEN, vor den eigenen: kein Namensfeld, keine Knöpfe (daher auch keine Klassen
+  // `tb-verw-z`/`-n`, die die Zeilenlogik unten zählt). Der Block ist EIN Kind des
+  // Containers — `vorn` rechnet ihn aus den Indizes der eigenen Zeilen heraus.
+  let fest = null;
+  if (liste === 'ressourcen' && kind) {
+    fest = el('details', 'tb-verw-fest');
+    fest.open = true;
+    const eing = RES_EINGEBAUT.filter((r) => r.kind === kind);
+    fest.append(el('summary', null, '🔒 Eingebaut (' + eing.length + ') — fest, nicht änderbar'));
+    for (const k of RES_KATEGORIEN.filter((c) => c.kind === kind)) {
+      const items = eing.filter((r) => r.kat === k.id);
+      if (!items.length) continue;   // «Eigene …» hat keine festen Einträge
+      fest.append(el('div', 'tb-verw-fkat', k.label));
+      for (const r of items) fest.append(el('div', 'tb-verw-fitem', '🔒 ' + r.label));
+    }
+    container.append(fest);
+  }
+  const vorn = fest ? 1 : 0;
 
   function baueZeile(id) {
     const zeile = el('div', 'tb-verw-z');
@@ -84,7 +105,7 @@ export function mountAuswahlListe(container, { store, send, liste, kind, leerTex
     if (!eigene.length) container.append(leer);
     for (const [i, x] of eigene.entries()) {
       const r = zeilen.get(x.id) || baueZeile(x.id);
-      if (container.children[i] !== r.zeile) container.insertBefore(r.zeile, container.children[i] || null);
+      if (container.children[vorn + i] !== r.zeile) container.insertBefore(r.zeile, container.children[vorn + i] || null);
       if (document.activeElement !== r.nam && r.nam.value !== x.label) r.nam.value = x.label;
       r.hoch.disabled = i === 0;
       r.runter.disabled = i === eigene.length - 1;
@@ -99,6 +120,14 @@ export function mountAuswahlListe(container, { store, send, liste, kind, leerTex
       // Ressourcen ohne `kind` mischen Personal und Maschinen in EINER Liste;
       // ein Kürzel sagt wenigstens, was man vor sich hat. Mit `kind` ist die Art
       // ohnehin klar.
+      // Eigene Ressource: ihre Kategorie als Beschriftung (Altdaten/unbekannt: «Eigene …»).
+      if (liste === 'ressourcen') {
+        const kk = x.kind || 'personal';
+        const k = RES_KATEGORIEN.find((c) => c.id === x.kat && c.kind === kk)
+          || RES_KATEGORIEN.find((c) => c.id === (kk === 'maschine' ? 'eigene-m' : 'eigene-p'));
+        if (!r.kat) { r.kat = el('span', 'tb-verw-kat'); r.zeile.insertBefore(r.kat, r.hoch); }
+        if (r.kat.textContent !== k.label) r.kat.textContent = k.label;
+      }
       const art = x.kind && !kind ? x.kind : null;
       if (art !== r.art) {
         r.zeile.querySelector('.tb-verw-kind')?.remove();

@@ -10,7 +10,8 @@ import { gewerkVar, gewerkTexture, hueVon, slotAus, HUES, MAX_SLOTS } from './pa
 import { artOf, abschnittOf, abschnitte, showTagVon } from './ebene.js';
 import { fmtPuffer, engpassText, kettenEnde, verknuepft, PUFFER_UNVERKNUEPFT } from './timeaxis.js';
 import { el, toInput, STATUS } from './dom.js';
-import { ressourcen, resKind, deckung, RES_KINDS } from './resources.js';
+import { resLabel, resKind, deckung, RES_KINDS } from './resources.js';
+import { openResPicker, resNeuOpt } from './res-picker.js';
 import { aufbauPhase } from './phasen.js';
 
 const DEP_TYPES = [
@@ -605,31 +606,25 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
   // Beliebig viele Zuweisungen {Bezeichnung, Anzahl, Zeitfenster}. Läuft
   // ausschließlich über setTaskRes (setTaskField lehnt das Feld `res` ab) —
   // die Prüfung von Anzahl und Zeitfenster steckt dort im Store.
-  const NEUE_RES = '__neu__';
-
   function resBlock(t) {
     const box = el('div', 'ins-res');
     box.append(el('div', 'ins-l', 'Personal & Maschinen'));
 
     (t.res || []).forEach((z, idx) => box.append(resRow(t, z, idx)));
 
+    // «+ Personal» / «+ Maschine» öffnen die Such-Auswahl; angelegt wird erst
+    // mit der Wahl (nicht mehr: ersten Eintrag nehmen).
     const addBtn = (kind, label) => {
       const b = el('button', 'btn ins-res-add', label);
-      b.onclick = () => {
-        const vorhanden = ressourcen(store.state, kind);
-        if (!vorhanden.length) {
-          // Eigener App-Kasten statt window.prompt — der schwebt über der
-          // Tabelle, table.js besitzt ihn, hier nur über openNeuFragen geliehen.
-          openNeuFragen({
-            titel: 'Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + ')',
-            cmd: { type: 'addRessource', kind },
-          }, b, (rid) => {
-            send({ type: 'setTaskRes', id: t.id, index: null, value: { rid, n: 1, von: null, bis: null } });
-          });
-          return;
-        }
-        send({ type: 'setTaskRes', id: t.id, index: null, value: { rid: vorhanden[0].id, n: 1, von: null, bis: null } });
-      };
+      const neueZuweisung = (rid) =>
+        send({ type: 'setTaskRes', id: t.id, index: null, value: { rid, n: 1, von: null, bis: null } });
+      b.onclick = () => openResPicker({
+        anker: b, kind, state: store.state,
+        onWahl: neueZuweisung,
+        // Eigener App-Kasten statt window.prompt — der schwebt über der
+        // Tabelle, table.js besitzt ihn, hier nur über openNeuFragen geliehen.
+        onNeu: () => openNeuFragen(resNeuOpt(kind), b, neueZuweisung),
+      });
       return b;
     };
     const addRow = el('div', 'ins-res-add-row');
@@ -669,29 +664,16 @@ export function createInspector(root, { store, onError, onClose, onConfirm, open
     };
     row.append(nIn, el('span', 'ins-res-x2', '×'));
 
-    const rsel = el('select', 'ins-res-r');
-    for (const r of ressourcen(store.state, kind)) {
-      const o = el('option', null, r.label);
-      o.value = r.id;
-      if (r.id === z.rid) o.selected = true;
-      rsel.append(o);
-    }
-    const neu = el('option', null, '+ Neu…');
-    neu.value = NEUE_RES;
-    rsel.append(neu);
-    rsel.onchange = () => {
-      if (rsel.value === NEUE_RES) {
-        rsel.value = z.rid;   // Auswahl sofort zurückstellen, falls abgebrochen wird
-        openNeuFragen({
-          titel: 'Neue Bezeichnung (' + (kind === 'personal' ? 'Personal' : 'Maschine') + ')',
-          cmd: { type: 'addRessource', kind },
-        }, rsel, (id) => {
-          send({ type: 'setTaskRes', id: t.id, index: idx, value: { rid: id, n: z.n, von: z.von, bis: z.bis } });
-        });
-        return;
-      }
-      send({ type: 'setTaskRes', id: t.id, index: idx, value: { rid: rsel.value, n: z.n, von: z.von, bis: z.bis } });
-    };
+    const rsel = el('button', 'ins-res-r', resLabel(z.rid, store.state) + ' ▾');
+    rsel.type = 'button';
+    rsel.setAttribute('aria-label', 'Bezeichnung wählen');
+    rsel.onclick = () => openResPicker({
+      anker: rsel, kind, state: store.state, aktuell: z.rid,
+      onWahl: (rid) => send({ type: 'setTaskRes', id: t.id, index: idx, value: { rid, n: z.n, von: z.von, bis: z.bis } }),
+      onNeu: () => openNeuFragen(resNeuOpt(kind), rsel, (id) => {
+        send({ type: 'setTaskRes', id: t.id, index: idx, value: { rid: id, n: z.n, von: z.von, bis: z.bis } });
+      }),
+    });
     row.append(rsel);
 
     // Zeitfenster: «(ganzer Vorgang)» ist die Vorgabe (von/bis null) — dabei

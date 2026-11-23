@@ -293,7 +293,9 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // Bereich «Gewerke & Bühnen»: das Farbfeld der Zeile (Schraffur ab Platz 11).
     'ein-gw-farbe',
     // Kontextmenü (Zoom, Tag, Projektmenü, Rechtsklick): fehlte in Board, Blueprint und Studio.
-    'mn-i', 'mn-sep'];
+    'mn-i', 'mn-sep',
+    // Such-Auswahl Helfer/Maschinen: schwebende Fläche, Suchfeld, Kategorie-Kopf, Eintrag.
+    'rp-pop', 'rp-kopf', 'rp-item', 'rp-such'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

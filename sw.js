@@ -43,6 +43,7 @@ const HUELLE = [
   'js/gantt.js',
   'js/inspector.js',
   'js/listen-editor.js',
+  'js/res-picker.js',
   'js/live.js',
   'js/menu.js',
   'js/palette.js',

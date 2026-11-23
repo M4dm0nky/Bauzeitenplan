@@ -712,7 +712,7 @@ body { margin: 0; }
 .ins-res-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .ins-res-n { width: 44px; flex: none; font: inherit; }
 .ins-res-x2 { flex: none; }
-.ins-res-r { flex: 1 1 auto; min-width: 90px; font: inherit; }
+.ins-res-r { flex: 1 1 auto; min-width: 90px; font: inherit; text-align: left; cursor: pointer; padding: 3px 6px; }
 .ins-res-zeitbtn, .ins-res-zeitreset, .ins-res-x {
   flex: none; font: inherit; background: none; border: 0; cursor: pointer; padding: 2px 4px;
 }
@@ -755,6 +755,33 @@ body { margin: 0; }
 .tb-verw-z { display: flex; align-items: center; gap: 4px; }
 .tb-verw-kind { flex: none; }
 .tb-verw-n { flex: 1; min-width: 0; padding: 4px 6px; font: inherit; }
+.tb-res-pick { text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-neuart-sel { padding: 5px 7px; font: inherit; }
+/* Verwalten-Liste: eingebaute Ressourcen (Katalog) schreibgeschützt, Kategorie der eigenen. */
+.tb-verw-fest { font-size: 12px; margin-bottom: 6px; }
+.tb-verw-fest summary { cursor: pointer; font-weight: 600; padding: 2px 0; }
+.tb-verw-fkat { font-weight: 600; margin-top: 6px; }
+.tb-verw-fitem { padding: 1px 0 1px 10px; }
+.tb-verw-kat { flex: none; max-width: 38%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; opacity: .8; }
+
+/* ── Such-Auswahl Helfer/Maschinen (res-picker.js) ────────────────────────── */
+.rp-pop {
+  position: fixed; z-index: 70; display: flex; flex-direction: column; gap: 6px;
+  padding: 8px; width: 320px; max-width: calc(100vw - 16px);
+}
+.rp-such { padding: 6px 8px; font: inherit; }
+.rp-liste { display: flex; flex-direction: column; max-height: min(52vh, 420px); overflow-y: auto; }
+.rp-kopf {
+  position: sticky; top: 0; z-index: 1; padding: 6px 4px 3px; margin-top: 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+}
+.rp-item {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px; font: inherit;
+  text-align: left; cursor: pointer; border: 0; background: none; color: inherit; border-radius: 4px;
+}
+.rp-ok { flex: none; width: 1.1em; font-weight: 700; }
+.rp-leer { padding: 10px 6px; opacity: .8; }
+.rp-neu { padding: 6px 8px; font: inherit; cursor: pointer; text-align: left; }
 .tb-verw-b {
   flex: none; width: 26px; height: 26px; padding: 0; cursor: pointer;
   font: inherit; line-height: 1; display: grid; place-items: center;

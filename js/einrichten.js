@@ -16,6 +16,7 @@ import { toMin } from './schedule.js';
 import { phaseLabel, istPhasenArt } from './phasen.js';
 import { newId, benutztVon } from './store.js';
 import { mountAuswahlListe } from './listen-editor.js';
+import { resNeuOpt } from './res-picker.js';
 import { gewerkVar, gewerkTexture } from './palette.js';
 import { artOf } from './ebene.js';
 
@@ -357,11 +358,11 @@ export function createEinrichten(root, { store, send, zu, zurueck, weiter, onZu,
   }
 
   function baueListen() {
-    einbetten(resHost, { titel: 'Personal', liste: 'ressourcen', kind: 'personal', leerText: 'Noch kein Personal.',
-      add: { id: 'ei-res-personal', text: '+ Personal', opt: { titel: 'Neue Bezeichnung (Personal)', cmd: { type: 'addRessource', kind: 'personal' } } } });
-    einbetten(resHost, { titel: 'Maschinen', liste: 'ressourcen', kind: 'maschine', leerText: 'Noch keine Maschine.',
-      add: { id: 'ei-res-maschine', text: '+ Maschine', opt: { titel: 'Neue Bezeichnung (Maschine)', cmd: { type: 'addRessource', kind: 'maschine' } } } });
-    resHost.append(el('p', 'ei-hint', 'Zugewiesen wird am Vorgang — im Panel oder in der Tabelle, Spalte «Ressourcen».'));
+    einbetten(resHost, { titel: 'Personal', liste: 'ressourcen', kind: 'personal', leerText: 'Noch kein eigenes Personal.',
+      add: { id: 'ei-res-personal', text: '+ Personal', opt: resNeuOpt('personal') } });
+    einbetten(resHost, { titel: 'Maschinen', liste: 'ressourcen', kind: 'maschine', leerText: 'Noch keine eigene Maschine.',
+      add: { id: 'ei-res-maschine', text: '+ Maschine', opt: resNeuOpt('maschine') } });
+    resHost.append(el('p', 'ei-hint', 'Zugewiesen wird am Vorgang — im Panel oder in der Tabelle, Spalte «Ressourcen». Die eingebauten Helfer und Maschinen (🔒) sind fest; eigene legst du mit Kategorie an.'));
     einbetten(artenHost, { titel: 'Arten der Zeiteinträge', liste: 'punktTypen', leerText: 'Noch keine eigene Art.',
       add: { id: 'ein-art-add', text: '+ Art', opt: { titel: 'Neue Art', kompaktFeld: true, cmd: { type: 'addPunktTyp' } } } });
     einbetten(artenHost, { titel: 'Abschnitte', liste: 'abschnitte', leerText: 'Noch kein eigener Abschnitt.',
