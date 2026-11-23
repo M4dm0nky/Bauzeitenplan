@@ -3711,6 +3711,54 @@ await check('«Alle bestätigen» je Gruppe = EIN Undo-Schritt', async () => {
   return (await page.locator('.bd-oz').count()) === n ? true : 'ein Undo stellte nicht alle her';
 });
 
+console.log('\nENDREVIEW TEIL 1 (leere Bedarfsauswahl, Tab+Enter im Picker)');
+await check('Bedarf: Auswahl ohne Bedarf dieser Art → «In dieser Auswahl kein Maschinenbedarf», nicht «Kein Zeitraum»', async () => {
+  await bsPanel();
+  await page.locator('.ins-res-add', { hasText: 'Maschine' }).click();
+  await page.waitForTimeout(150);
+  await page.locator('.rp-such').fill('Scheren');
+  await page.waitForTimeout(150);
+  if (!(await page.locator('.rp-item').count())) return 'Vorbedingung: Picker findet keine Maschine «Scheren»';
+  await page.locator('.rp-item').first().click();
+  await page.waitForTimeout(300);
+  await page.locator('[data-view="bedarf"]').click();
+  await page.locator('[data-bedarf="maschine"]').click();
+  await page.waitForTimeout(300);
+  if (await page.locator('.bd-t').count() === 0) return 'Vorbedingung: Maschinenraster fehlt im Bauzeitenplan: ' + (await page.locator('.bd-empty').allTextContents()).join(' ') + ' / Zeilen ' + (await page.locator('.ins-res-row').count());
+  await page.locator('.rail-m', { hasText: 'Showablauf' }).click({ timeout: 5000 });
+  await page.waitForTimeout(500);
+  const txt = await page.locator('.bd-empty').allTextContents();
+  if (!txt.length) return 'kein Leer-Hinweis (Auswahl hat Maschinenbedarf?)';
+  if (txt.join(' ').includes('Kein Zeitraum')) return 'falscher Hinweis: ' + txt.join(' ');
+  return txt.join(' ').includes('kein Maschinenbedarf') ? true : 'Hinweis: ' + txt.join(' ');
+});
+await check('Picker: Tab auf einen Eintrag, Enter wählt den fokussierten (nicht die Markierung)', async () => {
+  await page.locator('.rail-m', { hasText: 'Bauzeitenplan' }).click({ timeout: 5000 });
+  await page.locator('[data-view="gantt"]').click();
+  await page.waitForTimeout(300);
+  await page.locator('.bz-bar').first().click();
+  await page.waitForTimeout(300);
+  await page.locator('.ins-res-add', { hasText: 'Personal' }).click();
+  await page.waitForTimeout(150);
+  const vorher = await page.locator('.ins-res-row').count();
+  await page.keyboard.press('Tab');   // Suchfeld → erster Eintrag
+  await page.keyboard.press('Tab');   // zweiter Eintrag; die Markierung bleibt auf dem ersten
+  const f = await page.evaluate(() => {
+    const x = document.activeElement;
+    return x && x.classList.contains('rp-item')
+      ? { rid: x.dataset.rid, label: x.textContent.replace('✓', '').trim() } : null;
+  });
+  if (!f) return 'Tab landete nicht auf einem Eintrag';
+  const aktiv = await page.locator('.rp-item.is-aktiv').first().getAttribute('data-rid');
+  if (f.rid === aktiv) return 'Vorbedingung: fokussierter = markierter Eintrag';
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  if (await page.locator('.rp-pop').count()) return 'Picker nach Enter offen';
+  if ((await page.locator('.ins-res-row').count()) !== vorher + 1) return 'keine Zuweisung';
+  const zeile = await page.locator('.ins-res-row').last().textContent();
+  return zeile.includes(f.label) ? true : 'gewählt wurde «' + zeile.trim() + '», fokussiert war «' + f.label + '»';
+});
+
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 

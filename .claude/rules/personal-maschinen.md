@@ -3,6 +3,11 @@ paths:
   - "js/resources.js"
   - "js/bedarf.js"
   - "js/store.js"
+  - "js/res-picker.js"
+  - "js/res-katalog.js"
+  - "js/inspector.js"
+  - "js/table.js"
+  - "js/listen-editor.js"
   - "tools/verify-edit.mjs"
 ---
 

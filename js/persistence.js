@@ -187,6 +187,8 @@ export function migrate(plan) {
     // Personal & Maschinen: `res` ist der Bedarf, `bereitstellung` macht daraus
     // ein Angebot (der Pool, aus dem andere Vorgänge ihre Zuweisung nehmen).
     if (!Array.isArray(t.res)) t.res = [];
+    // Unbekannter Bedarfsstatus aus einem Import = angefragt (Feld fehlt).
+    for (const z of t.res) if (z && 'status' in z && !['bestaetigt', 'abgelehnt'].includes(z.status)) delete z.status;
     t.bereitstellung = !!t.bereitstellung;
     // Untervorgänge: parent = id des Elternvorgangs, sonst null. Altpläne ohne
     // das Feld sind reine top-level → voll abwärtskompatibel.

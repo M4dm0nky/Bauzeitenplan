@@ -55,10 +55,14 @@ export function createBedarf(root, { store, onEinrichten, neuFragen } = {}) {
 
     const raster = bedarfsRaster(tasks, genutzteRessourcen(tasks, resList), { kind, von, bis, schritt });
     const grenzen = rasterGrenzen(von, bis, schritt);   // Kopfzeile aus denselben Grenzen wie das Raster
-    const n = raster[0] ? raster[0].slots.length : 0;
+    const n = grenzen.length - 1;   // nicht aus dem Raster: das listet nur genutzte Bezeichnungen
     if (!n) { root.append(el('div', 'bd-empty', 'Kein Zeitraum zu zeigen.')); return; }
 
     root.append(offenBlock(S, tasks));
+    if (!raster.length) {
+      root.append(el('div', 'bd-empty', 'In dieser Auswahl kein ' + (kind === 'personal' ? 'Personal' : 'Maschinen') + 'bedarf.'));
+      return;
+    }
 
     const wrap = el('div', 'bd-scroll');
     const table = el('table', 'bd-t');

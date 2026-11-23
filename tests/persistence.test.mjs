@@ -764,5 +764,19 @@ test('gleichnamig, aber andere Art bleibt unangetastet', () => {
   assert.equal(m.tasks[0].res[0].rid, 'sh');
 });
 
+test('Import: unbekannter Bedarfsstatus fällt auf angefragt, gültige bleiben, idempotent', () => {
+  const raw = plan();
+  raw.tasks[0].res = [
+    { rid: 'sh', n: 1, von: null, bis: null, status: 'quatsch' },
+    { rid: 'sh', n: 1, von: null, bis: null, status: 'bestaetigt', bestaetigtAm: '2026-10-01T00:00:00Z' },
+    { rid: 'sh', n: 1, von: null, bis: null, status: 'abgelehnt', notiz: 'x' },
+  ];
+  const m = migrate(raw);
+  assert.equal('status' in m.tasks[0].res[0], false);
+  assert.equal(m.tasks[0].res[1].status, 'bestaetigt');
+  assert.equal(m.tasks[0].res[2].status, 'abgelehnt');
+  assert.deepEqual(migrate(JSON.parse(JSON.stringify(m))).tasks[0].res, m.tasks[0].res);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

@@ -129,7 +129,10 @@ export function openResPicker({ anker, kind, state, aktuell, onWahl, onNeu }) {
       markiere((aktiv + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length);
     } else if (e.key === 'Enter' && box.contains(e.target) && e.target !== neu) {
       e.preventDefault();
-      if (items[aktiv]) wahl(items[aktiv].dataset.rid);
+      // Fokus auf einem Eintrag (Tab): der fokussierte gilt, nicht die Pfeil-Markierung.
+      const fokus = e.target.closest && e.target.closest('.rp-item');
+      const ziel = fokus || items[aktiv];
+      if (ziel) wahl(ziel.dataset.rid);
     }
   };
   const aussen = (e) => { if (!box.contains(e.target)) zu(); };
