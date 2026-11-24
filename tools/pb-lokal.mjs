@@ -77,6 +77,10 @@ export async function startePb({ port, origins = '' } = {}) {
   proc.stderr.on('data', (d) => { log += d; log = log.slice(-6000); });
   const url = `http://127.0.0.1:${port}`;
   let beendet = false;
+  // Auch bei Absturz/Abbruch des Skripts (z. B. geschlossene Pipe) keinen Server zurücklassen
+  const aufraeumen = () => { try { proc.kill('SIGKILL'); } catch { /* weg */ } try { rmSync(dir, { recursive: true, force: true }); } catch { /* weg */ } };
+  process.once('exit', aufraeumen);
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(sig, () => { aufraeumen(); process.exit(130); });
   const stop = async () => {
     if (!beendet) {
       beendet = true;
