@@ -15,7 +15,7 @@ import { local } from './conflicts.js';
 import { RES_EINGEBAUT, RES_KATEGORIEN } from './res-katalog.js';
 import { phaseFehler, istPhasenArt } from './phasen.js';
 import { resStatusBereinigen } from './persistence.js';
-import { aenderungen, umkehren, anwenden } from './aenderungen.js';
+import { aenderungen, umkehren, anwenden, istLeer } from './aenderungen.js';
 
 // Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
 // Ablage die äußere Schicht — diese Abhängigkeit liefe verkehrt herum. Für eine
@@ -932,6 +932,23 @@ function freeSlot(state, art = 'gewerk') {
   for (let i = 0; ; i++) if (!used.has(i)) return i;
 }
 
+// Die Zeiten eines Sammelvorgangs sind abgeleitet (Hülle der Kinder). Hat ein
+// Fremder ein anderes Kind geändert, weicht die Hülle im aktuellen Zustand vom
+// `vorher` des Undo-Eintrags ab — das ist KEIN Konflikt, reflowParents rechnet sie
+// danach neu. Weicht nur dies ab, gilt der aktuelle Datensatz als Ausgangszustand.
+const HUELLE_FELDER = ['start', 'end', 'milestone', 'res'];
+function huellenAbgleich(state, aend) {
+  const eltern = new Set(state.tasks.map((t) => t.parent).filter(Boolean));
+  const x = aend.vorgaenge;
+  if (!x || !x.aendern.some((e) => eltern.has(e.vorher.id))) return aend;
+  const ohne = (o) => { const c = { ...o }; HUELLE_FELDER.forEach((f) => delete c[f]); return JSON.stringify(Object.keys(c).sort().map((k) => [k, c[k]])); };
+  const aktuell = new Map(state.tasks.map((t) => [t.id, t]));
+  return { ...aend, vorgaenge: { ...x, aendern: x.aendern.map((e) => {
+    const a = aktuell.get(e.vorher.id);
+    return a && eltern.has(a.id) && ohne(a) === ohne(e.vorher) ? { ...e, vorher: JSON.parse(JSON.stringify(a)) } : e;
+  }) } };
+}
+
 // ── Store ───────────────────────────────────────────────────────────────────
 
 export function createStore(initial, opt = {}) {
@@ -974,6 +991,19 @@ export function createStore(initial, opt = {}) {
     return r || ok();
   }
 
+  // Gemeinsame Grundform für replace und applyRemote.
+  function normalisieren(st) {
+    if (!Array.isArray(st.phases)) st.phases = [];
+    if (!Array.isArray(st.deps)) st.deps = [];
+    if (!Array.isArray(st.tasks)) st.tasks = [];
+    st.tasks.forEach((t) => {
+      if (t.parent === undefined) t.parent = null;
+      if (!Array.isArray(t.res)) t.res = [];
+      t.bereitstellung = !!t.bereitstellung;
+    });
+    reflowParents(st);
+  }
+
   function apply(cmd) {
     const sperre = opt.gesperrt && opt.gesperrt();
     if (sperre) return err(sperre);
@@ -990,6 +1020,9 @@ export function createStore(initial, opt = {}) {
     // gerechnet, enthält also die Hüllen): so nimmt ⌘Z nur den eigenen Schritt
     // zurück und lässt fremde Änderungen (applyRemote) stehen.
     const aend = aenderungen(state, draft);
+    // Änderte der Befehl nichts, bleibt keine Spur: kein Undo-Eintrag, nicht
+    // ungesichert, kein Neuzeichnen.
+    if (istLeer(aend)) return r;
     const abgelehnt = opt.pruefe ? opt.pruefe(state, draft, aend) : null;
     if (abgelehnt) return err(abgelehnt);
 
@@ -1009,14 +1042,23 @@ export function createStore(initial, opt = {}) {
     const sperre = opt.gesperrt && opt.gesperrt();
     if (sperre) return err(sperre);
     const eintrag = von[von.length - 1];
-    const aend = umgekehrt ? umkehren(eintrag) : eintrag;
+    const aend = huellenAbgleich(state, umgekehrt ? umkehren(eintrag) : eintrag);
     const r = anwenden(state, aend, { erzwingen });
     if (!r.ok) return r;
+    // Hüllen der Sammelvorgänge nachziehen (fremde Änderungen an Kindern, die der
+    // Eintrag nicht kennt). Was wirklich geschah, steht in `tatsaechlich`; der
+    // Eintrag für den Gegenstapel wird daraus gerechnet, damit Redo/Undo
+    // symmetrisch bleiben.
+    const draft = r.state;
+    reflowParents(draft);
+    const tatsaechlich = aenderungen(state, draft);
+    const abgelehnt = opt.pruefe ? opt.pruefe(state, draft, tatsaechlich) : null;
+    if (abgelehnt) return err(abgelehnt);
     von.pop();
-    nach.push(eintrag);
-    state = r.state;
+    nach.push(umgekehrt ? umkehren(tatsaechlich) : tatsaechlich);
+    state = draft;
     dirty = true;
-    notify({ quelle: umgekehrt ? 'undo' : 'redo', aend });
+    notify({ quelle: umgekehrt ? 'undo' : 'redo', aend: tatsaechlich });
     return { ok: true };
   }
 
@@ -1036,18 +1078,13 @@ export function createStore(initial, opt = {}) {
     applyRemote(next) {
       const alt = state;
       state = clone(next);
+      normalisieren(state);
       notify({ quelle: 'remote', aend: aenderungen(alt, state) });
     },
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
     replace(next) {           // Projektwechsel / Import
       state = clone(next);
-      if (!Array.isArray(state.phases)) state.phases = [];
-      state.tasks.forEach((t) => {
-        if (t.parent === undefined) t.parent = null;
-        if (!Array.isArray(t.res)) t.res = [];
-        t.bereitstellung = !!t.bereitstellung;
-      });
-      reflowParents(state);
+      normalisieren(state);
       undoStack.length = 0;
       redoStack.length = 0;
       dirty = false;

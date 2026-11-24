@@ -55,7 +55,7 @@ export function zusammensetzen(teile, reihenfolge = {}) {
   };
 }
 
-const leer = () => ({ anlegen: [], aendern: [], loeschen: [], anlegenPos: [], loeschenPos: [] });
+const leer = () => ({ anlegen: [], aendern: [], loeschen: [], anlegenPos: [], loeschenPos: [], aendernPos: [], aendernPosNeu: [] });
 
 // Änderungen von `vorher` nach `nachher`. Zu anlegen/loeschen steht in
 // anlegenPos/loeschenPos (parallele Listen) die Array-Position, damit das Undo
@@ -73,7 +73,10 @@ export function aenderungen(vorher, nachher) {
       const alt = v[c].get(eid);
       if (!n[c].has(eid)) { a.loeschen.push(JSONKLON(alt)); a.loeschenPos.push(i); return; }
       const neu = n[c].get(eid);
-      if (alt !== neu && kanon(alt) !== kanon(neu)) a.aendern.push({ vorher: JSONKLON(alt), nachher: JSONKLON(neu) });
+      if (alt !== neu && kanon(alt) !== kanon(neu)) {
+        a.aendern.push({ vorher: JSONKLON(alt), nachher: JSONKLON(neu) });
+        a.aendernPos.push(i); a.aendernPosNeu.push(nPos.get(eid));
+      }
     });
     nk.forEach((eid, i) => {
       if (!v[c].has(eid)) { a.anlegen.push(JSONKLON(n[c].get(eid))); a.anlegenPos.push(nPos.get(eid)); }
@@ -97,6 +100,8 @@ export function umkehren(a) {
       loeschen: x.anlegen.map(JSONKLON),
       anlegenPos: [...(x.loeschenPos || [])],
       loeschenPos: [...(x.anlegenPos || [])],
+      aendernPos: [...(x.aendernPosNeu || [])],
+      aendernPosNeu: [...(x.aendernPos || [])],
     };
   }
   return out;
@@ -133,11 +138,18 @@ export function anwenden(state, a, { erzwingen = false } = {}) {
     if (!x) continue;
     const m = teile[c];
     for (const o of x.loeschen) m.delete(o.id);
-    for (const e of x.aendern) m.set(e.nachher.id, JSONKLON(e.nachher));
-    if (c === 'plaene') { for (const o of x.anlegen) m.set(o.id, JSONKLON(o)); continue; }
+    // Fremd gelöschter Datensatz, den ein erzwungenes Undo wieder braucht: neu
+    // anlegen, an der alten Position (soweit bekannt).
+    const wieder = [];
+    x.aendern.forEach((e, i) => {
+      if (m.has(e.nachher.id)) m.set(e.nachher.id, JSONKLON(e.nachher));
+      else wieder.push({ o: e.nachher, p: x.aendernPosNeu?.[i] });
+    });
+    if (c === 'plaene') { for (const o of [...x.anlegen, ...wieder.map((w) => w.o)]) m.set(o.id, JSONKLON(o)); continue; }
     // Neu Angelegtes: an der gemerkten Position (aufsteigend, damit mehrere
     // Einfügungen exakt aufgehen), sonst hinten.
-    const neu = x.anlegen.map((o, i) => ({ o, p: x.anlegenPos?.[i] })).filter(({ o }) => !m.has(o.id) || erzwingen);
+    const neu = [...x.anlegen.map((o, i) => ({ o, p: x.anlegenPos?.[i] })), ...wieder]
+      .filter(({ o }) => !m.has(o.id) || erzwingen);
     if (!neu.length) continue;
     const reihe = [...m.keys()];
     for (const { o, p } of neu.sort((s, t) => (s.p ?? Infinity) - (t.p ?? Infinity))) {
