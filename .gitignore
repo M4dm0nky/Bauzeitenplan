@@ -16,3 +16,7 @@ tools/_*.mjs
 !.claude/rules/
 
 .superpowers/
+
+# Lokale PocketBase-Binary + Zugangsdaten für Prüfungen (Task Online)
+tools/.pb/
+pocketbase/*.local.json
