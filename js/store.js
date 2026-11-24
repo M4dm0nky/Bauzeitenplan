@@ -14,6 +14,7 @@ import { MAX_SLOTS } from './palette.js';
 import { local } from './conflicts.js';
 import { RES_EINGEBAUT, RES_KATEGORIEN } from './res-katalog.js';
 import { phaseFehler, istPhasenArt } from './phasen.js';
+import { resStatusBereinigen } from './persistence.js';
 
 // Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
 // Ablage die äußere Schicht — diese Abhängigkeit liefe verkehrt herum. Für eine
@@ -374,9 +375,16 @@ const HANDLERS = {
     // Zuweisungen nur übernehmen, wenn sie auf bekannte Ressourcen zeigen —
     // sonst käme ein importierter/getippter Vertipper still in den Export und
     // hinge im Bedarfsraster nirgends ein.
+    // Der Bedarfsstatus reist mit (Import) und wird wie in `migrate` geprüft;
+    // eine Bereitstellung hat keinen. `duplicateTask` setzt selbst zurück.
     const res = (Array.isArray(t.res) ? t.res : [])
-      .filter((z) => resBekannt(state, z.rid) && Number.isInteger(z.n) && z.n > 0)
-      .map((z) => ({ rid: z.rid, n: z.n, von: z.von ?? null, bis: z.bis ?? null }));
+      .filter((z) => z && resBekannt(state, z.rid) && Number.isInteger(z.n) && z.n > 0)
+      .map((z) => {
+        const e = { rid: z.rid, n: z.n, von: z.von ?? null, bis: z.bis ?? null };
+        if (t.bereitstellung) return e;
+        for (const f of ['status', 'notiz', 'bestaetigtAm']) if (z[f] !== undefined) e[f] = z[f];
+        return resStatusBereinigen(e);
+      });
     state.tasks.push({
       id, gewerk, title: String(t.title).trim(),
       start: t.start ?? null, end: t.end ?? null, milestone,
@@ -721,6 +729,7 @@ const HANDLERS = {
       list.splice(idx, 1);
     } else {
       const v = cmd.value;
+      if (v == null || typeof v !== 'object' || Array.isArray(v)) return 'Die Zuweisung fehlt oder ist ungültig.';
       if (!resBekannt(state, v.rid)) return 'Unbekannte Bezeichnung: ' + v.rid;
       if (!Number.isInteger(v.n) || v.n <= 0) return 'Die Anzahl muss eine ganze Zahl größer 0 sein.';
       const von = v.von ?? null, bis = v.bis ?? null;
@@ -738,8 +747,10 @@ const HANDLERS = {
         // Bleibt die Zeile inhaltlich gleich, bleibt ihr Status; sonst gilt eine
         // neue Anfrage (Status-Felder fallen weg).
         const alt = list[idx];
-        const gleich = alt.rid === eintrag.rid && alt.n === eintrag.n
-          && (alt.von ?? null) === eintrag.von && (alt.bis ?? null) === eintrag.bis;
+        // Wirksame Zeit: Fenster null = ganzer Vorgang. Verglichen per toMin.
+        const wirk = (z) => [z.von ?? t.start, z.bis ?? t.end].map((x) => (x == null ? null : toMin(x)));
+        const [av, ab] = wirk(alt), [ev, eb] = wirk(eintrag);
+        const gleich = alt.rid === eintrag.rid && alt.n === eintrag.n && av === ev && ab === eb;
         if (gleich) { list[idx] = { ...alt }; }
         else list[idx] = eintrag;
       }

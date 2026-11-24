@@ -1682,5 +1682,65 @@ test('setResStatusMehrere: alles oder nichts, ein Undo-Schritt', () => {
   assert.deepEqual(taskById(s, 'a').res.map((z) => 'status' in z), [false, false]);
 });
 
+console.log('\nBedarfsstatus: Fensterform, Ablehnung, addTask (Issue #10)');
+const bestaetigt = () => {
+  const s = mitRes();
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM, notiz: 'ok' });
+  return s;
+};
+test('Fenster = ganzer Vorgang behält den Status (null -> exakt start/end)', () => {
+  const s = bestaetigt();
+  const r = s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: { rid: 'p-stagehand', n: 4, von: '2026-07-13T08:00', bis: '2026-07-13T12:00' } });
+  assert.equal(r.ok, true);
+  assert.equal(taskById(s, 'a').res[0].status, 'bestaetigt');
+});
+test('anderes Stringformat derselben Minute behält den Status', () => {
+  const s = bestaetigt();
+  s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: { rid: 'p-stagehand', n: 4, von: '2026-07-13T08:00', bis: '2026-07-13T12:00' } });
+  const r = s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: { rid: 'p-stagehand', n: 4, von: '2026-07-13T08:00:00', bis: '2026-07-13T12:00:00' } });
+  assert.equal(r.ok, true);
+  assert.equal(taskById(s, 'a').res[0].status, 'bestaetigt');
+});
+test('echte Zeitänderung des Fensters setzt auf angefragt zurück (Gegenprobe)', () => {
+  const s = bestaetigt();
+  const r = s.apply({ type: 'setTaskRes', id: 'a', index: 0, value: { rid: 'p-stagehand', n: 4, von: '2026-07-13T09:00', bis: '2026-07-13T12:00' } });
+  assert.equal(r.ok, true);
+  assert.equal('status' in taskById(s, 'a').res[0], false);
+});
+test('setTaskRes ohne value / mit kaputtem Wert: Ablehnung, nichts hinterlassen', () => {
+  const s = bestaetigt();
+  s.markSaved();
+  const undoVorher = s.canUndo;
+  for (const value of [undefined, 'x', 42, [], { n: 1 }]) {
+    let r;
+    assert.doesNotThrow(() => { r = s.apply({ type: 'setTaskRes', id: 'a', index: 0, value }); });
+    assert.equal(r.ok, false);
+  }
+  assert.equal(s.canUndo, undoVorher); assert.equal(s.dirty, false);
+  assert.equal(taskById(s, 'a').res[0].status, 'bestaetigt');
+});
+test('addTask reicht gültigen Bedarfsstatus durch', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addTask', task: { gewerk: 'licht', title: 'X', start: '2026-07-14T08:00', end: '2026-07-14T10:00',
+    res: [{ rid: 'p-stagehand', n: 2, von: null, bis: null, status: 'bestaetigt', notiz: 'Mail', bestaetigtAm: AM }] } });
+  const z = taskById(s, r.id).res[0];
+  assert.deepEqual([z.status, z.notiz, z.bestaetigtAm], ['bestaetigt', 'Mail', AM]);
+});
+test('addTask verwirft unbekannten Status samt Notiz, kürzt lange Notiz', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addTask', task: { gewerk: 'licht', title: 'X', start: '2026-07-14T08:00', end: '2026-07-14T10:00',
+    res: [{ rid: 'p-stagehand', n: 2, status: 'quatsch', notiz: 'weg', bestaetigtAm: AM },
+          { rid: 'p-runner', n: 1, status: 'abgelehnt', notiz: 'y'.repeat(300) }] } });
+  const [a, b] = taskById(s, r.id).res;
+  assert.deepEqual(Object.keys(a).sort(), ['bis', 'n', 'rid', 'von']);
+  assert.equal(b.notiz.length, 200);
+});
+test('addTask: Bereitstellung bekommt keinen Status', () => {
+  const s = createStore(seed());
+  const r = s.apply({ type: 'addTask', task: { gewerk: 'licht', title: 'Pool', start: '2026-07-14T08:00', end: '2026-07-14T10:00',
+    bereitstellung: true, res: [{ rid: 'p-stagehand', n: 2, status: 'bestaetigt' }] } });
+  assert.equal('status' in taskById(s, r.id).res[0], false);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

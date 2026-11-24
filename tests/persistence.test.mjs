@@ -778,5 +778,19 @@ test('Import: unbekannter Bedarfsstatus fällt auf angefragt, gültige bleiben, 
   assert.deepEqual(migrate(JSON.parse(JSON.stringify(m))).tasks[0].res, m.tasks[0].res);
 });
 
+test('Import: notiz/bestaetigtAm ohne gültigen status werden entfernt, idempotent', () => {
+  const raw = plan();
+  raw.tasks[0].res = [
+    { rid: 'sh', n: 1, von: null, bis: null, notiz: 'Waise', bestaetigtAm: '2026-10-01T00:00:00Z' },
+    { rid: 'sh', n: 1, von: null, bis: null, status: 'quatsch', notiz: 'x', bestaetigtAm: '2026-10-01T00:00:00Z' },
+    { rid: 'sh', n: 1, von: null, bis: null, status: 'abgelehnt', notiz: 'Grund' },
+  ];
+  const m = migrate(raw);
+  assert.deepEqual(Object.keys(m.tasks[0].res[0]).sort(), ['bis', 'n', 'rid', 'von']);
+  assert.deepEqual(Object.keys(m.tasks[0].res[1]).sort(), ['bis', 'n', 'rid', 'von']);
+  assert.equal(m.tasks[0].res[2].notiz, 'Grund');
+  assert.deepEqual(migrate(JSON.parse(JSON.stringify(m))).tasks[0].res, m.tasks[0].res);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

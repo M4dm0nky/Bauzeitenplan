@@ -11,6 +11,23 @@ import { spanFehler, topoSort } from './schedule.js';
 import { RES_EINGEBAUT } from './res-katalog.js';
 import { artAusName, istPhasenArt, phasenFehler, phaseLabel } from './phasen.js';
 
+/**
+ * Bedarfsstatus einer Zuweisung auf gültige Form bringen (am Objekt): unbekannter
+ * oder fehlender `status` = angefragt, dann gibt es auch weder `notiz` noch
+ * `bestaetigtAm`; `notiz` ist Text <= 200 Zeichen. Idempotent. Gemeinsame Regel
+ * für Import (`migrate`) und `addTask`.
+ */
+export function resStatusBereinigen(z) {
+  if (!['bestaetigt', 'abgelehnt'].includes(z.status)) {
+    delete z.status; delete z.notiz; delete z.bestaetigtAm;
+    return z;
+  }
+  if (typeof z.notiz === 'string') z.notiz = z.notiz.slice(0, 200);
+  else delete z.notiz;
+  if (typeof z.bestaetigtAm !== 'string') delete z.bestaetigtAm;
+  return z;
+}
+
 export const SCHEMA_VERSION = 1;
 
 const K_INDEX = 'bzp_projects';
@@ -188,7 +205,7 @@ export function migrate(plan) {
     // ein Angebot (der Pool, aus dem andere Vorgänge ihre Zuweisung nehmen).
     if (!Array.isArray(t.res)) t.res = [];
     // Unbekannter Bedarfsstatus aus einem Import = angefragt (Feld fehlt).
-    for (const z of t.res) if (z && 'status' in z && !['bestaetigt', 'abgelehnt'].includes(z.status)) delete z.status;
+    for (const z of t.res) if (z) resStatusBereinigen(z);
     t.bereitstellung = !!t.bereitstellung;
     // Untervorgänge: parent = id des Elternvorgangs, sonst null. Altpläne ohne
     // das Feld sind reine top-level → voll abwärtskompatibel.
