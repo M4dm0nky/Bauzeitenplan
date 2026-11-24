@@ -78,6 +78,14 @@ function spanne(t, z) {
 }
 
 /**
+ * Die EINE Regel «zählt diese Bedarfszeile mit?»: ein abgelehnter Bedarf bleibt am
+ * Vorgang stehen, deckt aber nichts ab (Lücke) und zählt nicht in Summen (Balkenzahl,
+ * Crew-Kopfzeile). Angefragt (Feld fehlt) und bestätigt zählen. Das Bedarfsraster
+ * zählt Bedarf weiterhin vollständig (Bedarf ist Bedarf, auch abgelehnt).
+ */
+export const zaehltAlsDeckung = (z) => !z || z.status !== 'abgelehnt';
+
+/**
  * Deckung EINER Art (Personal ODER Maschine) über die Dauer des Vorgangs:
  * welche Zeitspannen sind durch mindestens eine Zuweisung dieser Art abgedeckt,
  * welche nicht.
@@ -99,7 +107,7 @@ export function deckung(t, kind, state) {
   if (end <= start) return { gedeckt: [], luecken: [], luecktMin: 0 };
 
   // Intervalle vereinigen (Sweep über sortierte Fenster).
-  const spannen = zuweisungen.map((z) => spanne(t, z)).sort((a, b) => a.von - b.von);
+  const spannen = zuweisungen.filter(zaehltAlsDeckung).map((z) => spanne(t, z)).sort((a, b) => a.von - b.von);
   const vereint = [];
   for (const s of spannen) {
     const von = Math.max(s.von, start), bis = Math.min(s.bis, end);

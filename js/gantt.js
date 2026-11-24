@@ -11,14 +11,14 @@ import { runningAt, offeneVerspaetungen, verschoben } from './live.js';
 import { sichtGewerke, programmFenster, amTag, imAbschnitt, programmTage, buehnenIds } from './ebene.js';
 import { gewerkVar, gewerkTexture, gewerkInkVar } from './palette.js';
 import { el, svgEl } from './dom.js';
-import { resLabel, resKind } from './resources.js';
+import { resLabel, resKind, zaehltAlsDeckung, resStatusInfo } from './resources.js';
 import { aufbauPhase, showTage, phaseLabel } from './phasen.js';
 
 // Summe der Personal-Zuweisungen eines Vorgangs — ersetzt die frühere blanke
 // Zahl `crew`. Maschinen zählen hier nicht mit: die Kopfzeile fragte schon
 // vorher nur nach Personen.
 const personalSum = (t, state) =>
-  (t.res || []).filter((z) => resKind(z.rid, state) !== 'maschine')
+  (t.res || []).filter((z) => resKind(z.rid, state) !== 'maschine' && zaehltAlsDeckung(z))
     .reduce((a, z) => a + z.n, 0);
 import {
   ZOOM, clampZoom, zoomAnchored, nearestPreset, fitPx, tickScale, ticksFor,
@@ -1483,7 +1483,7 @@ export function createGantt(root, opts = {}) {
         add('Dauer', fmtDur(toMin(t.end) - toMin(t.start)));
       }
       if ((t.res || []).length) {
-        add(t.bereitstellung ? 'Bietet' : 'Braucht', t.res.map((z) => z.n + '× ' + resLabel(z.rid, S)).join(', '));
+        add(t.bereitstellung ? 'Bietet' : 'Braucht', t.res.map((z) => (t.bereitstellung ? '' : resStatusInfo(z).symbol + ' ') + z.n + '× ' + resLabel(z.rid, S)).join(', '));
       }
       const conf = CONFLICTS.get(t.id);
       if (conf) add('Konflikt', conf.message);

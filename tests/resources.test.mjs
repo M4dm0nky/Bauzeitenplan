@@ -1,4 +1,4 @@
-import { ressourcen, resGruppen, resLabel, resKind, deckung, bedarfsRaster, offeneBedarfe, genutzteRessourcen, rasterGrenzen, scheibeIndex } from '../js/resources.js';
+import { ressourcen, resGruppen, resLabel, resKind, deckung, zaehltAlsDeckung, bedarfsRaster, offeneBedarfe, genutzteRessourcen, rasterGrenzen, scheibeIndex } from '../js/resources.js';
 import { toMin } from '../js/schedule.js';
 import { RES_EINGEBAUT, RES_KATEGORIEN } from '../js/res-katalog.js';
 import { createStore } from '../js/store.js';
@@ -276,6 +276,35 @@ test('resLabel/resKind kennen eingebaute', () => {
 console.log('\nBedarfsstatus: offeneBedarfe / bestaetigt im Raster');
 const stS = (tasks) => ({ project: {}, gewerke: [{ id: 'g1', name: 'A', sort: 1 }, { id: 'g2', name: 'B', sort: 0 }], tasks });
 const tk = (id, gewerk, start, end, res, over = {}) => ({ id, gewerk, title: id, start, end, res, ...over });
+test('zaehltAlsDeckung: abgelehnt zählt nicht, angefragt/fehlend/bestätigt schon', () => {
+  assert.equal(zaehltAlsDeckung({ rid: 'stagehand', n: 1, status: 'abgelehnt' }), false);
+  assert.equal(zaehltAlsDeckung({ rid: 'stagehand', n: 1 }), true);
+  assert.equal(zaehltAlsDeckung({ rid: 'stagehand', n: 1, status: 'angefragt' }), true);
+  assert.equal(zaehltAlsDeckung({ rid: 'stagehand', n: 1, status: 'bestaetigt' }), true);
+});
+test('deckung: abgelehnte Zeile deckt nicht ab — Lücke bleibt', () => {
+  const t = task([
+    { rid: 'stagehand', n: 4, von: '2026-08-30T10:00', bis: '2026-08-30T15:00' },
+    { rid: 'rigger', n: 2, von: '2026-08-30T15:00', bis: '2026-08-30T20:00', status: 'abgelehnt' },
+  ]);
+  const d = deckung(t, 'personal', state());
+  assert.equal(d.luecktMin, 300);
+  assert.deepEqual(d.luecken, [[toMin('2026-08-30T15:00'), toMin('2026-08-30T20:00')]]);
+});
+test('deckung: nur abgelehnte Zeilen — volle Lücke, nicht null', () => {
+  const t = task([{ rid: 'stagehand', n: 10, von: null, bis: null, status: 'abgelehnt' }]);
+  const d = deckung(t, 'personal', state());
+  assert.notEqual(d, null);
+  assert.equal(d.luecktMin, 600);
+  assert.deepEqual(d.gedeckt, []);
+});
+test('bedarfsRaster: abgelehnter Bedarf zählt als bedarf, nicht als bestaetigt', () => {
+  const t = tk('a', 'g1', '2026-05-04T08:00', '2026-05-04T10:00', [{ rid: 'p-runner', n: 3, von: null, bis: null, status: 'abgelehnt' }]);
+  const r = bedarfsRaster([t], [{ id: 'p-runner', label: 'Runner', kind: 'personal' }], { kind: 'personal', von: toMin('2026-05-04T08:00'), bis: toMin('2026-05-04T10:00'), schritt: 60 });
+  assert.equal(r[0].slots[0].bedarf, 3);
+  assert.equal(r[0].slots[0].bestaetigt, 0);
+});
+
 test('offeneBedarfe: nur angefragte (oder fehlende) Zeilen, keine bestätigten, keine Bereitstellung, kein ohneTermin', () => {
   const s = stS([
     tk('a', 'g1', '2026-05-04T08:00', '2026-05-04T12:00', [
