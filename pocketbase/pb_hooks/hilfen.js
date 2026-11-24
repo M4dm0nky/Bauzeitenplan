@@ -51,25 +51,51 @@ function fehler409(eid, rev) {
 
 // ── Bedarfsstatus ──────────────────────────────────────────────────────────
 // Echte Datenform: daten.res = [{rid, n, von, bis, status?, notiz?, bestaetigtAm?}], «status fehlt» = angefragt.
-// Nur Leitung darf bestaetigt/abgelehnt setzen oder notiz/bestaetigtAm ändern.
-// Rückfall (alle drei Felder weg) darf jeder Schreibberechtigte.
-function statusFelder(z) {
+// Ohne Bestätigungsrecht (nur superadmin/besitzer/produktionsleitung dürfen) gilt: jede Zeile in neu, die
+// bestaetigt/abgelehnt ist oder notiz/bestaetigtAm trägt, muss als VOLLSTÄNDIG identische Zeile
+// (alle Felder, kanonisch verglichen) in alt vorkommen (Multimenge, Duplikate zählen). Damit sind
+// «bestätigte Zeile ändern», «Duplikat einer bestätigten Zeile» und «neu bestätigen» gesperrt;
+// der Rückfall (alle drei Felder weg) betrifft nur Zeilen ohne Status und bleibt frei.
+function kanon(v) {
+  if (Array.isArray(v)) return "[" + v.map(kanon).join(",") + "]";
+  if (v && typeof v === "object") return "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + kanon(v[k])).join(",") + "}";
+  return JSON.stringify(v === undefined ? null : v);
+}
+function hatStatus(z) {
   z = z || {};
-  return { status: z.status && z.status !== "angefragt" ? z.status : "", notiz: z.notiz || "", am: z.bestaetigtAm || "" };
+  return (z.status && z.status !== "angefragt") || !!z.notiz || !!z.bestaetigtAm;
 }
 function statusGeaendert(altRes, neuRes) {
   altRes = Array.isArray(altRes) ? altRes : [];
   neuRes = Array.isArray(neuRes) ? neuRes : [];
-  for (let i = 0; i < neuRes.length; i++) {
-    const n = neuRes[i] || {};
-    // Zuordnung: gleicher Index mit gleicher rid, sonst erste Zeile mit gleicher rid
-    let a = altRes[i] && altRes[i].rid === n.rid ? altRes[i] : altRes.find((x) => x && x.rid === n.rid);
-    const sa = statusFelder(a), sn = statusFelder(n);
-    if (sa.status === sn.status && sa.notiz === sn.notiz && sa.am === sn.am) continue;
-    if (!sn.status && !sn.notiz && !sn.am) continue; // Rückfall auf angefragt
-    return true;
+  const vorrat = {};
+  for (const z of altRes) { const k = kanon(z); vorrat[k] = (vorrat[k] || 0) + 1; }
+  for (const z of neuRes) {
+    if (!hatStatus(z)) continue;
+    const k = kanon(z);
+    if (!vorrat[k]) return true;
+    vorrat[k]--;
   }
   return false;
+}
+
+// Spalten sind nur Index-Kopien: sie müssen mit `daten` übereinstimmen (sonst kann ein Client, der
+// aus `daten` rekonstruiert, etwas anderes sehen als Regeln und Hook geprüft haben)
+function spaltenStimmen(coll, rec) {
+  const d = json(rec, "daten");
+  if (!d || typeof d !== "object") return coll === "ressourcen" || coll === "phasen" ? true : "daten fehlt";
+  const eid = rec.getString("eid");
+  if (coll === "vorgaenge") {
+    if (d.id !== eid) return "id";
+    if (d.gewerk !== rec.getString("gewerk")) return "gewerk";
+  } else if (coll === "verknuepfungen") {
+    if (d.id !== eid) return "id";
+    if (d.from !== rec.getString("von")) return "von";
+    if (d.to !== rec.getString("nach")) return "nach";
+  } else if (coll === "gewerke") {
+    if (d.id !== eid) return "id";
+  }
+  return true;
 }
 
 // ── Prüfungen je Aktion; werfen Fehler (403/400/409), verändern e.record (rev) ──────────────
@@ -106,13 +132,21 @@ function pruefe(e, coll, aktion) {
     if (q === undefined || Number(q) !== aktuell) throw fehler409(eidVon(rec), aktuell);
   }
 
+  // Spalten = daten (alle Rollen, neu UND alt)
+  for (const [r2, n] of aktion === "update" ? [[rec, "neu"], [alt, "alt"]] : [[rec, "neu"]]) {
+    if (aktion === "delete") break;
+    const st = spaltenStimmen(coll, r2);
+    if (st !== true) throw new BadRequestError("Die Spalte «" + st + "» passt nicht zu den Daten (" + n + ").");
+  }
+
   // Gewerkeleiter
   if (r.rolle === "gewerkeleiter") {
     const eigen = (g) => g !== "projekt" && r.gewerke.indexOf(g) >= 0;
     const verboten = () => new ForbiddenError(nurText(app, planId, r.gewerke));
+    const gewerkeVon = (x) => [x.getString("gewerk"), (json(x, "daten") || {}).gewerk];
     if (coll === "vorgaenge") {
-      if (aktion !== "create" && !eigen(alt.getString("gewerk"))) throw verboten();
-      if (aktion !== "delete" && !eigen(rec.getString("gewerk"))) throw verboten();
+      if (aktion !== "create" && !gewerkeVon(alt).every(eigen)) throw verboten();
+      if (aktion !== "delete" && !gewerkeVon(rec).every(eigen)) throw verboten();
     } else if (coll === "verknuepfungen") {
       const eigenerNachfolger = (nach) => {
         const v = finde(app, "vorgaenge", "plan_id = {:p} && eid = {:e}", { p: planId, e: nach });
@@ -131,7 +165,21 @@ function pruefe(e, coll, aktion) {
   if (coll === "vorgaenge" && aktion !== "delete" && LEITUNG.indexOf(r.rolle) < 0 && r.rolle !== "produktionsleitung") {
     const dNeu = json(rec, "daten") || {};
     const dAlt = alt ? json(alt, "daten") || {} : {};
-    if (statusGeaendert(dAlt.res, dNeu.res)) throw new ForbiddenError("Bedarf bestätigen oder ablehnen darf nur die Produktionsleitung.");
+    if (statusGeaendert(dAlt.res, dNeu.res)) throw new ForbiddenError("Bedarf bestätigen darf nur die Produktionsleitung.");
+  }
+
+  // Löschen: nichts löschen, worauf noch etwas zeigt (der Client schickt es im selben Batch mit:
+  // verknuepfungen → vorgaenge (Kinder vor Eltern) → gewerke/phasen/ressourcen)
+  if (aktion === "delete") {
+    const eid = rec.getString("eid");
+    if (coll === "gewerke" && finde(app, "vorgaenge", "plan_id = {:p} && gewerk = {:g}", { p: planId, g: eid }))
+      throw new BadRequestError("Das Gewerk hat noch Vorgänge.");
+    if (coll === "vorgaenge") {
+      if (finde(app, "vorgaenge", "plan_id = {:p} && daten.parent = {:e}", { p: planId, e: eid }))
+        throw new BadRequestError("Der Vorgang hat noch Untervorgänge.");
+      if (finde(app, "verknuepfungen", "plan_id = {:p} && (von = {:e} || nach = {:e})", { p: planId, e: eid }))
+        throw new BadRequestError("Auf den Vorgang zeigen noch Verknüpfungen.");
+    }
   }
 
   // Konsistenz
@@ -140,6 +188,18 @@ function pruefe(e, coll, aktion) {
       const g = rec.getString("gewerk");
       if (g !== "projekt" && !finde(app, "gewerke", "plan_id = {:p} && eid = {:e}", { p: planId, e: g }))
         throw new BadRequestError("Unbekanntes Gewerk: " + g);
+      // Untervorgang: eine Ebene, gleiches Gewerk, Elternvorgang desselben Plans
+      const d = json(rec, "daten") || {};
+      if (d.parent !== undefined && d.parent !== null && d.parent !== "") {
+        const eid = rec.getString("eid");
+        const el = d.parent === eid ? null : finde(app, "vorgaenge", "plan_id = {:p} && eid = {:e}", { p: planId, e: String(d.parent) });
+        if (!el) throw new BadRequestError("Der Elternvorgang existiert nicht.");
+        const ed = json(el, "daten") || {};
+        if (ed.parent !== undefined && ed.parent !== null && ed.parent !== "") throw new BadRequestError("Untervorgänge haben nur eine Ebene.");
+        if (el.getString("gewerk") !== g) throw new BadRequestError("Ein Untervorgang liegt im Gewerk seines Elternvorgangs.");
+        if (finde(app, "vorgaenge", "plan_id = {:p} && daten.parent = {:e}", { p: planId, e: eid }))
+          throw new BadRequestError("Ein Vorgang mit Untervorgängen kann kein Untervorgang sein.");
+      }
     } else if (coll === "verknuepfungen") {
       for (const f of ["von", "nach"]) {
         if (!finde(app, "vorgaenge", "plan_id = {:p} && eid = {:e}", { p: planId, e: rec.getString(f) }))

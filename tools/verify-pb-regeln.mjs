@@ -9,7 +9,38 @@ const PW = 'Test-Passwort-123';
 let fehler = 0;
 const ok = (b, text, extra = '') => { console.log(`${b ? '✓' : '✗'} ${text}${b ? '' : ' ' + extra}`); if (!b) fehler++; };
 
+// Echte Datenform: `daten` trägt id/gewerk/from/to wie die App sie liefert (der Hook erzwingt, dass
+// die Spalten dazu passen). Fehlende Schlüssel werden aus den Spalten ergänzt; explizit gesetzte
+// (auch falsche) bleiben unangetastet, damit Negativtests möglich sind.
+const ECHT = ['vorgaenge', 'verknuepfungen', 'gewerke'];
+async function echt(pb, method, path, body) {
+  if (!body || typeof body !== 'object' || !['POST', 'PATCH'].includes(method)) return body;
+  const m = path.split('?')[0].match(/^\/api\/collections\/(\w+)\/records(?:\/(\w+))?$/);
+  if (!m || !ECHT.includes(m[1])) return body;
+  let cur = {};
+  if (method === 'PATCH') {
+    const r = await pb.su('GET', `/api/collections/${m[1]}/records/${m[2]}`);
+    if (!r.ok) return body;
+    cur = r.body;
+  }
+  const sp = { ...cur, ...body };
+  const map = { gewerk: 'gewerk', von: 'from', nach: 'to' };
+  if (body.daten === undefined) {
+    const ge = Object.keys(map).filter((c) => c in body);
+    if (!ge.length) return body;
+    const d = { ...(cur.daten || {}) };
+    for (const c of ge) d[map[c]] = body[c];
+    return { ...body, daten: d };
+  }
+  const d = { ...body.daten };
+  if (d.id === undefined && sp.eid !== undefined) d.id = sp.eid;
+  if (m[1] === 'vorgaenge' && d.gewerk === undefined) d.gewerk = sp.gewerk;
+  if (m[1] === 'verknuepfungen') { if (d.from === undefined) d.from = sp.von; if (d.to === undefined) d.to = sp.nach; }
+  return { ...body, daten: d };
+}
+
 export async function api(pb, token, method, path, body) {
+  body = await echt(pb, method, path, body);
   const h = {};
   if (body !== undefined) h['content-type'] = 'application/json';
   if (token) h.authorization = token;
@@ -18,7 +49,11 @@ export async function api(pb, token, method, path, body) {
   const t = await r.text(); let json = null; try { json = t ? JSON.parse(t) : null; } catch { json = t; }
   return { status: r.status, ok: r.ok, body: json };
 }
-export const batch = (pb, token, requests) => api(pb, token, 'POST', '/api/batch', { requests });
+export const batch = async (pb, token, requests) => {
+  const rs = [];
+  for (const q of requests) rs.push(q.body ? { ...q, body: await echt(pb, q.method, q.url, q.body) } : q);
+  return api(pb, token, 'POST', '/api/batch', { requests: rs });
+};
 export const post = (coll, body) => ({ method: 'POST', url: `/api/collections/${coll}/records`, body });
 // «leer oder verboten»: Filterregel ohne Treffer = 200 mit 0, sonst 4xx
 const leerOderVerboten = (n) => n === 0 || (n <= -400 && n > -500);
@@ -303,6 +338,10 @@ async function STATUS(pb) {
   status(await patch(pb, k, 'bearb', 'vorgaenge', id, { ...mitRes(neu({ ...res[1], status: 'bestaetigt' })), rev }), 403, 'bearb setzt bestaetigt');
   status(await patch(pb, k, 'gwl', 'vorgaenge', id, { ...mitRes(neu({ ...res[1], notiz: 'nur Notiz' })), rev }), 403, 'gwl setzt nur notiz');
   status(await patch(pb, k, 'gwl', 'vorgaenge', id, { ...mitRes([{ ...res[0], bestaetigtAm: '2026-02-02T10:00' }, res[1]]), rev }), 403, 'gwl ändert bestaetigtAm');
+  status(await patch(pb, k, 'gwl', 'vorgaenge', id, { ...mitRes([{ ...res[0], n: 9 }, res[1]]), rev }), 403, 'gwl ändert bestätigte Zeile ohne Rückfall (Anzahl)');
+  status(await patch(pb, k, 'gwl', 'vorgaenge', id, { ...mitRes([res[0], res[0], res[1]]), rev }), 403, 'gwl dupliziert bestätigte Zeile');
+  status(await patch(pb, k, 'gwl', 'vorgaenge', id, { ...mitRes([{ ...res[0], von: '2026-01-01T08:00', bis: '2026-01-01T09:00' }, res[1]]), rev }), 403, 'gwl ändert Fenster einer bestätigten Zeile');
+  ok((await patch(pb, k, 'gwl', 'vorgaenge', id, { ...mitRes([res[1], res[0]]), rev })).ok && ++rev, 'gwl vertauscht die Reihenfolge (Zeilen unverändert)');
   ok((await patch(pb, k, 'gwl', 'vorgaenge', id, { ...mitRes([res[0], { ...res[1], n: 3 }]), rev })).ok && ++rev, 'gwl ändert Anzahl einer unbestätigten Zeile (Status unverändert)');
   ok((await patch(pb, k, 'gwl', 'vorgaenge', id, { ...mitRes([{ rid: 'r1', n: 4, von: null, bis: null }, { ...res[1], n: 3 }]), rev })).ok && ++rev, 'gwl ändert Anzahl einer bestätigten Zeile, Status entfernt (Rückfall)');
   const stand = (await gib(pb, 'vorgaenge', 'planA', 'vs')).daten.res;
@@ -330,6 +369,12 @@ async function KONTEN(pb) {
   ok(ss.ok && ss.body.superadmin === true, 'Superadmin setzt superadmin', `Status ${ss.status}`);
   ok((await api(pb, k.fremd.token, 'PATCH', `/api/collections/users/records/${k.kandidat.id}`, { name: 'x' })).ok, 'frisch beförderter Superadmin darf Fremdkonto ändern (Token trägt Flag erst nach neuer Anmeldung?)');
   status(await api(pb, k.bearb.token, 'PATCH', `/api/collections/users/records/${k.fremd.id}`, { name: 'x' }), 404, 'Nutzer ändert fremdes Konto (Regel)');
+  status(await api(pb, k.bearb.token, 'POST', '/api/collections/users/request-email-change', { newEmail: 'andere@bzp.test' }), 403, 'request-email-change');
+  // confirm: PocketBase validiert Token/Passwort VOR dem Hook (400); ein gültiger Token kann ohne request-email-change nicht entstehen
+  for (const t of [k.bearb.token, null]) {
+    const c = await api(pb, t, 'POST', '/api/collections/users/confirm-email-change', { token: 'x.y.z', password: PW });
+    ok(c.status === 400 || c.status === 403, `confirm-email-change${t ? '' : ' ohne Anmeldung'} wird abgewiesen`, `Status ${c.status}`);
+  }
 }
 
 async function EINLADUNG(pb) {
@@ -415,7 +460,93 @@ async function KONSISTENZ(pb) {
   ok(!(await gib(pb, 'gewerke', 'planA', 'g8')), 'Batch zurückgerollt (Gewerk g8 fehlt)');
 }
 
-const ABSCHNITTE = { SCHEMA, REV, GEWERKELEITER, STATUS, KONTEN, EINLADUNG, BESITZER, KONSISTENZ };
+async function DATEN(pb) {
+  console.log('— DATEN (Spalten = daten, Untervorgänge)');
+  const { k } = await grundaufbau(pb);
+  await erweitern(pb, k);
+  const vor = (n, eid, gewerk, daten) => api(pb, k[n].token, 'POST', '/api/collections/vorgaenge/records', { plan_id: 'planA', eid, gewerk, daten, pos: 1 });
+  // C1: Spalte ≠ daten → 400, für alle Rollen
+  status(await vor('gwl', 'c1', 'g1', { gewerk: 'g2' }), 400, 'gwl: Spalte Licht, daten.gewerk Ton');
+  status(await vor('gwl', 'c2', 'g2', { gewerk: 'g1' }), 400, 'gwl: Spalte Ton, daten.gewerk Licht');
+  status(await vor('pl', 'c3', 'g1', { gewerk: 'g2' }), 400, 'pl: Spalte ≠ daten.gewerk');
+  status(await vor('pl', 'c4', 'g1', { id: 'anders' }), 400, 'pl: eid ≠ daten.id');
+  status(await vor('pl', 'c5', 'g1', { gewerk: null }), 400, 'pl: daten.gewerk null');
+  const vl = await gib(pb, 'vorgaenge', 'planA', 'vl');
+  status(await patch(pb, k, 'gwl', 'vorgaenge', vl.id, { daten: { id: 'vl', gewerk: 'g2' }, rev: 1 }), 400, 'gwl ändert nur daten.gewerk auf Ton (Spalte bleibt Licht)');
+  status(await patch(pb, k, 'bearb', 'vorgaenge', vl.id, { daten: { id: 'vl', gewerk: 'g2' }, rev: 1 }), 400, 'bearb ändert nur daten.gewerk');
+  ok((await gib(pb, 'vorgaenge', 'planA', 'vl')).daten.gewerk === 'g1', 'Vorgang bleibt konsistent im Licht');
+  const vp = (eid, extra = {}) => api(pb, k.pl.token, 'POST', '/api/collections/verknuepfungen/records', { plan_id: 'planA', eid, von: 'vt', nach: 'vl', daten: {}, pos: 1, ...extra });
+  status(await vp('c6', { daten: { to: 'vt' } }), 400, 'Verknüpfung: nach ≠ daten.to');
+  status(await vp('c7', { daten: { from: 'vl' } }), 400, 'Verknüpfung: von ≠ daten.from');
+  status(await vp('c8', { daten: { id: 'x' } }), 400, 'Verknüpfung: eid ≠ daten.id');
+  status(await api(pb, k.gwl.token, 'POST', '/api/collections/verknuepfungen/records', { plan_id: 'planA', eid: 'c9', von: 'vt', nach: 'vl', daten: { to: 'vt' }, pos: 1 }), 400, 'gwl: Verknüpfung nach Licht, daten.to Ton');
+  status(await api(pb, k.pl.token, 'POST', '/api/collections/gewerke/records', { plan_id: 'planA', eid: 'g7', daten: { id: 'g8', name: 'x' }, pos: 1 }), 400, 'Gewerk: eid ≠ daten.id');
+  ok((await vp('c10')).ok, 'Gegenprobe: konsistente Verknüpfung wird angelegt');
+  // I1: Untervorgänge
+  ok((await vor('gwl', 'k1', 'g1', { parent: 'vl' })).ok, 'gwl legt Untervorgang unter eigenem Vorgang an');
+  status(await vor('gwl', 'k2', 'g1', { parent: 'vt' }), 400, 'gwl hängt Licht-Vorgang unter Ton-Vorgang');
+  status(await vor('pl', 'k3', 'g1', { parent: 'vt' }), 400, 'pl hängt Licht-Vorgang unter Ton-Vorgang (anderes Gewerk)');
+  status(await vor('pl', 'k4', 'g1', { parent: 'k1' }), 400, 'Enkel (Elternvorgang ist selbst Untervorgang)');
+  status(await vor('pl', 'k5', 'g1', { parent: 'gibtsnicht' }), 400, 'Elternvorgang existiert nicht');
+  status(await vor('pl', 'k6', 'g1', { parent: 'k6' }), 400, 'Vorgang als sein eigener Elternvorgang');
+  const vl2 = await gib(pb, 'vorgaenge', 'planA', 'vl');
+  status(await patch(pb, k, 'pl', 'vorgaenge', vl2.id, { daten: { id: 'vl', gewerk: 'g1', parent: 'vp' }, rev: 1 }), 400, 'Vorgang mit Untervorgängen wird selbst Untervorgang');
+}
+
+async function LOESCHEN(pb) {
+  console.log('— LOESCHEN (Verweise, Kaskade, Batch-Reihenfolge)');
+  const { k } = await grundaufbau(pb);
+  await erweitern(pb, k);
+  const id = async (c, e) => (await gib(pb, c, 'planA', e)).id;
+  const kind = await api(pb, k.pl.token, 'POST', '/api/collections/vorgaenge/records', { plan_id: 'planA', eid: 'vlk', gewerk: 'g1', daten: { parent: 'vl' }, pos: 9 });
+  ok(kind.ok, 'Untervorgang angelegt', `Status ${kind.status}`);
+  status(await loesche(pb, k, 'pl', 'gewerke', await id('gewerke', 'g2'), 1), 400, 'Gewerk mit Vorgängen löschen');
+  status(await loesche(pb, k, 'pl', 'vorgaenge', await id('vorgaenge', 'vl'), 1), 400, 'Vorgang mit Untervorgang/Verknüpfungen löschen');
+  status(await loesche(pb, k, 'pl', 'vorgaenge', await id('vorgaenge', 'vt'), 1), 400, 'Vorgang mit Verknüpfungen löschen');
+  status(await loesche(pb, k, 'pl', 'vorgaenge', kind.body.id, 1).then((r) => ({ ...r, status: r.status === 204 ? 204 : r.status })), 204, 'Untervorgang ohne Verweise löschen');
+  const del = async (c, e) => ({ method: 'DELETE', url: `/api/collections/${c}/records/${await id(c, e)}?rev=1` });
+  // falsche Reihenfolge (Gewerk vor Vorgängen) → ganzer Batch abgelehnt, nichts gelöscht
+  const falsch = await batch(pb, k.pl.token, [await del('gewerke', 'g2'), await del('verknuepfungen', 'kl'), await del('verknuepfungen', 'kt'), await del('vorgaenge', 'vt')]);
+  ok(falsch.status === 400, 'Batch in falscher Reihenfolge (Gewerk zuerst) → abgelehnt', `Status ${falsch.status}`);
+  ok(!!(await gib(pb, 'verknuepfungen', 'planA', 'kl')) && !!(await gib(pb, 'gewerke', 'planA', 'g2')), 'falscher Batch zurückgerollt (nichts gelöscht)');
+  const falsch2 = await batch(pb, k.pl.token, [await del('vorgaenge', 'vt'), await del('verknuepfungen', 'kl'), await del('verknuepfungen', 'kt')]);
+  ok(falsch2.status === 400, 'Batch: Vorgang vor seinen Verknüpfungen → abgelehnt', `Status ${falsch2.status}`);
+  // richtige Reihenfolge: verknuepfungen → vorgaenge → gewerke
+  const richtig = await batch(pb, k.pl.token, [await del('verknuepfungen', 'kl'), await del('verknuepfungen', 'kt'), await del('vorgaenge', 'vt'), await del('gewerke', 'g2')]);
+  ok(richtig.ok, 'Batch in richtiger Reihenfolge (verknuepfungen → vorgaenge → gewerke) → erlaubt', `Status ${richtig.status} ${JSON.stringify(richtig.body).slice(0, 200)}`);
+  ok(!(await gib(pb, 'vorgaenge', 'planA', 'vt')) && !(await gib(pb, 'gewerke', 'planA', 'g2')), 'alles gelöscht');
+  // Kinder vor Eltern im selben Batch
+  await api(pb, k.pl.token, 'POST', '/api/collections/vorgaenge/records', { plan_id: 'planA', eid: 'ek', gewerk: 'g1', daten: { parent: 'vl' }, pos: 9 });
+  const eltern = await batch(pb, k.pl.token, [await del('vorgaenge', 'vl'), await del('vorgaenge', 'ek')]);
+  ok(eltern.status === 400, 'Batch: Elternvorgang vor Kind → abgelehnt', `Status ${eltern.status}`);
+  const kinder = await batch(pb, k.pl.token, [await del('vorgaenge', 'ek'), await del('vorgaenge', 'vl')]);
+  ok(kinder.ok, 'Batch: Kind vor Elternvorgang → erlaubt', `Status ${kinder.status} ${JSON.stringify(kinder.body).slice(0, 200)}`);
+  // Gewerkeleiter: fremde Verknüpfung auf eigenem Vorgang → Vorgang nicht löschbar (gewollt)
+  const mk = await batch(pb, k.pl.token, [
+    post('gewerke', { plan_id: 'planA', eid: 'g3', daten: { id: 'g3', name: 'Video' }, pos: 3 }),
+    post('vorgaenge', { plan_id: 'planA', eid: 'vo', gewerk: 'g1', daten: {}, pos: 1 }),
+    post('vorgaenge', { plan_id: 'planA', eid: 'vf', gewerk: 'g3', daten: {}, pos: 1 }),
+    post('verknuepfungen', { plan_id: 'planA', eid: 'ko', von: 'vo', nach: 'vf', daten: {}, pos: 1 }),
+  ]);
+  ok(mk.ok, 'Aufbau: Licht-Vorgang vo → Video-Vorgang vf', JSON.stringify(mk.body).slice(0, 200));
+  status(await loesche(pb, k, 'gwl', 'verknuepfungen', await id('verknuepfungen', 'ko'), 1), 403, 'gwl löscht Verknüpfung mit fremdem Nachfolger');
+  status(await loesche(pb, k, 'gwl', 'vorgaenge', await id('vorgaenge', 'vo'), 1), 400, 'gwl löscht Vorgang mit fremder Verknüpfung (gewollt gesperrt)');
+  // Plan löschen: Kaskade, Neuanlage erbt nichts
+  await api(pb, k.pl.token, 'POST', '/api/collections/einladungen/records', { plan_id: 'planA', email: 'z@bzp.test', rolle: 'betrachter', gewerke: [] });
+  const pa = (await pb.su('GET', '/api/collections/plaene/records?filter=plan_id="planA"')).body.items[0];
+  status(await api(pb, k.pl.token, 'DELETE', `/api/collections/plaene/records/${pa.id}`), 409, 'Plan löschen ohne rev');
+  status(await api(pb, k.pl.token, 'DELETE', `/api/collections/plaene/records/${pa.id}?rev=${pa.rev}`), 204, 'Plan löschen (Besitzer, mit rev)');
+  const rest = {};
+  for (const c of [...COLS, 'plaene', 'mitglieder', 'einladungen']) rest[c] = (await pb.su('GET', `/api/collections/${c}/records?perPage=1&filter=${encodeURIComponent('plan_id="planA"')}`)).body.totalItems;
+  ok(Object.values(rest).every((n) => n === 0), 'Kaskade: keine Datensätze von planA mehr', JSON.stringify(rest));
+  ok((await pb.su('GET', '/api/collections/vorgaenge/records?filter=plan_id="planB"')).body.totalItems === 1, 'Plan B unberührt');
+  ok((await api(pb, k.pl.token, 'POST', '/api/collections/plaene/records', { plan_id: 'planA', daten: { name: 'neu' } })).ok, 'Plan mit gleicher plan_id neu anlegen');
+  ok(await anzahl(pb, k.pl.token, 'vorgaenge', 'plan_id = "planA"') === 0, 'Neuer Plan hat keine alten Vorgänge');
+  ok(await anzahl(pb, k.bearb.token, 'plaene', 'plan_id = "planA"') === 0, 'Altes Mitglied sieht den neuen Plan nicht');
+  ok(await anzahl(pb, k.pl.token, 'mitglieder', 'plan_id = "planA"') === 0, 'Neuer Plan hat keine Altmitglieder');
+}
+
+const ABSCHNITTE = { SCHEMA, REV, GEWERKELEITER, STATUS, KONTEN, EINLADUNG, BESITZER, KONSISTENZ, DATEN, LOESCHEN };
 
 const i = process.argv.indexOf('--nur');
 const nur = i > 0 ? process.argv[i + 1].toUpperCase() : null;

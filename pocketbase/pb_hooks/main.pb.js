@@ -34,6 +34,26 @@ onRecordUpdateRequest((e) => {
   e.next();
 }, "users");
 
+// E-Mail-Adresse ändern geht auch über request-/confirm-email-change: gesperrt (Superuser ausgenommen)
+onRecordRequestEmailChangeRequest((e) => {
+  if (!e.hasSuperuserAuth()) throw new ForbiddenError("Die E-Mail-Adresse lässt sich nicht ändern.");
+  e.next();
+}, "users");
+onRecordConfirmEmailChangeRequest((e) => {
+  if (!e.hasSuperuserAuth()) throw new ForbiddenError("Die E-Mail-Adresse lässt sich nicht ändern.");
+  e.next();
+}, "users");
+
+// ── Plan löschen: alle Datensätze des Plans mit (gleiche Transaktion wie das Löschen) ──────────
+onRecordDelete((e) => {
+  e.next();
+  const planId = e.record.getString("plan_id");
+  for (const c of ["verknuepfungen", "vorgaenge", "phasen", "ressourcen", "gewerke", "mitglieder", "einladungen"]) {
+    const liste = e.app.findRecordsByFilter(c, "plan_id = {:p}", "", 0, 0, { p: planId });
+    for (const r of liste) e.app.delete(r);
+  }
+}, "plaene");
+
 // ── Einladung anlegen ───────────────────────────────────────────────────────
 onRecordCreateRequest((e) => {
   const h = require(`${__hooks}/hilfen.js`);
