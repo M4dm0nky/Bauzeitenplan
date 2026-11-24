@@ -32,6 +32,7 @@ const HUELLE = [
   './',
   'index.html',
   'print.html',
+  'js/aenderungen.js',
   'js/app.js',
   'js/bedarf.js',
   'js/conflicts.js',

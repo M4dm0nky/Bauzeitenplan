@@ -1742,5 +1742,105 @@ test('addTask: Bereitstellung bekommt keinen Status', () => {
   assert.equal('status' in taskById(s, r.id).res[0], false);
 });
 
+console.log('\nUndo nur eigener Schritte (Änderungslisten)');
+
+test('pruefe lehnt ab: kein Undo-Eintrag, nicht ungesichert, Zustand unverändert', () => {
+  const s = createStore(seed(), { pruefe: () => 'nicht erlaubt' });
+  const r = s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: 'Neu' });
+  assert.deepEqual([r.ok, r.error], [false, 'nicht erlaubt']);
+  assert.equal(s.canUndo, false);
+  assert.equal(s.dirty, false);
+  assert.equal(taskById(s, 'a').title, 'Podest');
+});
+test('pruefe bekommt vorher, nachher und die Änderungsliste', () => {
+  let got;
+  const s = createStore(seed(), { pruefe: (v, n, a) => { got = { v, n, a }; return null; } });
+  s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: 'Neu' });
+  assert.equal(got.v.tasks[0].title, 'Podest');
+  assert.equal(got.n.tasks[0].title, 'Neu');
+  assert.equal(got.a.vorgaenge.aendern.length, 1);
+});
+test('applyRemote: nicht ungesichert, kein Undo-Eintrag, Abonnent bekommt quelle remote', () => {
+  const s = createStore(seed());
+  const infos = [];
+  s.subscribe((st, info) => infos.push(info.quelle));
+  const fremd = JSON.parse(JSON.stringify(s.state));
+  fremd.tasks[1].title = 'Fremd';
+  s.applyRemote(fremd);
+  assert.equal(s.dirty, false);
+  assert.equal(s.canUndo, false);
+  assert.equal(taskById(s, 'b').title, 'Fremd');
+  assert.deepEqual(infos, ['remote']);
+});
+test('Undo nach fremder Änderung an ANDEREM Vorgang: nur der eigene Schritt, fremde bleibt', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: 'Eigen' });
+  const fremd = JSON.parse(JSON.stringify(s.state));
+  fremd.tasks[1].title = 'Fremd';
+  s.applyRemote(fremd);
+  assert.deepEqual(s.undo(), { ok: true });
+  assert.equal(taskById(s, 'a').title, 'Podest');
+  assert.equal(taskById(s, 'b').title, 'Fremd');
+  assert.deepEqual(s.redo(), { ok: true });
+  assert.equal(taskById(s, 'a').title, 'Eigen');
+  assert.equal(taskById(s, 'b').title, 'Fremd');
+});
+test('Fremde Änderung am SELBEN Vorgang: Konflikt, Stapel bleibt; erzwingen stellt her', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: 'Eigen' });
+  const fremd = JSON.parse(JSON.stringify(s.state));
+  fremd.tasks[0].title = 'Fremd';
+  s.applyRemote(fremd);
+  const r = s.undo();
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.konflikt, [{ coll: 'vorgaenge', eid: 'a', art: 'geaendert' }]);
+  assert.equal(s.canUndo, true);
+  assert.equal(taskById(s, 'a').title, 'Fremd');
+  assert.deepEqual(s.undo({ erzwingen: true }), { ok: true });
+  assert.equal(taskById(s, 'a').title, 'Podest');
+  assert.equal(s.canUndo, false);
+  assert.equal(s.canRedo, true);
+});
+test('gesperrt lehnt apply, undo und redo ab', () => {
+  let sperre = null;
+  const s = createStore(seed(), { gesperrt: () => sperre });
+  s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: 'Neu' });
+  s.undo();
+  sperre = 'Offline';
+  assert.deepEqual(s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: 'X' }), { ok: false, error: 'Offline' });
+  assert.deepEqual(s.redo(), { ok: false, error: 'Offline' });
+  assert.equal(s.canRedo, true);
+  sperre = null;
+  s.redo();
+  sperre = 'Offline';
+  assert.deepEqual(s.undo(), { ok: false, error: 'Offline' });
+  assert.equal(taskById(s, 'a').title, 'Neu');
+});
+test('Undo eines Löschens stellt die Reihenfolge exakt wieder her', () => {
+  const s = createStore(seed());
+  const vor = JSON.parse(JSON.stringify(s.state));
+  s.apply({ type: 'removeTask', id: 'a' });
+  s.undo();
+  assert.deepEqual(s.state, vor);
+});
+test('Untervorgänge: Undo/Redo stellen Hülle des Sammelvorgangs mit her', () => {
+  const s = createStore(seedSub());
+  const k = addKid(s, 'Main SL', '2026-07-13T10:00', '2026-07-13T12:00');
+  assert.equal(k.ok, true);
+  const mitKind = JSON.parse(JSON.stringify(s.state));
+  assert.equal(taskById(s, 'pa').end, '2026-07-13T12:00');
+  s.undo();
+  assert.equal(s.state.tasks.length, 1);
+  assert.equal(taskById(s, 'pa').end, '2026-07-13T09:00');
+  s.redo();
+  assert.deepEqual(s.state, mitKind);
+  s.apply({ type: 'moveTask', id: k.id, start: '2026-07-14T10:00', end: '2026-07-14T12:00' });
+  const verschoben = JSON.parse(JSON.stringify(s.state));
+  s.undo();
+  assert.equal(taskById(s, 'pa').end, '2026-07-13T12:00');
+  s.redo();
+  assert.deepEqual(s.state, verschoben);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);

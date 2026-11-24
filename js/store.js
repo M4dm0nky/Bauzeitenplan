@@ -15,6 +15,7 @@ import { local } from './conflicts.js';
 import { RES_EINGEBAUT, RES_KATEGORIEN } from './res-katalog.js';
 import { phaseFehler, istPhasenArt } from './phasen.js';
 import { resStatusBereinigen } from './persistence.js';
+import { aenderungen, umkehren, anwenden } from './aenderungen.js';
 
 // Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
 // Ablage die äußere Schicht — diese Abhängigkeit liefe verkehrt herum. Für eine
@@ -933,7 +934,7 @@ function freeSlot(state, art = 'gewerk') {
 
 // ── Store ───────────────────────────────────────────────────────────────────
 
-export function createStore(initial) {
+export function createStore(initial, opt = {}) {
   let state = clone(initial);
   if (!state.deps) state.deps = [];
   if (!state.tasks) state.tasks = [];
@@ -955,7 +956,7 @@ export function createStore(initial) {
   const subs = new Set();
   let dirty = false;
 
-  const notify = () => subs.forEach((fn) => fn(state));
+  const notify = (info = { quelle: 'replace', aend: null }) => subs.forEach((fn) => fn(state, info));
 
   // Führt cmd auf draft aus. Rückgabe: {ok:true,...} oder {ok:false,error}
   function run(draft, cmd) {
@@ -974,6 +975,8 @@ export function createStore(initial) {
   }
 
   function apply(cmd) {
+    const sperre = opt.gesperrt && opt.gesperrt();
+    if (sperre) return err(sperre);
     // Auf einer Kopie arbeiten: scheitert der Befehl (oder ein Teil eines
     // Sammelbefehls), wird die Kopie weggeworfen und nichts ist passiert.
     const draft = clone(state);
@@ -983,32 +986,42 @@ export function createStore(initial) {
     // jedem erfolgreichen Befehl, damit kein Handler es einzeln bedenken muss.
     reflowParents(draft);
 
-    undoStack.push(state);
+    // Der Undo-Eintrag ist die Änderungsliste des Befehls (nach reflowParents
+    // gerechnet, enthält also die Hüllen): so nimmt ⌘Z nur den eigenen Schritt
+    // zurück und lässt fremde Änderungen (applyRemote) stehen.
+    const aend = aenderungen(state, draft);
+    const abgelehnt = opt.pruefe ? opt.pruefe(state, draft, aend) : null;
+    if (abgelehnt) return err(abgelehnt);
+
+    undoStack.push(aend);
     if (undoStack.length > UNDO_MAX) undoStack.shift();
     redoStack.length = 0;   // neuer Zweig — der alte Redo-Ast ist tot
     state = draft;
     dirty = true;
-    notify();
+    notify({ quelle: 'lokal', aend });
     return r;
   }
 
-  function undo() {
-    if (!undoStack.length) return false;
-    redoStack.push(state);
-    state = undoStack.pop();
+  // Undo/Redo: Eintrag (umgekehrt) auf den AKTUELLEN Zustand anwenden. Weicht ein
+  // betroffener Datensatz ab (fremde Änderung), Konflikt und Stapel unverändert.
+  function schritt(von, nach, umgekehrt, { erzwingen = false } = {}) {
+    if (!von.length) return false;
+    const sperre = opt.gesperrt && opt.gesperrt();
+    if (sperre) return err(sperre);
+    const eintrag = von[von.length - 1];
+    const aend = umgekehrt ? umkehren(eintrag) : eintrag;
+    const r = anwenden(state, aend, { erzwingen });
+    if (!r.ok) return r;
+    von.pop();
+    nach.push(eintrag);
+    state = r.state;
     dirty = true;
-    notify();
-    return true;
+    notify({ quelle: umgekehrt ? 'undo' : 'redo', aend });
+    return { ok: true };
   }
 
-  function redo() {
-    if (!redoStack.length) return false;
-    undoStack.push(state);
-    state = redoStack.pop();
-    dirty = true;
-    notify();
-    return true;
-  }
+  const undo = (o) => schritt(undoStack, redoStack, true, o);
+  const redo = (o) => schritt(redoStack, undoStack, false, o);
 
   return {
     get state() { return state; },
@@ -1019,6 +1032,12 @@ export function createStore(initial) {
     undo,
     redo,
     markSaved() { dirty = false; },
+    // Fremde Änderung übernehmen: kein Undo-Eintrag, nicht ungesichert, Stapel bleiben.
+    applyRemote(next) {
+      const alt = state;
+      state = clone(next);
+      notify({ quelle: 'remote', aend: aenderungen(alt, state) });
+    },
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
     replace(next) {           // Projektwechsel / Import
       state = clone(next);
