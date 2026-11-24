@@ -3,6 +3,12 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unveröffentlicht
+
+- **Res-Picker (Issue #11):** Pfeiltasten nur noch mit Fokus in der Box; der Picker schließt, wenn sein Anker neu gebaut wird (Undo, Sync); Optionen tragen `aria-selected`.
+- **Bedarfsstatus (Issue #10):** Fenster = ganzer Vorgang behält die Bestätigung (Vergleich per `toMin`); `setTaskRes` lehnt fehlenden/kaputten Wert sauber ab; `addTask` behält gültigen Status; Import entfernt `notiz`/`bestaetigtAm` ohne gültigen Status.
+- **Abgelehnter Bedarf bleibt, zählt aber nicht:** Deckung zeigt die Lücke, Balkenzahl und Crew-Kopfzeile lassen ihn weg; der Tooltip «Braucht» zeigt je Zeile ⏳ ✓ ✕ (Issue #9).
+
 ## 0.25.0 — 2026-11-23
 
 - **Helfer und Maschinen aus festem Katalog:** Standardbezeichnungen der Vermieter in Kategorien (`js/res-katalog.js`), eigene Bezeichnungen bekommen eine Kategorie; gleichnamige eigene Einträge in alten Plänen werden in die eingebaute umgelegt.

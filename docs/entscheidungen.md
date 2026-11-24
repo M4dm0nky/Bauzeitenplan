@@ -605,6 +605,13 @@ desselben Werts ändert nichts. Bereitstellungs-Vorgänge haben keinen Status.
 was der Handler nicht aufzählt, fällt beim Anlegen still weg, dieselbe Falle
 wie bei `abschnitt`.
 
+**Abgelehnt heißt «Bedarf bleibt, kommt aber nicht»** (Marco, 2026-11-24, Issue #9).
+Die Leute oder die Maschine braucht man weiterhin, sie kommen nur nicht. Deshalb
+zählt die Zeile im Bedarfsraster weiter als Bedarf, deckt aber nichts ab: Die
+Deckung zeigt die Lücke, und Balkenzahl und Crew-Kopfzeile lassen sie weg. Die
+Regel steht an EINER Stelle (`zaehltAlsDeckung`, resources.js). Vorher verschwand
+die Lücke mit der Absage, und der Plan sah gedeckt aus, obwohl niemand kommt.
+
 **`crew` ist keine Ressource — es ist die MIGRIERTE Ressource «Crew».**Beim
 Laden wandelt `persistence.js` jede blanke `crew: N` einmalig in
 `res: [{rid:'crew', n:N, von:null, bis:null}]` und legt bei Bedarf die
