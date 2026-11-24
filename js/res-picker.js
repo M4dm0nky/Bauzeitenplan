@@ -80,7 +80,10 @@ export function openResPicker({ anker, kind, state, aktuell, onWahl, onNeu }) {
   let aktiv = -1;
 
   const markiere = (i) => {
-    items.forEach((n, k) => n.classList.toggle('is-aktiv', k === i));
+    items.forEach((n, k) => {
+      n.classList.toggle('is-aktiv', k === i);
+      n.setAttribute('aria-selected', k === i ? 'true' : 'false');
+    });
     aktiv = i;
     items[i]?.scrollIntoView?.({ block: 'nearest' });
   };
@@ -116,14 +119,19 @@ export function openResPicker({ anker, kind, state, aktuell, onWahl, onNeu }) {
     box.remove();
     window.removeEventListener('keydown', aufTaste, true);
     document.removeEventListener('pointerdown', aussen, true);
+    wacht.disconnect();
     if (zuMerker === zu) zuMerker = null;
   };
   zuMerker = zu;
-  const wahl = (rid) => { zu(); onWahl(rid); };
+  // Panel/Tabelle bauen nach Undo, Sync, Befehl neu auf: ist der Anker abgehängt,
+  // zeigt `onWahl` auf eine tote Zeile — der Picker schließt sich dann.
+  const wacht = new MutationObserver(() => { if (!anker.isConnected) zu(); });
+  wacht.observe(document.body, { childList: true, subtree: true });
+  const wahl = (rid) => { const ok = anker.isConnected; zu(); if (ok) onWahl(rid); };
 
   const aufTaste = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); zu(); }
-    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && box.contains(e.target)) {
       e.preventDefault();
       if (!items.length) return;
       markiere((aktiv + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length);

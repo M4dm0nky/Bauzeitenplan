@@ -3308,6 +3308,59 @@ await check('Picker: Pfeiltaste ↓ bewegt die Markierung, ↑ zurück', async (
   await page.keyboard.press('Escape');
   return (a !== b && a === c) ? true : [a, b, c].join(' / ');
 });
+await check('Picker: aria-selected folgt der Pfeiltaste (genau eine Option «true», die aktive)', async () => {
+  await rpOeffne('Maschine');
+  const lies = () => page.locator('.rp-item').evaluateAll((ns) => ({
+    sel: ns.filter((n) => n.getAttribute('aria-selected') === 'true').map((n) => n.dataset.rid),
+    aktiv: ns.filter((n) => n.classList.contains('is-aktiv')).map((n) => n.dataset.rid),
+    ohne: ns.filter((n) => !n.hasAttribute('aria-selected')).length,
+  }));
+  const a = await lies();
+  await page.keyboard.press('ArrowDown');
+  const b = await lies();
+  await page.keyboard.press('Escape');
+  if (a.ohne || b.ohne) return 'Optionen ohne aria-selected: ' + a.ohne + '/' + b.ohne;
+  if (a.sel.length !== 1 || b.sel.length !== 1) return 'true-Zahl ' + a.sel.length + '/' + b.sel.length;
+  if (a.sel[0] !== a.aktiv[0] || b.sel[0] !== b.aktiv[0]) return 'aria-selected ≠ is-aktiv';
+  return a.sel[0] !== b.sel[0] ? true : 'aria-selected wandert nicht mit ↓';
+});
+await check('Picker: ↑/↓ mit Fokus außerhalb der Box werden nicht verschluckt', async () => {
+  await rpOeffne('Maschine');
+  const r = await page.evaluate(() => {
+    const f = document.createElement('input');
+    f.type = 'number'; f.value = '5'; f.id = 'rp-fremd';
+    document.body.append(f);
+    window.__rpPrevented = null;
+    document.addEventListener('keydown', (e) => { window.__rpPrevented = e.defaultPrevented; }, { once: true });
+    f.focus();
+    return document.activeElement === f;
+  });
+  if (!r) return 'Fremdfeld ohne Fokus vorbereitet';
+  const aktivVor = await page.locator('.rp-item.is-aktiv').first().getAttribute('data-rid');
+  await page.keyboard.press('ArrowUp');
+  const wert = await page.locator('#rp-fremd').inputValue();
+  const prevented = await page.evaluate(() => window.__rpPrevented);
+  const aktivNach = await page.locator('.rp-item.is-aktiv').first().getAttribute('data-rid');
+  await page.evaluate(() => document.getElementById('rp-fremd').remove());
+  await page.keyboard.press('Escape');
+  await page.locator('.rp-pop').waitFor({ state: 'detached', timeout: 1000 }).catch(() => {});
+  if (prevented) return 'Pfeiltaste außerhalb wurde per preventDefault verschluckt';
+  if (wert !== '6') return 'Zahlfeld blieb bei «' + wert + '» (erwartet 6)';
+  return aktivVor === aktivNach ? true : 'Picker-Markierung bewegte sich trotz Fokus außerhalb';
+});
+await check('Picker: baut sich der Anker neu auf (Undo), schließt er; keine Wahl auf toter Zeile', async () => {
+  if (await page.locator('#undo').isDisabled()) return 'Vorbedingung: kein Undo-Eintrag da';
+  const vorher = await rpZeilen();
+  await rpOeffne('Maschine');
+  const ankerAlt = await page.evaluate(() => { const a = document.querySelector('.ins-res-add'); a.dataset.alt = '1'; return !!a; });
+  // Undo ohne Zeigerereignis (sonst schließt schon der Klick daneben): wie Strg+Z / Sync.
+  await page.evaluate(() => document.getElementById('undo').click());
+  await page.waitForTimeout(250);
+  if (!ankerAlt) return 'Vorbedingung: kein Anker';
+  if (await page.locator('[data-alt="1"]').count()) return 'Vorbedingung: Anker wurde nicht neu gebaut';
+  if (await page.locator('.rp-pop').count()) return 'Picker bleibt nach Neuaufbau des Ankers offen';
+  return (await rpZeilen()) === vorher - 1 ? true : 'Zeilen ' + vorher + ' → ' + (await rpZeilen());
+});
 await check('Picker: Escape schließt ohne Änderung — keine Zuweisung, kein Undo-Eintrag', async () => {
   await undoOhneFeld();
   await page.waitForTimeout(250);
