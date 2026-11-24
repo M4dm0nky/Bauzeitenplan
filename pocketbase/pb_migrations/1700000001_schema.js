@@ -14,6 +14,10 @@ const MITGLIED = `(${SUPER} || ${BESITZER} || ${MITGL})`;
 const SCHREIBEN = `(@request.auth.id != '' && (${SUPER} || ${BESITZER} || (${MITGL} && @collection.mitglieder.rolle ?!= 'betrachter')))`;
 // ein Datensatz darf nie in einen anderen Plan umgehängt werden
 const PLAN_FEST = "(@request.body.plan_id:isset = false || @request.body.plan_id = plan_id)";
+// Plan-Metadaten (plaene): Gewerkeleiter und Betrachter dürfen sie nicht ändern; der Besitzer ist
+// nur durch Superadmin änderbar (sonst könnte sich ein Bearbeiter zum Besitzer machen)
+const PLAN_AENDERN = `(@request.auth.id != '' && (${SUPER} || ${BESITZER} || (${MITGL} && (@collection.mitglieder.rolle ?= 'produktionsleitung' || @collection.mitglieder.rolle ?= 'bearbeiter'))))`;
+const BESITZER_FEST = `(${SUPER} || @request.body.besitzer:isset = false || @request.body.besitzer = besitzer)`;
 // Mitglieder/Einladungen verwalten: Superadmin, Besitzer, Mitglied «produktionsleitung» des Plans
 const VERWALTEN = `(@request.auth.id != '' && (${SUPER} || ${BESITZER} || (${MITGL} && @collection.mitglieder.rolle ?= 'produktionsleitung')))`;
 
@@ -28,7 +32,7 @@ const zeit = [
 // Regeln verweisen auf andere Collections (@collection.mitglieder/plaene): erst ALLE Collections
 // ohne Regeln anlegen, dann die Regeln setzen (sonst «failed to load collection»).
 const REGELN = {
-  plaene: { listRule: MITGLIED, viewRule: MITGLIED, createRule: `${SUPER} || @request.auth.produktionsleitung = true`, updateRule: `${SCHREIBEN} && ${PLAN_FEST}`, deleteRule: VERWALTEN },
+  plaene: { listRule: MITGLIED, viewRule: MITGLIED, createRule: `${SUPER} || (@request.auth.produktionsleitung = true && @request.body.besitzer = @request.auth.id)`, updateRule: `${PLAN_AENDERN} && ${PLAN_FEST} && ${BESITZER_FEST}`, deleteRule: VERWALTEN },
   mitglieder: { listRule: MITGLIED, viewRule: MITGLIED, createRule: VERWALTEN, updateRule: `${VERWALTEN} && ${PLAN_FEST}`, deleteRule: VERWALTEN },
   einladungen: { listRule: VERWALTEN, viewRule: VERWALTEN, createRule: VERWALTEN, updateRule: `${VERWALTEN} && ${PLAN_FEST}`, deleteRule: VERWALTEN },
 };
@@ -39,7 +43,7 @@ for (const name of ["ressourcen", "gewerke", "vorgaenge", "phasen", "verknuepfun
 migrate((app) => {
   // --- users erweitern ---
   const users = app.findCollectionByNameOrId("users");
-  users.fields.add(new TextField({ name: "name" }));
+  if (!users.fields.getByName("name")) users.fields.add(new TextField({ name: "name" }));
   users.fields.add(new BoolField({ name: "superadmin" }));
   users.fields.add(new BoolField({ name: "produktionsleitung" }));
   users.createRule = null; // Konten nur über die Hook-Route
@@ -112,6 +116,7 @@ migrate((app) => {
     try { app.delete(app.findCollectionByNameOrId(name)); } catch (_) { /* schon weg */ }
   }
   const users = app.findCollectionByNameOrId("users");
-  for (const f of ["name", "superadmin", "produktionsleitung"]) users.fields.removeByName(f);
+  // «name» bleibt (kann PocketBase-Standardfeld sein)
+  for (const f of ["superadmin", "produktionsleitung"]) users.fields.removeByName(f);
   app.save(users);
 });
