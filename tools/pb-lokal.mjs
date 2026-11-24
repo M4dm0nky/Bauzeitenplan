@@ -56,7 +56,7 @@ async function http(url, { method = 'GET', body, token, timeout = 15000 } = {}) 
   return { status: r.status, ok: r.ok, body: json };
 }
 
-export async function startePb({ port, origins = '' } = {}) {
+export async function startePb({ port, origins = '', appUrl = 'http://localhost:8080' } = {}) {
   const exe = await ensureBinary();
   port = port || await freierPort();
   const dir = mkdtempSync(join(tmpdir(), 'bzp-pb-'));
@@ -69,7 +69,8 @@ export async function startePb({ port, origins = '' } = {}) {
     rmSync(dir, { recursive: true, force: true });
     throw new Error('superuser upsert fehlgeschlagen: ' + String(e.stderr || e.stdout || e.message).slice(-800));
   }
-  const args = ['serve', '--http', `127.0.0.1:${port}`, ...gemeinsam];
+  // --hooksWatch=false: Dropbox/Editor berühren Dateien, ein Neustart mitten im Lauf wäre fatal
+  const args = ['serve', '--http', `127.0.0.1:${port}`, '--hooksWatch=false', ...gemeinsam];
   if (origins) args.push('--origins', origins);
   const proc = spawn(exe, args, { stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
@@ -106,6 +107,9 @@ export async function startePb({ port, origins = '' } = {}) {
     if (!auth.ok) throw new Error('Superuser-Anmeldung fehlgeschlagen: ' + JSON.stringify(auth.body));
     const suToken = auth.body.token;
     const su = (method, path, body) => http(url + path, { method, body, token: suToken });
+    // APP_URL für Einladungslinks (Hook liest $app.settings().meta.appURL)
+    const st = await su('PATCH', '/api/settings', { meta: { appURL: appUrl } });
+    if (!st.ok) throw new Error('appURL setzen fehlgeschlagen: ' + JSON.stringify(st.body));
     return { url, stop, admin, su, log: () => log };
   } catch (e) { await stop(); throw e; }
 }

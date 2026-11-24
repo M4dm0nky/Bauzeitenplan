@@ -32,7 +32,7 @@ const zeit = [
 // Regeln verweisen auf andere Collections (@collection.mitglieder/plaene): erst ALLE Collections
 // ohne Regeln anlegen, dann die Regeln setzen (sonst «failed to load collection»).
 const REGELN = {
-  plaene: { listRule: MITGLIED, viewRule: MITGLIED, createRule: `${SUPER} || (@request.auth.produktionsleitung = true && @request.body.besitzer = @request.auth.id)`, updateRule: `${PLAN_AENDERN} && ${PLAN_FEST} && ${BESITZER_FEST}`, deleteRule: VERWALTEN },
+  plaene: { listRule: MITGLIED, viewRule: MITGLIED, createRule: `${SUPER} || (@request.auth.produktionsleitung = true && (@request.body.besitzer:isset = false || @request.body.besitzer = @request.auth.id))`, updateRule: `${PLAN_AENDERN} && ${PLAN_FEST} && ${BESITZER_FEST}`, deleteRule: VERWALTEN },
   mitglieder: { listRule: MITGLIED, viewRule: MITGLIED, createRule: VERWALTEN, updateRule: `${VERWALTEN} && ${PLAN_FEST}`, deleteRule: VERWALTEN },
   einladungen: { listRule: VERWALTEN, viewRule: VERWALTEN, createRule: VERWALTEN, updateRule: `${VERWALTEN} && ${PLAN_FEST}`, deleteRule: VERWALTEN },
 };
@@ -49,8 +49,9 @@ migrate((app) => {
   users.createRule = null; // Konten nur über die Hook-Route
   users.listRule = "@request.auth.id != ''";
   users.viewRule = "@request.auth.id != ''";
-  // Flags kann niemand selbst setzen (Superuser umgeht Regeln und setzt sie weiterhin)
-  users.updateRule = "id = @request.auth.id && @request.body.superadmin:isset = false && @request.body.produktionsleitung:isset = false";
+  // Eigenes Konto oder Superadmin; die Flags (superadmin/produktionsleitung: nur Superadmin) und
+  // die E-Mail (niemand) schützt der Hook (main.pb.js) mit 403 und Klartext
+  users.updateRule = "id = @request.auth.id || @request.auth.superadmin = true";
   users.deleteRule = null;
   app.save(users);
 
