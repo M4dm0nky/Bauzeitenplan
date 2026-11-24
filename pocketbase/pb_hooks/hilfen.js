@@ -65,9 +65,20 @@ function hatStatus(z) {
   z = z || {};
   return (z.status && z.status !== "angefragt") || !!z.notiz || !!z.bestaetigtAm;
 }
-function statusGeaendert(altRes, neuRes) {
+// Eine Bestätigung gilt für bestimmte Zeiten: ändern sich start/end/milestone des Vorgangs (Vergleich über
+// Zeitstempel wie toMin im Store, nicht über Zeichenketten), darf KEINE Zeile mehr status/notiz/bestaetigtAm tragen.
+function zeitMs(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const t = Date.parse(v);
+  return isNaN(t) ? String(v) : t;
+}
+function zeitGleich(dAlt, dNeu) {
+  return zeitMs(dAlt.start) === zeitMs(dNeu.start) && zeitMs(dAlt.end) === zeitMs(dNeu.end) && !!dAlt.milestone === !!dNeu.milestone;
+}
+function statusGeaendert(altRes, neuRes, zeitUnveraendert) {
   altRes = Array.isArray(altRes) ? altRes : [];
   neuRes = Array.isArray(neuRes) ? neuRes : [];
+  if (!zeitUnveraendert) return neuRes.some(hatStatus);
   const vorrat = {};
   for (const z of altRes) { const k = kanon(z); vorrat[k] = (vorrat[k] || 0) + 1; }
   for (const z of neuRes) {
@@ -165,7 +176,7 @@ function pruefe(e, coll, aktion) {
   if (coll === "vorgaenge" && aktion !== "delete" && LEITUNG.indexOf(r.rolle) < 0 && r.rolle !== "produktionsleitung") {
     const dNeu = json(rec, "daten") || {};
     const dAlt = alt ? json(alt, "daten") || {} : {};
-    if (statusGeaendert(dAlt.res, dNeu.res)) throw new ForbiddenError("Bedarf bestätigen darf nur die Produktionsleitung.");
+    if (statusGeaendert(dAlt.res, dNeu.res, !alt || zeitGleich(dAlt, dNeu))) throw new ForbiddenError("Bedarf bestätigen darf nur die Produktionsleitung.");
   }
 
   // Löschen: nichts löschen, worauf noch etwas zeigt (der Client schickt es im selben Batch mit:
@@ -174,6 +185,13 @@ function pruefe(e, coll, aktion) {
     const eid = rec.getString("eid");
     if (coll === "gewerke" && finde(app, "vorgaenge", "plan_id = {:p} && gewerk = {:g}", { p: planId, g: eid }))
       throw new BadRequestError("Das Gewerk hat noch Vorgänge.");
+    if (coll === "ressourcen") {
+      const alle = app.findRecordsByFilter("vorgaenge", "plan_id = {:p}", "", 0, 0, { p: planId });
+      for (const v of alle) {
+        const res = (json(v, "daten") || {}).res;
+        if (Array.isArray(res) && res.some((z) => z && z.rid === eid)) throw new BadRequestError("Die Ressource wird noch von Vorgängen benutzt.");
+      }
+    }
     if (coll === "vorgaenge") {
       if (finde(app, "vorgaenge", "plan_id = {:p} && daten.parent = {:e}", { p: planId, e: eid }))
         throw new BadRequestError("Der Vorgang hat noch Untervorgänge.");

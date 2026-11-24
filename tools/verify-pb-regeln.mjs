@@ -348,6 +348,16 @@ async function STATUS(pb) {
   ok(stand[0].status === undefined && stand[0].n === 4, 'Rückfall gespeichert (Zeile 1 ohne Status, n = 4)', JSON.stringify(stand[0]));
   ok((await patch(pb, k, 'pl', 'vorgaenge', id, { ...mitRes([{ ...stand[0], status: 'bestaetigt', bestaetigtAm: '2026-03-03T10:00' }, stand[1]]), rev })).ok && ++rev, 'pl setzt bestaetigt');
   ok((await patch(pb, k, 'plmit', 'vorgaenge', id, { ...mitRes([stand[0], { ...stand[1], status: 'abgelehnt', notiz: 'ausgebucht' }]), rev })).ok && ++rev, 'PL-Mitglied setzt abgelehnt');
+  // Zeitänderung entwertet die Bestätigung: ohne Rückfall verboten, mit Rückfall erlaubt, Zeitstempel statt Zeichenketten
+  const zc = await api(pb, k.pl.token, 'POST', '/api/collections/vorgaenge/records', { plan_id: 'planA', eid: 'vz', gewerk: 'g1', daten: { titel: 'vz', start: '2026-09-19T08:00', end: '2026-09-19T10:00', milestone: false, res }, pos: 7 });
+  ok(zc.ok, 'pl legt Vorgang mit Zeiten und bestätigter Zeile an', `Status ${zc.status}`);
+  const zd = (o, r = res) => ({ daten: { titel: 'vz', start: '2026-09-19T08:00', end: '2026-09-19T10:00', milestone: false, res: r, ...o } });
+  status(await patch(pb, k, 'gwl', 'vorgaenge', zc.body.id, { ...zd({ start: '2026-09-19T09:00' }), rev: 1 }), 403, 'gwl verschiebt Vorgang mit bestätigter Zeile ohne Rückfall');
+  status(await patch(pb, k, 'gwl', 'vorgaenge', zc.body.id, { ...zd({ end: '2026-09-19T11:00' }), rev: 1 }), 403, 'gwl ändert Ende ohne Rückfall');
+  status(await patch(pb, k, 'gwl', 'vorgaenge', zc.body.id, { ...zd({ milestone: true }), rev: 1 }), 403, 'gwl macht Meilenstein ohne Rückfall');
+  ok((await patch(pb, k, 'gwl', 'vorgaenge', zc.body.id, { ...zd({ start: '2026-09-19T08:00:00', end: '2026-09-19T10:00:00.000' }), rev: 1 })).ok, 'gleiche Zeit in anderer Schreibweise (Zeitstempel-Vergleich) → ok');
+  ok((await patch(pb, k, 'gwl', 'vorgaenge', zc.body.id, { ...zd({ start: '2026-09-19T09:00' }, [{ rid: 'r1', n: 1, von: null, bis: null }, res[1]]), rev: 2 })).ok, 'gwl verschiebt Vorgang MIT Rückfall → ok');
+  ok((await patch(pb, k, 'pl', 'vorgaenge', zc.body.id, { ...zd({ start: '2026-09-19T07:00' }, res), rev: 3 })).ok, 'pl verschiebt Vorgang mit bestätigter Zeile (Recht vorhanden)');
   const cr = await api(pb, k.gwl.token, 'POST', '/api/collections/vorgaenge/records', { plan_id: 'planA', eid: 'vs2', gewerk: 'g1', daten: { titel: 'x', res }, pos: 8 });
   status(cr, 403, 'gwl legt Vorgang mit bestätigter Zeile an');
   const cr2 = await api(pb, k.gwl.token, 'POST', '/api/collections/vorgaenge/records', { plan_id: 'planA', eid: 'vs3', gewerk: 'g1', daten: { titel: 'x', res: [res[1]] }, pos: 8 });
@@ -504,6 +514,13 @@ async function LOESCHEN(pb) {
   status(await loesche(pb, k, 'pl', 'vorgaenge', await id('vorgaenge', 'vl'), 1), 400, 'Vorgang mit Untervorgang/Verknüpfungen löschen');
   status(await loesche(pb, k, 'pl', 'vorgaenge', await id('vorgaenge', 'vt'), 1), 400, 'Vorgang mit Verknüpfungen löschen');
   status(await loesche(pb, k, 'pl', 'vorgaenge', kind.body.id, 1).then((r) => ({ ...r, status: r.status === 204 ? 204 : r.status })), 204, 'Untervorgang ohne Verweise löschen');
+  // Ressource, die noch von einem Vorgang benutzt wird
+  const rv = await api(pb, k.pl.token, 'POST', '/api/collections/vorgaenge/records', { plan_id: 'planA', eid: 'vres', gewerk: 'g1', daten: { res: [{ rid: 'r1', n: 1, von: null, bis: null }] }, pos: 9 });
+  status(await loesche(pb, k, 'pl', 'ressourcen', await id('ressourcen', 'r1'), 1), 400, 'Ressource mit Bedarfszeile löschen');
+  const rvb = await batch(pb, k.pl.token, [{ method: 'DELETE', url: `/api/collections/ressourcen/records/${await id('ressourcen', 'r1')}?rev=1` }, { method: 'DELETE', url: `/api/collections/vorgaenge/records/${rv.body.id}?rev=1` }]);
+  ok(rvb.status === 400, 'Batch: Ressource vor ihrem Vorgang löschen → abgelehnt', `Status ${rvb.status}`);
+  const rvc = await batch(pb, k.pl.token, [{ method: 'DELETE', url: `/api/collections/vorgaenge/records/${rv.body.id}?rev=1` }, { method: 'DELETE', url: `/api/collections/ressourcen/records/${await id('ressourcen', 'r1')}?rev=1` }]);
+  ok(rvc.ok, 'Batch: Vorgang, dann Ressource löschen → erlaubt', `Status ${rvc.status}`);
   const del = async (c, e) => ({ method: 'DELETE', url: `/api/collections/${c}/records/${await id(c, e)}?rev=1` });
   // falsche Reihenfolge (Gewerk vor Vorgängen) → ganzer Batch abgelehnt, nichts gelöscht
   const falsch = await batch(pb, k.pl.token, [await del('gewerke', 'g2'), await del('verknuepfungen', 'kl'), await del('verknuepfungen', 'kt'), await del('vorgaenge', 'vt')]);
