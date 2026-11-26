@@ -478,6 +478,86 @@ check('jede ausgelieferte Datei steht in HUELLE (sw.js) — und keine tote', () 
   return r.length ? r.join(' | ') : true;
 });
 
+// ── Auslieferung: Docker-Image enthält genau die ausgelieferten Dateien ───────────────────────────
+// Rein: welche Repo-Dateien landen laut Dockerfile (COPY) und .dockerignore im Image? `dateien` = Repo-relative
+// Pfade (real: `git ls-files`, wie Coolify sie auscheckt). Mustersprache wie Docker: letzter Treffer gewinnt,
+// `!` hebt auf, `*` bleibt in einer Ebene, `**/` darf Ebenen überspringen, ein Muster gilt auch für alles darunter.
+const dockerRe = (g) => new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  .replace(/\*\*\//g, '\u0000').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\u0000/g, '(?:.*/)?') + '(?:/.*)?$');
+const imageDateien = (dockerfile, ignore, dateien) => {
+  const regeln = ignore.split('\n').map((z) => z.trim()).filter((z) => z && !z.startsWith('#'))
+    .map((z) => ({ neg: z.startsWith('!'), re: dockerRe(z.replace(/^!/, '').replace(/^\//, '').replace(/\/$/, '')) }));
+  const ausgeschlossen = (f) => regeln.reduce((aus, r) => (r.re.test(f) ? !r.neg : aus), false);
+  const quellen = [];
+  for (const z of dockerfile.split('\n')) {
+    const m = z.match(/^\s*COPY\s+(.+)$/i);
+    if (!m) continue;
+    const teile = m[1].trim().split(/\s+/).filter((x) => !x.startsWith('--'));
+    quellen.push(...teile.slice(0, -1));
+  }
+  const drin = new Set();
+  for (const q of quellen) {
+    const pfad = q.replace(/^\.\//, '');
+    const alle = pfad === '.' || pfad === './';
+    for (const f of dateien) {
+      if (ausgeschlossen(f)) continue;
+      if (alle || f === pfad.replace(/\/$/, '') || f.startsWith(pfad.replace(/\/?$/, '/'))) drin.add(f);
+    }
+  }
+  return [...drin].sort();
+};
+const huelleListe = () => {
+  const sw = readFileSync(join(root, 'sw.js'), 'utf8');
+  const m = sw.match(/const HUELLE = \[([\s\S]*?)\];/);
+  return m ? [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).filter((x) => x !== './') : [];
+};
+const imageProbleme = (dockerfile, ignore, dateien, huelle) => {
+  const drin = imageDateien(dockerfile, ignore, dateien);
+  const r = [];
+  const verboten = drin.filter((f) => /^(docs|tools|tests|pocketbase|\.superpowers|\.claude|node_modules|\.git)\//.test(f) || /\.(md|mjs)$/.test(f) || f === 'Dockerfile');
+  if (verboten.length) r.push('gehört nicht ins Image: ' + verboten.slice(0, 5).join(', ') + (verboten.length > 5 ? ` (+${verboten.length - 5})` : ''));
+  const fehlt = [...huelle, 'sw.js'].filter((f) => !drin.includes(f));
+  if (fehlt.length) r.push('fehlt im Image (steht in HUELLE): ' + fehlt.join(', '));
+  const extra = drin.filter((f) => ![...huelle, 'sw.js', 'nginx.conf'].includes(f) && !verboten.includes(f));
+  if (extra.length) r.push('nicht ausgeliefert, aber im Image: ' + extra.slice(0, 5).join(', '));
+  return r;
+};
+
+check('Docker-Image (Dockerfile + .dockerignore): genau die ausgelieferten Dateien, alle aus HUELLE, nichts aus docs/tools/tests/pocketbase', () => {
+  const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean);
+  const df = readFileSync(join(root, 'Dockerfile'), 'utf8');
+  const ign = readFileSync(join(root, '.dockerignore'), 'utf8');
+  // Selbstprüfung (Rot-Nachweis): die Prüfung MUSS bei einem kaputten Image anschlagen.
+  const baum = ['index.html', 'print.html', 'login.html', 'sw.js', 'nginx.conf', 'Dockerfile', 'js/app.js', 'js/version.js', 'styles/base.css',
+    'assets/a.svg', 'docs/x.md', 'tools/t.mjs', 'tests/run.mjs', 'pocketbase/setup.mjs', '.claude/rules/a.md', 'README.md'];
+  const huelle = ['index.html', 'print.html', 'login.html', 'js/app.js', 'js/version.js', 'styles/base.css', 'assets/a.svg'];
+  const gut = 'COPY nginx.conf /c\nCOPY index.html print.html login.html sw.js /h/\nCOPY js/ /h/js/\nCOPY styles/ /h/styles/\nCOPY assets/ /h/assets/\n';
+  const gutIgn = '*\n!index.html\n!print.html\n!login.html\n!sw.js\n!nginx.conf\n!js\n!styles\n!assets\n';
+  const selbst = [
+    ['Allowlist ok', gut, gutIgn, 0],
+    ['COPY . ohne .dockerignore', 'COPY . /h/\n', '', 1],
+    ['COPY . mit leerem Ausschluss von docs', 'COPY . /h/\n', '*\n!js\n!styles\n!assets\n!index.html\n!print.html\n!login.html\n!sw.js\n!docs\n', 1],
+    ['assets fehlt', gut.replace('COPY assets/ /h/assets/\n', ''), gutIgn, 1],
+    ['.dockerignore sperrt js', gut, gutIgn.replace('!js\n', ''), 1],
+  ];
+  const kaputt = selbst.filter(([, d, i, n]) => (imageProbleme(d, i, baum, huelle).length > 0) !== (n > 0)).map(([n]) => n);
+  if (kaputt.length) return 'Selbstprüfung der Image-Sperre falsch bei: ' + kaputt.join(', ');
+  const r = imageProbleme(df, ign, tracked, huelleListe());
+  return r.length ? r.join(' | ') : true;
+});
+
+check('nginx.conf: sw.js ohne HTTP-Cache, gzip an, kein SPA-Fallback, Health-Check', () => {
+  const n = readFileSync(join(root, 'nginx.conf'), 'utf8');
+  const r = [];
+  if (!/location = \/sw\.js \{[^}]*Cache-Control "no-cache/.test(n)) r.push('sw.js ohne no-cache');
+  if (!/^\s*gzip on;/m.test(n)) r.push('gzip aus');
+  if (/try_files[^;]*\/index\.html/.test(n)) r.push('SPA-Fallback auf index.html (unbekannte Pfade müssen 404 sein)');
+  if (!/location = \/healthz/.test(n)) r.push('/healthz fehlt (HEALTHCHECK im Dockerfile)');
+  if (!/EXPOSE 80/.test(readFileSync(join(root, 'Dockerfile'), 'utf8'))) r.push('Dockerfile: EXPOSE 80 fehlt');
+  return r.length ? r.join(' | ') : true;
+});
+
+
 check('sw.js legt die HUELLE am HTTP-Cache vorbei an (cache: reload)', () => {
   const sw = readFileSync(join(root, 'sw.js'), 'utf8');
   const inst = sw.match(/addEventListener\('install'[\s\S]*?\n\}\);/);

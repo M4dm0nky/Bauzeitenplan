@@ -1,0 +1,1222 @@
+[
+  {
+    "id": "_pb_users_auth_",
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": null,
+    "updateRule": "id = @request.auth.id || @request.auth.superadmin = true",
+    "deleteRule": null,
+    "name": "users",
+    "type": "auth",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "cost": 0,
+        "help": "",
+        "hidden": true,
+        "id": "password901924565",
+        "max": 0,
+        "min": 8,
+        "name": "password",
+        "pattern": "",
+        "presentable": false,
+        "required": true,
+        "system": true,
+        "type": "password"
+      },
+      {
+        "autogeneratePattern": "[a-zA-Z0-9]{50}",
+        "help": "",
+        "hidden": true,
+        "id": "text2504183744",
+        "max": 60,
+        "min": 30,
+        "name": "tokenKey",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "exceptDomains": [],
+        "help": "",
+        "hidden": false,
+        "id": "email3885137012",
+        "name": "email",
+        "onlyDomains": [],
+        "presentable": false,
+        "required": true,
+        "system": true,
+        "type": "email"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "bool1547992806",
+        "name": "emailVisibility",
+        "presentable": false,
+        "required": false,
+        "system": true,
+        "type": "bool"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "bool256245529",
+        "name": "verified",
+        "presentable": false,
+        "required": false,
+        "system": true,
+        "type": "bool"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text1579384326",
+        "max": 255,
+        "min": 0,
+        "name": "name",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "file376926767",
+        "maxSelect": 1,
+        "maxSize": 0,
+        "mimeTypes": [
+          "image/jpeg",
+          "image/png",
+          "image/svg+xml",
+          "image/gif",
+          "image/webp"
+        ],
+        "name": "avatar",
+        "presentable": false,
+        "protected": false,
+        "required": false,
+        "system": false,
+        "thumbs": [],
+        "type": "file"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "bool970486788",
+        "name": "superadmin",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "bool"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "bool1650553905",
+        "name": "produktionsleitung",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "bool"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_tokenKey__pb_users_auth_` ON `users` (`tokenKey`)",
+      "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''"
+    ],
+    "system": false,
+    "authRule": "",
+    "manageRule": null,
+    "authAlert": {
+      "enabled": true,
+      "emailTemplate": {
+        "subject": "Login from a new location",
+        "body": "<p>Hello,</p>\n<p>We noticed a login to your {APP_NAME} account from a new location:</p>\n<p><em>{ALERT_INFO}</em></p>\n<p><strong>If this wasn't you, you should immediately change your {APP_NAME} account password to revoke access from all other locations.</strong></p>\n<p>If this was you, you may disregard this email.</p>\n<p>\n  Thanks,<br/>\n  {APP_NAME} team\n</p>"
+      }
+    },
+    "oauth2": {
+      "providers": [],
+      "mappedFields": {
+        "id": "",
+        "name": "name",
+        "username": "",
+        "avatarURL": "avatar"
+      },
+      "enabled": false
+    },
+    "passwordAuth": {
+      "enabled": true,
+      "identityFields": [
+        "email"
+      ]
+    },
+    "mfa": {
+      "enabled": false,
+      "duration": 600,
+      "rule": ""
+    },
+    "otp": {
+      "enabled": false,
+      "duration": 180,
+      "length": 8,
+      "emailTemplate": {
+        "subject": "OTP for {APP_NAME}",
+        "body": "<p>Hello,</p>\n<p>Your one-time password is: <strong>{OTP}</strong></p>\n<p><i>If you didn't ask for the one-time password, you can ignore this email.</i></p>\n<p>\n  Thanks,<br/>\n  {APP_NAME} team\n</p>"
+      }
+    },
+    "authToken": {
+      "duration": 432000
+    },
+    "passwordResetToken": {
+      "duration": 1800
+    },
+    "emailChangeToken": {
+      "duration": 1800
+    },
+    "verificationToken": {
+      "duration": 86400
+    },
+    "fileToken": {
+      "duration": 180
+    },
+    "verificationTemplate": {
+      "subject": "Verify your {APP_NAME} email",
+      "body": "<p>Hello,</p>\n<p>Thank you for joining us at {APP_NAME}.</p>\n<p>Click on the button below to verify your email address.</p>\n<p>\n  <a class=\"btn\" href=\"{APP_URL}/_/#/auth/confirm-verification/{TOKEN}\" target=\"_blank\" rel=\"noopener\">Verify</a>\n</p>\n<p><i>If you didn't recently register, please ignore this email.</i></p>\n<p>\n  Thanks,<br/>\n  {APP_NAME} team\n</p>"
+    },
+    "resetPasswordTemplate": {
+      "subject": "Passwort für den Bauzeitenplan zurücksetzen",
+      "body": "<p>Hallo,</p><p>zum Zurücksetzen deines Passworts klicke auf den folgenden Link:</p><p><a href=\"{APP_URL}/login.html?reset={TOKEN}\" target=\"_blank\" rel=\"noopener\">Neues Passwort festlegen</a></p><p>Wenn du das nicht angefordert hast, kannst du diese Mail ignorieren.</p>"
+    },
+    "confirmEmailChangeTemplate": {
+      "subject": "Confirm your {APP_NAME} new email address",
+      "body": "<p>Hello,</p>\n<p>Click on the button below to confirm your new email address.</p>\n<p>\n  <a class=\"btn\" href=\"{APP_URL}/_/#/auth/confirm-email-change/{TOKEN}\" target=\"_blank\" rel=\"noopener\">Confirm new email</a>\n</p>\n<p><i>If you didn't ask to change your email address, please ignore this email.</i></p>\n<p>\n  Thanks,<br/>\n  {APP_NAME} team\n</p>"
+    }
+  },
+  {
+    "id": "pbc_3658547507",
+    "listRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "viewRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "createRule": "@request.auth.superadmin = true || (@request.auth.produktionsleitung = true && (@request.body.besitzer:isset = false || @request.body.besitzer = @request.auth.id))",
+    "updateRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && (@collection.mitglieder.rolle ?= 'produktionsleitung' || @collection.mitglieder.rolle ?= 'bearbeiter')))) && (@request.body.plan_id:isset = false || @request.body.plan_id = plan_id) && (@request.auth.superadmin = true || @request.body.besitzer:isset = false || @request.body.besitzer = besitzer)",
+    "deleteRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?= 'produktionsleitung')))",
+    "name": "plaene",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text3902341787",
+        "max": 0,
+        "min": 0,
+        "name": "plan_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text743187457",
+        "max": 0,
+        "min": 0,
+        "name": "besitzer",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "json3362956743",
+        "maxSize": 5000000,
+        "name": "daten",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "json"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number165162695",
+        "max": null,
+        "min": null,
+        "name": "rev",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_plaene_plan_id ON plaene (plan_id)"
+    ],
+    "system": false
+  },
+  {
+    "id": "pbc_2707111162",
+    "listRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "viewRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "createRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?= 'produktionsleitung')))",
+    "updateRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?= 'produktionsleitung'))) && (@request.body.plan_id:isset = false || @request.body.plan_id = plan_id)",
+    "deleteRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?= 'produktionsleitung')))",
+    "name": "mitglieder",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text3902341787",
+        "max": 0,
+        "min": 0,
+        "name": "plan_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text2809058197",
+        "max": 0,
+        "min": 0,
+        "name": "user_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "select2468880607",
+        "maxSelect": 1,
+        "name": "rolle",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "values": [
+          "produktionsleitung",
+          "bearbeiter",
+          "gewerkeleiter",
+          "betrachter"
+        ]
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "json552244119",
+        "maxSize": 5000000,
+        "name": "gewerke",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "json"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_mitglieder_plan_user ON mitglieder (plan_id, user_id)"
+    ],
+    "system": false
+  },
+  {
+    "id": "pbc_798327568",
+    "listRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?= 'produktionsleitung')))",
+    "viewRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?= 'produktionsleitung')))",
+    "createRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?= 'produktionsleitung')))",
+    "updateRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?= 'produktionsleitung'))) && (@request.body.plan_id:isset = false || @request.body.plan_id = plan_id)",
+    "deleteRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?= 'produktionsleitung')))",
+    "name": "einladungen",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text3902341787",
+        "max": 0,
+        "min": 0,
+        "name": "plan_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text3885137012",
+        "max": 0,
+        "min": 0,
+        "name": "email",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "select2468880607",
+        "maxSelect": 1,
+        "name": "rolle",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "values": [
+          "produktionsleitung",
+          "bearbeiter",
+          "gewerkeleiter",
+          "betrachter"
+        ]
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "json552244119",
+        "maxSize": 5000000,
+        "name": "gewerke",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "json"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text1597481275",
+        "max": 0,
+        "min": 0,
+        "name": "token",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date1608841475",
+        "max": "",
+        "min": "",
+        "name": "ablauf",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_einladungen_token ON einladungen (token)"
+    ],
+    "system": false
+  },
+  {
+    "id": "pbc_4154100110",
+    "listRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "viewRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "createRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter')))",
+    "updateRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter'))) && (@request.body.plan_id:isset = false || @request.body.plan_id = plan_id)",
+    "deleteRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter')))",
+    "name": "ressourcen",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text3902341787",
+        "max": 0,
+        "min": 0,
+        "name": "plan_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text1337828726",
+        "max": 0,
+        "min": 0,
+        "name": "eid",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "json3362956743",
+        "maxSize": 5000000,
+        "name": "daten",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "json"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number165162695",
+        "max": null,
+        "min": null,
+        "name": "rev",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number2161764012",
+        "max": null,
+        "min": null,
+        "name": "pos",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_ressourcen_plan_eid ON ressourcen (plan_id, eid)"
+    ],
+    "system": false
+  },
+  {
+    "id": "pbc_2981751933",
+    "listRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "viewRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "createRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter')))",
+    "updateRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter'))) && (@request.body.plan_id:isset = false || @request.body.plan_id = plan_id)",
+    "deleteRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter')))",
+    "name": "gewerke",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text3902341787",
+        "max": 0,
+        "min": 0,
+        "name": "plan_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text1337828726",
+        "max": 0,
+        "min": 0,
+        "name": "eid",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "json3362956743",
+        "maxSize": 5000000,
+        "name": "daten",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "json"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number165162695",
+        "max": null,
+        "min": null,
+        "name": "rev",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number2161764012",
+        "max": null,
+        "min": null,
+        "name": "pos",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_gewerke_plan_eid ON gewerke (plan_id, eid)"
+    ],
+    "system": false
+  },
+  {
+    "id": "pbc_2614219727",
+    "listRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "viewRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "createRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter')))",
+    "updateRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter'))) && (@request.body.plan_id:isset = false || @request.body.plan_id = plan_id)",
+    "deleteRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter')))",
+    "name": "vorgaenge",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text3902341787",
+        "max": 0,
+        "min": 0,
+        "name": "plan_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text1337828726",
+        "max": 0,
+        "min": 0,
+        "name": "eid",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "json3362956743",
+        "maxSize": 5000000,
+        "name": "daten",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "json"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number165162695",
+        "max": null,
+        "min": null,
+        "name": "rev",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number2161764012",
+        "max": null,
+        "min": null,
+        "name": "pos",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text2323403830",
+        "max": 0,
+        "min": 0,
+        "name": "gewerk",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_vorgaenge_plan_eid ON vorgaenge (plan_id, eid)"
+    ],
+    "system": false
+  },
+  {
+    "id": "pbc_1125939314",
+    "listRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "viewRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "createRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter')))",
+    "updateRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter'))) && (@request.body.plan_id:isset = false || @request.body.plan_id = plan_id)",
+    "deleteRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter')))",
+    "name": "phasen",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text3902341787",
+        "max": 0,
+        "min": 0,
+        "name": "plan_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text1337828726",
+        "max": 0,
+        "min": 0,
+        "name": "eid",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "json3362956743",
+        "maxSize": 5000000,
+        "name": "daten",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "json"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number165162695",
+        "max": null,
+        "min": null,
+        "name": "rev",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number2161764012",
+        "max": null,
+        "min": null,
+        "name": "pos",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_phasen_plan_eid ON phasen (plan_id, eid)"
+    ],
+    "system": false
+  },
+  {
+    "id": "pbc_2258784900",
+    "listRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "viewRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
+    "createRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter')))",
+    "updateRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter'))) && (@request.body.plan_id:isset = false || @request.body.plan_id = plan_id)",
+    "deleteRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?!= 'betrachter')))",
+    "name": "verknuepfungen",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text3902341787",
+        "max": 0,
+        "min": 0,
+        "name": "plan_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text1337828726",
+        "max": 0,
+        "min": 0,
+        "name": "eid",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "json3362956743",
+        "maxSize": 5000000,
+        "name": "daten",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "json"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number165162695",
+        "max": null,
+        "min": null,
+        "name": "rev",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number2161764012",
+        "max": null,
+        "min": null,
+        "name": "pos",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text3880974023",
+        "max": 0,
+        "min": 0,
+        "name": "von",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text3188797237",
+        "max": 0,
+        "min": 0,
+        "name": "nach",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_verknuepfungen_plan_eid ON verknuepfungen (plan_id, eid)"
+    ],
+    "system": false
+  }
+]

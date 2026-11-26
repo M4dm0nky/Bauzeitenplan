@@ -1,6 +1,9 @@
 // Server-Prüfung: Schema und API-Regeln der PocketBase (kein Browser).
-//   node tools/verify-pb-regeln.mjs [--nur SCHEMA]
+//   node tools/verify-pb-regeln.mjs [--nur SCHEMA]      (frische lokale PocketBase je Abschnitt)
+//   node tools/verify-pb-regeln.mjs --gegen <url>       (LESEMODUS gegen eine laufende Instanz, schreibt nie)
 // Jeder Abschnitt ist eine Funktion in ABSCHNITTE (Task 3 ergänzt weitere).
+// --gegen: ohne Anmeldung (Health, Collections da und anonym leer, Hook-Route da). Mit der Umgebungsvariable
+// PB_SU_TOKEN (Superuser-Token, nie im Repo) zusätzlich die Einstellungen (appURL, Rate Limits).
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -15,7 +18,7 @@ import { aenderungen } from '../js/aenderungen.js';
 const COLS = ['ressourcen', 'gewerke', 'vorgaenge', 'phasen', 'verknuepfungen'];
 const PW = 'Test-Passwort-123';
 let fehler = 0;
-const ok = (b, text, extra = '') => { console.log(`${b ? '✓' : '✗'} ${text}${b ? '' : ' ' + extra}`); if (!b) fehler++; };
+const ok = (b, text, extra = '') => { console.log(`${b ? '✓' : '✗'} ${text}${b ? '' : ' ' + extra}`); if (!b) fehler++; return b; };
 
 // Echte Datenform: `daten` trägt id/gewerk/from/to wie die App sie liefert (der Hook erzwingt, dass
 // die Spalten dazu passen). Fehlende Schlüssel werden aus den Spalten ergänzt; explizit gesetzte
@@ -767,7 +770,48 @@ async function RATELIMIT_AUS() {
   } finally { await pb.stop(); }
 }
 
+// ── Lesemodus gegen eine laufende Instanz (Admin-Auftrag Phase 2) ───────────────────────────────────
+// Schreibt nie etwas: nur GET und EIN anonymer POST an die Hook-Route mit leerem Body (wird abgelehnt).
+const GEGEN_COLS = ['plaene', 'mitglieder', 'einladungen', ...COLS];
+export async function GEGEN(url, { suToken = '' } = {}) {
+  const pb = { url: url.replace(/\/+$/, '') };
+  const h = await api(pb, '', 'GET', '/api/health');
+  ok(h.status === 200 && h.body?.code === 200, '/api/health = 200', `Status ${h.status}`);
+  // Anonym darf nichts zu sehen sein: Filterregeln ohne Treffer liefern 200 mit leerer Liste. 404 = Collection fehlt
+  // (Migration nicht eingespielt), 200 mit Einträgen = Regel offen, 403 = Regel auf «nur Superuser» (falsch gesetzt).
+  for (const c of [...GEGEN_COLS, 'users']) {
+    const r = await api(pb, '', 'GET', `/api/collections/${c}/records?perPage=1`);
+    const gut = r.status === 200 && Array.isArray(r.body?.items) && r.body.items.length === 0 && r.body.totalItems === 0;
+    ok(gut, `${c}: vorhanden, anonym leer`, r.status === 404 ? 'Collection fehlt (Migration?)' : `Status ${r.status}, ${JSON.stringify(r.body).slice(0, 120)}`);
+  }
+  // Hook-Route da: ohne Auth und ohne Token lehnt sie mit 400 ab; 404 hieße «Hook nicht geladen».
+  const e = await api(pb, '', 'POST', '/api/bzp/einladung', {});
+  ok(e.status === 400 && /Einladung unbekannt/.test(e.body?.message || ''), 'Hook-Route /api/bzp/einladung lehnt anonym ab (Hook geladen)', e.status === 404 ? 'Route fehlt (Hook nicht geladen)' : `Status ${e.status}, ${JSON.stringify(e.body).slice(0, 120)}`);
+  if (suToken) {
+    const s = await api(pb, suToken, 'GET', '/api/settings');
+    if (!ok(s.status === 200, 'Superuser-Token gilt (Einstellungen lesbar)', `Status ${s.status}`)) return;
+    const rl = s.body.rateLimits || {};
+    const create = (rl.rules || []).find((r) => r.label === '*:create');
+    ok(create?.maxRequests === 2000 && create?.duration === 5, 'Migration 1700000003 wirkt: *:create = 2000 je 5 s', JSON.stringify(create));
+    ok(rl.enabled === true, 'Rate Limiting ist an (Einstellung des Admins, die Migration fasst es nicht an)');
+    const url2 = s.body.meta?.appURL || '';
+    ok(/^https?:\/\/.+\/$/.test(url2), 'Application URL gesetzt, mit Schrägstrich am Ende', url2);
+  } else {
+    console.log('· ohne PB_SU_TOKEN: Einstellungen (Rate Limits, Application URL) nicht geprüft');
+  }
+}
+
 const ABSCHNITTE = { SCHEMA, REV, GEWERKELEITER, STATUS, KONTEN, EINLADUNG, BESITZER, KONSISTENZ, DATEN, LOESCHEN, SERVERPLAN, RATELIMIT };
+
+const gi = process.argv.indexOf('--gegen');
+if (gi > 0 && process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  const ziel = process.argv[gi + 1];
+  if (!/^https?:\/\//.test(ziel || '')) { console.error('Aufruf: node tools/verify-pb-regeln.mjs --gegen <url>'); process.exit(2); }
+  try { await GEGEN(ziel, { suToken: process.env.PB_SU_TOKEN || '' }); }
+  catch (e) { console.log('✗ Abbruch: ' + e.message); fehler++; }
+  console.log(fehler ? `\n${fehler} Fehler` : '\nLesemodus: alles wie erwartet');
+  process.exit(fehler ? 1 : 0);
+}
 
 const i = process.argv.indexOf('--nur');
 const nur = i > 0 ? process.argv[i + 1].toUpperCase() : null;

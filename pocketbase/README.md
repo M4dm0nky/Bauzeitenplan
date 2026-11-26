@@ -4,12 +4,16 @@ Server-Teil des Bauzeitenplans (Branch `online`): PocketBase **0.40.6**.
 
 - `pb_migrations/` — Schema und API-Regeln als JS-Migration (laufen beim Start automatisch).
 - `pb_hooks/` — Server-Logik (rev, Rollen, Konten, Einladung).
+- `setup.mjs` — erstes Superadmin-Konto der App anlegen (macht Marco selbst, idempotent, `--trocken` schreibt nichts). Zugang aus `pocketbase/pb-admin.local.json` (gitignored) oder Umgebungsvariablen, nie im Repo.
+- `schema.json` — lesbare Momentaufnahme der Collections nach allen Migrationen (`node tools/pb-schema-export.mjs`, `--pruefen` vergleicht). Maßgeblich bleiben die Migrationen; Rate Limits und Einstellungen sind darin nicht enthalten.
+- Einspielen auf Test/Live (nur Admin): `docs/admin-auftrag-online-phase2.md`.
 
 ## Lokal prüfen
 
 ```bash
 node tools/pb-lokal.mjs            # lädt die Binary nach tools/.pb/ (gitignored), startet, prüft /api/health, beendet → «PB OK»
 node tools/verify-pb-regeln.mjs    # Schema und Regeln gegen eine frische lokale PocketBase (--nur SCHEMA)
+node tools/verify-pb-regeln.mjs --gegen <url>   # Lesemodus gegen eine laufende Instanz (schreibt nie; PB_SU_TOKEN = Superuser-Token für Einstellungen)
 ```
 
 `tools/pb-lokal.mjs` startet die Binary headless auf freiem Port mit leerem Datenordner (tmp),

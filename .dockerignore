@@ -1,0 +1,11 @@
+# Allowlist: alles sperren, nur die ausgelieferten Dateien freigeben (siehe Dockerfile).
+*
+!index.html
+!print.html
+!login.html
+!sw.js
+!nginx.conf
+!js
+!styles
+!assets
+**/.DS_Store
