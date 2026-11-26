@@ -98,12 +98,12 @@ Details je Thema in `.claude/rules/` (Frontmatter `paths:`); dort stehen die Reg
 | `js/bedarf.js` | Bedarfsansicht |
 | `js/rail.js` | Die Schiene (Modus) |
 | `js/einrichten.js` | Einrichten-Seite (`#ein-seite`, fünf Bereiche, geführtes Erstes Einrichten) |
-| `js/einrichten-status.js` | Status ✓ ⚠ ○, Zeitraum-Hülle (`einrichtStatus`, `ausserhalb`, `zeitraumHuelle`) — **DOM-frei** |
+| `js/einrichten-status.js` | Status ✓ ⚠ ○, Zeitraum-Hülle (`einrichtStatus`) — **DOM-frei** |
 | `js/res-katalog.js` | Eingebaute Helfer/Maschinen in Kategorien (`RES_KATEGORIEN`, `RES_EINGEBAUT`) — **DOM-frei** |
 | `js/res-picker.js` | Such-Auswahl Helfer/Maschinen (`openResPicker`, `resNeuOpt`) |
 | `js/listen-editor.js` | Verwalten-Liste `mountAuswahlListe` (Tabelle + Einrichten-Seite) |
 | `js/sync.js` | GitHub-Contents-Client + `abgleich()` — **DOM-frei** |
-| `js/pb.js` | PocketBase-Client ohne SDK — **DOM-frei** |
+| `js/pb.js`, `server.js` | PocketBase-Client · Serverplan (rev, Realtime) — **DOM-frei** |
 
 Warum was so ist: `docs/entscheidungen.md` (auch «Kritisch entfiel»: Puffer + Engpass statt kritischer Pfad).
 

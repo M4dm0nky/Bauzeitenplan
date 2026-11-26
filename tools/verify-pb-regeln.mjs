@@ -2,7 +2,14 @@
 //   node tools/verify-pb-regeln.mjs [--nur SCHEMA]
 // Jeder Abschnitt ist eine Funktion in ABSCHNITTE (Task 3 ergänzt weitere).
 import { pathToFileURL } from 'node:url';
-import { startePb, kontoAnlegen } from './pb-lokal.mjs';
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
+import { startePb, kontoAnlegen, anmelden as anmeldenRoh } from './pb-lokal.mjs';
+import { createPb } from '../js/pb.js';
+import { createServerPlan, listePlaene } from '../js/server.js';
+import { deserialize } from '../js/persistence.js';
+import { aenderungen } from '../js/aenderungen.js';
 
 const COLS = ['ressourcen', 'gewerke', 'vorgaenge', 'phasen', 'verknuepfungen'];
 const PW = 'Test-Passwort-123';
@@ -563,13 +570,125 @@ async function LOESCHEN(pb) {
   ok(await anzahl(pb, k.pl.token, 'mitglieder', 'plan_id = "planA"') === 0, 'Neuer Plan hat keine Altmitglieder');
 }
 
-const ABSCHNITTE = { SCHEMA, REV, GEWERKELEITER, STATUS, KONTEN, EINLADUNG, BESITZER, KONSISTENZ, DATEN, LOESCHEN };
+// ── SERVERPLAN: js/server.js gegen die echte PocketBase (Realtime braucht EventSource) ────────────
+const fixturePlan = (n) => deserialize(readFileSync(new URL('./fixtures/' + n + '.json', import.meta.url), 'utf8')).plan;
+const kl = (x) => JSON.parse(JSON.stringify(x));
+const warte = (ms) => new Promise((r) => setTimeout(r, ms));
+async function clientFuer(pb, email) {
+  const a = await anmeldenRoh(pb.url, email, PW);
+  const speicher = new Map();
+  speicher.set('bzp_auth', JSON.stringify({ token: a.token, record: a.record }));
+  const sp = { getItem: (k) => speicher.get(k) ?? null, setItem: (k, v) => speicher.set(k, v), removeItem: (k) => speicher.delete(k) };
+  return createPb({ basis: pb.url, fetch, speicher: sp, autostart: false });
+}
+async function SERVERPLAN(pb) {
+  console.log('— SERVERPLAN');
+  const { k } = await grundaufbau(pb);
+  const KT = fixturePlan('klassentreffen-festival');
+  const AMK = fixturePlan('amk-singleshow');
+  const pbA = await clientFuer(pb, 'pl@bzp.test');
+  const pbB = await clientFuer(pb, 'bearb@bzp.test');
+  try {
+    // Anlegen aus der Fixture → Laden → deepEqual (inkl. Verknüpfungen, Phasen, Ressourcen bei AMK)
+    for (const [name, vorlage] of [['Klassentreffen', KT], ['AMK', AMK]]) {
+      const neu = createServerPlan({ pb: pbA, planId: 'x' });
+      const r = await neu.planAnlegen(vorlage);
+      ok(r.ok && r.planId !== vorlage.project.id, `${name}: planAnlegen mit neuer plan_id`, JSON.stringify(r).slice(0, 300));
+      if (!r.ok) continue;
+      const lade = await createServerPlan({ pb: pbA, planId: r.planId }).laden();
+      ok(lade.ok && isDeepStrictEqual(lade.state, r.state), `${name}: laden = angelegter Plan (deepEqual)`, JSON.stringify(lade).slice(0, 200));
+      ok(lade.ok && lade.rolle?.rolle === 'besitzer', `${name}: Rolle besitzer`, JSON.stringify(lade.rolle));
+      if (name === 'AMK') {
+        // Löschen in der verbindlichen Reihenfolge: ein Gewerk samt Vorgängen, Verknüpfungen
+        const sp = createServerPlan({ pb: pbA, planId: r.planId });
+        await sp.laden();
+        const g = r.state.gewerke.find((x) => r.state.tasks.some((t) => t.gewerk === x.id) && !r.state.tasks.every((t) => t.gewerk === x.id));
+        const nach = kl(r.state);
+        nach.tasks = nach.tasks.filter((t) => t.gewerk !== g.id);
+        nach.deps = nach.deps.filter((d) => nach.tasks.some((t) => t.id === d.from) && nach.tasks.some((t) => t.id === d.to));
+        nach.gewerke = nach.gewerke.filter((x) => x.id !== g.id);
+        const del = await sp.senden(aenderungen(r.state, nach));
+        ok(del.ok, 'AMK: Gewerk mit Vorgängen/Verknüpfungen in einem Batch löschen', JSON.stringify(del).slice(0, 300));
+        ok(isDeepStrictEqual((await sp.laden()).state, nach), 'AMK: Server entspricht danach dem Plan');
+        ok((await sp.planLoeschen()).ok, 'AMK: planLoeschen');
+        ok((await createServerPlan({ pb: pbA, planId: r.planId }).laden()).nichtGefunden === true, 'AMK: danach nichtGefunden');
+      }
+    }
+
+    // Zwei Clients: A besitzt, B ist Bearbeiter
+    const A = createServerPlan({ pb: pbA, planId: 'x' });
+    const ang = await A.planAnlegen(KT);
+    const planId = ang.planId;
+    await pb.su('POST', '/api/collections/mitglieder/records', { plan_id: planId, user_id: k.bearb.id, rolle: 'bearbeiter', gewerke: [] });
+    const B = createServerPlan({ pb: pbB, planId });
+    const la = await A.laden(), lb = await B.laden();
+    ok(lb.ok && lb.rolle?.rolle === 'bearbeiter', 'B: Rolle bearbeiter, sieht den Plan', JSON.stringify(lb).slice(0, 200));
+    ok(lb.ok && isDeepStrictEqual(lb.state, la.state), 'B lädt denselben Stand wie A');
+    const liste = await listePlaene(pbB);
+    const mein = liste.find((x) => x.plan_id === planId);
+    ok(liste.length === 2 && mein?.rolle === 'bearbeiter' && mein.name === KT.project.name, 'listePlaene(B): ein Plan mit Rolle', JSON.stringify(liste));
+
+    // Realtime: A ändert X, B bekommt genau X; A bekommt sein Echo nicht
+    const gotA = [], gotB = [];
+    A.abonnieren((t) => gotA.push(t)); B.abonnieren((t) => gotB.push(t));
+    await warte(1200); // Abo-Handshake
+    const X = la.state.tasks[3].id;
+    const a1 = kl(la.state); a1.tasks[3].title = 'Realtime-Test';
+    ok((await A.senden(aenderungen(la.state, a1))).ok, 'A ändert Vorgang X');
+    await warte(1500);
+    ok(gotB.length === 1 && gotB[0].coll === 'vorgaenge' && gotB[0].eid === X && gotB[0].objekt?.title === 'Realtime-Test', 'B bekommt per Realtime genau X', JSON.stringify(gotB).slice(0, 300));
+    ok(gotA.length === 0, 'A bekommt sein eigenes Echo nicht', JSON.stringify(gotA).slice(0, 300));
+    // Löschen kommt als objekt null; Anlegen mit Objekt
+    const a2 = kl(a1); a2.tasks.splice(4, 1); a2.gewerke.push({ ...kl(a2.gewerke[0]), id: 'gneu', name: 'Neu' });
+    ok((await A.senden(aenderungen(a1, a2))).ok, 'A löscht einen Vorgang und legt ein Gewerk an');
+    await warte(1500);
+    ok(gotB.some((t) => t.coll === 'vorgaenge' && t.eid === a1.tasks[4].id && t.objekt === null), 'B bekommt das Löschen (objekt null)', JSON.stringify(gotB.map((t) => [t.coll, t.eid])));
+    ok(gotB.some((t) => t.coll === 'gewerke' && t.eid === 'gneu' && t.objekt?.name === 'Neu'), 'B bekommt das neue Gewerk');
+    ok(gotB.length === 3 && gotA.length === 0, 'sonst nichts', `B ${gotB.length}, A ${gotA.length}`);
+    // B hat den fremden Stand nachgezogen: sein nächstes Senden mit der gehörten rev klappt
+    const b0 = kl(a2); b0.tasks[3].title = 'von B';
+    ok((await B.senden(aenderungen(a2, b0))).ok, 'B ändert X nach dem Realtime-Ereignis (rev nachgezogen)');
+    await warte(800);
+    ok(gotA.length === 1 && gotA[0].eid === X, 'A bekommt Bs Änderung', JSON.stringify(gotA).slice(0, 200));
+
+    // Konflikt: beide ändern X mit gleicher rev (B ohne Realtime-Nachzug → veralteter Stand)
+    const B2 = createServerPlan({ pb: pbB, planId });
+    const stand = (await B2.laden()).state;
+    const A2 = createServerPlan({ pb: pbA, planId });
+    await A2.laden();
+    const von = (t) => { const s = kl(stand); s.tasks[6].title = t; return s; };
+    const rA = await A2.senden(aenderungen(stand, von('A gewinnt')));
+    const rB = await B2.senden(aenderungen(stand, von('B verliert')));
+    ok(rA.ok && !rB.ok && rB.konflikt?.[0]?.eid === stand.tasks[6].id && rB.konflikt[0].art === 'aendern' && rB.konflikt[0].fremd?.title === 'A gewinnt', 'Gleiche rev: einer ok, der andere konflikt mit dem fremden Stand', JSON.stringify([rA, rB]).slice(0, 400));
+    // Fremd gelöscht → fremd null
+    const A3 = kl(stand); A3.tasks.splice(7, 1);
+    ok((await A2.senden(aenderungen(stand, A3))).ok, 'A löscht Vorgang Y');
+    const b3 = kl(stand); b3.tasks[7].title = 'zu spät';
+    const rB3 = await B2.senden(aenderungen(stand, b3));
+    ok(!rB3.ok && rB3.konflikt?.[0]?.fremd === null, 'B ändert den gelöschten Vorgang → konflikt, fremd null', JSON.stringify(rB3).slice(0, 300));
+
+    // Token kaputt → abgemeldet (Liste wäre sonst leer)
+    const pbX = await clientFuer(pb, 'pl@bzp.test');
+    await pbX.abmelden();
+    ok((await createServerPlan({ pb: pbX, planId }).laden()).abgemeldet === true, 'ohne Anmeldung: laden → abgemeldet');
+    ok((await A.planLoeschen()).ok, 'A: planLoeschen');
+    ok((await B.laden()).nichtGefunden === true, 'B: Plan weg → nichtGefunden');
+    ok((await pb.su('GET', '/api/collections/vorgaenge/records?perPage=1&filter=' + encodeURIComponent(`plan_id="${planId}"`))).body.totalItems === 0, 'Kaskade: keine Vorgänge mehr');
+  } finally { await pbA.abmelden(); await pbB.abmelden(); }
+}
+
+const ABSCHNITTE = { SCHEMA, REV, GEWERKELEITER, STATUS, KONTEN, EINLADUNG, BESITZER, KONSISTENZ, DATEN, LOESCHEN, SERVERPLAN };
 
 const i = process.argv.indexOf('--nur');
 const nur = i > 0 ? process.argv[i + 1].toUpperCase() : null;
 if (nur && !ABSCHNITTE[nur]) { console.error('Unbekannter Abschnitt: ' + nur + ' (' + Object.keys(ABSCHNITTE).join(', ') + ')'); process.exit(2); }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  // SERVERPLAN braucht EventSource (Node 24: nur mit --experimental-eventsource) → Selbstneustart mit dem Flag
+  if (typeof EventSource === 'undefined' && (!nur || nur === 'SERVERPLAN')) {
+    const r = spawnSync(process.execPath, ['--experimental-eventsource', '--disable-warning=UNDICI-ES', ...process.argv.slice(1)], { stdio: 'inherit' });
+    process.exit(r.status ?? 1);
+  }
   let pb;
   try {
     // frischer Server je Abschnitt: Abschnitte beeinflussen sich nicht
