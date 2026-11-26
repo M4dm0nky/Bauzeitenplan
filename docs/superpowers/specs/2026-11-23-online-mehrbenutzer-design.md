@@ -1,6 +1,6 @@
 # Bauzeitenplan online — mehrere Benutzer, Rollen, gleichzeitiges Arbeiten
 
-**Stand:** 2026-11-23 · **Status:** Entwurf zur Freigabe durch Marco
+**Stand:** 2026-11-26 · **Status:** freigegeben (Marco), umgesetzt auf Branch `online`
 **Server-Grundlage:** `docs/admin-auftrag-online-phase1.md` (beim Admin)
 
 ## 1. Absicht und Warum

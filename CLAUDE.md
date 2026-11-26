@@ -1,10 +1,10 @@
 # Bauzeitenplan — Arbeitsanweisungen
 
-Gantt-Ablaufplan für die Veranstaltungsbranche. Vanilla JS, ES-Module, **kein Build-Step**. Projekte leben im Browser (localStorage) + JSON-Export. Kein Backend, keine Anmeldung.
+Gantt-Ablaufplan für die Veranstaltungsbranche. Vanilla JS, ES-Module, **kein Build-Step**. Mehrbenutzer-App gegen PocketBase 0.40.6: Anmeldung, Rollen, Realtime; offline nur Ansicht. Pläne leben auf dem Server, JSON-Export/-Import bleibt.
 
-**Live:** https://m4dm0nky.github.io/Bauzeitenplan/ · **Repo:** M4dm0nky/Bauzeitenplan · **Version:** `node tools/version.mjs`
+**Test:** https://m4dm0nky.github.io/Bauzeitenplan/ (Branch `main`, API `api-test`) · **Live:** https://callboard.nyxlightwork.de (Branch `live`, API `api`) · **Repo:** M4dm0nky/Bauzeitenplan · **Version:** `node tools/version.mjs`
 
-Starten: `python3 -m http.server 8080`. Nur Regeln hier; Begründungen: `docs/entscheidungen.md` → «Begründungen zu den Regeln in CLAUDE.md».
+Starten: `python3 -m http.server 8080` (Test-API; `?api=<url>` nur auf localhost). Die Prüfskripte starten selbst eine lokale PocketBase (`tools/pb-lokal.mjs`). Nur Regeln hier; Begründungen: `docs/entscheidungen.md` → «Begründungen zu den Regeln in CLAUDE.md».
 
 ## Vor jeder Änderung
 
@@ -17,9 +17,11 @@ node tools/verify-amk.mjs  # AMK-Plan importieren (tools/fixtures)
 node tools/verify-klassentreffen.mjs  # V07-Plan importieren + Negativprüfung «kein mitgelieferter Plan»
 node tools/verify-print.mjs  # Tagesblätter A3: Zuschnitt, Filter, Maßstab
 node tools/verify-showablauf.mjs  # Showablauf: Ebene, Bühnen, Kopfzeile, Blatt
+node tools/verify-pb-regeln.mjs  # Server: Schema, Regeln, Hook, Rate Limits (lokale PocketBase); --gegen <url> = Lesemodus
+node tools/verify-mehrbenutzer.mjs  # Anmeldung, Rollen, Realtime, Offline, Mitglieder (zwei Browser)
 ```
 
-- **Alle neun müssen grün sein**, bevor etwas fertig ist (parallel startbar). `verify-browser.mjs` braucht einmalig `npx playwright install firefox`.
+- **Alle zehn müssen grün sein**, bevor etwas fertig ist (parallel startbar, **`verify-mehrbenutzer` allein**: Last). `verify-browser.mjs` braucht einmalig `npx playwright install firefox`.
 - **Screenshots ansehen, nicht nur die Häkchen zählen;** zu jedem behobenen Fehler eine Prüfung schreiben.
 - **Neue Bausteine gehören in die `needed`-Liste in `tests/run.mjs`.**
 - **Fertig erst mit nachgezogener Doku:** README, CHANGELOG, diese Datei, `.claude/rules/*.md`, `docs/*.md` per grep auf geänderte Funktionen/Dateien/Zahlen prüfen.
@@ -27,7 +29,9 @@ node tools/verify-showablauf.mjs  # Showablauf: Ebene, Bühnen, Kopfzeile, Blatt
 
 ## Deploy und Version
 
-`git push origin main` → GitHub Pages (~1 Min., Quelle `main` / `root`). Danach **live gegenprüfen**: `node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/`
+**Test:** `git push origin main` → GitHub Pages (~1 Min.). **Live:** `git push origin live` → Coolify baut das `Dockerfile` (nginx); Migrationen/Hooks spielt nur der Admin ein (`docs/admin-auftrag-online-phase2.md`).
+
+Danach prüfen: `node tools/verify-browser.mjs --base <url>` (nur Anmeldeseite + Weiterleitung), `node tools/verify-pb-regeln.mjs --gegen <api-url>`.
 
 - **Vor dem Deploy: `node tools/version.mjs <neu>`** (setzt auch alle `?v=`).
 - **Service Worker network-first**, Cache `bzp-<SW_VERSION>`, Kill-Switch in `sw.js`. Wer eine Datei anlegt/löscht, pflegt `HUELLE` in `sw.js` (`tests/run.mjs` prüft beide Richtungen).
@@ -44,15 +48,10 @@ node tools/verify-showablauf.mjs  # Showablauf: Ebene, Bühnen, Kopfzeile, Blatt
 - **Der Store ist der einzige Weg, den Plan zu ändern;** nie direkt an `state`. Validierung VOR der Änderung; ein abgelehnter Befehl hinterlässt nichts (kein Undo-Eintrag, keine Ungesichert-Marke). Undo über Schnappschüsse.
 - **Rechenlogik bleibt DOM-frei** (`schedule.js`, `timeaxis.js`, `store.js`, `conflicts.js`, `persistence.js`); neue Logik dort → Test.
 - **Neue Felder müssen durch `addTask` durch** (sonst fallen sie beim Anlegen still weg).
-- **`js/dom.js` = DOM-Kleinkram** (`el`, `svgEl`, `$`, `escapeHtml`, `toInput`, `STATUS`), nicht `clone`.
 - **Ein Zustand, ein Besitzer:** Inspector = INHALT des Panels, `syncPanel()` (app.js) allein die Sichtbarkeit (`#ins.hidden`).
-- **Die App holt nie eine Plan-JSON:** kein `BUNDLED`/`openBundled`, kein `fetch` einer `.json` in `js/` (`tests/run.mjs` sperrt es). Testdaten liegen in `tools/fixtures/`, Prüfskripte seeden sie per `tools/plan-fixture.mjs`.
-- **Start = Projektdialog** (`bootLokal`), kein Autostart. Direkt nur der Live-Monitor (`bzp_live=1` + aktives Projekt). `?plan=leer` = ohne Plan: aktives/erstes Projekt, sonst Dialog (alle verify-Skripte hängen daran).
+- **Start = Anmeldung, dann Projektdialog** (`boot`), kein Autostart. Direkt nur der Live-Monitor (`bzp_live=1` + aktives Projekt). `?plan=leer` = ohne Plan: aktives/erstes Projekt, sonst Dialog (alle verify-Skripte hängen daran).
 - **Was der erste Start braucht, gehört auf Modulebene, nicht in `mount()`** (Import, Neu, Projekte, `openEinrichten`; Einrichten ist eine Seite, kein Fenster).
-- **Keine Platzhaltertexte in Freitextspalten.** **„Tag 1/2/3" gehört in die Notiz, nicht in den Titel** (Test). **Das Wort ist «Zeiteintrag»** in Spalte, Knopf, Zähler, Ecke der Seitenspalte, Vorgabename, Kennzahl (Datenfeld `punktTyp`; auf dem A3-Blatt bleibt «Programmpunkt»).
 - **Zeiten aus echten Zeitstempeln** (`toMin()`), nie aus Ziffern auf Datumsstrings.
-- **Balkenbeschriftung nicht entfernen** (sekundäre Kodierung). **Schraffur = Gewerk-Identität** (Platz 9–16), nicht Status.
-- **Eine Reihenfolge für beide Ansichten: `byStart`** (Start, Ende, Titel). **Verknüpfungs-Picker sucht** (`candidateGroups`), ebenso die **Suche** (`suchTreffer`, beide schedule.js, DOM-frei); lange Listen nie als `<select>`.
 - **Niemals `window.prompt`/`confirm`/`alert`.** Bestätigung: `askDialog({title, message, buttons})` (app.js; `null` bei Abbruch). Namenseingabe: `tb-neuart` (`neuFragen`, table.js; `cmd` setzt den Namen als `label`, `buildCmd(wert, kompakt)` wenn er anderswo im Befehl steht).
 
 ## Themenregeln (laden nur bei passenden Dateien)
@@ -65,14 +64,10 @@ Details je Thema in `.claude/rules/` (Frontmatter `paths:`); dort stehen die Reg
 - Gantt-Darstellung, Achse, Zeilen, Beschriftung: `.claude/rules/gantt-darstellung.md`
 - Themes, Gewerk-Farben, Farbplätze: `.claude/rules/themes-farben.md`
 - Tabelle, Schiene, Einrichten, Knopfzahl: `.claude/rules/tabelle-einrichten.md`
-- Sync, Service Worker, Offline: `.claude/rules/sync-offline.md`
+- Server, Rollen, Senden, Offline, Service Worker, Auslieferung: `.claude/rules/server-offline.md`
 - Personal, Maschinen, Bereitstellung, Bedarf, `crew`: `.claude/rules/personal-maschinen.md`
 - Auswahllisten, Eintragsarten, Abschnitte verwalten: `.claude/rules/auswahllisten.md`
 - Untervorgänge, Warnungen/Abhaken, `migrate`, AMK-Plan: `.claude/rules/store-daten.md`
-
-## Aus Crewplaner gelernt (für ein späteres Backend)
-
-- `project_id` & Co. als **Text**, nie Relation. E-Mails `.toLowerCase()`. API-Rules nach Coolify-Redeploy prüfen. Kein Bundle-File: ES-Module mit `?v=`-Cache-Bust. Rollen serverseitig über API-Rules (UI-Verstecken ist keine Sicherheit).
 
 ## Aufbau
 
@@ -103,17 +98,16 @@ Details je Thema in `.claude/rules/` (Frontmatter `paths:`); dort stehen die Reg
 | `js/res-katalog.js` | Eingebaute Helfer/Maschinen in Kategorien — **DOM-frei** |
 | `js/res-picker.js` | Such-Auswahl Helfer/Maschinen |
 | `js/listen-editor.js` | Verwalten-Liste `mountAuswahlListe` (Tabelle + Einrichten-Seite) |
-| `js/konflikt.js` | Konfliktauflösung beim Senden — **DOM-frei** |
-| `js/pb.js`, `server.js` | PocketBase-Client · Serverplan (rev, Realtime) — **DOM-frei** |
+| `js/pb.js`, `server.js` | PocketBase-Client · Serverplan (rev, Realtime, Warteschlange) — **DOM-frei** |
+| `js/aenderungen.js`, `rechte.js`, `konflikt.js` | Änderungsliste je Befehl · Rechte-Vorabprüfung · Konfliktauflösung — **DOM-frei** |
 | `login.html`, `login.js` | Anmelden, Passwort, Einladung |
+| `pocketbase/` | Migrationen, Hooks, `setup.mjs`, `schema.json`; `Dockerfile` + `nginx.conf` = Live-Image |
 
 Warum was so ist: `docs/entscheidungen.md` (auch «Kritisch entfiel»: Puffer + Engpass statt kritischer Pfad).
 
 ## Fahrplan
 
 Offene Punkte: GitHub-Issues von M4dm0nky/Bauzeitenplan, keine Liste in dieser Datei.
-
-**PocketBase liegt auf Eis:** Branch `pocketbase-vorbereitung`, nicht gemergt, nicht deployt. Nur die Vorlage «festival» ist abgenommen; Tour, Corporate, Messe sind Entwürfe und beim ersten echten Einsatz zu korrigieren.
 
 ## Gestartete Prozesse IMMER wieder beenden
 Hintergrundbefehle, Server, Watcher, Builds (auch von Subagenten) beenden, sobald sie fertig sind; nach Abbruch/Timeout und am Sitzungsende auf verwaiste Prozesse prüfen. Details: `C:\Dropbox\Incomming\github\CLAUDE.md`.

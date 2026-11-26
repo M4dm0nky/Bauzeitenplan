@@ -7,7 +7,7 @@ Warum Dinge so sind, wie sie sind. Nur das, was sich aus dem Code nicht ablesen 
 | Frage | Entscheidung | Warum |
 |---|---|---|
 | Zeitachse | Vier Zoomstufen: Monate / Wochen / Tage / Stunden | Der Zeitraum spannt Monate, der Load-In läuft stundengenau. Ein Raster kann beides nicht. |
-| Backend | **Keines.** Reine statische Auslieferung, localStorage + JSON-Export | Eine vorbereitete PocketBase-Schicht wurde in v0.8.0 aus `main` entfernt (siehe unten). Kommt der Bedarf zurück, wird es eine **eigene** Instanz, keine Kopplung an Crewplaner: übernommen werden Muster und Erfahrungen, nicht die Daten. |
+| Backend | **PocketBase 0.40.6, eigene Instanzen** (Test, Live), statische Auslieferung der App; localStorage nur für Token und lokale Kopie, JSON-Export/-Import bleibt | Externe Leute arbeiten mit eigenem Zugang am selben Plan (Spec 2026-11-23, Abschnitt «Online und Mehrbenutzer» unten). Keine Kopplung an Crewplaner: übernommen werden Muster und Erfahrungen, nicht die Daten. Bis v0.25 gab es kein Backend (siehe «PocketBase liegt auf Eis»). |
 | Gantt-Zeilen | Zwei Ebenen: Band (aufklappbar) → Vorgänge | Entspricht dem klassischen Bauzeitenplan. Das Band ist je nach Plan-Ebene ein Gewerk oder eine Bühne. |
 | Abhängigkeiten | Von Anfang an, alle vier Typen + Puffer/Engpass (kritischer Pfad entfiel 2026-11-23) | — |
 | Build-Step | Keiner. Native ES-Module. | Konsistent zu Crewplaner und Personalplan. |
@@ -517,6 +517,39 @@ Integrationspunkte — liegt im Branch **`pocketbase-vorbereitung`**. Er wird ni
 deployt und nicht gemergt. Wer Online + Rollen wieder aufnimmt, macht dort weiter;
 die Crewplaner-Lehren weiter oben in dieser Datei gelten dann wieder.
 
+**Nachtrag (Branch `online`):** Die Schicht wurde nicht gemerged, sondern neu und größer gebaut (Mehrbenutzer, Hook, Realtime); der Branch `pocketbase-vorbereitung` bleibt als Vorlage liegen. Die Crewplaner-Lehren oben gelten seitdem wieder; die Kurzfassung in `CLAUDE.md` («Aus Crewplaner gelernt») steht jetzt nur noch hier.
+
+## Online und Mehrbenutzer (Branch `online`, 2026-11-24 bis 26)
+
+Spec: `docs/superpowers/specs/2026-11-23-online-mehrbenutzer-design.md` (freigegeben), Plan: `docs/superpowers/plans/2026-11-24-teil2-online-mehrbenutzer.md`. Die Entscheidungen E-1 bis E-10 stammen aus dem Plan, die weiteren aus dem Umsetzungslauf.
+
+### Entscheidungen des Plans (E-1 bis E-10)
+
+- **E-1 Branch `online`** von `main`. Bis zum Live-Gang bleibt `main` die lokale App (Spec 15). Der Branch ist die Server-Fassung komplett: GitHub-Sync und lokaler Modus entfallen dort.
+- **E-2 Datensatzform einheitlich:** jede Plan-Collection hat `plan_id`, `eid` (heutige id des Eintrags), `daten` (JSON: das ganze heutige Objekt), `rev` (Zahl), `pos` (Zahl, Reihenfolge im Array). Nur was Regeln/Hook brauchen, steht zusätzlich als Spalte: `vorgaenge.gewerk`, `verknuepfungen.von`/`nach`. Abweichung von Spec 7 (`tid`/`gid`/… und Einzelspalten), weil so kein neues Task-Feld je eine Schemaänderung braucht (Projektregel «neue Felder müssen durch»).
+- **E-3 `plaene.daten`** = `project` ohne `ressourcen` (die liegen in `ressourcen`, Spec 7). Eine Plan-Änderung (Name, Zeitraum, `punktTypen`, `abschnitte`) ist eine Änderung an einem Datensatz.
+- **E-4 O-2 entfällt:** Untervorgänge liegen immer im Gewerk des Elternvorgangs (`addTask`, Regel store-daten). Die Hülle ist also immer eine Änderung im eigenen Gewerk und wird normal gesendet.
+- **E-5 O-4:** Die verify-Skripte seeden über `tools/pb-lokal.mjs` (startet die PocketBase-Binary headless auf freiem Port mit leerem Datenordner, legt Konten und Plan per API an, beendet sie). Die App nimmt `?api=<url>` nur an, wenn `location.hostname` `localhost` oder `127.0.0.1` ist.
+- **E-6 CORS** macht Traefik (Admin, Phase 1); lokal `serve --origins`. Kein CORS im Hook (Traefik hat ohnehin das letzte Wort).
+- **E-7 Undo patch-basiert** für alle Fälle (nicht nur online): ein Undo-Eintrag ist die Änderungsliste des Befehls; Undo wendet ihre Umkehrung auf den aktuellen Stand an. Weicht ein betroffener Datensatz inzwischen ab (fremde Änderung), liefert `undo()` `{ok:false, konflikt:[…]}` und die App fragt per `askDialog`.
+- **E-8 Einladung:** Datensatz `einladungen` mit `token` (32 Zeichen, vom Hook erzeugt), `ablauf` +14 Tage. Hook-Route `POST /api/bzp/einladung` (`{token, name, passwort}` ohne Konto, oder angemeldet nur `{token}`) legt Konto/Mitgliedschaft an und löscht die Einladung. Existiert das Konto beim Einladen schon, legt der Hook sofort die Mitgliedschaft an statt einer Einladung. Mail nur, wenn PocketBase SMTP hat (Live); sonst gibt die Antwort den Link zurück (Test).
+- **E-9 Seiten:** `login.html` (Anmelden, Passwort vergessen, Einladung annehmen, Passwort neu — per Query `?einladung=`/`?reset=`). Mitglieder-Verwaltung als Dialog in der App, Superadmin-Verwaltung als Dialog in der App (kein `admin.html`).
+- **E-10 Rollen-Info** für den Client: `rolleIn(plan, user, mitglieder)` → `{rolle:'superadmin'|'besitzer'|'produktionsleitung'|'bearbeiter'|'gewerkeleiter'|'betrachter', gewerke:[]}`.
+
+### Entscheidungen aus der Umsetzung
+
+- **Rate-Limit-Migration statt Hook-Endpunkt.** Die PocketBase-Regel `*:create` (20 je 5 s) zählt jede Unteranfrage eines Batches; der AMK- und der Klassentreffen-Import scheiterten ab 21 Datensätzen (gemessen). Robs nannte Anheben als Option; ein eigener Hook-Endpunkt (wie im Crewplaner) müsste alle Prüfungen des Hooks nachbauen. Darum hebt die Migration `1700000003_ratelimits.js` NUR `*:create` auf 2000 je 5 s und fasst weder `enabled` noch die anderen Regeln an. Preis: Die Regel wirkt erst mit dem Phase-2-Deploy (steht im Admin-Auftrag), und angemeldete Nutzer sind gegen Masseneinträge schwächer geschützt. Dazu der Client (Task 10b): 429 ist vorübergehend, die Änderung bleibt in der Warteschlange und geht mit Backoff erneut raus, nie wird sie zurückgenommen; Batch-Aufrufe höchstens alle 450 ms.
+- **Ein Batch bis 2000, keine Teilung.** Ein ganzer Plan geht als EIN Batch (Spec «alles oder nichts»); mehr als 2000 Anfragen lehnt der Client mit Meldung ab, statt ihn zu teilen und halb anzulegen. Sehr große Importe scheitern also sichtbar, nicht still.
+- **«jemand anderem» im Konfliktdialog.** Der Hook speichert keinen Bearbeiter je Datensatz; ein Feld dafür wäre eine Schemaänderung und mehr Daten, als der Dialog braucht. Er sagt «… wurde inzwischen von jemand anderem geändert/gelöscht».
+- **Manuelles Abmelden löscht die lokalen Kopien.** Geteilter Rechner: wer sich abmeldet, will keine Planreste im Browser lassen. Ein abgelaufenes Token (`401`) lässt sie stehen, damit der Live-Monitor weiterzeigt und ungesendete Änderungen nicht verloren gehen.
+- **`rechte.js` prüft nur Rechte,** nicht Konsistenz (Elternvorgang, Gewerk, Verweise, `rev`). Das macht der Server und lehnt mit 400 ab; die App zeigt den Fehler. Preis: weniger schöner Text bei Konsistenzfehlern, dafür keine zweite Kopie der Regeln im Client, die auseinanderläuft.
+- **Offline nur Ansicht,** nie Offline-Schreiben: Ohne Netz sperrt die App das Bearbeiten (Marke «Offline – nur Ansicht», nach 3 s entprellt), der Live-Monitor zeigt die lokale Kopie weiter. `print.html` liest diese Kopie, also vorher die App öffnen.
+- **`verify-sync` entfällt, die verify-Zahl ist zehn.** Der Plan sprach von «elf» (Zählfehler): acht bisherige Skripte (ohne `verify-sync`) plus `verify-pb-regeln` und `verify-mehrbenutzer`, dazu `tests/run.mjs`. `verify-mehrbenutzer` läuft allein (Last: zwei Browserkontexte gegen eine lokale PocketBase).
+- **`verify-browser --base` prüft nur Anmeldeseite und Weiterleitung.** Gegen eine echte Instanz gibt es kein Testkonto und es wird nichts angelegt; die Server-Seite prüft der Lesemodus `verify-pb-regeln.mjs --gegen <url>` (ohne Anmeldung, schreibt nie; mit `PB_SU_TOKEN` zusätzlich Rate Limits und Application URL).
+- **Mail auf Live offen, auf Test aus.** «Passwort vergessen» geht auf Test nie und auf Live erst, wenn der Admin Resend eingerichtet hat. Einladungen funktionieren per Link auch ohne Mail (E-8).
+- **Image aus Allowlist.** `Dockerfile` kopiert nur die ausgelieferten Dateien (`COPY` je Datei/Ordner), `.dockerignore` sperrt zusätzlich alles andere; `tests/run.mjs` prüft das gegen `HUELLE` (doppelte Absicherung gegen versehentlich ausgelieferte `docs/`, `tools/`, `pocketbase/`). nginx liefert Seiten, JS und CSS mit `no-cache` (Rückfrage per ETag), weil die Dateien `?v=` tragen, aber nicht fingerabdruck-benannt sind, und `sw.js` ohne jeden HTTP-Cache.
+- **Superuser und Superadmin sind zwei Dinge.** Superuser = PocketBase-Zugang des Admins/Marcos (`/_/`), Superadmin = Flag `users.superadmin` in der App. Das erste App-Konto legt Marco selbst mit `pocketbase/setup.mjs` an, nicht der Admin; Konten entstehen sonst nur über die Hook-Route (Einladung).
+
 ## Vorschläge aus Reviews, die geprüft und abgelehnt wurden
 
 Damit derselbe Vorschlag nicht beim nächsten Review erneut Arbeit macht — hier
@@ -632,7 +665,7 @@ HTML-Datei. Gründe:
 
 - **Ein Store, ein Undo.** Eine zweite Seite hätte einen zweiten Planstand und
   zwei Tabs, die sich überschreiben; so bleibt jede Änderung ein Befehl, ein ⌘Z.
-- **Sync läuft weiter.** Keine zweite Seite, die den Abgleich neu verdrahten muss.
+- **Sync läuft weiter.** Keine zweite Seite, die den Abgleich neu verdrahten muss. (Seit Branch `online`: der Serverabgleich.)
 - **Kein Eintrag in `version.mjs`/`HUELLE`.** Jede ausgelieferte HTML-Seite
   müsste dort und in der Versionsprüfung stehen.
 - **Der Ausschnitt bleibt.** Der Gantt wird nur verborgen, nicht abgebaut: `.col.ist-ein`
@@ -641,8 +674,8 @@ HTML-Datei. Gründe:
   Scroll und Zoom wie vorher.
 - Die alte Begründung für das Fenster («Ausschnitt bleibt») ist damit weiter erfüllt.
 
-**Was daraus folgt.** Der Speicherort ist kein Bereich, sondern der Dialog
-`#sync-dlg` (selten gebraucht, Technik statt Planung). Projekt anlegen, wechseln,
+**Was daraus folgt.** Der Speicherort war kein Bereich, sondern der Dialog
+`#sync-dlg` (selten gebraucht, Technik statt Planung; seit Branch `online` entfernt, der Plan liegt auf dem Server). Projekt anlegen, wechseln,
 Import und Export wanderten in das Projektmenü der Kopfzeile (`#proj-knopf`),
 weil sie nichts mit dem Einrichten EINES Plans zu tun haben. Gewerke, Bühnen,
 Personal, Maschinen, Arten und Abschnitte sind auf der Seite direkt bearbeitbar:
@@ -1005,7 +1038,7 @@ und `?plan=<key>` öffnete sie direkt; neuer Planstand hieß Datei tauschen, pus
 
 **Warum das entfiel (Marco, 2026-11-22):** Ein Plan, der von allein erscheint, ist unerwartet
 und zieht Netzabrufe nach sich. Sein Plan bleibt lokal bei ihm; Pläne kommen über Import/Export
-oder den Sync. Entfernt sind `BUNDLED`/`openBundled`/`bundledKey`, der Abschnitt «Mitgelieferte
+oder den Sync (heute: den Server). Entfernt sind `BUNDLED`/`openBundled`/`bundledKey`, der Abschnitt «Mitgelieferte
 Pläne» im Projektdialog, `planHash`/`unveraendert` und die Abfrage «Zwei Fassungen» beim Laden.
 `project.quelle` bleibt in Altbeständen als totes Feld stehen.
 
@@ -1334,7 +1367,9 @@ der Name woanders im Befehl gehört (`addGewerk` z. B. in `gewerk.name`).
 `grep -rn "window\.prompt\|[^.]prompt(\|confirm(\|alert(" js/*.js` muss leer
 bleiben (Kommentare ausgenommen).
 
-### Local-first.
+### Local-first (ersetzt durch den Server-Plan, siehe «Online und Mehrbenutzer»).
+
+*Historisch: Dieser Abschnitt beschreibt den GitHub-Sync bis v0.25.1. Auf Branch `online` ist er entfernt (`js/sync.js`, `bzp_sync`, `verify-sync.mjs` gibt es nicht mehr; `tests/run.mjs` sperrt `bzp_sync` und `sync.js`).*
 
 Der Plan lebt weiter in `localStorage`; das private Daten-Repo
 `M4dm0nky/Bauzeitenplan-Daten` (`main`, `projekte/<project.id>.json`, Inhalt =
