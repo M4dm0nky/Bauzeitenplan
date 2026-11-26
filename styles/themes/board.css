@@ -336,3 +336,11 @@ kbd { font: inherit; font-size: 10px; border: 1.5px solid var(--ink-3); backgrou
 .res-st-bestaetigt { background: var(--ein-ok); color: var(--ein-ok-t); }
 .res-st-abgelehnt { background: var(--crit); color: var(--panel); }
 .bd-offen { background: var(--panel); border: 1px solid var(--line, var(--rule-2, currentColor)); color: var(--ink); }
+
+/* Mitglieder und Verwaltung */
+.mg-zeile { background: var(--panel2); border: 1px solid var(--line); color: var(--ink); }
+.mg-feld { background: var(--panel); border: 1px solid var(--line); color: var(--ink); }
+.mg-chip { color: var(--ink); }
+.mg-weg { background: var(--panel); border: 1px solid var(--line); color: var(--ink); }
+.mg-weg:hover:not(:disabled) { background: var(--crit); border-color: var(--crit); color: #fff; }
+.mg-fehler { color: var(--crit); }

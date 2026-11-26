@@ -50,6 +50,8 @@ const HUELLE = [
   'js/live.js',
   'js/login.js',
   'js/menu.js',
+  'js/mitglieder-logik.js',
+  'js/mitglieder.js',
   'js/palette.js',
   'js/pb.js',
   'js/persistence.js',

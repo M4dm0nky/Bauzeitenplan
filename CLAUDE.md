@@ -94,6 +94,8 @@ Details je Thema in `.claude/rules/` (Frontmatter `paths:`); dort stehen die Reg
 | `js/live.js` | Verzug, Laufendes, Versatz (`verschoben`, `versatzText`) — **DOM-frei** |
 | `js/inspector.js` | Seitenpanel |
 | `js/menu.js` | Kontextmenü, Tageswahl |
+| `js/mitglieder.js` | Dialoge «Mitglieder…» (Plan) und «Verwaltung…» (Superadmin); rendert nur, Daten über `pb` |
+| `js/mitglieder-logik.js` | Liste zusammenführen, Einladung/Rolle prüfen, Fehlertexte — **DOM-frei** |
 | `js/bedarf.js` | Bedarfsansicht |
 | `js/rail.js` | Die Schiene (Modus) |
 | `js/einrichten.js` | Einrichten-Seite (`#ein-seite`, fünf Bereiche, geführtes Erstes Einrichten) |

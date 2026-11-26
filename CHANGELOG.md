@@ -5,6 +5,7 @@ nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
 ## Unveröffentlicht (Branch `online`)
 
+- **Mitglieder und Verwaltung:** Projektmenü «Mitglieder…» (Produktionsleitung, Besitzer, Superadmin): Mitglieder mit Rolle und Gewerke-Chips, Rolle/Gewerke ändern, entfernen und Einladungen zurückziehen (jeweils mit Rückfrage), einladen per E-Mail (vorhandenes Konto: sofort Mitglied, sonst Link mit «Kopieren»). «Verwaltung…» nur für den Superadmin: Schalter Produktionsleitung je Konto, alle Pläne mit Besitzer. Neu: `js/mitglieder.js` (Dialog), `js/mitglieder-logik.js` (DOM-frei).
 - **Rate Limits:** 429 gilt als vorübergehend (`code:'limit'`): Änderungen bleiben in der Warteschlange und gehen mit Backoff (1/2/4/max 5 s) selbst raus, nichts wird zurückgenommen. Batch-Aufrufe höchstens zwei je Sekunde (450 ms). Neue Pläne versuchen es bei 429 dreimal. Migration `1700000003_ratelimits.js` hebt die create-Regel auf 2000 je 5 s, damit ein ganzer Plan durchgeht.
 - **Reset-Mail:** Link ohne doppelten Schrägstrich (`onMailerRecordPasswordResetSend`).
 - **Offline-Marke:** erscheint erst nach 3 s; Tokens in allen Themes. Abgelaufene Anmeldung mit ungesendeten Änderungen fragt nach. Ladefehler, die keine Netzfehler sind, zeigen nicht «Offline».

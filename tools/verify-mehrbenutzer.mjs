@@ -1,5 +1,5 @@
 // Mehrbenutzer-Prüfung im echten Browser (Firefox) gegen eine lokale PocketBase.
-//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG|ZWEI_NUTZER|IMPORT|OFFLINE|MONITOR|MONITOR_ABGELAUFEN|ABMELDEN]
+//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG|ZWEI_NUTZER|IMPORT|OFFLINE|MONITOR|MONITOR_ABGELAUFEN|ABMELDEN|MITGLIEDER|VERWALTUNG]
 // ANMELDUNG: login.html — falsches/richtiges Passwort, «Passwort vergessen», Einladung (neues Konto,
 // vorhandenes Konto, ungültig), Passwort zurücksetzen (Mail über einen kleinen lokalen SMTP-Empfänger).
 // Task 11 ergänzt weitere Abschnitte in ABSCHNITTE. Alle Passwörter entstehen zur Laufzeit.
@@ -379,7 +379,7 @@ async function ZWEI_NUTZER({ pb, base, browser }) {
     await titelSetzen(B.page, Z, 'B: Z vier'); await gesendet(B.page);
     await wertBis(A.page, Z, 'B: Z vier');
     await A.page.keyboard.press('Control+z');
-    await dlgKnopf(A.page, 'Abbrechen').click();
+    await A.page.locator('.dlg-act .btn', { hasText: 'Abbrechen' }).click();
     ok((await titel(A.page, Z).inputValue()) === 'B: Z vier', 'A: Undo-Konflikt «Abbrechen» ändert nichts');
     // 6) Fremdänderung überschreibt keine offene eigene Änderung (Realtime LÄUFT bei E, nur dessen Senden ist verzögert)
     const E = await nutzer(browser, pb, 'bearb@bzp.test', PW, { batchMs: 3500 }); ctxs.push(E.ctx);
@@ -656,7 +656,178 @@ async function ABMELDEN({ pb, base, browser }) {
   } finally { await P.ctx.close().catch(() => {}); }
 }
 
-const ABSCHNITTE = { ANMELDUNG, ZWEI_NUTZER, IMPORT, OFFLINE, MONITOR, MONITOR_ABGELAUFEN, ABMELDEN };
+// ── MITGLIEDER / VERWALTUNG (Task 11) ─────────────────────────────────────────
+const toastText = (page) => page.evaluate(() => { const t = document.getElementById('toast'); return t && !t.hidden ? t.textContent : null; });
+const toastBis = async (page, re, ms = 6000) => { try { await page.waitForFunction((r) => { const t = document.getElementById('toast'); return t && !t.hidden && new RegExp(r).test(t.textContent); }, re.source, { timeout: ms }); return true; } catch { return false; } };
+async function menueOeffnen(page) { await page.locator('#proj-knopf').click(); await page.locator('.mn').waitFor({ timeout: 5000 }); }
+async function menueZu(page) { await page.keyboard.press('Escape'); await page.locator('.mn').waitFor({ state: 'detached', timeout: 3000 }).catch(() => {}); }
+
+async function MITGLIEDER({ pb, base, browser }) {
+  console.log('— MITGLIEDER');
+  const PW = pw();
+  const plId = await planAnlegenFuer(pb, PW);
+  const bearb = await kontoAnlegen(pb, { email: 'bearb@bzp.test', name: 'Ben', passwort: PW });
+  await kontoAnlegen(pb, { email: 'vorhanden@bzp.test', name: 'Vera', passwort: PW });
+  await pb.su('POST', '/api/collections/mitglieder/records', { plan_id: plId, user_id: bearb.id, rolle: 'bearbeiter', gewerke: [] });
+  const LICHT = 't149', TON = 't151'; // Fixture: g2 Licht, g3 Ton
+  const ctxs = [];
+  try {
+    const A = await nutzer(browser, pb, 'pl@bzp.test', PW); ctxs.push(A.ctx);
+    const B = await nutzer(browser, pb, 'bearb@bzp.test', PW); ctxs.push(B.ctx);
+    await Promise.all([planOeffnen(A.page, base, pb), planOeffnen(B.page, base, pb)]);
+
+    // bearb: kein «Mitglieder…», kein «Verwaltung…»
+    await menueOeffnen(B.page);
+    ok((await B.page.locator('#mitglieder-oeffnen').count()) === 0, 'Bearbeiter sieht «Mitglieder…» nicht');
+    ok((await B.page.locator('#verwaltung-oeffnen').count()) === 0, 'Bearbeiter sieht «Verwaltung…» nicht');
+    await menueZu(B.page);
+
+    // pl: Dialog, Eingaben prüfen
+    await menueOeffnen(A.page);
+    ok((await A.page.locator('#mitglieder-oeffnen').count()) === 1 && (await A.page.locator('#verwaltung-oeffnen').count()) === 0, 'Produktionsleitung sieht «Mitglieder…», nicht «Verwaltung…»');
+    await A.page.locator('#mitglieder-oeffnen').click();
+    const dlg = A.page.locator('#mg-dlg');
+    await dlg.locator('#mg-einladen').waitFor({ timeout: 8000 });
+    ok((await dlg.locator('[data-mitglied]').count()) === 1 && /Ben/.test(await dlg.locator('[data-mitglied]').textContent()), 'Liste zeigt Ben als Mitglied');
+    ok((await dlg.locator('[data-besitzer]').count()) === 1, 'Besitzer steht als eigene Zeile (ohne Entfernen)');
+    const einladungenZahl = async () => (await pb.su('GET', '/api/collections/einladungen/records')).body.totalItems;
+    await dlg.locator('#mg-mail').fill('kaputt');
+    await dlg.locator('#mg-einladen').click();
+    ok(/gültige E-Mail/.test(await dlg.locator('.mg-fehler').textContent()) && (await einladungenZahl()) === 0, 'ungültige Adresse → Hinweis, nichts angelegt');
+    await dlg.locator('#mg-mail').fill('Neuling@BZP.test');
+    await dlg.locator('#mg-rolle-neu').selectOption('gewerkeleiter');
+    await dlg.locator('#mg-einladen').click();
+    ok(/mindestens ein Gewerk/.test(await dlg.locator('.mg-fehler').textContent()) && (await einladungenZahl()) === 0, 'Gewerkeleiter ohne Gewerk → Hinweis, nichts angelegt');
+    await dlg.locator('.mg-einladen .mg-chip[data-gewerk="g2"]').click();
+    ok((await dlg.locator('.mg-einladen .mg-chip[data-gewerk="g2"]').getAttribute('aria-pressed')) === 'true', 'Chip «Licht» gewählt (aria-pressed)');
+    await dlg.locator('#mg-einladen').click();
+    await dlg.locator('#mg-link').waitFor({ timeout: 8000 });
+    const link = await dlg.locator('#mg-link').inputValue();
+    ok(link.startsWith(`${base}/login.html?einladung=`), 'Einladungslink steht im Feld', link);
+    ok((await dlg.locator('#mg-kopieren').count()) === 1, '«Kopieren» neben dem Link');
+    await dlg.locator('#mg-kopieren').click();
+    ok(await dlg.locator('.mg-link .mg-leer').textContent() !== '', 'Kopieren meldet «Kopiert.» oder «Markiert»', await dlg.locator('.mg-link .mg-leer').textContent());
+    const token = new URL(link).searchParams.get('einladung');
+    const speicher = await A.page.evaluate(() => JSON.stringify({ ...localStorage }));
+    ok(!speicher.includes(token), 'Einladungstoken steht in keinem localStorage-Eintrag (Plan, Kopie, Export)');
+    ok((await dlg.locator('[data-einladung]').count()) === 1 && /neuling@bzp\.test/.test(await dlg.locator('[data-einladung]').textContent()), 'offene Einladung steht in der Liste');
+    const eRec = (await pb.su('GET', '/api/collections/einladungen/records')).body.items[0];
+    ok(eRec.rolle === 'gewerkeleiter' && JSON.stringify(eRec.gewerke) === '["g2"]' && eRec.email === 'neuling@bzp.test', 'Einladung am Server: Rolle, Gewerk Licht, E-Mail klein', JSON.stringify(eRec));
+    ok((await A.page.locator('#undo').isDisabled()), 'Einladen schafft keinen Undo-Eintrag');
+    await A.page.emulateMedia({ colorScheme: 'dark' });
+    await A.page.screenshot({ path: join(shots, 'mitglieder.png') });   // dunkel, mit Link und offener Einladung
+    await A.page.emulateMedia({ colorScheme: 'light' });
+
+    // vorhandenes Konto → direkt Mitglied
+    await dlg.locator('#mg-mail').fill('vorhanden@bzp.test');
+    await dlg.locator('#mg-rolle-neu').selectOption('betrachter');
+    await dlg.locator('#mg-einladen').click();
+    ok(await toastBis(A.page, /vorhanden@bzp\.test ist jetzt Mitglied/), 'vorhandenes Konto: Toast «… ist jetzt Mitglied.»', await toastText(A.page));
+    await dlg.locator('[data-mitglied]', { hasText: 'Vera' }).waitFor({ timeout: 5000 });
+    ok(true, 'Vera erscheint sofort in der Liste');
+    await A.page.screenshot({ path: join(shots, 'mitglieder-2.png') });
+
+    // Neuling nimmt an (zweiter, frischer Kontext) und arbeitet als Gewerkeleiter Licht
+    const C = { ctx: await browser.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block' }) }; ctxs.push(C.ctx);
+    C.page = await C.ctx.newPage();
+    C.page.on('dialog', (d) => { ok(false, 'Browser-Dialog erschienen: ' + d.type()); d.dismiss(); });
+    C.page.on('pageerror', (e) => ok(false, 'Seitenfehler: ' + e.message));
+    await C.page.goto(link.replace(/^[^?]*/, `${base}/login.html`) + '&api=' + encodeURIComponent(pb.url));
+    const PWC = pw();
+    await C.page.fill('#e-name', 'Nele Neu'); await C.page.fill('#e-pw', PWC); await C.page.fill('#e-pw2', PWC);
+    await C.page.click('#f-einladung button[type=submit]');
+    await C.page.waitForURL(/index\.html/, { timeout: 10000 });
+    await planOeffnen(C.page, base, pb);
+    await warte(1200);
+    ok((await C.page.locator('#undo').isDisabled()), 'C: Undo leer vor der ersten Änderung');
+    // Ton (fremdes Gewerk) → Toast, kein Undo-Eintrag
+    await titelSetzen(C.page, TON, 'Ton von Licht');
+    ok(await toastBis(C.page, /Nur Licht darfst du ändern\./), 'C: Ton-Vorgang ändern → Toast «Nur Licht darfst du ändern.»', await toastText(C.page));
+    ok(await C.page.locator('#undo').isDisabled(), 'C: abgelehnte Änderung hinterlässt keinen Undo-Eintrag');
+    ok((await serverTitel(pb, plId, TON)) !== 'Ton von Licht', 'C: Server hat den Ton-Vorgang nicht geändert');
+    // Licht (eigenes Gewerk) → geht
+    await titelSetzen(C.page, LICHT, 'Licht von Nele');
+    await gesendet(C.page);
+    ok((await serverTitel(pb, plId, LICHT)) === 'Licht von Nele', 'C: Licht-Vorgang ändern gelingt, Server hat ihn');
+    ok(!(await C.page.locator('#undo').isDisabled()), 'C: Licht-Änderung steht im Undo');
+    await menueOeffnen(C.page);
+    ok((await C.page.locator('#mitglieder-oeffnen').count()) === 0, 'Gewerkeleiter sieht «Mitglieder…» nicht');
+    await menueZu(C.page);
+
+    // pl ändert Neles Rolle auf Betrachter; zweiter Versuch von C wird abgelehnt und zieht die neue Rolle nach
+    await dlg.locator('#mg-fertig').click();      // Liste ist veraltet (Nele kam dazu): Dialog neu öffnen
+    await menueOeffnen(A.page); await A.page.locator('#mitglieder-oeffnen').click();
+    await dlg.locator('#mg-einladen').waitFor({ timeout: 8000 });
+    const nele = dlg.locator('[data-mitglied]', { hasText: 'Nele Neu' });
+    await nele.locator('.mg-rolle').selectOption('betrachter');
+    await nele.locator('.mg-speichern').click();
+    ok(await toastBis(A.page, /Nele Neu: Rolle gespeichert/), 'pl: Rolle ändern → Toast');
+    const nm = (await pb.su('GET', '/api/collections/mitglieder/records?filter=' + encodeURIComponent('rolle="betrachter" && plan_id="' + plId + '"'))).body.items;
+    ok(nm.length === 2, 'Server: Nele und Vera sind Betrachter', String(nm.length));
+    await dlg.locator('#mg-fertig').click();
+    await titelSetzen(C.page, LICHT, 'Licht nochmal');
+    await dlgKnopf(C.page, 'OK').waitFor({ timeout: 8000 });
+    await dlgKnopf(C.page, 'OK').click();
+    await C.page.waitForFunction(() => document.body.classList.contains('nur-ansicht'), null, { timeout: 8000 });
+    ok(true, 'C: nach der abgelehnten Änderung gilt die neue Rolle (nur Ansicht)');
+
+    // Entfernen über askDialog; Zurückziehen
+    await menueOeffnen(A.page); await A.page.locator('#mitglieder-oeffnen').click();
+    const d2 = A.page.locator('#mg-dlg'); await d2.locator('#mg-einladen').waitFor({ timeout: 8000 });
+    await d2.locator('[data-mitglied]', { hasText: 'Vera' }).locator('.mg-weg').click();
+    await A.page.locator('.dlg-act .btn', { hasText: 'Abbrechen' }).click();
+    ok((await d2.locator('[data-mitglied]', { hasText: 'Vera' }).count()) === 1, 'Entfernen → Abbrechen lässt Vera drin');
+    await d2.locator('[data-mitglied]', { hasText: 'Vera' }).locator('.mg-weg').click();
+    await A.page.locator('.dlg-act .btn-danger', { hasText: 'Entfernen' }).click();
+    await d2.locator('[data-mitglied]', { hasText: 'Vera' }).waitFor({ state: 'detached', timeout: 6000 });
+    ok(true, 'Entfernen bestätigt → Vera weg');
+    await d2.locator('#mg-mail').fill('offen@bzp.test');
+    await d2.locator('#mg-einladen').click();
+    await d2.locator('[data-einladung]', { hasText: 'offen@bzp.test' }).waitFor({ timeout: 6000 });
+    await d2.locator('[data-einladung]', { hasText: 'offen@bzp.test' }).locator('.mg-weg').click();
+    await A.page.locator('.dlg-act .btn-danger', { hasText: 'Zurückziehen' }).click();
+    await d2.locator('[data-einladung]', { hasText: 'offen@bzp.test' }).waitFor({ state: 'detached', timeout: 6000 });
+    ok(true, 'Einladung zurückgezogen (über askDialog)');
+  } finally { for (const c of ctxs) await c.close().catch(() => {}); }
+}
+
+async function VERWALTUNG({ pb, base, browser }) {
+  console.log('— VERWALTUNG');
+  const PW = pw();
+  const plId = await planAnlegenFuer(pb, PW);
+  const sa = await kontoAnlegen(pb, { email: 'sa@bzp.test', name: 'Sabine', passwort: PW, superadmin: true });
+  const nu = await kontoAnlegen(pb, { email: 'nutzer@bzp.test', name: 'Nora', passwort: PW });
+  void sa;
+  const ctxs = [];
+  try {
+    const N0 = await nutzer(browser, pb, 'nutzer@bzp.test', PW); ctxs.push(N0.ctx);
+    await N0.page.goto(appUrl(base, pb, '&plan=leer'));
+    await N0.page.locator('#neu-anlegen').waitFor({ timeout: 10000 });
+    ok(await N0.page.locator('#neu-anlegen').isDisabled(), 'Nutzer ohne Flag: «Projekt anlegen» gesperrt');
+    const S = await nutzer(browser, pb, 'sa@bzp.test', PW); ctxs.push(S.ctx);
+    await planOeffnen(S.page, base, pb);
+    await menueOeffnen(S.page);
+    ok((await S.page.locator('#verwaltung-oeffnen').count()) === 1, 'Superadmin sieht «Verwaltung…»');
+    await S.page.locator('#verwaltung-oeffnen').click();
+    const v = S.page.locator('#vw-dlg');
+    await v.locator('#vw-fertig').waitFor({ timeout: 8000 });
+    ok((await v.locator('[data-plan]').count()) === 1 && /Paula/.test(await v.locator('[data-plan]').textContent()), 'Pläne mit Besitzer (Paula) gelistet');
+    const zeile = v.locator(`[data-konto="${nu.id}"]`);
+    ok(!(await zeile.locator('.mg-leitung').isChecked()), 'Konto Nora: Schalter Produktionsleitung aus');
+    await zeile.locator('.mg-leitung').check();
+    ok(await toastBis(S.page, /Nora darf jetzt Pläne anlegen/), 'Schalter an → Toast', await toastText(S.page));
+    const rec = (await pb.su('GET', `/api/collections/users/records/${nu.id}`)).body;
+    ok(rec.produktionsleitung === true, 'Server: produktionsleitung gesetzt');
+    await S.page.screenshot({ path: join(shots, 'verwaltung.png') });
+    // Nora lädt neu: «Neu» geht jetzt (Anmeldung wird beim Laden erneuert)
+    await N0.page.goto(appUrl(base, pb, '&plan=leer'));
+    await N0.page.locator('#neu-anlegen').waitFor({ timeout: 10000 });
+    ok(!(await N0.page.locator('#neu-anlegen').isDisabled()), 'Nora kann nach dem Schalter «Projekt anlegen»');
+    void plId;
+  } finally { for (const c of ctxs) await c.close().catch(() => {}); }
+}
+
+const ABSCHNITTE = { ANMELDUNG, ZWEI_NUTZER, IMPORT, OFFLINE, MONITOR, MONITOR_ABGELAUFEN, ABMELDEN, MITGLIEDER, VERWALTUNG };
 const i = process.argv.indexOf('--nur');
 const nur = i > 0 ? (process.argv[i + 1] || '').toUpperCase().replace(' ', '_') : null;
 if (nur && !ABSCHNITTE[nur]) { console.error('Unbekannter Abschnitt: ' + nur + ' (' + Object.keys(ABSCHNITTE).join(', ') + ')'); process.exit(2); }

@@ -1054,3 +1054,33 @@ body.nur-ansicht .bz-bar, body.nur-ansicht .bz-ms { cursor: default; }
   .ph-entw { grid-column: 1 / -1; }
 }
 .ph-z.is-entwurf { outline: 2px solid var(--en); outline-offset: 2px; border-radius: 4px; }
+
+/* ── Mitglieder und Verwaltung (js/mitglieder.js) ──────────────────────────
+   Aufbau hier, Flächen und Linien je Theme (mg-zeile, mg-feld, mg-weg, mg-fehler, mg-chip). */
+.mg-box { width: min(780px, 100%); }
+.mg-liste { display: flex; flex-direction: column; gap: 6px; }
+.mg-zeile { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 10px; }
+.mg-person { display: flex; flex-direction: column; min-width: 150px; flex: 1 1 150px; }
+.mg-name { font-weight: 600; }
+.mg-mail { opacity: .72; font-size: .85em; }
+.mg-rolle-text { white-space: nowrap; }
+.mg-chips, .mg-chipfeld { display: flex; flex-wrap: wrap; gap: 5px; }
+.mg-chipfeld { flex-basis: 100%; }
+.mg-chipfeld:empty { display: none; }
+.mg-chip { font: inherit; font-size: .88em; padding: 2px 10px; border-radius: 999px; border: 2px solid var(--gw); background: transparent; color: inherit; cursor: pointer; }
+span.mg-chip { cursor: default; }
+button.mg-chip[aria-pressed="true"], .mg-chip[data-an] { background: var(--gw); color: var(--gw-ink); font-weight: 600; }
+button.mg-chip[aria-pressed="true"]::before { content: '✓ '; }
+.mg-chip[data-tex] { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 1px, transparent 1px 4px); }
+.mg-feld { font: inherit; padding: 6px 8px; min-width: 0; }
+.mg-einladen { margin-top: 4px; }
+.mg-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mg-form input[type="email"] { flex: 1 1 240px; }
+.mg-link { margin-top: 10px; }
+.mg-link-feld { flex: 1 1 300px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .85em; }
+.mg-fehler { margin: 10px 0 0; font-weight: 600; }
+.mg-fehler::before { content: '⚠ '; }
+.mg-leer { opacity: .7; }
+.mg-schalter { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.mg-weg { margin-left: auto; }
+.mg-speichern { margin-left: 0; }

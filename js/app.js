@@ -7,7 +7,8 @@ import { createStore, verschiebeZeit, SHIFT_MAX_TAGE, SHIFT_MAX_MIN } from './st
 import { createRepo, serialize, deserialize } from './persistence.js';
 import { createPb, apiBasis, ERNEUERN_MS } from './pb.js';
 import { createServerPlan, listePlaene } from './server.js';
-import { rechteFehler, darfPlanAnlegen } from './rechte.js';
+import { rechteFehler, darfPlanAnlegen, darfMitglieder } from './rechte.js';
+import { openMitglieder, openVerwaltung } from './mitglieder.js';
 import { anwenden, umkehren, aenderungen, istLeer, zerlegen, zusammensetzen } from './aenderungen.js';
 import { abgelaufenEntscheid, eintragTitel, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen, offeneSchluessel, uebernehmeOhneOffene } from './konflikt.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
@@ -836,6 +837,8 @@ function nachladen() {
     if (srv !== server) return;
     const l = await srv.laden();
     if (srv !== server || !l.ok) return;
+    rolle = l.rolle;          // eine geänderte Rolle gilt sofort (Mitglieder-Dialog, Einladung angenommen)
+    syncNurAnsicht();
     uebernehmeStand(l.state);
   });
 }
@@ -1937,6 +1940,30 @@ async function abmelden() {
   pb.abmelden();     // meldet «abgemeldet» → zuLogin (nicht zusätzlich weiterleiten)
 }
 
+// Mitglieder verwalten: Änderungen gehen direkt an den Server (nicht über den Store, kein Undo).
+// Beim Schließen liest die App Rolle und Plan neu (eigene Rolle geändert oder entfernt).
+function mitgliederOeffnen() {
+  const srv = server;
+  if (!srv || !darfMitglieder(rolle)) return;
+  openMitglieder({
+    pb, planId: store.state.project.id, planName: store.state.project.name,
+    gewerke: store.state.gewerke.map((g) => ({ id: g.id, name: g.name, slot: g.slot })),
+    ich: { id: pb.auth?.record?.id, rolle: rolle.rolle },
+    askDialog, toast, rollenAnzeige: ROLLEN_ANZEIGE,
+    beiSchliessen: ({ geaendert, selbstEntfernt }) => {
+      if (selbstEntfernt && srv === server) {
+        const id = store.state.project.id;
+        schliesseServer(); repo.remove(id);
+        showProjectDialog({ firstRun: true });
+      } else if (geaendert && srv === server) nachladen();
+    },
+  });
+}
+function verwaltungOeffnen() {
+  if (!pb.auth?.record?.superadmin) return;
+  openVerwaltung({ pb, toast });
+}
+
 function projektMenue() {
   const r = $('proj-knopf').getBoundingClientRect();
   const user = pb.auth?.record;
@@ -1948,6 +1975,8 @@ function projektMenue() {
     { id: 'proj-menu', label: '📂 Projekte…', run: projekteWaehlen },
     { id: 'import', label: '⬆ Import…', disabled: !darf || ohneNetz, hint: grund, run: importieren },
     { id: 'export', label: '⬇ Export', disabled: !store, run: exportieren },
+    ...(store && server && darfMitglieder(rolle) ? [{ id: 'mitglieder-oeffnen', label: '👥 Mitglieder…', disabled: ohneNetz, hint: ohneNetz ? 'offline' : '', run: mitgliederOeffnen }] : []),
+    ...(user?.superadmin ? [{ id: 'verwaltung-oeffnen', label: '⭐ Verwaltung…', disabled: ohneNetz, hint: ohneNetz ? 'offline' : '', run: verwaltungOeffnen }] : []),
     null,
     { id: 'konto', label: '👤 ' + (user?.name || user?.email || 'Angemeldet'), disabled: true },
     { id: 'abmelden', label: '⎋ Abmelden', run: abmelden },
