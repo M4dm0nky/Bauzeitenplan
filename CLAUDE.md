@@ -35,7 +35,7 @@ Danach prüfen: `node tools/verify-browser.mjs --base <url>` (nur Anmeldeseite +
 
 - **Vor dem Deploy: `node tools/version.mjs <neu>`** (setzt auch alle `?v=`).
 - **Service Worker network-first**, Cache `bzp-<SW_VERSION>`, Kill-Switch in `sw.js`. Wer eine Datei anlegt/löscht, pflegt `HUELLE` in `sw.js` (`tests/run.mjs` prüft beide Richtungen).
-- **Die Version wird NIE von Hand geändert** (keine Zahl in dieser Datei): `node tools/version.mjs 0.2.0` stempelt `js/version.js` · `package.json` · `index.html` **und `print.html`** (`?v=`) · `sw.js` (`SW_VERSION`) · `CHANGELOG.md`.
+- **Die Version wird NIE von Hand geändert** (keine Zahl in dieser Datei): `node tools/version.mjs 0.2.0` stempelt `js/version.js` · `package.json` · `index.html`, `print.html` **und `login.html`** (`?v=`) · `sw.js` (`SW_VERSION`) · `CHANGELOG.md`.
 - **Die Nummer entscheidet Marco** — VOR dem Stempeln fragen. Rückschritte und Nicht-SemVer lehnt der Befehl ab.
 - **Jede ausgelieferte HTML-Seite gehört in `tools/version.mjs` UND in die Versionsprüfung in `tests/run.mjs`.**
 - **Annotierter Tag nach dem Push** (`git tag -a v0.2.0 -m "…" && git push origin v0.2.0`), **erst nach Rückfrage.**

@@ -34,7 +34,8 @@ Du prüfst den Bauzeitenplan auf Herz und Nieren. ZUERST NUR LESEN UND AUSPROBIE
     node tools/verify-klassentreffen.mjs
     node tools/verify-print.mjs
     node tools/verify-showablauf.mjs
-    node tools/verify-sync.mjs
+    node tools/verify-pb-regeln.mjs
+    node tools/verify-mehrbenutzer.mjs
   Ohne `?plan=` fragt der Projektdialog; `?plan=leer` öffnet das aktive (sonst erste) Projekt, sonst den Dialog. Die App holt keinen Plan von selbst.
 
 ## Vorgehen – in getrennten Durchgängen, nicht alles auf einmal

@@ -119,7 +119,10 @@ self.addEventListener('fetch', (event) => {
     fetch(req, { cache: 'no-cache' }).then((res) => {
       if (res.ok) {
         const kopie = res.clone();
-        event.waitUntil(caches.open(CACHE).then((c) => c.put(req, kopie)).catch(() => {}));
+        // Navigationen nur unter dem Pfad ohne Query cachen: `login.html?einladung=<token>`/`?reset=<token>` sollen nie im
+        // Cache landen (die Seite selbst ist für alle Queries dieselbe; die Offline-Suche nutzt ignoreSearch).
+        const schluessel = isNavigation ? new Request(url.origin + url.pathname) : req;
+        event.waitUntil(caches.open(CACHE).then((c) => c.put(schluessel, kopie)).catch(() => {}));
       }
       return res;
     }).catch(async () => {

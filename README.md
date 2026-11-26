@@ -35,10 +35,15 @@ Link, Rolle und Gewerke ändern, entfernen) und «Verwaltung…» (Superadmin: w
 darf Pläne anlegen, alle Pläne).
 
 **Offline ist nur Ansicht.** Ohne Netz sperrt die App das Bearbeiten («📡 Offline –
-nur Ansicht») und verbindet sich wieder von selbst. Der **Live-Monitor** (Live-Modus
-mit aktivem Projekt) öffnet ohne Dialog und zeigt bei abgelaufener Anmeldung oder
-ohne Netz die lokale Kopie weiter. Meldest du dich selbst ab, löscht die App die
-lokalen Kopien. **`print.html` liest diese lokale Kopie** — vor dem Drucken also
+nur Ansicht») und verbindet sich wieder von selbst; ein kurzer Abbruch der
+Live-Verbindung (der Server trennt nach 5 Minuten Ruhe) zählt erst nach 10 s als
+offline. Auch ein Start ohne Netz (oder bei gestörtem Server) zeigt die lokale
+Kopie, sofern es eine gibt. Der **Live-Monitor** (Live-Modus mit aktivem Projekt)
+öffnet ohne Dialog und zeigt bei abgelaufener Anmeldung die lokale Kopie weiter.
+Meldest du dich selbst ab, löscht die App die lokalen Kopien, auch in einem zweiten
+Tab desselben Browsers. Ein Fehler des Servers (5xx, 429, kein JSON) nimmt
+Änderungen nie zurück: sie bleiben offen und gehen später raus. Löschen darf einen
+Plan nur der Besitzer oder der Superadmin. **`print.html` liest diese lokale Kopie** — vor dem Drucken also
 die App einmal öffnen.
 
 **Test und Live:** Der Hostname wählt die Instanz — `callboard.nyxlightwork.de`
