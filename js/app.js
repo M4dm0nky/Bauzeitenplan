@@ -116,7 +116,11 @@ const loginSeite = () => {
   return 'login.html' + (api ? '?api=' + encodeURIComponent(api) : '');
 };
 let zuLoginLaeuft = false;
-function zuLogin() {
+// Anmeldung weg: zur Anmeldeseite. Einzige Ausnahme: der Live-Monitor (`bzp_live=1`) mit lokaler
+// Kopie zeigt sie weiter («Anmeldung abgelaufen – lokale Kopie») und springt nie auf login.html.
+// Manuelles Abmelden (grund 'manuell') gilt nie als Ausnahme: der Rechner kann geteilt sein.
+function zuLogin(grund) {
+  if (grund !== 'manuell' && lsLies('bzp_live') === '1' && zeigeKopie('abgemeldet')) return;
   if (zuLoginLaeuft) return;
   zuLoginLaeuft = true;
   location.replace(loginSeite());
@@ -124,19 +128,26 @@ function zuLogin() {
 
 async function boot() {
   if (!pb.istAngemeldet) { zuLogin(); return; }
-  if (new URLSearchParams(location.search).get('plan') === 'leer') {
+  const live = lsLies('bzp_live') === '1';
+  const leer = new URLSearchParams(location.search).get('plan') === 'leer';
+  // Der Live-Monitor öffnet das aktive Projekt ohne Dialog; `?plan=leer` (Prüfwerkzeuge) auch.
+  if (leer || live) {
     let liste = [];
-    try { liste = await listePlaene(pb); } catch (e) { if (e.abgemeldet) { zuLogin(); return; } }
+    try { liste = await listePlaene(pb); } catch (e) {
+      if (e.abgemeldet) { zuLogin(); return; }
+      if (live && zeigeKopie('offline')) return;      // kein Netz: der Monitor zeigt die lokale Kopie
+    }
     const aktiv = repo.getActive();
-    const erstes = liste.find((p) => p.plan_id === aktiv) || liste[0];
-    if (erstes && await open(erstes.plan_id)) return;
+    const erstes = liste.find((p) => p.plan_id === aktiv) || (leer ? liste[0] : null);
+    if (erstes && await open(erstes.plan_id, { still: live })) return;
+    if (live && !store && zeigeKopie('offline')) return;
   }
   showProjectDialog({ firstRun: !store });
 }
 
 // Öffnet den Plan vom Server. true = offen, false = nicht geöffnet (Fehler gemeldet oder
 // «Abbrechen» bei ungesendeten Änderungen des bisherigen Plans).
-async function open(planId) {
+async function open(planId, { still = false } = {}) {
   await ablauf;     // laufende Sendungen und Konfliktfragen des bisherigen Plans abwarten
   if (server && (server.offen.length || geparkt.length)) {
     const wahl = await askDialog({
@@ -152,7 +163,7 @@ async function open(planId) {
   }
   const srv = createServerPlan({ pb, planId });
   const r = await srv.laden();
-  if (!r.ok) { await ladeFehler(r); return false; }
+  if (!r.ok) { if (!still || r.abgemeldet) await ladeFehler(r); return false; }
 
   const wechsel = !!store;
   const andereId = wechsel && store.state.project.id !== r.state.project.id;
@@ -160,6 +171,7 @@ async function open(planId) {
   server = srv;
   rolle = r.rolle;
   offline = false;
+  kopieModus = null; clearTimeout(kopieWiederTimer);
   if (store) {
     // Ein anderes Projekt (auch «Neu») schließt die Einrichten-Seite des bisherigen —
     // direkt vor dem Ersetzen, damit «eingerichtet» noch zum alten Plan gehört.
@@ -178,13 +190,14 @@ async function open(planId) {
   repo.setActive(r.state.project.id);   // wirft nie (persistence.js)
   refreshChrome();
   kopieSchreiben();
+  syncNurAnsicht();
   paintSpeicher();
   return true;
 }
 
 // Meldung zu einem gescheiterten Laden. Abgemeldet → Anmeldeseite.
 async function ladeFehler(r) {
-  if (r.abgemeldet) { zuLogin(); return; }
+  if (r.abgemeldet) { zuLogin('401'); return; }
   const text = r.offline ? 'Keine Verbindung zum Server. Der Plan lässt sich nur mit Verbindung öffnen.'
     : r.nichtGefunden ? 'Dieser Plan existiert nicht mehr oder du hast keinen Zugriff darauf.'
       : 'Der Plan konnte nicht geladen werden' + (r.fehler?.message ? ': ' + r.fehler.message : '.');
@@ -285,6 +298,9 @@ function mount() {
     openNeuFragen: (opt, ankerEl, fertig) => table.openNeuFragen(opt, ankerEl, fertig),
   });
   if (gantt.minimapNode) $('mini').append(gantt.minimapNode);
+  // Neu aufgebaute Felder (Panel, Tabelle, Einrichten, Bedarf) erben die Sperre der Nur-Ansicht.
+  const sperrBeob = new MutationObserver(() => { if (document.body.classList.contains('nur-ansicht')) felderSperren(true); });
+  for (const id of SPERR_WURZELN) if ($(id)) sperrBeob.observe($(id), { childList: true, subtree: true });
 
   // Live-Modus überlebt das Neuladen — der Monitor beim Aufbau soll nach einem
   // Stromausfall wieder live sein, ohne dass jemand hinläuft.
@@ -494,7 +510,7 @@ const gewerkName = (id) => store.state.gewerke.find((g) => g.id === id)?.name ||
 const storeOptionen = () => ({
   // Dieselben Regeln wie der Server (js/rechte.js); der Server bleibt die Sicherheit.
   pruefe: (vorher, nachher, aend) => rechteFehler(rolle, aend, vorher, gewerkName),
-  gesperrt: () => (!server ? 'Kein Plan geöffnet.'
+  gesperrt: () => (!server ? (kopieModus ? 'Nur lokale Kopie – keine Verbindung zum Server.' : 'Kein Plan geöffnet.')
     : offline ? 'Offline – nur Ansicht'
       : rolle?.rolle === 'betrachter' ? 'Nur ansehen: du bist Betrachter.' : null),
 });
@@ -520,8 +536,74 @@ function paintSpeicher() {
 function setOffline(v) {
   if (offline === v) return;
   offline = v;
+  syncNurAnsicht();
   paintSpeicher();
   if (v) planeWieder();
+}
+
+// ── Nur Ansicht ──────────────────────────────────────────────────────────────
+// `setNurAnsicht` ist der EINZIGE Schreiber von body.nur-ansicht und der Kopfzeilenmarke
+// (#hd-offline). Der Store sperrt über `opt.gesperrt` ohnehin; die Klasse sperrt zusätzlich die
+// Oberfläche (Ziehen in gantt.js, Felder, Menüs). Jetzt-Linie und Live-Ansicht laufen weiter (Uhr).
+let kopieModus = null;        // null | 'offline' | 'abgemeldet': ohne Server, nur die lokale Kopie
+let kopieWiederTimer = null;
+const NUR_TEXT = {
+  offline: '📡 Offline – nur Ansicht',
+  betrachter: '👁 Nur ansehen',
+  abgemeldet: '🔑 Anmeldung abgelaufen – lokale Kopie',
+};
+function setNurAnsicht(grund) {
+  document.body.classList.toggle('nur-ansicht', !!grund);
+  const m = $('hd-offline');
+  if (m) { m.hidden = !grund; m.textContent = grund ? NUR_TEXT[grund] : ''; m.dataset.grund = grund || ''; }
+  felderSperren(!!grund);
+}
+const nurAnsichtGrund = () => kopieModus || (offline ? 'offline' : rolle?.rolle === 'betrachter' ? 'betrachter' : null);
+const syncNurAnsicht = () => setNurAnsicht(nurAnsichtGrund());
+
+// Felder in Seitenpanel, Tabelle, Einrichten und Bedarf: Text schreibgeschützt, Auswahl gesperrt.
+// Sie werden bei jedem Neuaufbau neu gesetzt (MutationObserver in mount()).
+const SPERR_WURZELN = ['ins', 'tb', 'ein-seite', 'bd'];
+function felderSperren(an) {
+  for (const id of SPERR_WURZELN) {
+    const wurzel = $(id);
+    if (!wurzel) continue;
+    for (const f of wurzel.querySelectorAll('input, textarea, select')) {
+      const hart = f.matches('select, [type=checkbox], [type=radio], [type=color], [type=range], [type=button], [type=file]');
+      if (an) {
+        if (hart ? !f.disabled : !f.readOnly) { f[hart ? 'disabled' : 'readOnly'] = true; f.dataset.na = hart ? 'd' : 'r'; }
+      } else if (f.dataset.na) {
+        f[f.dataset.na === 'd' ? 'disabled' : 'readOnly'] = false; delete f.dataset.na;
+      }
+    }
+  }
+}
+// Kein Server (Start ohne Netz, Anmeldung abgelaufen): die lokale Kopie ansehen. true = sie steht.
+function zeigeKopie(grund) {
+  if (!store) {
+    const id = repo.getActive() || repo.list()[0]?.id;
+    const plan = id ? repo.load(id) : null;
+    if (!plan) return false;
+    schliesseServer();
+    kopieModus = grund;
+    store = createStore(plan, storeOptionen());
+    mount();
+    refreshChrome();
+  } else {
+    schliesseServer();
+    kopieModus = grund;
+  }
+  syncNurAnsicht();
+  paintSpeicher();
+  clearTimeout(kopieWiederTimer);
+  // Ohne Netz, aber angemeldet: regelmäßig prüfen, ob der Server wieder da ist.
+  if (grund === 'offline') kopieWiederTimer = setTimeout(kopieWieder, WIEDER_MS * 3);
+  return true;
+}
+async function kopieWieder() {
+  if (kopieModus !== 'offline' || !store || !pb.istAngemeldet) return;
+  if (await open(store.state.project.id, { still: true })) return;
+  if (kopieModus === 'offline') kopieWiederTimer = setTimeout(kopieWieder, WIEDER_MS * 3);
 }
 
 // Eigene Änderung senden (aus dem Abonnement des Stores).
@@ -548,7 +630,7 @@ function sende(aend) {
 async function ergebnis(srv, r, eigene) {
   for (let i = 0; i < 20 && srv === server; i++) {
     if (r.ok) { setOffline(false); return; }
-    if (r.abgemeldet) { zuLogin(); return; }
+    if (r.abgemeldet) { zuLogin('401'); return; }
     if (r.offline) { setOffline(true); return; }       // bleibt in srv.offen, geht später raus
     if (r.zuGross) {
       await askDialog({ title: 'Zu viele Änderungen auf einmal', message: ['Diese Änderung ist für einen Schritt zu groß und wurde nicht gesendet.', 'Sie wird hier zurückgenommen. Mach sie in kleineren Schritten.'], buttons: [{ label: 'OK', value: true, primary: true }] });
@@ -575,6 +657,7 @@ function zuruecknehmen(aend) {
   if (x.ok) store.applyRemote(x.state);
   store.entferneEintrag(aend);   // ⌘Z soll keine Änderung «zurücknehmen», die nie gültig war
   refreshChrome();
+  nachladen();                   // ein währenddessen verschlucktes Fremd-Echo wieder sichtbar machen
 }
 
 // Konfliktdialog je Art. Der Name des anderen steht nicht in den Daten (der Server speichert
@@ -685,7 +768,12 @@ function freigeben() {
   const frei = [...gehalten].filter((k) => !offen.has(k));
   if (!frei.length) return;
   for (const k of frei) gehalten.delete(k);
+  nachladen();
+}
+// Einmal den Serverstand holen und anwenden (ohne Datensätze mit offener eigener Änderung).
+function nachladen() {
   const srv = server;
+  if (!srv) return;
   reihe(async () => {
     if (srv !== server) return;
     const l = await srv.laden();
@@ -712,8 +800,9 @@ function schliesseServer() {
   if (stopAbo) { stopAbo(); stopAbo = null; }
   clearTimeout(fremdTimer); fremdTimer = null; fremdListe = []; gehalten.clear(); unterwegs.length = 0;
   clearTimeout(wiederTimer); wiederTimer = null;
-  server = null; offline = false;
+  server = null; offline = false; rolle = null; kopieModus = null;
   geparkt.length = 0;
+  syncNurAnsicht();
   paintSpeicher();
 }
 
@@ -723,20 +812,28 @@ function schliesseServer() {
 async function abgleichen(srv) {
   if (srv !== server) return;
   if (srv.offen.length) {
-    await ergebnis(srv, await srv.wiederVerbunden());
+    const w = await srv.wiederVerbunden();
+    // Konflikt: die betroffene Liste gilt während des Dialogs als unterwegs, damit Fremdereignisse zurückgehalten werden.
+    if (w.konflikt && w.aend) unterwegs.push(w.aend);
+    try { await ergebnis(srv, w, w.aend); } finally {
+      const i = unterwegs.indexOf(w.aend); if (i >= 0) unterwegs.splice(i, 1);
+      freigeben();
+    }
     if (srv !== server || srv.offen.length || geparkt.length) return;
   }
   if (wartend > 0 || geparkt.length) return;     // Eigenes ist unterwegs: ein Laden würde es überrollen
   const l = await srv.laden();
   if (srv !== server) return;
-  if (l.abgemeldet) { zuLogin(); return; }
+  if (l.abgemeldet) { zuLogin('401'); return; }
   if (l.offline) { setOffline(true); return; }
   if (!l.ok) return;
   rolle = l.rolle;
+  syncNurAnsicht();
   uebernehmeStand(l.state);     // Eingaben während des Ladens werden nicht überrollt
 }
 
-// Offline: alle 5 s prüfen, ob der Server wieder da ist (Task 10 baut darauf die Offline-Ansicht).
+// Offline: alle 5 s prüfen, ob der Server wieder da ist (Wiederverbinden: Anmeldung erneuern,
+// neu abonnieren, offene Warteschlange senden, Stand laden; Marke weg).
 let wiederTimer = null;
 const WIEDER_MS = 5000;
 function planeWieder() {
@@ -747,9 +844,9 @@ async function versucheWieder() {
   const srv = server;
   if (!srv || !offline) return;
   const e = await pb.erneuern();
-  if (!e.ok && (e.status === 401 || e.code === 'auth')) { zuLogin(); return; }
+  if (!e.ok && (e.status === 401 || e.code === 'auth')) { zuLogin('401'); return; }
   if (!e.ok) { planeWieder(); return; }
-  offline = false;
+  setOffline(false);
   srv.neuAbonnieren();
   await abgleichen(srv);
   paintSpeicher();
@@ -758,11 +855,11 @@ async function versucheWieder() {
 // ── Lokale Kopie ────────────────────────────────────────────────────────────
 // print.html liest den Plan weiter aus localStorage. Sie wird nach jedem Laden und jeder
 // Änderung geschrieben (ohne Token — der Plan allein) und gilt nie als Wahrheit.
-let kopieTimer = null, kopieGemeldet = false;
+let kopieTimer = null, kopieGemeldet = false, kopieAus = false;
 function kopieSpaeter() { clearTimeout(kopieTimer); kopieTimer = setTimeout(kopieSchreiben, 800); }
 function kopieSchreiben() {
   clearTimeout(kopieTimer); kopieTimer = null;
-  if (!store || !server) return;
+  if (!store || !server || kopieAus) return;
   const r = repo.save(store.state);
   if (!r.ok && !kopieGemeldet) { kopieGemeldet = true; toast('Die lokale Kopie (für den Druck) ließ sich nicht speichern: ' + r.error, 'bad', 8000); }
 }
@@ -1132,6 +1229,7 @@ function refreshShowhead() {
 
 // ── Kontextmenü ─────────────────────────────────────────────────────────────
 function showContext(sel, x, y) {
+  if (document.body.classList.contains('nur-ansicht')) return;   // nur Ansicht: kein Menü, das ändert
   const S = store.state;
   // Eine Verknüpfung zuerst abfangen: darunter wird `sel.id` als Vorgangs-id
   // gelesen, und die Suche liefe ins Leere.
@@ -1782,11 +1880,12 @@ function projektMenue() {
   const r = $('proj-knopf').getBoundingClientRect();
   const user = pb.auth?.record;
   const darf = darfPlanAnlegen(user);
-  const grund = darf ? '' : 'nur Leitung';
+  const ohneNetz = !!kopieModus || offline;
+  const grund = ohneNetz ? 'offline' : darf ? '' : 'nur Leitung';
   openMenu(r.left, r.bottom + 4, [
-    { id: 'new-proj', label: '＋ Neu…', disabled: !darf, hint: grund, run: neuesProjekt },
+    { id: 'new-proj', label: '＋ Neu…', disabled: !darf || ohneNetz, hint: grund, run: neuesProjekt },
     { id: 'proj-menu', label: '📂 Projekte…', run: projekteWaehlen },
-    { id: 'import', label: '⬆ Import…', disabled: !darf, hint: grund, run: importieren },
+    { id: 'import', label: '⬆ Import…', disabled: !darf || ohneNetz, hint: grund, run: importieren },
     { id: 'export', label: '⬇ Export', disabled: !store, run: exportieren },
     null,
     { id: 'konto', label: '👤 ' + (user?.name || user?.email || 'Angemeldet'), disabled: true },
@@ -1829,9 +1928,15 @@ function main() {
   // Das Token erneuert die App selbst (alle 6 h), damit sie danach die Realtime-Verbindung
   // neu aufbauen kann: sie trägt sonst bis zum nächsten Verbinden das alte Token.
   pb = createPb({ basis: apiBasis(), autostart: false });
-  pb.on('abgemeldet', () => zuLogin());
+  pb.on('abgemeldet', (e) => {
+    // Manuelles Abmelden räumt die lokalen Kopien weg (geteilter Rechner); abgelaufen (401) lässt sie stehen.
+    if (e?.grund === 'manuell') { kopieAus = true; for (const x of repo.list()) repo.remove(x.id); }
+    zuLogin(e?.grund);
+  });
   let getrennt = false;
-  pb.on('getrennt', () => { getrennt = true; });
+  pb.on('getrennt', () => { getrennt = true; if (server) setOffline(true); });
+  window.addEventListener('offline', () => { if (server) setOffline(true); });
+  window.addEventListener('online', () => { if (server && offline) reihe(versucheWieder); });
   pb.on('verbunden', () => {
     if (!getrennt) return;
     getrennt = false;

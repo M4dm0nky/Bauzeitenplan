@@ -712,8 +712,11 @@ export function createGantt(root, opts = {}) {
     return m && !link.verboten.has(m.dataset.task) ? m : null;
   };
 
+  // Nur Ansicht (offline, Betrachter, Anmeldung abgelaufen): body.nur-ansicht, gesetzt von app.js setNurAnsicht.
+  const nurAnsicht = () => document.body.classList.contains('nur-ansicht');
   root.addEventListener('pointerdown', (e) => {
     const h = e.target.closest('.bz-link');
+    if (nurAnsicht()) return;
     if (!h || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const from = h.dataset.linkFrom;
     const node = from && root.querySelector('[data-task="' + from + '"]');
@@ -922,7 +925,7 @@ export function createGantt(root, opts = {}) {
   }
 
   root.addEventListener('pointerdown', (e) => {
-    if (link) return;
+    if (link || nurAnsicht()) return;
     // Ein bestehender Zug ist verwaist (pointerup ging verloren) oder ein zweiter Finger
     // kommt dazu — in beiden Fällen gilt der alte nicht mehr.
     if (zug) zugEnde(false);

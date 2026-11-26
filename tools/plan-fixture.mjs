@@ -41,8 +41,74 @@ export function planSeed(datei) {
   return { plan, id, scripts };
 }
 
-/** Seedet eine Page oder einen BrowserContext (vor dem ersten goto); gibt die Projekt-id zurück. */
+// ── Server-Weg (seit Task 10) ───────────────────────────────────────────────────
+// Die App liest den Plan von PocketBase. `planLaden` startet je Skript EINE lokale PB
+// (tools/pb-lokal.mjs), legt das Konto «pruefer» (Produktionsleitung) und den Plan über den
+// Server-Weg an (createServerPlan.planAnlegen, wie der Import-Knopf) und gibt der Seite per
+// InitScript Anmeldung (`bzp_auth`), `?api=` und aktives Projekt mit. Das Token lebt nur im
+// Browser des Skripts und im Speicher, nie im Repo.
+//   const { id, pb, stop } = await planLaden(ctx, 'klassentreffen-festival.json');
+//   try { … page.goto(BASE + '/index.html?plan=leer') … } finally { await stop(); }
+// Mehrere Aufrufe im selben Skript teilen sich die PB; `stop()` zählt mit und beendet sie beim letzten.
+import { randomBytes } from 'node:crypto';
+import { createPb } from '../js/pb.js';
+import { createServerPlan } from '../js/server.js';
+import { startePb, kontoAnlegen, anmelden } from './pb-lokal.mjs';
+
+export const PRUEFER = 'pruefer@bzp.test';
+let gemeinsam = null;   // Promise<{ pb, pw, benutzer, zaehler }>
+
+async function gemeinsamePb() {
+  if (!gemeinsam) {
+    gemeinsam = (async () => {
+      const pb = await startePb();
+      try {
+        const pw = 'Pw-' + randomBytes(9).toString('hex');
+        const konto = await kontoAnlegen(pb, { email: PRUEFER, name: 'Prüfer', passwort: pw, produktionsleitung: true });
+        return { pb, pw, konto, zaehler: 0 };
+      } catch (e) { await pb.stop(); throw e; }
+    })();
+    gemeinsam.catch(() => { gemeinsam = null; });
+  }
+  return gemeinsam;
+}
+
+/** Legt den Plan aus tools/fixtures/<datei> auf dem Server an und richtet `ziel` (Page oder BrowserContext) ein. */
 export async function planLaden(ziel, datei = 'klassentreffen-festival.json') {
+  const g = await gemeinsamePb();
+  g.zaehler++;
+  const stop = async () => {
+    if (--g.zaehler > 0) return;
+    gemeinsam = null;
+    await g.pb.stop();
+  };
+  try {
+    const { plan } = planSeed(datei);
+    const a = await anmelden(g.pb.url, PRUEFER, g.pw);
+    const m = new Map([['bzp_auth', JSON.stringify({ token: a.token, record: a.record })]]);
+    const sp = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+    const r = await createServerPlan({ pb: createPb({ basis: g.pb.url, fetch, speicher: sp, autostart: false }), planId: null }).planAnlegen(plan);
+    if (!r.ok) throw new Error('Plan anlegen: ' + JSON.stringify(r).slice(0, 300));
+    const id = r.planId;
+    const skript = `try {
+  if (!localStorage.getItem('bzp_seeded_auth')) {
+    localStorage.setItem('bzp_seeded_auth', '1');
+    localStorage.setItem('bzp_auth', ${JSON.stringify(JSON.stringify({ token: a.token, record: a.record }))});
+    localStorage.setItem('bzp_active', ${JSON.stringify(id)});
+  }
+  const q = new URLSearchParams(location.search);
+  if (!q.get('api') && /^(localhost|127\\.0\\.0\\.1)$/.test(location.hostname)) {
+    q.set('api', ${JSON.stringify(g.pb.url)});
+    history.replaceState(null, '', location.pathname + '?' + q + location.hash);
+  }
+} catch (e) {}`;
+    await ziel.addInitScript(skript);
+    return { id, pb: g.pb, stop };
+  } catch (e) { await stop(); throw e; }
+}
+
+/** Alter Weg (localStorage-Seed): gilt nicht mehr für die App, bis Task 12 die übrigen Skripte umstellt. */
+export async function planLadenLokal(ziel, datei = 'klassentreffen-festival.json') {
   const { id, scripts } = planSeed(datei);
   await ziel.addInitScript(scripts);
   return id;

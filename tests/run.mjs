@@ -284,6 +284,8 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // Sync-Symbol (Speicherort): grün/gelb/rot je Zustand. Ohne eigene Regeln
     // stünde es in den anderen Themes ungestaltet im Kopf.
     'sync-state',
+    // Marke «Nur Ansicht» (offline, Betrachter, Anmeldung abgelaufen): gelb mit Rahmen.
+    'hd-offline',
     // Zeilen-Entwurf: gelbe Zeile, grünes ✓, rotes ✗, Grund darunter.
     // Ohne eigene Regeln verlöre ✓ gegen `.tb-ico { color: var(--muted) }`.
     'is-entwurf', 'en-ok', 'en-no', 'en-grund',

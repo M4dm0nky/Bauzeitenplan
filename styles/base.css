@@ -442,6 +442,12 @@ body { margin: 0; }
 .sync-state { white-space: nowrap; cursor: default; line-height: 1; font: inherit; background: none; }
 .sync-state[data-klick] { cursor: pointer; }
 .sync-state:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+/* Marke «Nur Ansicht»: gelb (Statusfarbe mittel), Symbol + Text. Farben je Theme. */
+.hd-offline { white-space: nowrap; line-height: 1; font-weight: 600; }
+.hd-offline[hidden] { display: none; }
+/* body.nur-ansicht (setNurAnsicht): nichts, was ändern würde, sieht bedienbar aus */
+body.nur-ansicht .bz-link, body.nur-ansicht .bz-grip { visibility: hidden; }
+body.nur-ansicht .bz-bar, body.nur-ansicht .bz-ms { cursor: default; }
 
 /* ── Tabellen-Editor ────────────────────────────────────────────────────────── */
 .tb { flex: 1; min-height: 0; overflow: auto; }

@@ -1,5 +1,5 @@
 // Mehrbenutzer-Prüfung im echten Browser (Firefox) gegen eine lokale PocketBase.
-//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG|ZWEI_NUTZER|IMPORT]
+//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG|ZWEI_NUTZER|IMPORT|OFFLINE|MONITOR|MONITOR_ABGELAUFEN|ABMELDEN]
 // ANMELDUNG: login.html — falsches/richtiges Passwort, «Passwort vergessen», Einladung (neues Konto,
 // vorhandenes Konto, ungültig), Passwort zurücksetzen (Mail über einen kleinen lokalen SMTP-Empfänger).
 // Task 11 ergänzt weitere Abschnitte in ABSCHNITTE. Alle Passwörter entstehen zur Laufzeit.
@@ -271,14 +271,20 @@ async function nodeClient(pb, email, passwort) {
   return createPb({ basis: pb.url, fetch, speicher: sp, autostart: false });
 }
 // Browserkontext, bereits angemeldet (bzp_auth wie nach login.html); blockRealtime kappt die SSE-Strecke
-async function nutzer(browser, pb, email, passwort, { blockRealtime = false, batchMs = 0 } = {}) {
+async function nutzer(browser, pb, email, passwort, { blockRealtime = false, batchMs = 0, batchSchalter = false, live = false } = {}) {
   const a = await anmeldenRoh(pb.url, email, passwort);
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block', acceptDownloads: true });
   await ctx.addInitScript((v) => { try { if (!localStorage.getItem('bzp_seeded')) { localStorage.setItem('bzp_seeded', '1'); localStorage.setItem('bzp_auth', v); } } catch (e) { /* egal */ } }, JSON.stringify({ token: a.token, record: a.record }));
-  if (blockRealtime) await ctx.route('**/api/realtime**', (r) => r.abort());
+  // Realtime stumm: die Verbindung steht (PB_CONNECT, Abo), aber Datenereignisse kommen nie an. Die Strecke ganz
+  // zu kappen (route abort) meldet «getrennt» → die App geht offline, lädt beim Wiederverbinden neu und sähe den Konflikt nie.
+  if (blockRealtime) await ctx.addInitScript(() => { const E = window.EventSource; window.EventSource = class extends E { addEventListener(n, f, o) { if (n === 'PB_CONNECT') super.addEventListener(n, f, o); } }; });
   // Senden verzögern: fetch an /api/batch im Seitenkontext aufhalten. (page.route würde in Firefox auch die
   // Realtime-Strecke (EventSource) puffern; hier läuft sie unberührt.)
   if (batchMs) await ctx.addInitScript((ms) => { const f = window.fetch.bind(window); window.fetch = (u, o) => (String(u && u.url || u).includes('/api/batch') ? new Promise((r) => setTimeout(r, ms)).then(() => f(u, o)) : f(u, o)); }, batchMs);
+  // Netzfehler beim Senden nachstellen: solange window.__batchNetz gesetzt ist, scheitert /api/batch wie ohne Netz
+  // (Realtime bleibt unberührt, anders als bei page.route).
+  if (batchSchalter) await ctx.addInitScript(() => { const f = window.fetch.bind(window); window.fetch = (u, o) => (window.__batchNetz && String(u && u.url || u).includes('/api/batch') ? Promise.reject(new TypeError('NetworkError')) : f(u, o)); });
+  if (live) await ctx.addInitScript(() => { try { if (!localStorage.getItem('bzp_live_seed')) { localStorage.setItem('bzp_live_seed', '1'); localStorage.setItem('bzp_live', '1'); } } catch (e) { /* egal */ } });
   const page = await ctx.newPage();
   page.on('dialog', (d) => { ok(false, 'Browser-Dialog erschienen: ' + d.type()); d.dismiss(); });
   page.on('pageerror', (e) => ok(false, 'Seitenfehler: ' + e.message));
@@ -433,9 +439,12 @@ async function ZWEI_NUTZER({ pb, base, browser }) {
     await pb.su('POST', '/api/collections/mitglieder/records', { plan_id: planId, user_id: betr.id, rolle: 'betrachter', gewerke: [] });
     const D = await nutzer(browser, pb, 'betr@bzp.test', PW); ctxs.push(D.ctx);
     await planOeffnen(D.page, base, pb);
-    await titelSetzen(D.page, X, 'Betrachter darf nicht');
+    ok(await markeBis(D.page, '👁 Nur ansehen'), 'Betrachter: Marke «👁 Nur ansehen»', await markeText(D.page));
+    ok(await titel(D.page, X).evaluate((n) => n.readOnly), 'Betrachter: Titelfeld schreibgeschützt');
+    // Die Sperre der Oberfläche umgehen: der Store lehnt trotzdem ab (Meldung statt Änderung)
+    await titel(D.page, X).evaluate((n) => { n.readOnly = false; }); await titelSetzen(D.page, X, 'Betrachter darf nicht');
     await D.page.locator('#toast').waitFor({ state: 'visible', timeout: 3000 });
-    ok(/Nur ansehen: du bist Betrachter/.test(await D.page.locator('#toast').textContent()), 'Betrachter: «Nur ansehen: du bist Betrachter.»');
+    ok(/Nur ansehen: du bist Betrachter/.test(await D.page.locator('#toast').textContent()), 'Betrachter: Store lehnt ab «Nur ansehen: du bist Betrachter.»');
     await warte(800);
     ok((await serverTitel(pb, planId, X)) === 'E: mein Wert', 'Betrachter: Server unverändert');
     await A.page.screenshot({ path: join(shots, 'mehrbenutzer-kopfzeile.png') });
@@ -494,7 +503,187 @@ async function IMPORT({ pb, base, browser }) {
   } finally { for (const c of ctxs) await c.close().catch(() => {}); }
 }
 
-const ABSCHNITTE = { ANMELDUNG, ZWEI_NUTZER, IMPORT };
+// ── OFFLINE / MONITOR / ABMELDEN (Task 10) ───────────────────────────────────
+const marke = (page) => page.locator('#hd-offline');
+const markeText = async (page) => ((await marke(page).isVisible()) ? (await marke(page).textContent()).trim() : null);
+const nurAnsicht = (page) => page.evaluate(() => document.body.classList.contains('nur-ansicht'));
+async function markeBis(page, text, ms = 8000) {
+  try { await page.waitForFunction((t) => { const m = document.getElementById('hd-offline'); return m && !m.hidden && m.textContent.trim() === t; }, text, { timeout: ms }); return true; } catch { return false; }
+}
+async function markeWeg(page, ms = 20000) {
+  try { await page.waitForFunction(() => document.getElementById('hd-offline')?.hidden === true, null, { timeout: ms }); return true; } catch { return false; }
+}
+async function planAnlegenFuer(pb, PW) {
+  await kontoAnlegen(pb, { email: 'pl@bzp.test', name: 'Paula', passwort: PW, produktionsleitung: true });
+  const ang = await createServerPlan({ pb: await nodeClient(pb, 'pl@bzp.test', PW), planId: null }).planAnlegen(fixturePlan('klassentreffen-festival'));
+  if (!ang.ok) throw new Error('Plan anlegen: ' + JSON.stringify(ang).slice(0, 200));
+  return ang.planId;
+}
+async function serverStart(pb, planId, id) {
+  const r = await pb.su('GET', `/api/collections/vorgaenge/records?filter=${encodeURIComponent(`plan_id="${planId}" && eid="${id}"`)}`);
+  return r.body.items[0]?.daten?.start;
+}
+
+async function OFFLINE({ pb, base, browser }) {
+  console.log('— OFFLINE');
+  const PW = pw();
+  const planId = await planAnlegenFuer(pb, PW);
+  const bearb = await kontoAnlegen(pb, { email: 'bearb@bzp.test', name: 'Ben', passwort: PW });
+  await pb.su('POST', '/api/collections/mitglieder/records', { plan_id: planId, user_id: bearb.id, rolle: 'bearbeiter', gewerke: [] });
+  const ctxs = [];
+  try {
+    const A = await nutzer(browser, pb, 'pl@bzp.test', PW, { batchSchalter: true }); ctxs.push(A.ctx);
+    const B = await nutzer(browser, pb, 'bearb@bzp.test', PW); ctxs.push(B.ctx);
+    await A.page.clock.install({ time: new Date('2026-08-21T10:00:00') });   // Uhr stellen (Jetzt-Linie mitten im Plan)
+    await Promise.all([planOeffnen(A.page, base, pb), planOeffnen(B.page, base, pb)]);
+    await warte(1500);
+    ok(!(await marke(A.page).isVisible()) && !(await nurAnsicht(A.page)), 'online: keine Marke, nicht nur Ansicht');
+    const ids = await A.page.$$eval('.tb-r', (rs) => rs.filter((r) => r.querySelector('.c-title input')).slice(0, 8).map((r) => r.dataset.id));
+    const [X] = ids.slice(2, 3);
+
+    // 1) Änderung kurz vor dem Abbruch: Senden scheitert am Netz → bleibt in der Warteschlange
+    await A.page.evaluate(() => { window.__batchNetz = true; });
+    await titelSetzen(A.page, X, 'A: kurz vor Abbruch');
+    ok(await markeBis(A.page, '📡 Offline – nur Ansicht'), 'Netzfehler beim Senden → Marke «📡 Offline – nur Ansicht»', await markeText(A.page));
+    ok((await A.page.locator('#sync-state').textContent()).includes('offen (1)'), 'Speicherstand «⚠ offen (1)»', await A.page.locator('#sync-state').textContent());
+    ok(await nurAnsicht(A.page), 'body.nur-ansicht gesetzt');
+    ok((await titel(B.page, X).inputValue()) !== 'A: kurz vor Abbruch', 'B sieht die Änderung noch nicht');
+
+    // 2) Verbindung wirklich weg (Browser offline): Ansicht, Ziehen, Felder, Uhr
+    await A.ctx.setOffline(true);
+    await A.page.locator('[data-view="gantt"]').click();
+    await A.page.locator('.bz-bar[data-task]:not(.is-summary)').first().waitFor({ timeout: 10000 });
+    await warte(1500);   // Gantt hat sich eingepasst
+    ok(await markeBis(A.page, '📡 Offline – nur Ansicht'), 'Marke bleibt offline');
+    const bar = await A.page.evaluate(async () => {
+      const L = Math.ceil(document.querySelector('.bz-side').getBoundingClientRect().right) + 30;
+      for (const n of document.querySelectorAll('.bz-bar[data-task]:not(.is-summary)')) {
+        n.scrollIntoView({ block: 'center', inline: 'center' });
+        await new Promise((r) => requestAnimationFrame(r));
+        const r = n.getBoundingClientRect();
+        if (r.width >= 60 && r.left > L && r.right < innerWidth - 100 && r.top > 140 && r.bottom < innerHeight - 100) return { id: n.dataset.task, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }
+      return null;
+    });
+    ok(!!bar, 'ein Balken im Bild');
+    // Erst auswählen: das Panel öffnet sich, der Gantt passt sich neu ein. Danach neu messen.
+    await A.page.mouse.click(bar.x, bar.y); await warte(1200);
+    const bar2 = await A.page.locator(`.bz-bar[data-task="${bar.id}"]`).evaluate((n) => { n.scrollIntoView({ block: 'center', inline: 'center' }); const r = n.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    bar.x = bar2.x; bar.y = bar2.y;
+    const links = () => A.page.locator(`.bz-bar[data-task="${bar.id}"]`).evaluate((n) => parseFloat(n.style.left));
+    const vorher = await links();
+    const startVorher = await serverStart(pb, planId, bar.id);
+    await A.page.evaluate(() => { const t = document.getElementById('toast'); t.hidden = true; t.textContent = ''; });
+    await A.page.mouse.move(bar.x, bar.y); await A.page.mouse.down();
+    await A.page.mouse.move(bar.x + 6, bar.y, { steps: 2 }); await A.page.mouse.move(bar.x + 90, bar.y, { steps: 6 });
+    await A.page.mouse.up(); await warte(300);
+    const nachher = await links();
+    ok(Math.abs(nachher - vorher) < 0.5, 'Ziehen eines Balkens ändert nichts (Balken steht)', vorher + ' → ' + nachher);
+    ok((await A.page.locator('#toast').isHidden()), 'Ziehen: gar nicht erst begonnen (kein Fehlerhinweis)', await A.page.locator('#toast').textContent());
+    ok((await serverStart(pb, planId, bar.id)) === startVorher, 'Server: Termin unverändert');
+    await A.page.locator(`.bz-bar[data-task="${bar.id}"]`).click({ force: true });
+    await A.page.locator('#ins input').first().waitFor({ timeout: 5000 });
+    const offeneFelder = await A.page.$$eval('#ins input:not([type=hidden]), #ins textarea, #ins select', (fs) => fs.filter((f) => !(f.readOnly || f.disabled)).map((f) => f.id || f.name || f.className || f.type));
+    ok(offeneFelder.length === 0, 'Panel: alle Felder schreibgeschützt/gesperrt', offeneFelder.join(','));
+    const jetzt = () => A.page.locator('.bz-now').evaluate((n) => parseFloat(n.style.left));
+    const j0 = await jetzt();
+    await A.page.clock.fastForward('30:00'); await warte(400);
+    const j1 = await jetzt();
+    ok(j1 > j0 + 0.5, 'Jetzt-Linie wandert offline mit der gestellten Uhr', `${j0} → ${j1}`);
+    await A.page.screenshot({ path: join(shots, 'offline.png') });
+    await A.page.locator('[data-view="tabelle"]').click();
+    await A.page.locator('.tb-r .c-title input').first().waitFor({ timeout: 5000 });
+    ok(await titel(A.page, ids[0]).evaluate((n) => n.readOnly), 'Tabelle: Titelfeld schreibgeschützt');
+
+    // 3) Wieder online: Marke weg, Warteschlange kommt bei B an, Bearbeiten geht wieder
+    await A.page.evaluate(() => { window.__batchNetz = false; });
+    await A.ctx.setOffline(false);
+    ok(await markeWeg(A.page), 'wieder online → Marke weg');
+    ok(!(await nurAnsicht(A.page)), 'wieder online → nicht mehr nur Ansicht');
+    ok(await wertBis(B.page, X, 'A: kurz vor Abbruch', 15000), 'die Änderung aus der Warteschlange kommt bei B an');
+    ok((await serverTitel(pb, planId, X)) === 'A: kurz vor Abbruch', 'Server hat die Änderung');
+    await gesendet(A.page);
+    ok(!(await titel(A.page, X).evaluate((n) => n.readOnly)), 'Tabelle: Titelfeld wieder bearbeitbar');
+    await titelSetzen(A.page, X, 'A: wieder online'); await gesendet(A.page);
+    ok(await wertBis(B.page, X, 'A: wieder online'), 'nach dem Wiederverbinden geht Bearbeiten und Realtime wieder');
+  } finally { for (const c of ctxs) await c.close().catch(() => {}); }
+}
+
+async function MONITOR({ pb, base, browser }) {
+  console.log('— MONITOR');
+  const PW = pw();
+  const planId = await planAnlegenFuer(pb, PW);
+  const KT = fixturePlan('klassentreffen-festival');
+  const P = await nutzer(browser, pb, 'pl@bzp.test', PW, { live: true });
+  try {
+    // 1) Mit Netz öffnen: die lokale Kopie entsteht (ohne Token)
+    await planOeffnen(P.page, base, pb);
+    await warte(1500);
+    const kopie = await P.page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('bzp_p_')).map((k) => localStorage.getItem(k)));
+    const auth = await P.page.evaluate(() => JSON.parse(localStorage.getItem('bzp_auth')));
+    ok(kopie.length === 1 && !kopie[0].includes(auth.token), 'lokale Kopie vorhanden, ohne Token');
+    const sichtbar = (page) => page.evaluate(() => document.querySelectorAll('[data-task], .tb-r').length);
+    // 2) PocketBase weg, Monitor (bzp_live=1) neu laden: Plan mit Marke, nie login.html
+    await pb.stop();
+    await P.page.goto(appUrl(base, pb));
+    ok(await markeBis(P.page, '📡 Offline – nur Ansicht', 15000), 'ohne Netz: Monitor zeigt «📡 Offline – nur Ansicht»', await markeText(P.page));
+    ok(!P.page.url().includes('login.html') && !(await P.page.locator('#dlg:not([hidden])').count()), 'kein login.html, kein Projektdialog', P.page.url());
+    ok((await P.page.locator('#proj-name').textContent()).includes(KT.project.name) && (await sichtbar(P.page)) > 0, 'der Plan steht da (aus der lokalen Kopie)');
+    ok(await nurAnsicht(P.page), 'nur Ansicht');
+    await P.page.screenshot({ path: join(shots, 'monitor-offline.png') });
+  } finally { await P.ctx.close().catch(() => {}); }
+}
+
+// Anmeldung abgelaufen: eigener Lauf mit lebendiger PB (der 401 kommt vom Server)
+async function MONITOR_ABGELAUFEN({ pb, base, browser }) {
+  console.log('— MONITOR (Anmeldung abgelaufen)');
+  const PW = pw();
+  await planAnlegenFuer(pb, PW);
+  const KT = fixturePlan('klassentreffen-festival');
+  const P = await nutzer(browser, pb, 'pl@bzp.test', PW, { live: true });
+  try {
+    await planOeffnen(P.page, base, pb);
+    await warte(1500);
+    const abgelaufen = () => P.page.evaluate(() => localStorage.setItem('bzp_auth', JSON.stringify({ token: 'abgelaufen.x.y', record: { id: 'x' } })));
+    await abgelaufen();
+    await P.page.goto(appUrl(base, pb));
+    ok(await markeBis(P.page, '🔑 Anmeldung abgelaufen – lokale Kopie', 15000), 'Live-Monitor: «🔑 Anmeldung abgelaufen – lokale Kopie»', await markeText(P.page));
+    ok(!P.page.url().includes('login.html'), 'Live-Monitor springt nicht auf login.html', P.page.url());
+    ok((await P.page.locator('#proj-name').textContent()).includes(KT.project.name), 'der Plan steht da');
+    ok(await nurAnsicht(P.page), 'nur Ansicht');
+    ok((await P.page.evaluate(() => Object.keys(localStorage).some((k) => k.startsWith('bzp_p_')))), 'lokale Kopie bleibt bei abgelaufener Anmeldung');
+    await P.page.screenshot({ path: join(shots, 'monitor-abgelaufen.png') });
+    // Gegenprobe: ohne Live-Monitor geht es auf login.html — und bleibt dort (keine Schleife zurück nach index.html)
+    await P.page.evaluate(() => localStorage.setItem('bzp_live', '0'));
+    await abgelaufen();
+    await P.page.goto(appUrl(base, pb));
+    await P.page.waitForURL(/login\.html/, { timeout: 10000 });
+    await warte(2500);
+    ok(P.page.url().includes('login.html'), 'ohne Live: abgelaufene Anmeldung → login.html, keine Schleife', P.page.url());
+    ok(await P.page.locator('#f-anmelden').isVisible(), 'login.html zeigt das Anmeldeformular');
+  } finally { await P.ctx.close().catch(() => {}); }
+}
+
+async function ABMELDEN({ pb, base, browser }) {
+  console.log('— ABMELDEN');
+  const PW = pw();
+  await planAnlegenFuer(pb, PW);
+  const P = await nutzer(browser, pb, 'pl@bzp.test', PW, { live: true });
+  try {
+    await planOeffnen(P.page, base, pb);
+    await warte(1500);
+    const kopien = () => P.page.evaluate(() => Object.keys(localStorage).filter((k) => k === 'bzp_active' || k.startsWith('bzp_p_') || (k === 'bzp_projects' && localStorage.getItem(k) !== '[]')));
+    ok((await kopien()).length >= 2, 'vor dem Abmelden: lokale Kopie vorhanden', (await kopien()).join(','));
+    await P.page.locator('#proj-knopf').click();
+    await P.page.locator('.mn #abmelden').click();
+    await P.page.waitForURL(/login\.html/, { timeout: 10000 });
+    await warte(1500);   // pagehide darf nichts zurückschreiben
+    ok((await kopien()).length === 0, 'manuelles Abmelden löscht die lokalen Kopien', (await kopien()).join(','));
+    ok((await P.page.evaluate(() => localStorage.getItem('bzp_auth'))) === null, 'und das Token');
+  } finally { await P.ctx.close().catch(() => {}); }
+}
+
+const ABSCHNITTE = { ANMELDUNG, ZWEI_NUTZER, IMPORT, OFFLINE, MONITOR, MONITOR_ABGELAUFEN, ABMELDEN };
 const i = process.argv.indexOf('--nur');
 const nur = i > 0 ? (process.argv[i + 1] || '').toUpperCase().replace(' ', '_') : null;
 if (nur && !ABSCHNITTE[nur]) { console.error('Unbekannter Abschnitt: ' + nur + ' (' + Object.keys(ABSCHNITTE).join(', ') + ')'); process.exit(2); }

@@ -181,6 +181,8 @@
         <button class="btn" id="drucken" title="Drucken (A3 quer)" aria-label="Drucken">🖨<span class="btn-wort"> Drucken</span></button>
         <button class="btn hd-mode" id="theme-toggle" title="Hell/Dunkel umschalten" aria-label="Hell/Dunkel umschalten">☾</button>
         <!-- Speicherstand beim Server: ✓ gesendet (grün) · ⟳ sendet… / ⚠ offen (n) (gelb). Einziger Schreiber: app.js paintSpeicher(). -->
+        <!-- Marke «Nur Ansicht» (📡 offline · 👁 Betrachter · 🔑 Anmeldung abgelaufen). Einziger Schreiber: app.js setNurAnsicht(). -->
+        <span class="hd-offline" id="hd-offline" role="status" hidden></span>
         <button type="button" class="sync-state" id="sync-state" data-state="ok" aria-live="polite">✓ gesendet</button>
       </div>
     </div>
