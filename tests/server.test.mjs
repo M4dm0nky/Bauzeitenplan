@@ -96,12 +96,35 @@ test('planAnlegen: Batch-Reihenfolge plaene → gewerke → ressourcen → phase
   for (const q of reqs.filter((q) => q.url.includes('/verknuepfungen/'))) assert.deepEqual([q.body.von, q.body.nach], [q.body.daten.from, q.body.daten.to]);
   assert.ok(reqs.every((q) => q.body.rev === 1));
 });
-test('planAnlegen: mehr als 1000 Anfragen gehen in Stücken, laden gibt trotzdem alles zurück', async () => {
-  const gross = kl(KT);
-  for (let i = 0; i < 700; i++) gross.tasks.push({ ...kl(gross.tasks[0]), id: 'z' + i });
-  const { pb, sp, state } = await holen(gross);
-  assert.ok(pb.aufrufe.length >= 2 && pb.aufrufe.every((a) => a.length <= 1000));
+const mitVielen = (n) => { const g = kl(KT); for (let i = 0; i < n; i++) g.tasks.push({ ...kl(g.tasks[0]), id: 'z' + i }); return g; };
+test('planAnlegen: ein großer Plan (unter 2000 Anfragen) geht in EINEM Batch und kommt vollständig zurück', async () => {
+  const { pb, sp, state } = await holen(mitVielen(1500));
+  assert.equal(pb.aufrufe.length, 1);
+  assert.ok(pb.aufrufe[0].length > 1000 && pb.aufrufe[0].length <= 2000);
   assert.deepEqual((await sp.laden()).state, state);
+});
+test('Zu groß (> 2000 Anfragen): senden und planAnlegen lehnen ab, es wird nichts gesendet oder eingereiht', async () => {
+  const { pb, sp, state } = await holen(KT);
+  await sp.laden();
+  pb.aufrufe.length = 0;
+  const gross = mitVielen(2100); // gegenüber dem Plan 2100 neue Vorgänge
+  const r = await sp.senden(aenderungen(state, { ...gross, project: state.project }));
+  assert.deepEqual(r, { ok: false, zuGross: true });
+  assert.equal(sp.offen.length, 0);
+  assert.deepEqual(await createServerPlan({ pb, planId: 'x' }).planAnlegen(gross), { ok: false, zuGross: true });
+  assert.equal(pb.aufrufe.length, 0);
+  assert.equal(pb.recs.filter((x) => x.collectionName === 'plaene').length, 1);
+});
+test('planAnlegen mit nicht leerer Warteschlange wird abgelehnt (offenVorhanden), nichts gesendet', async () => {
+  const { pb, sp, state } = await holen(KT);
+  await sp.laden();
+  pb.netz = true;
+  const a = kl(state); a.tasks[0].title = 'A';
+  await sp.senden(aenderungen(state, a));
+  pb.netz = false; pb.aufrufe.length = 0;
+  assert.deepEqual(await sp.planAnlegen(AMK), { ok: false, offenVorhanden: true });
+  assert.equal(pb.aufrufe.length, 0);
+  assert.equal(sp.offen.length, 1);
 });
 test('laden: Token-Fehler → abgemeldet, offline → offline, kein Plan → nichtGefunden', async () => {
   const { pb, sp } = await holen(KT);
@@ -372,6 +395,74 @@ test('planAnlegen scheitert → Fehler zurück, alte plan_id bleibt (laden liefe
   assert.equal(r.fehler.status, 403);
   pb.batch = orig;
   assert.deepEqual((await sp.laden()).state, state);
+});
+test('I1: Schlange [a1(X), a2(X)], a1 ergibt Konflikt (fremde rev = Basis+1) → a2 ebenfalls Konflikt, nichts überschrieben', async () => {
+  const { pb, sp, state } = await holen(KT);
+  await sp.laden();
+  pb.netz = true;
+  const a = kl(state); a.tasks[0].title = 'A1';
+  const b = kl(a); b.tasks[0].title = 'A2';
+  await sp.senden(aenderungen(state, a)); await sp.senden(aenderungen(a, b));
+  pb.netz = false;
+  const rec = pb.recs.find((x) => x.eid === state.tasks[0].id);
+  rec.daten = { ...rec.daten, title: 'Fremd' }; rec.rev = 2; // genau die rev, die a2 aus a1 «vorhersagt»
+  const r1 = await sp.wiederVerbunden();
+  assert.equal(r1.konflikt[0].eid, state.tasks[0].id);
+  assert.equal(sp.offen.length, 1);
+  pb.aufrufe.length = 0;
+  const r2 = await sp.wiederVerbunden();
+  assert.equal(r2.ok, false);
+  assert.equal(r2.konflikt[0].fremd.title, 'Fremd');
+  assert.equal(pb.aufrufe.length, 0, 'a2 wurde gar nicht gesendet');
+  assert.equal(rec.daten.title, 'Fremd');
+});
+test('I1: Offline-Änderung an X, dann Fremd-Echo für X, dann wiederVerbunden → Konflikt statt Überschreiben', async () => {
+  const { pb, sp, planId, state } = await holen(KT);
+  await sp.laden();
+  const got = [];
+  sp.abonnieren((t) => got.push(t));
+  pb.netz = true;
+  const a = kl(state); a.tasks[0].title = 'Offline';
+  await sp.senden(aenderungen(state, a));
+  const rec = pb.recs.find((x) => x.eid === state.tasks[0].id);
+  rec.daten = { ...rec.daten, title: 'Fremd' }; rec.rev = 2;
+  pb.hoerer({ thema: 'vorgaenge', action: 'update', record: kl(rec) });
+  assert.equal(got.length, 1);
+  pb.netz = false;
+  const r = await sp.wiederVerbunden();
+  assert.equal(r.ok, false);
+  assert.equal(r.konflikt[0].art, 'aendern');
+  assert.equal(rec.daten.title, 'Fremd');
+  assert.ok(planId);
+});
+test('Konflikt, dessen fremder Stand nicht nachgeholt werden kann: fremd null UND unbekannt true', async () => {
+  const { pb, sp, state } = await holen(KT);
+  await sp.laden();
+  pb.batch = async () => { pb.netz = true; return { ok: false, status: 409, code: 'rev', eid: state.tasks[0].id, rev: 2, index: 0 }; };
+  const a = kl(state); a.tasks[0].title = 'A';
+  const r = await sp.senden(aenderungen(state, a));
+  assert.deepEqual(r.konflikt, [{ coll: 'vorgaenge', eid: state.tasks[0].id, art: 'aendern', fremd: null, unbekannt: true }]);
+});
+test('Echo-Erwartung läuft nach 60 s ab: ein späteres Lösch-Ereignis gleicher Form ist fremd', async () => {
+  let t = 1000;
+  const pb = fakePb();
+  const r0 = await createServerPlan({ pb, planId: 'x' }).planAnlegen(KT);
+  const sp = createServerPlan({ pb, planId: r0.planId, jetzt: () => t });
+  await sp.laden();
+  const got = [];
+  sp.abonnieren((x) => got.push(x));
+  const [x1, x2] = [r0.state.tasks[0], r0.state.tasks[1]];
+  const ev = (task) => ({ thema: 'vorgaenge', action: 'delete', record: { plan_id: r0.planId, eid: task.id, id: 'r', rev: 1, daten: task } });
+  const a = kl(r0.state); a.tasks.splice(0, 1);
+  await sp.senden(aenderungen(r0.state, a));
+  t += 59000;
+  pb.hoerer(ev(x1));
+  assert.equal(got.length, 0, 'innerhalb von 60 s: eigenes Echo');
+  const b = kl(a); b.tasks.splice(0, 1);
+  await sp.senden(aenderungen(a, b));
+  t += 61000;
+  pb.hoerer(ev(x2));
+  assert.deepEqual(got, [{ coll: 'vorgaenge', eid: x2.id, objekt: null }]);
 });
 test('listePlaene: name, venue, Rolle aus besitzer/superadmin/mitglieder; Token zuerst erneuert; Fehler wirft', async () => {
   const pb = fakePb();

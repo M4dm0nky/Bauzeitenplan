@@ -7,8 +7,9 @@
 import { COLLS, zerlegen, zusammensetzen, istLeer } from './aenderungen.js';
 
 const KLON = (x) => JSON.parse(JSON.stringify(x));
-const MAX_BATCH = 1000; // PocketBase erlaubt 2000 Unteranfragen je Batch
+const MAX_BATCH = 2000; // PocketBase: batch.maxRequests (Migration). Größeres wird abgelehnt, nie gesplittet (Atomarität)
 const MAX_ECHOS = 2000;
+const ECHO_MS = 60000; // so lange wird ein eigenes Echo erwartet
 // Batch-Reihenfolge (vom Hook verlangt): Eltern vor Kindern beim Anlegen, umgekehrt beim Löschen
 const ANLEGEN = ['plaene', 'gewerke', 'ressourcen', 'phasen', 'vorgaenge', 'verknuepfungen'];
 const LOESCHEN = [...ANLEGEN].reverse();
@@ -62,26 +63,66 @@ export async function listePlaene(pb) {
   }));
 }
 
-export function createServerPlan({ pb, planId }) {
+export function createServerPlan({ pb, planId, jetzt = Date.now }) {
   let id = planId;
   let stand = new Map(COLLS.map((c) => [c, new Map()])); // coll → eid → {id, rev}
   const erwartet = new Map(); // Echos der eigenen Schreibzugriffe: "coll|eid|rev|action" → Zeit
-  let queue = [];
+  let queue = []; // Einträge {aend, basis}: basis = rev je Datensatz zum Zeitpunkt der Änderung (null = ungültig)
+  const vorhergesagt = new Map(); // coll|eid → rev, die der Datensatz nach den eingereihten Einträgen hat
   let kette = Promise.resolve();
   let handler = null;
   let stopAbo = null;
 
   const seriell = (fn) => { const p = kette.then(fn, fn); kette = p.catch(() => {}); return p; };
   const merke = (coll, eid, rev, action) => {
+    const t = jetzt();
+    if (erwartet.size >= MAX_ECHOS) for (const [k, z] of erwartet) if (t - z > ECHO_MS) erwartet.delete(k);
     if (erwartet.size >= MAX_ECHOS) for (const k of [...erwartet.keys()].slice(0, MAX_ECHOS / 2)) erwartet.delete(k);
-    erwartet.set(`${coll}|${eid}|${rev}|${action}`, Date.now());
+    erwartet.set(`${coll}|${eid}|${rev}|${action}`, t);
   };
   const eidVon = (coll, rec) => (coll === 'plaene' ? rec.plan_id : rec.eid);
+  // Eigenes Echo? Nur innerhalb von ECHO_MS; ein späteres Ereignis gleicher Form ist fremd.
+  const istEcho = (key) => { const z = erwartet.get(key); if (z === undefined) return false; erwartet.delete(key); return jetzt() - z <= ECHO_MS; };
+  const schluessel = (c, eid) => `${c}|${c === 'plaene' ? id : eid}`;
+  const zaehle = (aend) => COLLS.reduce((n, c) => n + (aend[c] ? aend[c].anlegen.length + aend[c].aendern.length + aend[c].loeschen.length : 0), 0);
+  // Welche Datensätze eine Änderung voraussetzt (ändern/löschen) bzw. erzeugt (anlegen)
+  const beruehrt = (aend) => COLLS.flatMap((c) => [
+    ...(aend[c]?.aendern || []).map((e) => schluessel(c, e.vorher.id)),
+    ...(aend[c]?.loeschen || []).map((o) => schluessel(c, o.id)),
+    ...(aend[c]?.anlegen || []).map((o) => schluessel(c, o.id))]);
+  // Beim Einreihen: auf welcher rev baut die Änderung auf? (Stand, oder Ergebnis der davor eingereihten)
+  function basisFuer(aend) {
+    const basis = new Map();
+    for (const c of COLLS) {
+      const x = aend[c]; if (!x) continue;
+      for (const k of [...x.aendern.map((e) => e.vorher.id), ...x.loeschen.map((o) => o.id)]) {
+        const sk = schluessel(c, k);
+        const rev = vorhergesagt.get(sk) ?? stand.get(c).get(c === 'plaene' ? id : k)?.rev;
+        if (rev !== undefined) basis.set(sk, rev);
+      }
+    }
+    for (const c of COLLS) {
+      const x = aend[c]; if (!x) continue;
+      for (const o of x.anlegen) vorhergesagt.set(schluessel(c, o.id), 1);
+      for (const e of x.aendern) { const sk = schluessel(c, e.vorher.id); if (basis.has(sk)) vorhergesagt.set(sk, basis.get(sk) + 1); }
+      for (const o of x.loeschen) vorhergesagt.delete(schluessel(c, o.id));
+    }
+    return basis;
+  }
+  // Ein Eintrag ist gescheitert: spätere Einträge, die dieselben Datensätze berühren, bauen auf einem Stand
+  // auf, den es so nicht gibt (Konflikt) → ihre Basis ungültig, sie werden zum Konflikt statt zu überschreiben.
+  const entwerten = (aend) => {
+    const ks = new Set(beruehrt(aend));
+    for (const e of queue) {
+      const mein = new Set(beruehrt(e.aend));
+      for (const k of ks) if (mein.has(k)) e.basis.set(k, null);
+    }
+  };
   const setze = (coll, rec) => stand.get(coll).set(eidVon(coll, rec), { id: rec.id, rev: rec.rev });
 
   async function holeFremd(coll, eid) {
     const r = await pb.liste(coll, coll === 'plaene' ? planFilter(id) : eidFilter(id, eid));
-    if (!r.ok) return { unbekannt: true };
+    if (!r.ok) return { fremd: null, unbekannt: true };
     const rec = r.items[0];
     if (!rec) { stand.get(coll).delete(eid); return { fremd: null }; }
     setze(coll, rec);
@@ -107,8 +148,9 @@ export function createServerPlan({ pb, planId }) {
   }
 
   // Änderungsliste → Batch-Anfragen in der verbindlichen Reihenfolge (+ Beschreibung je Anfrage)
-  function anfragen(aend) {
-    const reqs = [], meta = [];
+  function anfragen(aend, basis) {
+    const reqs = [], meta = [], ungueltig = [];
+    const revVon = (c, eid, s) => { const k = schluessel(c, eid); const b = basis.has(k) ? basis.get(k) : s.rev; if (b === null) ungueltig.push({ coll: c, eid }); return b; };
     const elternZuerst = (liste, f) => [...liste].sort((a, b) => (f(a)?.parent ? 1 : 0) - (f(b)?.parent ? 1 : 0));
     const kindZuerst = (liste, f) => [...liste].sort((a, b) => (f(b)?.parent ? 1 : 0) - (f(a)?.parent ? 1 : 0));
     const pfad = (c, rid) => `/api/collections/${c}/records${rid ? '/' + rid : ''}`;
@@ -127,9 +169,10 @@ export function createServerPlan({ pb, planId }) {
       for (const { e, pos } of elternZuerst(mitPos, (m) => m.e.nachher)) {
         const eid = c === 'plaene' ? id : e.vorher.id;
         const s = stand.get(c).get(eid);
-        const body = c === 'plaene' ? { daten: e.nachher, rev: s.rev } : { daten: e.nachher, rev: s.rev, ...(pos === undefined ? {} : { pos }), ...spalten(c, e.nachher) };
+        const rev = revVon(c, eid, s);
+        const body = c === 'plaene' ? { daten: e.nachher, rev } : { daten: e.nachher, rev, ...(pos === undefined ? {} : { pos }), ...spalten(c, e.nachher) };
         reqs.push({ method: 'PATCH', url: pfad(c, s.id), body });
-        meta.push({ coll: c, eid, art: 'aendern', rev: s.rev + 1 });
+        meta.push({ coll: c, eid, art: 'aendern', rev: rev + 1 });
       }
     }
     for (const c of LOESCHEN) { // löschen
@@ -137,50 +180,52 @@ export function createServerPlan({ pb, planId }) {
       for (const o of kindZuerst(x.loeschen, (m) => m)) {
         const eid = c === 'plaene' ? id : o.id;
         const s = stand.get(c).get(eid);
-        reqs.push({ method: 'DELETE', url: pfad(c, s.id) + '?rev=' + s.rev });
-        meta.push({ coll: c, eid, art: 'loeschen', rev: s.rev });
+        const rev = revVon(c, eid, s);
+        reqs.push({ method: 'DELETE', url: pfad(c, s.id) + '?rev=' + rev });
+        meta.push({ coll: c, eid, art: 'loeschen', rev });
       }
     }
-    return { reqs, meta };
+    return { reqs, meta, ungueltig };
   }
 
-  // Ein Batch (in Stücken ≤ MAX_BATCH) → ok | offline | abgemeldet | konflikt | fehler
-  async function schicke(aend) {
+  // Ein Batch (alles oder nichts) → ok | offline | abgemeldet | konflikt | fehler
+  async function schicke({ aend, basis }) {
     const unb = await ergaenze(aend);
     if (unb.netz) return { ok: false, offline: true };
     if (unb.fehlt.length) return { ok: false, konflikt: unb.fehlt };
-    const { reqs, meta } = anfragen(aend);
-    for (let von = 0; von < reqs.length; von += MAX_BATCH) {
-      const rq = reqs.slice(von, von + MAX_BATCH), mt = meta.slice(von, von + MAX_BATCH);
-      for (const m of mt) merke(m.coll, m.eid, m.rev, m.art === 'loeschen' ? 'delete' : m.art === 'anlegen' ? 'create' : 'update');
-      const r = await pb.batch(rq);
-      if (r.ok) {
-        r.antworten.forEach((rec, i) => {
-          const m = mt[i];
-          if (m.art === 'loeschen') stand.get(m.coll).delete(m.eid);
-          else if (rec && rec.id) stand.get(m.coll).set(m.eid, { id: rec.id, rev: rec.rev ?? m.rev });
-        });
-        continue;
-      }
-      for (const m of mt) erwartet.delete(`${m.coll}|${m.eid}|${m.rev}|${m.art === 'loeschen' ? 'delete' : m.art === 'anlegen' ? 'create' : 'update'}`);
-      if (istNetz(r)) return { ok: false, offline: true };
-      if (istAuth(r)) return { ok: false, abgemeldet: true };
-      const m = mt[r.index ?? -1];
-      if (r.code === 'rev' && m) return { ok: false, konflikt: [{ coll: m.coll, eid: m.eid, art: m.art, ...(await holeFremd(m.coll, m.eid)) }] };
-      // Ändern/Löschen eines Datensatzes, den es nicht mehr gibt (404): fremd gelöscht. Eine Regelabsage
-      // (kein Recht) antwortet am Server ebenfalls 404; darum gilt «gelöscht» nur, wenn er auch nicht lesbar ist.
-      if (m && m.art !== 'anlegen' && r.status === 404) {
-        const f = await holeFremd(m.coll, m.eid);
-        if (f.fremd === null) return { ok: false, konflikt: [{ coll: m.coll, eid: m.eid, art: 'geloescht', fremd: null }] };
-      }
-      // Anlegen scheitert, weil der Datensatz inzwischen existiert (eindeutiger Index) → Konflikt «existiert»
-      if (m?.art === 'anlegen' && r.status === 400) {
-        const f = await holeFremd(m.coll, m.eid);
-        if (f.fremd) return { ok: false, konflikt: [{ coll: m.coll, eid: m.eid, art: 'existiert', ...f }] };
-      }
-      return { ok: false, fehler: { status: r.status, code: r.code, message: r.message } };
+    const { reqs, meta, ungueltig } = anfragen(aend, basis);
+    if (ungueltig.length) { // baut auf einer gescheiterten Änderung auf: nicht senden, fremden Stand melden
+      const u = ungueltig[0];
+      return { ok: false, konflikt: [{ coll: u.coll, eid: u.eid, art: 'aendern', ...(await holeFremd(u.coll, u.eid)) }] };
     }
-    return { ok: true };
+    const art = (m) => (m.art === 'loeschen' ? 'delete' : m.art === 'anlegen' ? 'create' : 'update');
+    for (const m of meta) merke(m.coll, m.eid, m.rev, art(m));
+    const r = await pb.batch(reqs);
+    if (r.ok) {
+      r.antworten.forEach((rec, i) => {
+        const m = meta[i];
+        if (m.art === 'loeschen') stand.get(m.coll).delete(m.eid);
+        else if (rec && rec.id) stand.get(m.coll).set(m.eid, { id: rec.id, rev: rec.rev ?? m.rev });
+      });
+      return { ok: true };
+    }
+    for (const m of meta) erwartet.delete(`${m.coll}|${m.eid}|${m.rev}|${art(m)}`);
+    if (istNetz(r)) return { ok: false, offline: true };
+    if (istAuth(r)) return { ok: false, abgemeldet: true };
+    const m = meta[r.index ?? -1];
+    if (r.code === 'rev' && m) return { ok: false, konflikt: [{ coll: m.coll, eid: m.eid, art: m.art, ...(await holeFremd(m.coll, m.eid)) }] };
+    // Ändern/Löschen eines Datensatzes, den es nicht mehr gibt (404): fremd gelöscht. Eine Regelabsage
+    // (kein Recht) antwortet am Server ebenfalls 404; darum gilt «gelöscht» nur, wenn er auch nicht lesbar ist.
+    if (m && m.art !== 'anlegen' && r.status === 404) {
+      const f = await holeFremd(m.coll, m.eid);
+      if (f.fremd === null && !f.unbekannt) return { ok: false, konflikt: [{ coll: m.coll, eid: m.eid, art: 'geloescht', fremd: null }] };
+    }
+    // Anlegen scheitert, weil der Datensatz inzwischen existiert (eindeutiger Index) → Konflikt «existiert»
+    if (m?.art === 'anlegen' && r.status === 400) {
+      const f = await holeFremd(m.coll, m.eid);
+      if (f.fremd) return { ok: false, konflikt: [{ coll: m.coll, eid: m.eid, art: 'existiert', ...f }] };
+    }
+    return { ok: false, fehler: { status: r.status, code: r.code, message: r.message } };
   }
 
   // Warteschlange der Reihe nach senden. Offline/abgemeldet: alles bleibt in `offen`. Konflikt oder
@@ -191,8 +236,12 @@ export function createServerPlan({ pb, planId }) {
       const r = await schicke(queue[0]);
       if (r.ok) { queue.shift(); continue; }
       if (r.offline || r.abgemeldet) return r;
-      return { ...r, aend: queue.shift(), offen: queue.length };
+      const kopf = queue.shift();
+      entwerten(kopf.aend);
+      if (!queue.length) vorhergesagt.clear();
+      return { ...r, aend: kopf.aend, offen: queue.length };
     }
+    vorhergesagt.clear();
     return { ok: true };
   }
 
@@ -233,7 +282,7 @@ export function createServerPlan({ pb, planId }) {
       if (!handler || !record || record.plan_id !== id) return;
       const eid = eidVon(thema, record);
       const art = action === 'delete' ? 'delete' : action === 'create' ? 'create' : 'update';
-      if (erwartet.delete(`${thema}|${eid}|${record.rev}|${art}`)) return; // eigenes Echo
+      if (istEcho(`${thema}|${eid}|${record.rev}|${art}`)) return; // eigenes Echo
       const bekannt = stand.get(thema)?.get(eid);
       if (art !== 'delete' && bekannt && bekannt.rev >= record.rev) return; // schon bekannt
       if (art === 'delete') stand.get(thema)?.delete(eid); else setze(thema, record);
@@ -247,13 +296,15 @@ export function createServerPlan({ pb, planId }) {
      *  | {ok:false, abgemeldet:true} | {ok:false, fehler:{status,code,message}, aend} */
     senden(aend) {
       if (!aend || istLeer(aend)) return Promise.resolve({ ok: true });
-      return seriell(async () => { queue.push(aend); return leeren(); });
+      // Zu groß: nichts wird gesendet oder eingereiht (ein Batch fasst höchstens MAX_BATCH Anfragen)
+      if (zaehle(aend) > MAX_BATCH) return Promise.resolve({ ok: false, zuGross: true });
+      return seriell(async () => { queue.push({ aend, basis: basisFuer(aend) }); return leeren(); });
     },
     /** Nach dem Wiederverbinden die Warteschlange senden (Ergebnis wie senden). */
     wiederVerbunden() { return seriell(leeren); },
     /** Warteschlange verwerfen (z. B. nach neuem Laden, wenn der lokale Stand ersetzt wurde). */
-    offenVerwerfen() { queue = []; },
-    get offen() { return queue.slice(); },
+    offenVerwerfen() { queue = []; vorhergesagt.clear(); },
+    get offen() { return queue.map((e) => e.aend); },
     /** beiFremd({coll, eid, objekt|null}) für Änderungen anderer; eigene Echos werden verschluckt. Gibt stop() zurück. */
     abonnieren(beiFremd) {
       handler = beiFremd;
@@ -262,24 +313,24 @@ export function createServerPlan({ pb, planId }) {
     },
     /** Nach einer Token-Erneuerung: Verbindung neu aufbauen, damit sie das neue Token trägt. */
     neuAbonnieren() { if (handler) aboStarten(); },
-    /** Neuen Plan (Import/Vorlage/Neu) anlegen: neue plan_id, ein Batch. → {ok, planId, state} (state trägt die neue id). */
+    /** Neuen Plan (Import/Vorlage/Neu) anlegen: neue plan_id, EIN Batch. → {ok, planId, state} (state trägt die neue id)
+     *  | {ok:false, zuGross:true} | {ok:false, offenVorhanden:true} (die Warteschlange des alten Plans ist nicht leer). */
     planAnlegen(state) {
       return seriell(async () => {
+        if (queue.length) return { ok: false, offenVorhanden: true };
         const neu = KLON(state);
         const neu_id = neueId();
         neu.project = { ...neu.project, id: neu_id };
         const teile = zerlegen(neu);
         const aend = {};
         for (const c of COLLS) aend[c] = { anlegen: [...teile[c].values()], anlegenPos: [...teile[c].keys()].map((_, i) => i), aendern: [], loeschen: [] };
+        if (zaehle(aend) > MAX_BATCH) return { ok: false, zuGross: true };
         const alt = { id, stand };
         id = neu_id;
         stand = new Map(COLLS.map((c) => [c, new Map()]));
-        const r = await schicke(aend);
-        if (r.ok) return { ok: true, planId: id, state: neu };
-        // Teilweise angelegt (mehrere Stücke): Rest wegräumen
-        const p = stand.get('plaene').get(id);
-        if (p) await pb.batch([{ method: 'DELETE', url: `/api/collections/plaene/records/${p.id}?rev=${p.rev}` }]);
-        id = alt.id; stand = alt.stand;
+        const r = await schicke({ aend, basis: new Map() });
+        if (r.ok) { vorhergesagt.clear(); return { ok: true, planId: id, state: neu }; }
+        id = alt.id; stand = alt.stand; // ein Batch: bei Fehler ist nichts angelegt
         return r;
       });
     },
@@ -290,7 +341,7 @@ export function createServerPlan({ pb, planId }) {
         const p = stand.get('plaene').get(id);
         if (!p) return { ok: false, nichtGefunden: true };
         const r = await pb.batch([{ method: 'DELETE', url: `/api/collections/plaene/records/${p.id}?rev=${p.rev}` }]);
-        if (r.ok) { stand = new Map(COLLS.map((c) => [c, new Map()])); queue = []; return { ok: true }; }
+        if (r.ok) { stand = new Map(COLLS.map((c) => [c, new Map()])); queue = []; vorhergesagt.clear(); return { ok: true }; }
         if (istNetz(r)) return { ok: false, offline: true };
         if (istAuth(r)) return { ok: false, abgemeldet: true };
         return { ok: false, fehler: { status: r.status, code: r.code, message: r.message } };
