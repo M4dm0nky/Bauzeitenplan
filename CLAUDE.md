@@ -17,7 +17,6 @@ node tools/verify-amk.mjs  # AMK-Plan importieren (tools/fixtures)
 node tools/verify-klassentreffen.mjs  # V07-Plan importieren + Negativprüfung «kein mitgelieferter Plan»
 node tools/verify-print.mjs  # Tagesblätter A3: Zuschnitt, Filter, Maßstab
 node tools/verify-showablauf.mjs  # Showablauf: Ebene, Bühnen, Kopfzeile, Blatt
-node tools/verify-sync.mjs  # Sync: zwei Geräte, Konflikt, Offline-Start
 ```
 
 - **Alle neun müssen grün sein**, bevor etwas fertig ist (parallel startbar). `verify-browser.mjs` braucht einmalig `npx playwright install firefox`.
@@ -102,7 +101,7 @@ Details je Thema in `.claude/rules/` (Frontmatter `paths:`); dort stehen die Reg
 | `js/res-katalog.js` | Eingebaute Helfer/Maschinen in Kategorien — **DOM-frei** |
 | `js/res-picker.js` | Such-Auswahl Helfer/Maschinen |
 | `js/listen-editor.js` | Verwalten-Liste `mountAuswahlListe` (Tabelle + Einrichten-Seite) |
-| `js/sync.js` | GitHub-Contents-Client + `abgleich()` — **DOM-frei** |
+| `js/konflikt.js` | Konfliktauflösung beim Senden — **DOM-frei** |
 | `js/pb.js`, `server.js` | PocketBase-Client · Serverplan (rev, Realtime) — **DOM-frei** |
 | `login.html`, `login.js` | Anmelden, Passwort, Einladung |
 

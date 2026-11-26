@@ -1,21 +1,22 @@
 ---
 paths:
-  - "js/sync.js"
+  - "js/server.js"
+  - "js/konflikt.js"
+  - "js/pb.js"
   - "js/persistence.js"
   - "sw.js"
-  - "tools/verify-sync.mjs"
 ---
 
-# Sync und Offline
+# Server, Senden und Offline
 
-Local-first: Plan in `localStorage`; privates Repo `M4dm0nky/Bauzeitenplan-Daten` (`main`, `projekte/<project.id>.json` = `serialize(plan)`) gleicht nur ab. **Ohne Schlüssel verhält sich die App wie vorher.**
+Der Plan lebt auf PocketBase (`js/pb.js` Client, `js/server.js` Plan lesen/senden/Realtime). `localStorage` hält nur das Token (`bzp_auth`) und die **lokale Kopie** (`repo.save`, ohne Token) für `print.html`. Der GitHub-Sync ist entfernt (`js/sync.js` existiert nicht, kein `bzp_sync` in `js/`; `tests/run.mjs` sperrt beides).
 
-- **Schlüssel nur in `localStorage` `bzp_sync`** (`{token, repo}`), nie in Plan/Export/Repo (`tests/run.mjs` sperrt es). `remoteSha`/`dirty` im Index `bzp_projects`, nie im Plan.
-- **`js/sync.js` DOM-frei**, `fetch` hereingereicht (`createSync`); `abgleich()` entscheidet, app.js führt aus. **GitHub-Abrufe mit `cache:'no-store'`; Base64 über `TextEncoder`**, nie `btoa`.
-- **Ein Konflikt wird nie still aufgelöst:** `askDialog` mit drei Knöpfen, einer «Beide behalten (Kopie)» («… (anderes Gerät)»). Offenes Projekt neuer und lokal nicht `dirty` → ersetzen mit Toast. Gelöscht im Repo → Rückfrage; 404 der Liste ist kein leeres Repo.
-- **Zwei Tabs, ein Browser:** app.js-Block «Anderer Tab» (`storage`-Listener, `fremderTab`). Anderer Stand + hier nichts Ungesichertes (`saveTimer`/`store.dirty`/`ungesichert`) → `open(plan)` mit Toast; sonst Dreiknopf-Dialog (`askDialog`, höchstens einer, Folgeereignisse = eine erneute Prüfung). «Die aus dem anderen Tab nehmen»/«Beide» laden den Stand NACH dem Dialog frisch (`repo.load`), nie den Schnappschuss vom Dialogbeginn. Im anderen Tab gelöscht → `verworfen`, Projektdialog. Nicht `ueberschreibenSicher` nehmen: dessen `dirty` heißt «nicht hochgeladen» und steht nach jedem fremden Speichern. Prüfung: `verify-sync.mjs` «ZWEI TABS».
-- **Kein mitgelieferter Plan:** die App holt nie eine Plan-JSON (Sperre in `tests/run.mjs`); `project.quelle` in Altbeständen ist ein totes Feld und bleibt. Prüfung: `verify-klassentreffen.mjs` «KEIN MITGELIEFERTER PLAN», `verify-live.mjs` (Live-Monitor ohne Abruf).
-- **Hochladen gebündelt:** frühestens 10 s nach dem Speichern, sofort bei `visibilitychange → hidden` und Projektwechsel; höchstens EIN Nachlauf.
-- **Kein Netz/falscher Schlüssel bricht den Start nie** (`#sync-state` gelb/rot).
-- **Prüfen:** `tools/verify-sync.mjs` (gefälschte API); `--echt` mit `BZP_TOKEN`.
-- **Der Speicherort steht im Dialog `#sync-dlg`** (Projektmenü → «Speicherort…», `#sync-oeffnen`; `openEinrichten('sync')` öffnet ihn), nicht mehr auf der Einrichten-Seite. Schlüssel und `#sync-state` leben dort; Escape/«Schließen» schließen nur den Dialog.
+- **Kein lokaler Modus:** ohne Anmeldung `login.html` (`?api=` weiterreichen). `pb.on('abgemeldet')` ist der einzige Weg dorthin (`zuLogin`); `abmelden()` meldet selbst, nicht doppelt auslösen. Ausnahme folgt: Live-Monitor (Task 10).
+- **Senden:** `store.subscribe((s, info))`: `quelle` lokal/undo/redo → `sende(info.aend)` → `server.senden`; remote/replace nie. Alles mit Netz oder Rückfrage läuft hintereinander durch `reihe`. Anzeige `#sync-state` (einziger Schreiber `paintSpeicher`): ✓ gesendet · ⟳ sendet… · ⚠ offen (n).
+- **Konflikt (`loeseKonflikt`, Logik DOM-frei in `js/konflikt.js`):** geändert → «Ihre Fassung nehmen» / «Meine behalten»; gelöscht → «Wiederherstellen» / «Verwerfen»; `unbekannt` (Lesefehler) ist KEINE Löschung. Abbrechen lässt den Konflikt offen (`geparkt`, Klick auf den Speicherstand). Der Server kennt keinen Bearbeiter je Datensatz: der Dialog sagt «jemand anderem».
+- **Undo-Konflikt:** `store.undo()` liefert `{ok:false, konflikt}` → «Trotzdem zurücknehmen?» → `undo({erzwingen:true})` (`macheUndo`).
+- **Fremdänderungen** nur über `store.applyRemote` (gebündelt, 120 ms), kein Toast je Änderung. Nach `getrennt` + `verbunden`: ungesendetes senden, dann `laden()` und `applyRemote` (Undo-Verlauf bleibt). Token alle 6 h erneuern, danach `neuAbonnieren()`.
+- **Offline:** `gesperrt` liefert «Offline – nur Ansicht»; `versucheWieder` prüft alle 5 s. Die Offline-Ansicht baut Task 10 darauf.
+- **Neu/Vorlage/Import:** `planNeu` → `planAnlegen` (neue plan_id), nur mit `darfPlanAnlegen`. Löschen nur Besitzer/Superadmin.
+- **Kein mitgelieferter Plan:** die App holt nie eine Plan-JSON (Sperre in `tests/run.mjs`).
+- **Prüfen:** `node tools/verify-mehrbenutzer.mjs` (lokale PocketBase, zwei Browserkontexte).

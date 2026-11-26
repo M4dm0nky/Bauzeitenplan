@@ -5,7 +5,11 @@
 
 import { createStore, verschiebeZeit, SHIFT_MAX_TAGE, SHIFT_MAX_MIN } from './store.js';
 import { createRepo, serialize, deserialize } from './persistence.js';
-import { createSync, abgleich, gleicherPlan, SYNC_REPO } from './sync.js';
+import { createPb, apiBasis, ERNEUERN_MS } from './pb.js';
+import { createServerPlan, listePlaene } from './server.js';
+import { rechteFehler, darfPlanAnlegen } from './rechte.js';
+import { anwenden, umkehren, aenderungen, istLeer, zerlegen, zusammensetzen } from './aenderungen.js';
+import { eintragTitel, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen } from './konflikt.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
@@ -102,107 +106,89 @@ const startAnsicht = () => {
 const TEXT_EINGABEN = new Set(['text', 'search', 'url', 'tel', 'email', 'password', 'number',
   'date', 'time', 'datetime-local', 'month', 'week']);
 
-// ── Erststart ───────────────────────────────────────────────────────────────
-// Kein mitgelieferter Plan: die App holt nie eine JSON von selbst — ein Plan, der
-// von allein erscheint, wäre für den Nutzer unerwartet und zöge Netzabrufe nach
-// sich (Entscheidung 2026-11-22). Pläne kommen nur über Import, Vorlage oder Sync.
-// `?plan=leer` ist der Schalter der Prüfwerkzeuge.
-async function boot() {
-  await bootLokal();
-  // Danach, nicht davor und nicht blockierend: lokal starten, dann abgleichen.
-  abgleichen();
+// ── Start ───────────────────────────────────────────────────────────────────
+// Der Plan lebt auf dem Server (PocketBase). Ohne Anmeldung gibt es nichts zu zeigen:
+// zurück zur Anmeldeseite. (Ausnahme wird der Live-Monitor mit lokaler Kopie, Task 10.)
+// `?plan=leer` ist der Schalter der Prüfwerkzeuge: angemeldet öffnet er das aktive,
+// sonst das erste Projekt; der Dialog kommt, wenn es keines gibt.
+const loginSeite = () => {
+  const api = new URLSearchParams(location.search).get('api');
+  return 'login.html' + (api ? '?api=' + encodeURIComponent(api) : '');
+};
+let zuLoginLaeuft = false;
+function zuLogin() {
+  if (zuLoginLaeuft) return;
+  zuLoginLaeuft = true;
+  location.replace(loginSeite());
 }
 
-async function bootLokal() {
-  const wunsch = new URLSearchParams(location.search).get('plan');
-  const live = lsLies('bzp_live') === '1';
-
-  // Ein Live-Monitor startet nach Stromausfall von selbst: niemand klickt dort
-  // einen Dialog weg, und das zuletzt offene Projekt ist das richtige.
-  const activeId = repo.getActive();
-  const aktiv = activeId && repo.load(activeId);
-  if (live && aktiv && await open(aktiv)) return;
-  // `?plan=leer` ist der Schalter der Prüfwerkzeuge beim Neuladen (alle verify-Skripte):
-  // aktives, sonst erstes Projekt öffnet; der Dialog kommt, wenn keines da ist.
-  if (wunsch === 'leer') {
-    const erstes = aktiv || (repo.list().length ? repo.load(repo.list()[0].id) : null);
-    if (erstes && await open(erstes)) return;
+async function boot() {
+  if (!pb.istAngemeldet) { zuLogin(); return; }
+  if (new URLSearchParams(location.search).get('plan') === 'leer') {
+    let liste = [];
+    try { liste = await listePlaene(pb); } catch (e) { if (e.abgemeldet) { zuLogin(); return; } }
+    const aktiv = repo.getActive();
+    const erstes = liste.find((p) => p.plan_id === aktiv) || liste[0];
+    if (erstes && await open(erstes.plan_id)) return;
   }
-
-  // Sonst entscheidet der Mensch: zuletzt geöffnete, Neu, Import.
   showProjectDialog({ firstRun: !store });
 }
 
-// Liefert true, wenn das Projekt offen ist, false nach «Abbrechen» im
-// Sicherungsdialog (dann bleibt alles wie es war). Asynchron wird es nur beim
-// Wechsel auf ein ANDERES Projekt mit gescheitertem Sichern; ein Sync-Update
-// desselben Projekts läuft ohne Warten durch und fragt nie.
-async function open(plan) {
-  // Unverändert wieder geöffnet (kein Import, kein Abgleich-Ergebnis) bleibt
-  // abgeglichen — sonst würde jedes Öffnen einen Upload auslösen.
-  const id = plan.project.id;
-  const alt = repo.load(id), info = repo.syncInfo(id);
-  const abgeglichen = !!(alt && info.remoteSha && !info.dirty && gleicherPlan(alt, plan));
+// Öffnet den Plan vom Server. true = offen, false = nicht geöffnet (Fehler gemeldet oder
+// «Abbrechen» bei ungesendeten Änderungen des bisherigen Plans).
+async function open(planId) {
+  await ablauf;     // laufende Sendungen und Konfliktfragen des bisherigen Plans abwarten
+  if (server && (server.offen.length || geparkt.length)) {
+    const wahl = await askDialog({
+      title: 'Ungesendete Änderungen',
+      message: [`In «${store.state.project.name}» gibt es Änderungen, die noch nicht beim Server angekommen sind.`,
+        'Beim Wechsel gehen sie verloren.'],
+      buttons: [
+        { label: 'Abbrechen', value: null, primary: true },
+        { label: 'Verwerfen und wechseln', value: 'weg', danger: true },
+      ],
+    });
+    if (wahl !== 'weg') return false;
+  }
+  const srv = createServerPlan({ pb, planId });
+  const r = await srv.laden();
+  if (!r.ok) { await ladeFehler(r); return false; }
+
   const wechsel = !!store;
-  // Projektwechsel heißt andere id. Ein Sync-Update desselben Projekts ersetzt
-  // nur den Inhalt: der Versatz gehört dem Abend, nicht dem Stand des Plans.
-  const andereId = wechsel && store.state.project.id !== id;
-  verworfen.delete(id);     // wird (wieder) geöffnet, also kein Gelöschtes mehr
+  const andereId = wechsel && store.state.project.id !== r.state.project.id;
+  schliesseServer();
+  server = srv;
+  rolle = r.rolle;
+  offline = false;
   if (store) {
-    // Eine noch ausstehende Eingabe gehört dem bisherigen Projekt und wäre nach
-    // dem Ersetzen weg (der Timer schriebe den NEUEN Plan). Deshalb sofort sichern.
-    if (andereId && (saveTimer || store.dirty || ungesichert)) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-      const r = await sichern({ still: true });
-      if (!r.ok && !(await wechselnOhneSicherung(r))) {
-        scheduleSave();          // die Eingabe bleibt im Store und wird weiter versucht
-        return false;
-      }
-    }
     // Ein anderes Projekt (auch «Neu») schließt die Einrichten-Seite des bisherigen —
-    // nach erfolgreichem Sichern, direkt vor dem Ersetzen, damit «eingerichtet» noch
-    // zum alten Plan gehört und ein Abbruch die Seite stehen lässt.
+    // direkt vor dem Ersetzen, damit «eingerichtet» noch zum alten Plan gehört.
     if (andereId) { einScroll = null; closeEinrichten(); }
-    store.replace(plan);
+    store.replace(r.state);
     // Der Gantt des neuen Projekts hat sich selbst auf den Aufbau eingepasst — der
     // Scrollstand, den die Einrichten-Seite beim Öffnen gemerkt hat, gehört dem alten.
     einScroll = null;
-    // Ein Versatz gilt dem Abend, den man gerade fährt — nicht dem nächsten
-    // Projekt. Beim Wechsel zurück auf null, sonst stünde der neue Plan
-    // kommentarlos verschoben da.
+    // Ein Versatz gilt dem Abend, den man gerade fährt — nicht dem nächsten Projekt.
     if (andereId) setVersatz(0);
   } else {
-    store = createStore(plan);
+    store = createStore(r.state, storeOptionen());
     mount();
   }
-  repo.setActive(plan.project.id);   // wirft nie (persistence.js)
+  stopAbo = srv.abonnieren(beiFremd);
+  repo.setActive(r.state.project.id);   // wirft nie (persistence.js)
   refreshChrome();
-  save();
-  if (abgeglichen) repo.markSynced(id, info.remoteSha);
-  // Projektwechsel: sofort abgleichen (Änderungen am bisherigen Projekt hochladen).
-  if (wechsel && !abgleichLaeuft) abgleichen();
+  kopieSchreiben();
+  paintSpeicher();
   return true;
 }
 
-// Das Sichern des bisherigen Projekts ist gescheitert (Speicher voll): nicht
-// still wechseln, sonst ist die Eingabe weg. true = wechseln, false = bleiben.
-async function wechselnOhneSicherung(r) {
-  const wahl = await askDialog({
-    title: 'Nicht gespeichert',
-    message: [
-      `Die letzten Änderungen an «${store.state.project.name}» konnten nicht gesichert werden.`,
-      r.error,
-      'Exportiere den Plan als JSON, wechsle ohne Sicherung oder bleib im Projekt.',
-    ],
-    buttons: [
-      { label: 'Abbrechen', value: null },
-      { label: 'Trotzdem wechseln', value: 'wechseln', danger: true },
-      { label: 'Exportieren', value: 'export', primary: true },
-    ],
-  });
-  if (wahl === 'export') doExport();
-  return wahl === 'export' || wahl === 'wechseln';
+// Meldung zu einem gescheiterten Laden. Abgemeldet → Anmeldeseite.
+async function ladeFehler(r) {
+  if (r.abgemeldet) { zuLogin(); return; }
+  const text = r.offline ? 'Keine Verbindung zum Server. Der Plan lässt sich nur mit Verbindung öffnen.'
+    : r.nichtGefunden ? 'Dieser Plan existiert nicht mehr oder du hast keinen Zugriff darauf.'
+      : 'Der Plan konnte nicht geladen werden' + (r.fehler?.message ? ': ' + r.fehler.message : '.');
+  await askDialog({ title: 'Nicht geöffnet', message: [text], buttons: [{ label: 'OK', value: true, primary: true }] });
 }
 
 // ── Aufbau ──────────────────────────────────────────────────────────────────
@@ -312,13 +298,16 @@ function mount() {
   if (wantLive) setLive(true);
   refreshLive();
 
-  store.subscribe(() => {
+  store.subscribe((_s, info) => {
+    // Eigene Änderungen (lokal, Undo, Redo) gehen an den Server; Fremdes (remote) und
+    // Laden (replace) nie. Zuerst, damit ein Fehler beim Neuzeichnen das Senden nicht verhindert.
+    if (info && info.aend && (info.quelle === 'lokal' || info.quelle === 'undo' || info.quelle === 'redo')) sende(info.aend);
+    kopieSpaeter();
     phasen.refresh();
     einrichten.refresh();
     refreshChrome();
     syncBuehnen();          // eine neue oder gelöschte Bühne gehört in die Leiste
     refreshLive();
-    scheduleSave();
     if (view === 'tabelle') renderTable();
     if (view === 'bedarf') bedarf.render();
     inspector.render();       // Panel zeigt sonst veraltete Werte
@@ -403,18 +392,11 @@ function mount() {
     if (!mod) return;
     if (e.key.toLowerCase() === 'z') {
       e.preventDefault();
-      e.shiftKey ? store.redo() : store.undo();
+      macheUndo(e.shiftKey);
     } else if (e.key.toLowerCase() === 's') {
       e.preventDefault();
-      save(true);
+      toast(speicherStand().t.replace(/^\S+\s/, ''));
     }
-  });
-
-  // Ungesicherte Änderungen nicht stillschweigend verlieren.
-  window.addEventListener('beforeunload', (e) => {
-    if (!store || verworfen.has(store.state.project.id) || !(store.dirty || ungesichert)) return;
-    e.preventDefault();
-    e.returnValue = '';
   });
 }
 
@@ -459,7 +441,6 @@ const scrollerListe = () => [
 ];
 
 function openEinrichten(bereich = 'projekt', opt = {}) {
-  if (bereich === 'sync') { oeffneSpeicherort(); return; }   // Speicherort ist ein Dialog, kein Bereich
   if (!einrichten) return;
   if (!einrichten.offen) {
     einScroll = {};
@@ -490,367 +471,265 @@ function closeEinrichten() {
   });
 }
 
-// ── Speicherort (GitHub-Sync) ────────────────────────────────────────────────
-// Optional: ohne Schlüssel in localStorage (`bzp_sync`) tut dieser Block nichts
-// und die App verhält sich wie ohne Sync. Der Schlüssel lebt NUR dort — nie im
-// Plan, nie im Export, nie in persistence.js. Auf MODULEBENE, damit Verbinden
-// auch ohne offenes Projekt geht.
-const SYNC_KEY = 'bzp_sync';
-const UPLOAD_NACH_MS = 10000;      // gebündelt: frühestens 10 s nach der letzten Speicherung
-let uploadTimer = null, abgleichLaeuft = false, abgleichNochmal = false, uebersprungen = false, letzterAbgleich = null;
+// ── Server: Senden, Konflikte, Fremdänderungen ──────────────────────────────
+// Der Store ändert, der Server (js/server.js) speichert. Jede eigene Änderung (lokal, Undo,
+// Redo) geht als Änderungsliste an `server.senden`; Fremdänderungen kommen per Realtime und
+// laufen NUR über `store.applyRemote` (kein Undo-Eintrag, kein Hinweis je Änderung). Alle
+// Abläufe mit Netz oder Rückfrage laufen hintereinander durch `reihe`.
+let pb = null, server = null, stopAbo = null;
+let rolle = null;            // {rolle, gewerke} im offenen Plan
+let offline = false;
+let wartend = 0;             // eigene Änderungen, die noch nicht beim Server angekommen sind
+let konfliktOffen = false;   // ein Konfliktdialog wartet auf Antwort
+const geparkt = [];          // Konflikte, die mit «Abbrechen» offen blieben ({aend, konflikt})
+let ablauf = Promise.resolve();
+const reihe = (fn) => { const p = ablauf.then(fn); ablauf = p.catch((e) => console.error(e)); return p; };
 
-function syncKonfig() {
-  try {
-    const k = JSON.parse(window.localStorage.getItem(SYNC_KEY) || 'null');
-    return k && typeof k.token === 'string' && k.token && typeof k.repo === 'string' ? { token: k.token, repo: k.repo } : null;
-  } catch { return null; }
+const gewerkName = (id) => store.state.gewerke.find((g) => g.id === id)?.name || id;
+const storeOptionen = () => ({
+  // Dieselben Regeln wie der Server (js/rechte.js); der Server bleibt die Sicherheit.
+  pruefe: (vorher, nachher, aend) => rechteFehler(rolle, aend, vorher, gewerkName),
+  gesperrt: () => (!server ? 'Kein Plan geöffnet.'
+    : offline ? 'Offline – nur Ansicht'
+      : rolle?.rolle === 'betrachter' ? 'Nur ansehen: du bist Betrachter.' : null),
+});
+
+// EINZIGER Schreiber von #sync-state: gesendet (grün) · sendet… / offen (n) (gelb).
+function speicherStand() {
+  const n = (server ? server.offen.length : 0) + geparkt.length;
+  if (konfliktOffen) return { s: 'wartet', t: `⚠ offen (${n + wartend})`, titel: 'Konflikt: Rückfrage offen' };
+  if (wartend > 0) return { s: 'wartet', t: '⟳ sendet…', titel: 'Änderungen werden gesendet' };
+  if (n > 0 || offline) return { s: 'wartet', t: n ? `⚠ offen (${n})` : '⚠ offline', titel: offline ? 'Keine Verbindung – nur Ansicht' : 'Änderungen warten auf den Server' };
+  return { s: 'ok', t: '✓ gesendet', titel: 'Alles beim Server angekommen' };
 }
-
-const syncClient = (k) => createSync({ fetch: (...a) => window.fetch(...a), token: k.token, repo: k.repo });
-
-// EINZIGER Schreiber von #sync-state. null = nicht verbunden → ausgeblendet.
-function setSyncState(state, titel) {
+function paintSpeicher() {
   const n = $('sync-state');
-  if (!state) { n.hidden = true; return; }
-  n.hidden = false;
-  n.dataset.state = state;
-  n.title = titel || '';
-  n.setAttribute('aria-label', titel || '');
+  if (!n) return;
+  const st = speicherStand();
+  n.dataset.state = st.s;
+  n.textContent = st.t;
+  n.title = st.titel + (geparkt.length ? ' – anklicken, um den Konflikt zu klären' : '');
+  n.setAttribute('aria-label', st.t.replace(/^\S+\s/, ''));
+}
+function setOffline(v) {
+  if (offline === v) return;
+  offline = v;
+  paintSpeicher();
+  if (v) planeWieder();
 }
 
-function paintSyncInfo() {
-  const k = syncKonfig();
-  const info = $('sync-info');
-  $('sync-trennen').disabled = !k;
-  if (!k) { info.textContent = 'Nicht verbunden — die Pläne bleiben in diesem Browser.'; return; }
-  const offen = repo ? repo.syncListe().filter((e) => e.dirty).length : 0;
-  const zeit = letzterAbgleich ? letzterAbgleich.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : 'noch keiner';
-  info.textContent = `Verbunden mit ${k.repo}. Letzter Abgleich: ${zeit}. Offene Uploads: ${offen}.`;
-}
-
-function planeUpload() {
-  if (!syncKonfig()) return;
-  clearTimeout(uploadTimer);
-  setSyncState('wartet', 'Änderungen warten auf den Upload');
-  uploadTimer = setTimeout(abgleichen, UPLOAD_NACH_MS);
-}
-
-const GRUND_TEXT = {
-  offline: 'Keine Verbindung zu GitHub — es wird später abgeglichen.',
-  schluessel: 'Schlüssel ungültig oder ohne Zugriff.',
-  repo: 'Das Daten-Repo ist für diesen Schlüssel nicht sichtbar (oder es existiert nicht).',
-  konflikt: 'Das Projekt wurde zwischenzeitlich anderswo geändert.',
-  fehler: 'GitHub meldet einen Fehler.',
-};
-
-async function abgleichen() {
-  const k = syncKonfig();
-  if (!k) { setSyncState(null); return; }
-  if (abgleichLaeuft) { abgleichNochmal = true; return; }
-  abgleichLaeuft = true;
-  clearTimeout(uploadTimer);
-  try {
-    // Ein Überspringen (es wurde weitergetippt) löst höchstens EINEN sofortigen
-    // zweiten Durchlauf aus. Scheitert das Speichern dauerhaft (Speicher voll),
-    // bliebe es sonst eine Endlosschleife mit je list()+pull().
-    let nachSkip = false;
-    for (;;) {
-      abgleichNochmal = false; uebersprungen = false;
-      await abgleichenEinmal(k);
-      if (uebersprungen) {
-        if (nachSkip) {
-          setSyncState('wartet', 'Ungesicherte Änderung – Abgleich folgt nach dem Speichern');
-          abgleichNochmal = false;      // die nächste erfolgreiche save() → planeUpload startet neu
-          break;
-        }
-        nachSkip = true;
-        continue;
-      }
-      if (!abgleichNochmal) break;
-    }
-  } catch (e) {
-    setSyncState('fehler', 'Abgleich fehlgeschlagen: ' + (e && e.message || e));
-  } finally {
-    abgleichLaeuft = false;
-    paintSyncInfo();
-  }
-}
-
-// Ein Durchlauf. Bricht bei offline/Schlüssel ab (alles Weitere scheiterte genauso),
-// macht bei anderen Fehlern mit dem nächsten Projekt weiter.
-async function abgleichenEinmal(k) {
-  const sync = syncClient(k);
-  // Offene Tipp-Änderungen (800-ms-Verzögerung) erst in die Ablage bringen,
-  // sonst wüsste der Abgleich nicht, dass das offene Projekt dirty ist.
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; await save(); }
-  setSyncState('wartet', 'Gleiche ab …');
-  const l = await sync.list();
-  if (!l.ok) return syncScheitert(l);
-  let problem = null, abbruch = false;
-  for (const a of abgleich(repo.syncListe().filter((x) => !verworfen.has(x.id)), l.dateien)) {
-    const r = await fuehreAus(sync, a);
-    if (r && r.ok === false) {
-      problem = problem || r;
-      if (r.grund === 'offline' || r.grund === 'schluessel') { abbruch = true; break; }
-    }
-  }
-  if (abbruch) return syncScheitert(problem);
-  if (problem) {
-    return setSyncState(problem.grund === 'abgebrochen' ? 'fehler' : 'wartet',
-      problem.grund === 'abgebrochen' ? 'Konflikt nicht gelöst — Pläne weichen voneinander ab' : grundText(problem));
-  }
-  letzterAbgleich = new Date();
-  clearTimeout(uploadTimer);       // open()/save() im Durchlauf haben ihn evtl. neu gestellt
-  setSyncState('ok', 'Abgeglichen mit ' + k.repo);
-}
-
-// Text zu einem Fehlschlag, mit HTTP-Code, wo GitHub einen geliefert hat — sonst
-// bleibt «GitHub meldet einen Fehler» ein Rätsel (z. B. Token ohne Schreibrecht).
-const grundText = (r) => (GRUND_TEXT[r.grund] || GRUND_TEXT.fehler) + (r.status ? ` (HTTP ${r.status})` : '');
-
-function syncScheitert(r) {
-  setSyncState(r.grund === 'offline' ? 'wartet' : 'fehler', grundText(r));
-}
-
-const offenId = () => (store ? store.state.project.id : null);
-
-// Lokal ablegen; ist es das offene Projekt, auch anzeigen. open() speichert
-// selbst (dirty) — deshalb danach noch einmal als abgeglichen markieren.
-function uebernehmen(plan, sha) {
-  repo.save(plan, { remoteSha: sha });
-  if (plan.project.id === offenId()) open(plan);   // gleiche id: wartet und fragt nie
-  repo.markSynced(plan.project.id, sha);
-}
-
-async function hochladen(sync, id, sha) {
-  const plan = repo.load(id);
-  if (!plan) return { ok: true };
-  const vorher = (repo.list().find((x) => x.id === id) || {}).modified;
-  const r = await sync.push(id, serialize(plan), sha);
-  if (!r.ok) return r;
-  repo.markSynced(id, r.sha);
-  // Zwischenzeitlich weitergetippt? Dann gilt der Plan wieder als geändert.
-  const jetzt = (repo.list().find((x) => x.id === id) || {}).modified;
-  if (jetzt !== vorher) repo.save(repo.load(id));
-  return r;
-}
-
-// Darf der Abgleich Projekt `id` JETZT überschreiben/entfernen? Die Entscheidung
-// stammt aus einem Snapshot vor dem Netzwerk-await; wer inzwischen weitergetippt
-// hat (dirty, offener 800-ms-Timer, ungesicherter Store), wird nie überschrieben.
-function ueberschreibenSicher(id) {
-  // Lokal gar nicht vorhanden (neues Projekt vom anderen Gerät): nichts, was
-  // verloren gehen könnte. syncInfo() meldet für unbekannte ids dirty:true —
-  // ohne diese Zeile wurde jedes fremde Projekt übersprungen und nie geholt.
-  if (!repo.list().some((x) => x.id === id)) return true;
-  if (repo.syncInfo(id).dirty) return false;
-  if (id === offenId() && (saveTimer || store.dirty || ungesichert)) return false;
-  return true;
-}
-
-async function fuehreAus(sync, a) {
-  if (a.art === 'hochladen') return hochladen(sync, a.id, a.sha);
-
-  if (a.art === 'lokal-loeschen') {
-    if (!ueberschreibenSicher(a.id)) { uebersprungen = true; return { ok: true }; }
-    const name = (repo.list().find((x) => x.id === a.id) || {}).name || a.id;
-    // Nie still löschen: «nicht im Repo» kann auch ein Fehlgriff sein (anderes
-    // Repo, zurückgesetzter Verlauf). Abbruch heißt behalten.
-    const wahl = await askDialog({
-      title: 'Im Daten-Repo gelöscht',
-      message: [`«${name}» ist im Daten-Repo nicht mehr vorhanden — vermutlich auf einem anderen Gerät gelöscht.`,
-        'Hier behalten und neu hochladen, oder auch lokal löschen?'],
-      buttons: [
-        { label: 'Behalten und neu hochladen', value: 'behalten', primary: true },
-        { label: 'Lokal löschen', value: 'loeschen', danger: true },
-      ],
-    });
-    // Der Dialog hat gewartet: inzwischen Weitergetipptes nicht mehr löschen.
-    if (wahl === 'loeschen' && ueberschreibenSicher(a.id)) {
-      if (await loescheProjekt(a.id)) toast('«' + name + '» lokal gelöscht', undefined, 6000);
-      return { ok: true };
-    }
-    // Nur bei Erfolg nachlaufen: sonst käme derselbe Dialog in jedem Durchlauf.
-    const v = repo.vergessenRemote(a.id);
-    if (!v.ok) { toast(v.error || 'Konnte nicht vermerken, dass das Projekt neu hochgeladen werden soll.', 'bad', 8000); return { ok: true }; }
-    abgleichNochmal = true;
-    return { ok: true };
-  }
-
-  const p = await sync.pull(a.id);
-  if (!p.ok) return p;
-  const d = deserialize(p.text);
-  if (d.ok === false) return { ok: false, grund: 'fehler' };
-
-  if (a.art === 'herunterladen') {
-    // Nach dem Netz-await neu prüfen; übersprungen holt der nächste Durchlauf
-    // es als normalen Konflikt (dirty + andere sha) nach.
-    if (!ueberschreibenSicher(a.id)) { uebersprungen = true; return { ok: true }; }
-    const offen = a.id === offenId();
-    uebernehmen(d.plan, p.sha);
-    if (d.hinweis) toast(d.hinweis, 'bad', 8000);
-    else if (offen) toast('Neuere Fassung vom anderen Gerät geladen');
-    return { ok: true };
-  }
-
-  // Konflikt. Gleicher Inhalt (z. B. derselbe Plan auf zwei Geräten
-  // importiert) ist keiner: still als abgeglichen vermerken.
-  const lokal = repo.load(a.id);
-  if (lokal && gleicherPlan(lokal, d.plan)) { repo.markSynced(a.id, p.sha); return { ok: true }; }
-  const wahl = await askDialog({
-    title: 'Zwei verschiedene Fassungen',
-    message: [`«${(lokal && lokal.project.name) || a.id}» wurde auf einem anderen Gerät geändert, und hier auch.`,
-      'Welche Fassung soll gelten? Nichts wird ohne deine Wahl überschrieben.'],
-    buttons: [
-      { label: 'Meine behalten', value: 'mein', primary: true },
-      { label: 'Die vom anderen Gerät nehmen', value: 'fremd', danger: true },
-      { label: 'Beide behalten (Kopie)', value: 'beide' },
-    ],
+// Eigene Änderung senden (aus dem Abonnement des Stores).
+function sende(aend) {
+  const srv = server;
+  if (!srv) return;
+  wartend++;
+  paintSpeicher();
+  reihe(async () => {
+    try {
+      if (srv !== server) return;
+      await ergebnis(srv, await srv.senden(aend), aend);
+    } finally { wartend--; paintSpeicher(); }
   });
-  if (wahl === null) return { ok: false, grund: 'abgebrochen' };
-  if (wahl === 'fremd') {
-    // Auch im Dialog kann weitergetippt worden sein.
-    const jetzt = repo.load(a.id);
-    const offenUngesichert = a.id === offenId() && (saveTimer || store.dirty || ungesichert);
-    if (offenUngesichert || (lokal && jetzt && !gleicherPlan(lokal, jetzt))) { uebersprungen = true; return { ok: true }; }
-    uebernehmen(d.plan, p.sha);
-    if (d.hinweis) toast(d.hinweis, 'bad', 8000);
-    return { ok: true };
-  }
-  if (wahl === 'beide') {
-    const kopie = deserialize(p.text, { newId: true }).plan;
-    kopie.project.name += ' (anderes Gerät)';
-    repo.save(kopie);           // ohne remoteSha → wird im nächsten Durchlauf hochgeladen
-    abgleichNochmal = true;
-  }
-  return hochladen(sync, a.id, p.sha);
 }
 
-$('sync-verbinden').onclick = async () => {
-  const token = $('sync-token').value.trim();
-  if (!token) return toast('Bitte den Schlüssel eintragen.', 'bad');
-  const r = await syncClient({ token, repo: SYNC_REPO }).pruefe();
-  if (!r.ok) return toast(grundText(r), 'bad', 8000);
-  try { window.localStorage.setItem(SYNC_KEY, JSON.stringify({ token, repo: SYNC_REPO })); }
-  catch { return toast('Der Schlüssel konnte in diesem Browser nicht gespeichert werden.', 'bad', 8000); }
-  $('sync-token').value = '';
-  toast('Verbunden mit ' + SYNC_REPO);
-  paintSyncInfo();
-  abgleichen();
-};
-$('sync-trennen').onclick = () => {
-  try { window.localStorage.removeItem(SYNC_KEY); } catch { /* Privatmodus */ }
-  clearTimeout(uploadTimer);
-  setSyncState(null);
-  paintSyncInfo();
-  toast('Getrennt — die lokalen Pläne bleiben.');
-};
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') abgleichen(); });
-window.addEventListener('online', () => abgleichen());
-
-// Mit aktivem Sync wird ein hochgeladenes Projekt NUR gelöscht, wenn das Entfernen
-// im Daten-Repo gelingt — sonst käme es beim nächsten Abgleich zurück.
-// Liefert true = lokal löschen erlaubt.
-async function loescheImDatenRepo(id, sha) {
-  const k = syncKonfig();
-  if (!k) return true;
-  const r = await syncClient(k).remove(id, sha);
-  if (r.ok) return true;
-  toast(r.grund === 'konflikt'
-    ? 'Das Projekt wurde auf einem anderen Gerät geändert – erst abgleichen, dann löschen.'
-    : 'Löschen braucht Verbindung zu GitHub – das Projekt bleibt erhalten.', 'bad', 8000);
-  return false;
-}
-
-// ── Anderer Tab ─────────────────────────────────────────────────────────────
-// Zwei Tabs desselben Browsers teilen localStorage. Ohne diesen Block schreibt
-// jeder Autosave den vollen Stand und überschreibt still, was der andere Tab
-// gespeichert hat. `storage` feuert nur im ANDEREN Tab, nie im schreibenden.
-// Eigene Bedingung statt ueberschreibenSicher(): dessen dirty-Merker meint
-// «noch nicht hochgeladen» — den setzt jeder fremde Speichervorgang, auch ohne Sync.
-const tabUngesichert = () => !!(saveTimer || store.dirty || ungesichert);
-let tabPruefung = false, tabNochmal = false;
-
-// Im anderen Tab gelöscht: weder Plan noch Indexeintrag. Nie wieder anlegen.
-// Ein nie gesichertes Projekt (Speicher voll) fehlt ebenfalls — das ist keine Löschung.
-function geloeschtImAnderenTab(id) {
-  if (ungesichert || repo.load(id) || repo.list().some((x) => x.id === id)) return false;
-  verworfen.add(id);
-  clearTimeout(saveTimer); saveTimer = null;
-  toast('Dieses Projekt wurde in einem anderen Tab gelöscht.', 'bad', 8000);
-  showProjectDialog({ firstRun: !repo.list().length });
-  return true;
-}
-
-// open() ersetzt den Inhalt (gleiche id, fragt nie) und sichert selbst; das
-// store.replace löst aber über das Abonnement einen 800-ms-Autosave aus. Der
-// bliebe als «ungesichert» stehen und ließe die nächste fremde Änderung
-// fälschlich als Konflikt erscheinen.
-async function uebernimm(plan) {
-  if (!(await open(plan))) return;
-  clearTimeout(saveTimer); saveTimer = null;
-}
-
-async function pruefeAndererTab() {
-  if (!store) return;
-  const id = offenId();
-  if (verworfen.has(id)) return;
-  const plan = repo.load(id);    // Schnappschuss: nur DIESER Stand ist «der aus dem anderen Tab»
-  if (!plan) { geloeschtImAnderenTab(id); return; }
-  if (gleicherPlan(store.state, plan)) return;
-  if (!tabUngesichert()) {
-    await uebernimm(plan);
-    toast('In einem anderen Tab geändert — übernommen');
+// Antwort von senden/wiederVerbunden abarbeiten, bis alles gesendet oder bewusst offen ist.
+async function ergebnis(srv, r, eigene) {
+  for (let i = 0; i < 20 && srv === server; i++) {
+    if (r.ok) { setOffline(false); return; }
+    if (r.abgemeldet) { zuLogin(); return; }
+    if (r.offline) { setOffline(true); return; }       // bleibt in srv.offen, geht später raus
+    if (r.zuGross) {
+      await askDialog({ title: 'Zu viele Änderungen auf einmal', message: ['Diese Änderung ist für einen Schritt zu groß und wurde nicht gesendet.', 'Sie wird hier zurückgenommen. Mach sie in kleineren Schritten.'], buttons: [{ label: 'OK', value: true, primary: true }] });
+      zuruecknehmen(eigene);
+      return;
+    }
+    if (r.konflikt) { r = await loeseKonflikt(srv, r); if (!r) return; continue; }
+    if (r.fehler) {
+      await askDialog({ title: 'Nicht gespeichert', message: ['Der Server hat die Änderung abgelehnt: ' + (r.fehler.message || r.fehler.code || r.fehler.status), 'Sie wird hier zurückgenommen.'], buttons: [{ label: 'OK', value: true, primary: true }] });
+      zuruecknehmen(r.aend);
+      r = await srv.wiederVerbunden();
+      continue;
+    }
     return;
   }
-  // Der Autosave darf während der Frage nicht laufen: er schriebe meinen Stand
-  // über den fremden, bevor jemand gewählt hat. store.dirty/ungesichert bleiben.
-  clearTimeout(saveTimer); saveTimer = null;
-  const wahl = await askDialog({
-    title: 'Dieses Projekt wurde in einem anderen Tab geändert',
-    message: [`«${plan.project.name}» wurde in einem anderen Tab gespeichert, und hier gibt es ungesicherte Änderungen.`,
-      'Welche Fassung soll gelten? Nichts wird ohne deine Wahl überschrieben.'],
-    buttons: [
-      { label: 'Meine behalten', value: 'meine', primary: true },
-      { label: 'Die aus dem anderen Tab nehmen', value: 'fremd', danger: true },
-      { label: 'Beide behalten (Kopie)', value: 'beide' },
-    ],
-  });
-  // Während des Dialogs gelöscht: weder übernehmen noch neu anlegen.
-  if (geloeschtImAnderenTab(id)) return;
-  // Der andere Tab kann während des Dialogs weitergespeichert haben: «fremd» und
-  // «beide» nehmen den Stand von JETZT, nicht den vom Öffnen des Dialogs (der
-  // Autosave ruht, mein Stand ist noch nicht geschrieben, das Lesen ist sicher).
-  // Der Schnappschuss `plan` dient nur noch dem Dialogtext.
-  const neu = (wahl === 'fremd' || wahl === 'beide') ? repo.load(id) : null;
-  if ((wahl === 'fremd' || wahl === 'beide') && !neu) { geloeschtImAnderenTab(id); return; }
-  if (wahl === 'fremd') { await uebernimm(neu); return; }
-  if (wahl === 'beide') {
-    const kopie = JSON.parse(JSON.stringify(neu));
-    kopie.project.id = 'p' + Date.now().toString(36);
-    kopie.project.name = neu.project.name + ' (anderer Tab)';
-    delete kopie.project.quelle;
-    const r = repo.save(kopie);
-    if (!r.ok) { toast(r.error, 'bad', 8000); return; }
-    toast('Der Stand aus dem anderen Tab liegt als Kopie vor.');
-  }
-  // «Meine behalten», «Beide» und Abbruch (null): mein Stand gilt, sofort —
-  // kein Pfad bleibt still.
-  await save();
 }
 
-// Ein Lauf zur Zeit; Ereignisse während Dialog oder Übernahme lösen genau eine
-// weitere Prüfung aus (das letzte gewinnt, kein zweiter Dialog).
-async function fremderTab(e) {
-  if (e.storageArea && e.storageArea !== window.localStorage) return;
-  if (e.key !== null && e.key !== 'bzp_projects' && e.key !== 'bzp_p_' + offenId()) return;
-  if (tabPruefung) { tabNochmal = true; return; }
-  tabPruefung = true;
-  try {
-    do { tabNochmal = false; await pruefeAndererTab(); } while (tabNochmal);
-  } finally { tabPruefung = false; }
+// Eine Änderungsliste lokal rückgängig machen, OHNE Undo-Eintrag (sie war nie gültig).
+function zuruecknehmen(aend) {
+  if (!aend || !store) return;
+  const x = anwenden(store.state, umkehren(aend), { erzwingen: true });
+  if (x.ok) store.applyRemote(x.state);
 }
-window.addEventListener('storage', (e) => { fremderTab(e).catch((err) => console.error(err)); });
+
+// Konfliktdialog je Art. Der Name des anderen steht nicht in den Daten (der Server speichert
+// keinen Bearbeiter je Datensatz) → «jemand anderem». Abbrechen lässt alles offen (geparkt).
+// Rückgabe: Ergebnis des erneuten Sendens, oder null (geparkt / nichts mehr zu tun).
+async function loeseKonflikt(srv, r) {
+  const wer = 'jemand anderem';
+  const entscheid = [];
+  konfliktOffen = true; paintSpeicher();
+  try {
+    for (const g of gruppen(r.konflikt)) {
+      const k = g.eintraege[0];
+      const titel = eintragTitel(k.coll, k.eid, { state: store.state, aend: r.aend, fremd: k.fremd });
+      const mehr = g.eintraege.length > 1 ? ` (und ${g.eintraege.length - 1} weitere)` : '';
+      const abbr = { label: 'Abbrechen', value: null };
+      const dlg = g.art === 'geaendert' ? {
+        title: `«${titel}» wurde gerade von ${wer} geändert`,
+        message: ['Du hast denselben Eintrag gleichzeitig geändert' + mehr + '. Welche Fassung soll gelten?'],
+        buttons: [abbr, { label: 'Ihre Fassung nehmen', value: 'fremd', danger: true }, { label: 'Meine behalten', value: 'mein', primary: true }],
+      } : g.art === 'geloescht' ? {
+        title: `«${titel}» wurde von ${wer} gelöscht`,
+        message: ['Du hast ihn gleichzeitig geändert' + mehr + '. Wiederherstellen legt ihn mit deiner Änderung neu an.'],
+        buttons: [abbr, { label: 'Verwerfen', value: 'verwerfen', danger: true }, { label: 'Wiederherstellen', value: 'wieder', primary: true }],
+      } : {
+        title: `Der aktuelle Stand von «${titel}» ließ sich nicht lesen`,
+        message: ['Die Verbindung zum Server ist gestört. Deine Änderung ist noch nicht gesendet.'],
+        buttons: [abbr, { label: 'Zurücknehmen', value: 'weg', danger: true }, { label: 'Erneut senden', value: 'nochmal', primary: true }],
+      };
+      const w = await askDialog(dlg);
+      if (w === null) { geparkt.push({ aend: r.aend, konflikt: r.konflikt }); return null; }
+      entscheid.push({ g, w });
+    }
+  } finally { konfliktOffen = false; paintSpeicher(); }
+
+  let aend = r.aend;
+  for (const { g, w } of entscheid) {
+    if (w === 'fremd' || w === 'verwerfen') { store.applyRemote(fremdUebernehmen(store.state, g.eintraege)); aend = ohne(aend, g.eintraege); }
+    else if (w === 'mein') aend = meineBehalten(aend, g.eintraege);
+    else if (w === 'wieder') aend = wiederherstellen(aend, g.eintraege);
+    else if (w === 'weg') { zuruecknehmen(r.aend); aend = null; break; }
+  }
+  return aend && !istLeer(aend) ? srv.senden(aend) : srv.wiederVerbunden();
+}
+
+// Klick auf den Speicherstand: einen offen gelassenen Konflikt erneut stellen.
+function geparktesLoesen() {
+  const p = geparkt.shift();
+  if (!p || !server) return;
+  const srv = server;
+  paintSpeicher();
+  reihe(() => ergebnis(srv, { ok: false, konflikt: p.konflikt, aend: p.aend }));
+}
+
+// ⌘Z / ⌘⇧Z: hat jemand den betroffenen Eintrag inzwischen geändert, fragt der Store nicht,
+// sondern meldet einen Konflikt. Die Antwort entscheidet «Trotzdem zurücknehmen».
+async function macheUndo(wieder) {
+  if (!store) return;
+  const r = wieder ? store.redo() : store.undo();
+  if (!r || r.ok !== false) return;
+  if (!r.konflikt) { toast(r.error || 'Nicht möglich.', 'bad', 6000); return; }
+  const k = r.konflikt[0];
+  const titel = eintragTitel(k.coll, k.eid, { state: store.state });
+  const verb = wieder ? 'wiederholen' : 'zurücknehmen';
+  const wahl = await askDialog({
+    title: wieder ? 'Wiederholen nicht eindeutig' : 'Zurücknehmen nicht eindeutig',
+    message: [k.art === 'geloescht'
+      ? `«${titel}» wurde inzwischen von jemand anderem gelöscht. Trotzdem ${verb}?`
+      : `«${titel}» wurde inzwischen von jemand anderem geändert. Trotzdem ${verb}?`],
+    buttons: [{ label: 'Abbrechen', value: null }, { label: 'Trotzdem ' + verb, value: 'ja', danger: true }],
+  });
+  if (wahl !== 'ja') return;
+  const r2 = wieder ? store.redo({ erzwingen: true }) : store.undo({ erzwingen: true });
+  if (r2 && r2.ok === false) toast(r2.error || 'Nicht möglich.', 'bad', 6000);
+}
+
+// ── Fremdänderungen (Realtime) ──────────────────────────────────────────────
+// Mehrere Ereignisse (ein Batch eines anderen = viele Datensätze) in einem Schritt anwenden.
+let fremdListe = [], fremdTimer = null;
+function beiFremd(e) {
+  fremdListe.push(e);
+  if (!fremdTimer) fremdTimer = setTimeout(fremdAnwenden, 120);
+}
+function fremdAnwenden() {
+  fremdTimer = null;
+  const liste = fremdListe; fremdListe = [];
+  if (!store || !server) return;
+  if (liste.some((e) => e.coll === 'plaene' && e.objekt === null && e.eid === store.state.project.id)) { planWeg(); return; }
+  const teile = zerlegen(store.state);
+  for (const { coll, eid, objekt } of liste) {
+    if (!teile[coll]) continue;
+    if (objekt === null) { if (coll !== 'plaene') teile[coll].delete(eid); } else teile[coll].set(eid, objekt);
+  }
+  store.applyRemote({ ...store.state, ...zusammensetzen(teile) });
+}
+
+// Der offene Plan wurde von jemand anderem gelöscht.
+async function planWeg() {
+  const id = store.state.project.id;
+  schliesseServer();
+  repo.remove(id);
+  await askDialog({ title: 'Plan gelöscht', message: ['Dieser Plan wurde von jemand anderem gelöscht.'], buttons: [{ label: 'Projekte anzeigen', value: true, primary: true }] });
+  showProjectDialog({ firstRun: true });
+}
+
+function schliesseServer() {
+  if (stopAbo) { stopAbo(); stopAbo = null; }
+  clearTimeout(fremdTimer); fremdTimer = null; fremdListe = [];
+  clearTimeout(wiederTimer); wiederTimer = null;
+  server = null; offline = false;
+  geparkt.length = 0;
+  paintSpeicher();
+}
+
+// ── Verbindung ──────────────────────────────────────────────────────────────
+// Nach einer Trennung gibt es Lücken bei den Realtime-Ereignissen: ungesendete Änderungen senden,
+// dann den Stand neu laden und per applyRemote übernehmen (Undo-Verlauf bleibt).
+async function abgleichen(srv) {
+  if (srv !== server) return;
+  if (srv.offen.length) {
+    await ergebnis(srv, await srv.wiederVerbunden());
+    if (srv !== server || srv.offen.length || geparkt.length) return;
+  }
+  if (wartend > 0 || geparkt.length) return;     // Eigenes ist unterwegs: ein Laden würde es überrollen
+  const l = await srv.laden();
+  if (srv !== server) return;
+  if (l.abgemeldet) { zuLogin(); return; }
+  if (l.offline) { setOffline(true); return; }
+  if (!l.ok) return;
+  rolle = l.rolle;
+  if (!istLeer(aenderungen(store.state, l.state))) store.applyRemote(l.state);
+}
+
+// Offline: alle 5 s prüfen, ob der Server wieder da ist (Task 10 baut darauf die Offline-Ansicht).
+let wiederTimer = null;
+const WIEDER_MS = 5000;
+function planeWieder() {
+  clearTimeout(wiederTimer);
+  wiederTimer = setTimeout(() => reihe(versucheWieder), WIEDER_MS);
+}
+async function versucheWieder() {
+  const srv = server;
+  if (!srv || !offline) return;
+  const e = await pb.erneuern();
+  if (!e.ok && (e.status === 401 || e.code === 'auth')) { zuLogin(); return; }
+  if (!e.ok) { planeWieder(); return; }
+  offline = false;
+  srv.neuAbonnieren();
+  await abgleichen(srv);
+  paintSpeicher();
+}
+
+// ── Lokale Kopie ────────────────────────────────────────────────────────────
+// print.html liest den Plan weiter aus localStorage. Sie wird nach jedem Laden und jeder
+// Änderung geschrieben (ohne Token — der Plan allein) und gilt nie als Wahrheit.
+let kopieTimer = null, kopieGemeldet = false;
+function kopieSpaeter() { clearTimeout(kopieTimer); kopieTimer = setTimeout(kopieSchreiben, 800); }
+function kopieSchreiben() {
+  clearTimeout(kopieTimer); kopieTimer = null;
+  if (!store || !server) return;
+  const r = repo.save(store.state);
+  if (!r.ok && !kopieGemeldet) { kopieGemeldet = true; toast('Die lokale Kopie (für den Druck) ließ sich nicht speichern: ' + r.error, 'bad', 8000); }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && kopieTimer) kopieSchreiben(); });
+window.addEventListener('pagehide', () => { if (kopieTimer) kopieSchreiben(); });
+
+// Ungesendetes nicht stillschweigend verlieren.
+window.addEventListener('beforeunload', (e) => {
+  if (!server || !(wartend || server.offen.length || geparkt.length)) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
 
 // ── Der Tag ─────────────────────────────────────────────────────────────────
 // EIN Kalender-Knopf für beide Modi — «welcher Tag» ist dieselbe Frage, ob im
@@ -1286,88 +1165,22 @@ function apply(cmd) {
   return r;
 }
 
-// ── Speichern ───────────────────────────────────────────────────────────────
-// localStorage hängt am Browser. Bis PocketBase steht, ist der Export die
-// einzige echte Sicherung — deshalb der sichtbare Zustand oben rechts.
-let saveTimer = null;
-// Ein gescheitertes Sichern lässt store.dirty NICHT stehen (store.replace setzt
-// es zurück, bevor save() läuft). Deshalb merkt sich das EINE Variable: gesetzt
-// bei Fehlschlag, gelöscht bei Erfolg — Wechsel und Neuladen fragen sie ab.
-let ungesichert = false;
-function scheduleSave() {
-  clearTimeout(saveTimer);
-  setSaveState('dirty');
-  saveTimer = setTimeout(() => { saveTimer = null; save(); }, 800);
-}
-// Entfernt ein Projekt; ein Schreibfehler des Index wird gemeldet, ändert aber
-// den Ablauf nicht.
-// Gelöschte Projekt-ids, die noch im Store stehen (offenes Projekt ohne
-// Alternative): sichern() und beforeunload lassen sie in Ruhe.
-const verworfen = new Set();
-
-// Löscht lokal. Das OFFENE Projekt wird vorher verlassen (open() sichert das
-// bisherige und fragt bei Fehlschlag); nur wenn der Nutzer den Wechsel abbricht,
-// bleibt alles stehen. `vorEntfernen` (async, true = weiter) läuft NACH dem
-// Verlassen und VOR dem lokalen Entfernen: der Dialog löscht darin im Daten-Repo,
-// damit ein abgebrochener Wechsel nichts im Repo anrichtet. Gibt false zurück,
-// wenn nichts gelöscht wurde.
-async function loescheProjekt(id, vorEntfernen) {
-  // Während des Löschens kein Abgleich über diese id (der Wechsel startet einen):
-  // die Datei kann im Repo schon weg sein, das Projekt ist aber gewollt gelöscht.
-  verworfen.add(id);
-  const weiter = async () => !vorEntfernen || vorEntfernen();
-  if (id === offenId()) {
-    const anderes = repo.list().find((x) => x.id !== id);
-    const plan = anderes && repo.load(anderes.id);
-    if (plan) {
-      // Das zu löschende Projekt nicht mehr sichern: open() würde es sonst
-      // noch einmal ablegen, bevor entferne() es entfernt.
-      if (!(await open(plan))) { verworfen.delete(id); return false; }
-    } else {
-      if (!(await weiter())) { verworfen.delete(id); return false; }
-      clearTimeout(saveTimer); saveTimer = null;
-      entferne(id);
-      showProjectDialog({ firstRun: true });
-      return true;
-    }
+// ── Projekt löschen ─────────────────────────────────────────────────────────
+// Nur Besitzer und Superadmin (der Server prüft es ebenfalls; der Hook kaskadiert alle
+// Datensätze). Das OFFENE Projekt wird dabei geschlossen: der Dialog fordert ein neues.
+async function loescheProjekt(planId) {
+  const istOffen = !!server && store.state.project.id === planId;
+  const s = istOffen ? server : createServerPlan({ pb, planId });
+  const r = await s.planLoeschen();
+  if (!r.ok && !r.nichtGefunden) {
+    if (r.abgemeldet) zuLogin();
+    else toast(r.offline ? 'Keine Verbindung – das Projekt wurde nicht gelöscht.' : 'Löschen nicht möglich: ' + (r.fehler?.message || 'Fehler'), 'bad', 8000);
+    return false;
   }
-  if (!(await weiter())) { verworfen.delete(id); return false; }
-  entferne(id);
+  if (istOffen) schliesseServer();
+  const e = repo.remove(planId);
+  if (!e.ok) toast(e.error, 'bad', 8000);
   return true;
-}
-
-function entferne(id) {
-  const r = repo.remove(id);
-  if (!r.ok) toast(r.error, 'bad', 8000);
-  return r;
-}
-// EIN Weg, den Stand zu sichern und den Zustand anzuzeigen — für save() und
-// den Projektwechsel in open(). `still`: kein Toast (der Aufrufer fragt selbst).
-async function sichern({ loud = false, still = false } = {}) {
-  if (!store) return { ok: true };
-  // Ein gelöschtes offenes Projekt bleibt bis zum Wechsel im Store; Speichern
-  // legte es sonst wieder an (und mit Sync auch im Daten-Repo).
-  if (verworfen.has(store.state.project.id)) { ungesichert = false; return { ok: true }; }
-  // await ist für localStorage folgenlos (synchrones Objekt) und lässt den
-  // PocketBase-Durchschrieb (Promise) sein Ergebnis melden.
-  const r = await repo.save(store.state);
-  ungesichert = !r.ok;
-  if (r.ok) {
-    store.markSaved();
-    setSaveState('saved');
-    if (loud) toast('Gesichert');
-    if (repo.syncInfo(store.state.project.id).dirty) planeUpload();
-  } else {
-    setSaveState('error');
-    if (!still) toast(r.error, 'bad', 8000);
-  }
-  return r;
-}
-async function save(loud = false) { await sichern({ loud }); }
-function setSaveState(s) {
-  const n = $('save-state');
-  n.dataset.state = s;
-  n.textContent = s === 'saved' ? 'gesichert' : s === 'dirty' ? 'ungesichert …' : 'NICHT gesichert!';
 }
 
 // ── Kopfzeile ───────────────────────────────────────────────────────────────
@@ -1464,6 +1277,8 @@ function addGewerk(anker, art) {
 }
 
 // ── Export / Import ─────────────────────────────────────────────────────────
+// Export = JSON-Sicherung des Plans (nie ein Token). Import legt einen NEUEN Plan auf dem
+// Server an (neue plan_id, Spec 15); wer ihn sehen darf, entscheidet die Mitgliederliste.
 function doExport() {
   const blob = new Blob([serialize(store.state)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -1471,101 +1286,94 @@ function doExport() {
   a.download = store.state.project.name.replace(/[^\w\-]+/g, '-').toLowerCase() + '-bauzeitenplan.json';
   a.click();
   URL.revokeObjectURL(a.href);
-  toast('Exportiert — das ist deine Sicherung, bis das Backend steht.');
+  toast('Exportiert');
+}
+
+const KEIN_ANLEGEN = 'Neue Projekte legen nur Produktionsleitung und Superadmin an.';
+
+// Neuen Plan auf dem Server anlegen und öffnen. true = offen.
+async function planNeu(plan) {
+  if (!darfPlanAnlegen(pb.auth?.record)) { toast(KEIN_ANLEGEN, 'bad'); return false; }
+  const r = await createServerPlan({ pb, planId: null }).planAnlegen(plan);
+  if (!r.ok) {
+    if (r.abgemeldet) zuLogin();
+    else if (r.zuGross) await askDialog({ title: 'Plan zu groß', message: ['Dieser Plan hat zu viele Einträge für einen Schritt und wurde nicht angelegt.'], buttons: [{ label: 'OK', value: true, primary: true }] });
+    else toast(r.offline ? 'Keine Verbindung – der Plan wurde nicht angelegt.' : 'Der Plan konnte nicht angelegt werden: ' + (r.fehler?.message || r.message || 'Fehler'), 'bad', 8000);
+    return false;
+  }
+  return open(r.planId);
 }
 
 async function doImport(e) {
   const f = e.target.files[0];
   if (!f) return;
   e.target.value = '';
-  // Ohne newId: die Datei bringt ihre eigene Projekt-ID mit → derselbe Plan
-  // erneut geladen überschreibt sich, statt sich zu verdoppeln.
+  if (!darfPlanAnlegen(pb.auth?.record)) return toast(KEIN_ANLEGEN, 'bad');
   let r;
   try { r = deserialize(await f.text()); }
   catch (err) { return toast('Die Datei lässt sich nicht lesen: ' + ((err && err.message) || err), 'bad', 8000); }
   if (r.ok === false) return toast(r.error, 'bad', 8000);
   if (r.hinweis) toast(r.hinweis, 'bad', 8000);
-  const name = r.plan.project.name;
-
-  // Schon Projekte mit gleichem Namen da? Fragen, ob ersetzen (alte weg, nur
-  // diese Datei) oder zusätzlich importieren — sonst sammeln sich Duplikate.
-  const dupes = repo.list().filter((p) => p.name === name);
-  let choice = null;
-  if (dupes.length) {
-    choice = await askDialog({
-      title: `«${name}» ist bereits vorhanden`,
-      message: [
-        dupes.length === 1
-          ? 'Ein Projekt mit diesem Namen liegt schon in diesem Browser.'
-          : `${dupes.length} Projekte mit diesem Namen liegen schon in diesem Browser.`,
-        'Alte Version(en) ersetzen oder diese Datei zusätzlich als neues Projekt behalten?',
-      ],
-      buttons: [
-        { label: 'Abbrechen', value: null },
-        { label: 'Zusätzlich behalten', value: 'keep' },
-        { label: 'Ersetzen', value: 'replace', primary: true },
-      ],
-    });
-    if (choice === null) return;                 // Abbruch: gar nicht importieren
-    if (choice !== 'replace') r.plan.project.id = 'p' + Date.now().toString(36);
-  }
-
-  // Erst öffnen, dann die Alten entfernen: bricht der Nutzer den Wechsel ab,
-  // darf nichts gelöscht sein. Dieselbe id überschreibt open() ohnehin.
-  if (!(await open(r.plan))) return;
-  const weg = choice === 'replace' ? dupes.filter((p) => p.id !== r.plan.project.id) : [];
-  for (const p of weg) entferne(p.id);
+  if (!(await planNeu(r.plan))) return;
   $('dlg').hidden = true;      // sonst bleibt der Anlege-Dialog über allem liegen
-  // Die alten Fassungen waren der Platz: erst jetzt kann der neue Plan passen.
-  // Scheitert es weiter, steht der Speicherfehler da — kein «importiert».
-  if (weg.length && ungesichert && !(await sichern()).ok) return;
-  toast('«' + name + '» importiert');
+  toast('«' + r.plan.project.name + '» importiert');
 }
 
 // ── Projektdialog ───────────────────────────────────────────────────────────
-function showProjectDialog({ firstRun = false }) {
+// Rolle immer als Symbol + Text (nie Farbe allein).
+const ROLLEN_ANZEIGE = {
+  besitzer: '👑 Besitzer', superadmin: '⭐ Superadmin', produktionsleitung: '🎬 Produktionsleitung',
+  bearbeiter: '✏ Bearbeiter', gewerkeleiter: '🔧 Gewerkeleiter', betrachter: '👁 Betrachter',
+};
+
+async function showProjectDialog({ firstRun = false } = {}) {
   const dlg = $('dlg');
+  dlg.replaceChildren(el('div', 'dlg-box', 'Projekte werden geladen …'));
+  dlg.hidden = false;
+  let list = [], problem = null;
+  try { list = await listePlaene(pb); }
+  catch (e) {
+    if (e.abgemeldet) { zuLogin(); return; }
+    problem = e.offline ? 'Keine Verbindung zum Server. Die Projektliste lässt sich nur mit Verbindung laden.' : 'Die Projekte ließen sich nicht laden: ' + e.message;
+  }
+  const user = pb.auth?.record;
+  const darfAnlegen = darfPlanAnlegen(user);
   dlg.replaceChildren();
 
   const box = el('div', 'dlg-box');
   box.append(el('h2', 'dlg-h', firstRun ? 'Bauzeitenplan' : 'Projekte'));
-  const list = repo.list();
-  if (firstRun) box.append(el('p', 'dlg-sub', list.length
-    ? 'Öffne ein Projekt oder leg ein neues an. Alles bleibt in diesem Browser; sichere regelmäßig per Export.'
-    : 'Leg ein Projekt an — aus einer Vorlage oder leer. Alles bleibt in diesem Browser; sichere regelmäßig per Export.'));
+  if (problem) box.append(el('p', 'dlg-sub', '⚠ ' + problem));
+  else if (firstRun) box.append(el('p', 'dlg-sub', list.length
+    ? 'Öffne ein Projekt' + (darfAnlegen ? ' oder leg ein neues an.' : '.') + ' Die Pläne liegen auf dem Server, Änderungen anderer erscheinen sofort.'
+    : darfAnlegen ? 'Leg ein Projekt an — aus einer Vorlage oder leer — oder importiere eine JSON-Sicherung.'
+      : 'Du bist noch in keinem Projekt. Die Produktionsleitung lädt dich ein.'));
 
   // Bestehende Projekte
-
   if (list.length) {
     box.append(el('h3', 'dlg-h3', 'Öffnen'));
     const ul = el('div', 'dlg-list');
     for (const p of list) {
       const row = el('div', 'dlg-row');
       const b = el('button', 'dlg-open');
-      b.append(el('span', 'dlg-open-n', p.name));
-      b.append(el('span', 'dlg-open-m', (p.venue ? p.venue + ' · ' : '') + 'geändert ' + new Date(p.modified).toLocaleString('de-DE')));
-      b.onclick = async () => {
-        const pl = repo.load(p.id);
-        if (!pl) return;
-        if (await open(pl)) close();
-      };
-      const del = el('button', 'dlg-del', '×');
-      del.title = 'Projekt löschen';
-      del.onclick = async () => {
-        const sha = repo.syncInfo(p.id).remoteSha;
-        const zurSync = !!(syncKonfig() && sha);
-        const ok = await askDialog({
-          title: 'Projekt löschen?',
-          message: [`«${p.name}» endgültig löschen? Das lässt sich nicht rückgängig machen — exportiere vorher, wenn du unsicher bist.`,
-            ...(zurSync ? ['Wird auch auf allen anderen Geräten gelöscht.'] : [])],
-          buttons: [{ label: 'Abbrechen', value: false }, { label: 'Löschen', value: true, danger: true }],
-        });
-        if (!ok) return;
-        if (!(await loescheProjekt(p.id, () => !zurSync || loescheImDatenRepo(p.id, sha)))) return;
-        // Ohne Alternative zeigt loescheProjekt den Erststart-Dialog selbst.
-        if (repo.list().length) showProjectDialog({ firstRun: false });
-      };
-      row.append(b, del);
+      b.dataset.planId = p.plan_id;
+      b.append(el('span', 'dlg-open-n', p.name || '(ohne Namen)'));
+      b.append(el('span', 'dlg-open-m', (p.venue ? p.venue + ' · ' : '') + (ROLLEN_ANZEIGE[p.rolle] || 'ohne Rolle')));
+      b.onclick = async () => { if (await open(p.plan_id)) close(); };
+      row.append(b);
+      if (p.rolle === 'besitzer' || p.rolle === 'superadmin') {
+        const del = el('button', 'dlg-del', '×');
+        del.title = 'Projekt löschen';
+        del.onclick = async () => {
+          const ok = await askDialog({
+            title: 'Projekt löschen?',
+            message: [`«${p.name}» endgültig löschen? Der Plan verschwindet für ALLE Mitglieder und lässt sich nicht rückgängig machen — exportiere vorher, wenn du unsicher bist.`],
+            buttons: [{ label: 'Abbrechen', value: false }, { label: 'Löschen', value: true, danger: true }],
+          });
+          if (!ok || !(await loescheProjekt(p.plan_id))) return;
+          showProjectDialog({ firstRun: firstRun || !server });
+        };
+        row.append(del);
+      }
       ul.append(row);
     }
     box.append(ul);
@@ -1573,6 +1381,7 @@ function showProjectDialog({ firstRun = false }) {
 
   // Neu anlegen
   box.append(el('h3', 'dlg-h3', 'Neues Projekt'));
+  if (!darfAnlegen) box.append(el('p', 'dlg-sub', '🔒 ' + KEIN_ANLEGEN));
   const form = el('div', 'dlg-form');
 
   const nameIn = el('input');
@@ -1609,6 +1418,7 @@ function showProjectDialog({ firstRun = false }) {
 
   const actions = el('div', 'dlg-act');
   const create = el('button', 'btn btn-p', 'Projekt anlegen');
+  create.id = 'neu-anlegen';
   create.onclick = async () => {
     if (!nameIn.value.trim()) { nameIn.focus(); return; }
     if (!vonIn.value) { toast('Bitte «Von» eintragen.', 'bad'); vonIn.focus(); return; }
@@ -1619,21 +1429,32 @@ function showProjectDialog({ firstRun = false }) {
     const bisEnde = new Date(bisIn.value + 'T00:00'); bisEnde.setDate(bisEnde.getDate() + 1);
     const neu = planFromTemplate(chosen, { name: nameIn.value.trim(), venue: venueIn.value.trim(), von: vonIn.value + 'T00:00', bis: local(bisEnde) });
     neu.project.eingerichtet = false;     // nur hier: «Neu» führt einmal durch die Schritte
-    if (await open(neu)) { close(); openEinrichten('projekt', { erst: true }); }
+    if (await planNeu(neu)) { close(); openEinrichten('projekt', { erst: true }); }
   };
   const imp = el('button', 'btn', 'JSON importieren');
+  imp.id = 'neu-import';
   imp.onclick = () => $('import-file').click();
+  if (!darfAnlegen) {
+    for (const b of [create, imp]) { b.disabled = true; b.title = KEIN_ANLEGEN; }
+    for (const i of [nameIn, venueIn, vonIn, bisIn]) i.disabled = true;
+  }
   actions.append(imp, create);
   if (!firstRun) {
     const cancel = el('button', 'btn', 'Abbrechen');
     cancel.onclick = close;
     actions.prepend(cancel);
+  } else {
+    // Ohne Projekt gibt es noch keine Kopfzeile: hier muss man sich abmelden können.
+    const aus = el('button', 'btn', '⎋ Abmelden');
+    aus.id = 'dlg-abmelden';
+    aus.onclick = abmelden;
+    actions.prepend(aus);
   }
   box.append(actions);
 
   dlg.append(box);
   dlg.hidden = false;
-  nameIn.focus();
+  if (darfAnlegen) nameIn.focus();
 
   function close() { dlg.hidden = true; }
   dlg.onclick = (e) => { if (e.target === dlg && !firstRun) close(); };
@@ -1885,8 +1706,8 @@ function openReview() {
   document.body.append(dlg);
 }
 
-$('undo').onclick = () => store && store.undo();
-$('redo').onclick = () => store && store.redo();
+$('undo').onclick = () => macheUndo(false);
+$('redo').onclick = () => macheUndo(true);
 $('plan-verschieben').onclick = showShiftDialog;
 
 // ── Projektmenü (Kopfzeile) ─────────────────────────────────────────────────
@@ -1894,32 +1715,37 @@ $('plan-verschieben').onclick = showShiftDialog;
 // davon hängt an einem dauerhaft vorhandenen Knopf: Neu und Import müssen schon
 // beim allerersten Start gehen (kein Projekt, kein mount()) — der Projektdialog
 // bietet «JSON importieren» an, und `import-file` wird auf Modulebene verdrahtet.
+// Die Anmeldung (Name, Abmelden) steht am Ende des Menüs.
 const neuesProjekt = () => showProjectDialog({});
 const projekteWaehlen = () => showProjectDialog({});
 const importieren = () => $('import-file').click();
 const exportieren = () => { if (store) doExport(); };
 
-function oeffneSpeicherort() {
-  paintSyncInfo();
-  $('sync-dlg').hidden = false;
-  $('sync-token').focus();
+async function abmelden() {
+  if (server && (wartend || server.offen.length || geparkt.length)) {
+    const wahl = await askDialog({
+      title: 'Ungesendete Änderungen',
+      message: ['Es gibt Änderungen, die noch nicht beim Server angekommen sind. Beim Abmelden gehen sie verloren.'],
+      buttons: [{ label: 'Abbrechen', value: null, primary: true }, { label: 'Trotzdem abmelden', value: 'ja', danger: true }],
+    });
+    if (wahl !== 'ja') return;
+  }
+  pb.abmelden();     // meldet «abgemeldet» → zuLogin (nicht zusätzlich weiterleiten)
 }
-function schliesseSpeicherort() { $('sync-dlg').hidden = true; }
-$('sync-zu').onclick = schliesseSpeicherort;
-$('sync-dlg').onclick = (e) => { if (e.target === $('sync-dlg')) schliesseSpeicherort(); };
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !$('sync-dlg').hidden) { e.preventDefault(); schliesseSpeicherort(); }
-});
 
 function projektMenue() {
   const r = $('proj-knopf').getBoundingClientRect();
+  const user = pb.auth?.record;
+  const darf = darfPlanAnlegen(user);
+  const grund = darf ? '' : 'nur Leitung';
   openMenu(r.left, r.bottom + 4, [
-    { id: 'new-proj', label: '＋ Neu…', run: neuesProjekt },
+    { id: 'new-proj', label: '＋ Neu…', disabled: !darf, hint: grund, run: neuesProjekt },
     { id: 'proj-menu', label: '📂 Projekte…', run: projekteWaehlen },
-    { id: 'import', label: '⬆ Import…', run: importieren },
+    { id: 'import', label: '⬆ Import…', disabled: !darf, hint: grund, run: importieren },
     { id: 'export', label: '⬇ Export', disabled: !store, run: exportieren },
     null,
-    { id: 'sync-oeffnen', label: '☁ Speicherort…', run: oeffneSpeicherort },
+    { id: 'konto', label: '👤 ' + (user?.name || user?.email || 'Angemeldet'), disabled: true },
+    { id: 'abmelden', label: '⎋ Abmelden', run: abmelden },
   ]);
 }
 $('proj-knopf').onclick = projektMenue;
@@ -1951,12 +1777,25 @@ $('theme-toggle').onclick = () => {
 paintModeToggle();
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-// Der Plan lebt im Browser (localStorage) plus JSON-Export. Die Seite ist eine
-// reine statische Auslieferung ohne Nutzerverwaltung — es gibt nichts
-// auszuwählen und nichts anzumelden.
+// Der Plan lebt auf dem Server (PocketBase); localStorage hält nur die Kopie für den Druck
+// und das Token (js/pb.js). Ohne Anmeldung geht es zur Anmeldeseite.
 function main() {
   repo = createRepo(window.localStorage);
-  paintSyncInfo();
+  // Das Token erneuert die App selbst (alle 6 h), damit sie danach die Realtime-Verbindung
+  // neu aufbauen kann: sie trägt sonst bis zum nächsten Verbinden das alte Token.
+  pb = createPb({ basis: apiBasis(), autostart: false });
+  pb.on('abgemeldet', () => zuLogin());
+  let getrennt = false;
+  pb.on('getrennt', () => { getrennt = true; });
+  pb.on('verbunden', () => {
+    if (!getrennt) return;
+    getrennt = false;
+    const srv = server;
+    if (srv) reihe(async () => { if (srv !== server) return; setOffline(false); await abgleichen(srv); paintSpeicher(); });
+  });
+  setInterval(async () => { const r = await pb.erneuern(); if (r.ok && server) server.neuAbonnieren(); }, ERNEUERN_MS);
+  $('sync-state').onclick = () => { if (geparkt.length) geparktesLoesen(); };
+  paintSpeicher();
   boot();
 }
 main();

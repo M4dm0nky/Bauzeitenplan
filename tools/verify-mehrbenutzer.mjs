@@ -1,5 +1,5 @@
 // Mehrbenutzer-Prüfung im echten Browser (Firefox) gegen eine lokale PocketBase.
-//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG]
+//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG|ZWEI_NUTZER|IMPORT]
 // ANMELDUNG: login.html — falsches/richtiges Passwort, «Passwort vergessen», Einladung (neues Konto,
 // vorhandenes Konto, ungültig), Passwort zurücksetzen (Mail über einen kleinen lokalen SMTP-Empfänger).
 // Task 11 ergänzt weitere Abschnitte in ABSCHNITTE. Alle Passwörter entstehen zur Laufzeit.
@@ -11,6 +11,9 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { mustFirefox } from './browsers.mjs';
+import { createPb } from '../js/pb.js';
+import { createServerPlan } from '../js/server.js';
+import { deserialize } from '../js/persistence.js';
 import { startePb, kontoAnlegen, anmelden as anmeldenRoh } from './pb-lokal.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -256,9 +259,218 @@ async function ANMELDUNG({ pb, base, browser, smtp }) {
   }
 }
 
-const ABSCHNITTE = { ANMELDUNG };
+// ── Hilfen für ZWEI NUTZER / IMPORT ──────────────────────────────────────────
+const fixturePfad = (n) => join(here, 'fixtures', n + '.json');
+const fixturePlan = (n) => deserialize(readFileSync(fixturePfad(n), 'utf8')).plan;
+const warte = (ms) => new Promise((r) => setTimeout(r, ms));
+// Node-seitiger Client (Plan anlegen); Token nur im Speicher dieses Prozesses
+async function nodeClient(pb, email, passwort) {
+  const a = await anmeldenRoh(pb.url, email, passwort);
+  const m = new Map([['bzp_auth', JSON.stringify({ token: a.token, record: a.record })]]);
+  const sp = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  return createPb({ basis: pb.url, fetch, speicher: sp, autostart: false });
+}
+// Browserkontext, bereits angemeldet (bzp_auth wie nach login.html); blockRealtime kappt die SSE-Strecke
+async function nutzer(browser, pb, email, passwort, { blockRealtime = false } = {}) {
+  const a = await anmeldenRoh(pb.url, email, passwort);
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block', acceptDownloads: true });
+  await ctx.addInitScript((v) => { try { if (!localStorage.getItem('bzp_seeded')) { localStorage.setItem('bzp_seeded', '1'); localStorage.setItem('bzp_auth', v); } } catch (e) { /* egal */ } }, JSON.stringify({ token: a.token, record: a.record }));
+  if (blockRealtime) await ctx.route('**/api/realtime**', (r) => r.abort());
+  const page = await ctx.newPage();
+  page.on('dialog', (d) => { ok(false, 'Browser-Dialog erschienen: ' + d.type()); d.dismiss(); });
+  page.on('pageerror', (e) => ok(false, 'Seitenfehler: ' + e.message));
+  return { ctx, page };
+}
+const appUrl = (base, pb, extra = '') => `${base}/index.html?api=${encodeURIComponent(pb.url)}${extra}`;
+async function planOeffnen(page, base, pb) {
+  await page.goto(appUrl(base, pb, '&plan=leer'));
+  await page.waitForFunction(() => (document.getElementById('proj-name')?.textContent || '').trim().length > 1, null, { timeout: 15000 });
+  await page.locator('[data-view="tabelle"]').click();
+  try { await page.locator('.tb-r .c-title input').first().waitFor({ timeout: 10000 }); }
+  catch (e) { await page.screenshot({ path: join(shots, '_fehler.png') }); console.log('  URL ' + page.url() + ' | ' + (await page.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 300)); throw e; }
+}
+const titel = (page, id) => page.locator(`tr[data-id="${id}"] .c-title input`);
+async function titelSetzen(page, id, text) {
+  const f = titel(page, id);
+  await f.fill(text);
+  await f.press('Tab');
+  await page.evaluate(() => document.activeElement?.blur());
+}
+const gesendet = (page) => page.waitForFunction(() => document.getElementById('sync-state')?.dataset.state === 'ok' && /gesendet/.test(document.getElementById('sync-state').textContent), null, { timeout: 10000 });
+const wertBis = async (page, id, erwartet, ms = 3000) => {
+  try { await page.waitForFunction(([i, w]) => document.querySelector(`tr[data-id="${i}"] .c-title input`)?.value === w, [id, erwartet], { timeout: ms }); return true; } catch { return false; }
+};
+const dlgKnopf = (page, text) => page.locator('.dlg:not([hidden]) .btn', { hasText: text });
+async function serverTitel(pb, planId, id) {
+  const r = await pb.su('GET', `/api/collections/vorgaenge/records?filter=${encodeURIComponent(`plan_id="${planId}" && eid="${id}"`)}`);
+  return r.body.items[0]?.daten?.title;
+}
+
+async function ZWEI_NUTZER({ pb, base, browser }) {
+  console.log('— ZWEI NUTZER');
+  const PW = pw();
+  const pl = await kontoAnlegen(pb, { email: 'pl@bzp.test', name: 'Paula', passwort: PW, produktionsleitung: true });
+  const bearb = await kontoAnlegen(pb, { email: 'bearb@bzp.test', name: 'Ben', passwort: PW });
+  const KT = fixturePlan('klassentreffen-festival');
+  const ang = await createServerPlan({ pb: await nodeClient(pb, 'pl@bzp.test', PW), planId: null }).planAnlegen(KT);
+  ok(ang.ok, 'Plan über den Server angelegt', JSON.stringify(ang).slice(0, 200));
+  const planId = ang.planId;
+  const m = await pb.su('POST', '/api/collections/mitglieder/records', { plan_id: planId, user_id: bearb.id, rolle: 'bearbeiter', gewerke: [] });
+  ok(m.ok, 'bearb ist Bearbeiter im Plan');
+  const ctxs = [];
+  try {
+    const A = await nutzer(browser, pb, 'pl@bzp.test', PW); ctxs.push(A.ctx);
+    const B = await nutzer(browser, pb, 'bearb@bzp.test', PW); ctxs.push(B.ctx);
+    await Promise.all([planOeffnen(A.page, base, pb), planOeffnen(B.page, base, pb)]);
+    const ids = await A.page.$$eval('.tb-r', (rs) => rs.filter((r) => r.querySelector('.c-title input')).slice(0, 8).map((r) => r.dataset.id));
+    const [X, Y, Z] = ids.slice(2, 5);
+    const orig = {}; for (const i of [X, Y, Z]) orig[i] = await titel(A.page, i).inputValue();
+    await warte(1500); // Realtime-Handshake
+    ok((await A.page.locator('#sync-state').textContent()).includes('gesendet'), 'A: Speicherstand «gesendet» nach dem Laden');
+    ok((await A.page.locator('#sync-state').getAttribute('data-state')) === 'ok', 'A: Speicherstand grün (data-state ok)');
+
+    // 1) A ändert X → B sieht es ≤ 3 s, ohne Undo-Eintrag bei B
+    await titelSetzen(A.page, X, 'A: neuer Titel');
+    await gesendet(A.page);
+    ok(await wertBis(B.page, X, 'A: neuer Titel'), 'B sieht As Änderung binnen 3 s (Realtime)');
+    ok(await B.page.locator('#undo').isDisabled(), 'B: kein Undo-Eintrag durch die Fremdänderung');
+    ok((await serverTitel(pb, planId, X)) === 'A: neuer Titel', 'Server hat As Titel');
+    ok(!(await A.page.locator('.dlg:not([hidden])').count()), 'A: kein Dialog');
+
+    // 2) B ändert anderen Vorgang Y → kein Dialog, A sieht es
+    await titelSetzen(B.page, Y, 'B: anderer Vorgang');
+    await gesendet(B.page);
+    ok(await wertBis(A.page, Y, 'B: anderer Vorgang'), 'A sieht Bs Änderung an Y');
+    ok(!(await A.page.locator('.dlg:not([hidden])').count()) && !(await B.page.locator('.dlg:not([hidden])').count()), 'verschiedene Vorgänge → kein Konfliktdialog');
+
+    // 3) A macht seine Änderung an X rückgängig → Bs Änderung an Y bleibt
+    await A.page.keyboard.press('Control+z');
+    ok(await wertBis(A.page, X, orig[X]), 'A: ⌘Z nimmt As Änderung an X zurück');
+    await A.page.waitForTimeout(500);
+    ok((await titel(A.page, Y).inputValue()) === 'B: anderer Vorgang', 'A: Bs Änderung an Y bleibt nach ⌘Z');
+    await gesendet(A.page);
+    ok(await wertBis(B.page, X, orig[X]), 'B sieht As Rücknahme');
+    ok((await serverTitel(pb, planId, Y)) === 'B: anderer Vorgang', 'Server: Y bleibt Bs Titel');
+
+    // 4) Konflikt: C (Bearbeiter, Realtime gekappt) ändert dasselbe wie A
+    const C = await nutzer(browser, pb, 'bearb@bzp.test', PW, { blockRealtime: true }); ctxs.push(C.ctx);
+    await planOeffnen(C.page, base, pb);
+    await titelSetzen(A.page, X, 'A: Konfliktwert');
+    await gesendet(A.page);
+    await warte(1500);
+    ok((await titel(C.page, X).inputValue()) === orig[X], 'C: ohne Realtime noch der alte Titel (Strecke wirklich gekappt)');
+    await titelSetzen(C.page, X, 'C: mein Wert');
+    await C.page.locator('.dlg:not([hidden]) .dlg-h').first().waitFor({ timeout: 10000 });
+    const kt = (await C.page.locator('.dlg:not([hidden]) .dlg-h').first().textContent()).trim();
+    ok(/wurde gerade von jemand anderem geändert/.test(kt), 'C: Konfliktdialog «… wurde gerade von … geändert»', kt);
+    ok(await dlgKnopf(C.page, 'Ihre Fassung nehmen').isVisible() && await dlgKnopf(C.page, 'Meine behalten').isVisible() && await dlgKnopf(C.page, 'Abbrechen').isVisible(), 'C: Knöpfe Ihre Fassung nehmen / Meine behalten / Abbrechen');
+    await C.page.screenshot({ path: join(shots, 'mehrbenutzer-konflikt.png') });
+    await dlgKnopf(C.page, 'Ihre Fassung nehmen').click();
+    ok(await wertBis(C.page, X, 'A: Konfliktwert'), 'C: «Ihre Fassung nehmen» zeigt As Wert');
+    await gesendet(C.page);
+    ok((await serverTitel(pb, planId, X)) === 'A: Konfliktwert', 'Server behält As Wert');
+    // «Meine behalten»
+    await titelSetzen(A.page, Y, 'A: zweiter Konflikt');
+    await gesendet(A.page);
+    await titelSetzen(C.page, Y, 'C: ich bleibe');
+    await dlgKnopf(C.page, 'Meine behalten').waitFor({ timeout: 10000 });
+    await dlgKnopf(C.page, 'Meine behalten').click();
+    await gesendet(C.page);
+    ok((await titel(C.page, Y).inputValue()) === 'C: ich bleibe', 'C: «Meine behalten» bleibt stehen');
+    ok((await serverTitel(pb, planId, Y)) === 'C: ich bleibe', 'Server: Cs Fassung nach «Meine behalten»');
+    ok(await wertBis(A.page, Y, 'C: ich bleibe'), 'A bekommt Cs Fassung per Realtime');
+
+    // 5) Undo-Konflikt: A ändert Z, B ändert Z danach, A macht rückgängig
+    await titelSetzen(A.page, Z, 'A: Z eins');
+    await gesendet(A.page);
+    ok(await wertBis(B.page, Z, 'A: Z eins'), 'B sieht Z');
+    await titelSetzen(B.page, Z, 'B: Z zwei');
+    await gesendet(B.page);
+    ok(await wertBis(A.page, Z, 'B: Z zwei'), 'A sieht Bs Z');
+    await A.page.keyboard.press('Control+z');
+    await A.page.locator('.dlg:not([hidden]) .dlg-h').first().waitFor({ timeout: 5000 });
+    const ut = (await A.page.locator('.dlg:not([hidden])').first().textContent());
+    ok(/wurde inzwischen von jemand anderem geändert\. Trotzdem zurücknehmen\?/.test(ut), 'A: Undo-Konflikt «… Trotzdem zurücknehmen?»', ut.slice(0, 200));
+    await dlgKnopf(A.page, 'Trotzdem zurücknehmen').click();
+    ok(await wertBis(A.page, Z, orig[Z]), 'A: erzwungenes Undo setzt Z zurück');
+    await gesendet(A.page);
+    ok((await serverTitel(pb, planId, Z)) === orig[Z], 'Server: Z zurückgesetzt');
+    // Abbrechen lässt Bs Wert
+    await titelSetzen(A.page, Z, 'A: Z drei'); await gesendet(A.page);
+    await titelSetzen(B.page, Z, 'B: Z vier'); await gesendet(B.page);
+    await wertBis(A.page, Z, 'B: Z vier');
+    await A.page.keyboard.press('Control+z');
+    await dlgKnopf(A.page, 'Abbrechen').click();
+    ok((await titel(A.page, Z).inputValue()) === 'B: Z vier', 'A: Undo-Konflikt «Abbrechen» ändert nichts');
+    // Ein Betrachter darf nicht ändern
+    const betr = await kontoAnlegen(pb, { email: 'betr@bzp.test', name: 'Bea', passwort: PW });
+    await pb.su('POST', '/api/collections/mitglieder/records', { plan_id: planId, user_id: betr.id, rolle: 'betrachter', gewerke: [] });
+    const D = await nutzer(browser, pb, 'betr@bzp.test', PW); ctxs.push(D.ctx);
+    await planOeffnen(D.page, base, pb);
+    await titelSetzen(D.page, X, 'Betrachter darf nicht');
+    await D.page.locator('#toast').waitFor({ state: 'visible', timeout: 3000 });
+    ok(/Nur ansehen: du bist Betrachter/.test(await D.page.locator('#toast').textContent()), 'Betrachter: «Nur ansehen: du bist Betrachter.»');
+    await warte(800);
+    ok((await serverTitel(pb, planId, X)) === 'A: Konfliktwert', 'Betrachter: Server unverändert');
+    await A.page.screenshot({ path: join(shots, 'mehrbenutzer-kopfzeile.png') });
+  } finally { for (const c of ctxs) await c.close().catch(() => {}); }
+}
+
+async function IMPORT({ pb, base, browser }) {
+  console.log('— IMPORT');
+  const PW = pw();
+  const pl = await kontoAnlegen(pb, { email: 'pl@bzp.test', name: 'Paula', passwort: PW, produktionsleitung: true });
+  const bearb = await kontoAnlegen(pb, { email: 'bearb@bzp.test', name: 'Ben', passwort: PW });
+  const AMK = fixturePlan('amk-singleshow');
+  const ctxs = [];
+  try {
+    const P = await nutzer(browser, pb, 'pl@bzp.test', PW); ctxs.push(P.ctx);
+    await P.page.goto(appUrl(base, pb));
+    await P.page.locator('#dlg .dlg-box').waitFor({ timeout: 15000 });
+    await P.page.locator('#neu-import').waitFor();
+    ok(await P.page.locator('#neu-import').isEnabled(), 'pl: Import-Knopf aktiv');
+    await P.page.setInputFiles('#import-file', fixturePfad('amk-singleshow'));
+    await P.page.waitForFunction((n) => (document.getElementById('proj-name')?.textContent || '').includes(n), AMK.project.name, { timeout: 20000 });
+    ok(true, 'pl: AMK importiert und geöffnet');
+    const plaene = await pb.su('GET', '/api/collections/plaene/records');
+    const rec = plaene.body.items[0];
+    ok(plaene.body.items.length === 1 && rec.plan_id !== AMK.project.id, 'Server: ein Plan mit NEUER plan_id', rec?.plan_id);
+    const lokal = await P.page.evaluate(() => Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)]));
+    const tok = JSON.parse(lokal.find(([k]) => k === 'bzp_auth')[1]).token;
+    ok(lokal.filter(([k]) => k !== 'bzp_auth').every(([, v]) => !v.includes(tok)), 'lokale Kopie enthält kein Token');
+    ok(lokal.some(([k]) => k === 'bzp_p_' + rec.plan_id), 'lokale Kopie (für den Druck) liegt unter der neuen plan_id');
+    const dl = P.page.waitForEvent('download');
+    await P.page.locator('#proj-knopf').click(); await P.page.locator('.mn #export').click();
+    const d = await dl; const txt = readFileSync(await d.path(), 'utf8');
+    ok(!txt.includes(tok) && !/"token"/.test(txt), 'Export enthält kein Token');
+    // Projektdialog von pl: Rolle Besitzer
+    await P.page.locator('#proj-knopf').click(); await P.page.locator('.mn #proj-menu').click();
+    await P.page.locator('.dlg-open').first().waitFor();
+    ok(/Besitzer/.test(await P.page.locator('.dlg-open-m').first().textContent()) && (await P.page.locator('.dlg-open-n').first().textContent()).includes(AMK.project.name), 'pl: AMK im Dialog mit Rolle 👑 Besitzer');
+    await P.page.screenshot({ path: join(shots, 'mehrbenutzer-projektdialog.png') });
+    // bearb: Mitglied → sieht den Plan; darf nicht anlegen/importieren/löschen
+    await pb.su('POST', '/api/collections/mitglieder/records', { plan_id: rec.plan_id, user_id: bearb.id, rolle: 'bearbeiter', gewerke: [] });
+    const B = await nutzer(browser, pb, 'bearb@bzp.test', PW); ctxs.push(B.ctx);
+    await B.page.goto(appUrl(base, pb));
+    await B.page.locator('.dlg-open').first().waitFor({ timeout: 15000 });
+    ok((await B.page.locator('.dlg-open-n').first().textContent()).includes(AMK.project.name) && /Bearbeiter/.test(await B.page.locator('.dlg-open-m').first().textContent()), 'bearb: AMK im Dialog mit Rolle ✏ Bearbeiter');
+    ok(await B.page.locator('#neu-import').isDisabled() && await B.page.locator('#neu-anlegen').isDisabled(), 'bearb: Neu und Import gesperrt (mit Grund)');
+    ok(!(await B.page.locator('.dlg-del').count()), 'bearb: kein Löschen-Knopf');
+    // Löschen durch den Besitzer
+    await P.page.locator('.dlg-del').first().click();
+    await dlgKnopf(P.page, 'Löschen').click();
+    await P.page.waitForFunction(() => !document.querySelector('.dlg-open'), null, { timeout: 10000 });
+    ok((await pb.su('GET', '/api/collections/plaene/records')).body.items.length === 0, 'Server: Plan nach Löschen weg');
+    // Abmelden führt zur Anmeldeseite
+    await P.page.locator('#dlg-abmelden').click();
+    await P.page.waitForURL(/login\.html/, { timeout: 10000 });
+    ok((await P.page.evaluate(() => localStorage.getItem('bzp_auth'))) === null, 'Abmelden: bzp_auth geleert → login.html');
+  } finally { for (const c of ctxs) await c.close().catch(() => {}); }
+}
+
+const ABSCHNITTE = { ANMELDUNG, ZWEI_NUTZER, IMPORT };
 const i = process.argv.indexOf('--nur');
-const nur = i > 0 ? (process.argv[i + 1] || '').toUpperCase() : null;
+const nur = i > 0 ? (process.argv[i + 1] || '').toUpperCase().replace(' ', '_') : null;
 if (nur && !ABSCHNITTE[nur]) { console.error('Unbekannter Abschnitt: ' + nur + ' (' + Object.keys(ABSCHNITTE).join(', ') + ')'); process.exit(2); }
 
 let server, browser, pb, smtp;

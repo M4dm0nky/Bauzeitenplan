@@ -5,7 +5,7 @@
 // Prüfungen am DOM-Code, den Node nicht ausführen kann. Das Verhalten im
 // Browser prüft `node tools/verify-browser.mjs`.
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -203,17 +203,18 @@ check('gantt.js liest keine erfundene Gewerk-Eigenschaft (g.light)', () => {
   return /\bg\.light\b/.test(js('gantt.js')) ? 'g.light in gantt.js' : true;
 });
 
-check('der Sync-Schlüssel (bzp_sync) kommt nie in die Plan-Schicht', () => {
-  const s = readFileSync(join(root, 'js/persistence.js'), 'utf8');
-  return s.includes('bzp_sync') ? 'js/persistence.js kennt den Schlüssel' : true;
+check('GitHub-Sync entfernt: js/sync.js existiert nicht, kein bzp_sync in js/', () => {
+  if (existsSync(join(root, 'js/sync.js'))) return 'js/sync.js existiert noch';
+  const treffer = readdirSync(join(root, 'js')).filter((f) => f.endsWith('.js') && readFileSync(join(root, 'js', f), 'utf8').includes('bzp_sync'));
+  return treffer.length ? 'bzp_sync in js/' + treffer.join(', js/') : true;
 });
 
 check('die App holt keinen mitgelieferten Plan (kein BUNDLED/openBundled, fetch nur in der Erlaubnisliste, kein XHR/JSON-Import)', () => {
   // Erlaubnisliste statt Muster: eine zusammengesetzte URL (`fetch('./' + datei + '?v=')`)
   // ist durch kein Muster auf «.json» fassbar. Darum zählt jedes `fetch(` je Datei; erlaubt
-  // sind genau die Stellen mit Netzzugriff: sync.js (GitHub), pb.js (die eine Anfrage an die PocketBase-API,
-  // nie eine Plan-JSON) und der gereichte Aufruf in app.js.
-  const ERLAUBT = { 'sync.js': 1, 'app.js': 1, 'pb.js': 1 };
+  // sind genau die Stellen mit Netzzugriff: pb.js (die eine Anfrage an die PocketBase-API,
+  // nie eine Plan-JSON).
+  const ERLAUBT = { 'pb.js': 1 };
   // Nur ganze Kommentarzeilen fallen weg (Beginn `//`, `*`, `/*`), sonst zählt Prosa mit.
   // Kein Muster-Strip über den Text: `//` oder `/*` in einer Zeichenkette ließe sonst den
   // Rest der Zeile — und damit ein echtes `fetch(` — unsichtbar werden. Ein `fetch(` in
