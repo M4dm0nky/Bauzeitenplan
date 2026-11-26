@@ -935,18 +935,32 @@ function freeSlot(state, art = 'gewerk') {
 // Die Zeiten eines Sammelvorgangs sind abgeleitet (Hülle der Kinder). Hat ein
 // Fremder ein anderes Kind geändert, weicht die Hülle im aktuellen Zustand vom
 // `vorher` des Undo-Eintrags ab — das ist KEIN Konflikt, reflowParents rechnet sie
-// danach neu. Weicht nur dies ab, gilt der aktuelle Datensatz als Ausgangszustand.
-const HUELLE_FELDER = ['start', 'end', 'milestone', 'res'];
+// danach neu. Weicht nur dies ab, gilt der aktuelle Datensatz als Ausgangszustand
+// und die Hülle im `nachher` wird durch die aktuelle ersetzt (übernommen werden
+// nur die übrigen Felder). Jede andere Abweichung, auch `res`, bleibt Konflikt.
+const HUELLE_FELDER = ['start', 'end', 'milestone'];   // res NICHT: Zuweisungen sind keine abgeleiteten Werte
 function huellenAbgleich(state, aend) {
   const eltern = new Set(state.tasks.map((t) => t.parent).filter(Boolean));
   const x = aend.vorgaenge;
   if (!x || !x.aendern.some((e) => eltern.has(e.vorher.id))) return aend;
   const ohne = (o) => { const c = { ...o }; HUELLE_FELDER.forEach((f) => delete c[f]); return JSON.stringify(Object.keys(c).sort().map((k) => [k, c[k]])); };
   const aktuell = new Map(state.tasks.map((t) => [t.id, t]));
-  return { ...aend, vorgaenge: { ...x, aendern: x.aendern.map((e) => {
+  // Wer nach dem Anwenden noch Eltern ist, bekommt seine Hülle von reflowParents.
+  const weg = new Set(x.loeschen.map((o) => o.id));
+  const danach = new Set([...state.tasks.filter((t) => !weg.has(t.id)), ...x.anlegen].map((t) => t.parent).filter(Boolean));
+  const aendern = [];
+  for (const e of x.aendern) {
     const a = aktuell.get(e.vorher.id);
-    return a && eltern.has(a.id) && ohne(a) === ohne(e.vorher) ? { ...e, vorher: JSON.parse(JSON.stringify(a)) } : e;
-  }) } };
+    // Kein Eltern mehr danach (Kinder fallen weg): die Hülle ist dann echter Inhalt.
+    if (!(a && eltern.has(a.id) && danach.has(a.id))) { aendern.push(e); continue; }
+    // Reine Hüllenänderung eines weiter bestehenden Sammelvorgangs: abgeleitet, nichts zu tun.
+    if (ohne(e.vorher) === ohne(e.nachher)) continue;
+    if (ohne(a) !== ohne(e.vorher)) { aendern.push(e); continue; }
+    const nachher = { ...e.nachher };
+    HUELLE_FELDER.forEach((f) => { if (f in a) nachher[f] = a[f]; else delete nachher[f]; });
+    aendern.push({ ...e, vorher: JSON.parse(JSON.stringify(a)), nachher });
+  }
+  return { ...aend, vorgaenge: { ...x, aendern } };
 }
 
 // ── Store ───────────────────────────────────────────────────────────────────
@@ -1055,6 +1069,7 @@ export function createStore(initial, opt = {}) {
     const abgelehnt = opt.pruefe ? opt.pruefe(state, draft, tatsaechlich) : null;
     if (abgelehnt) return err(abgelehnt);
     von.pop();
+    if (istLeer(tatsaechlich)) return { ok: true };   // nichts geschah: kein Eintrag auf den Gegenstapel
     nach.push(umgekehrt ? umkehren(tatsaechlich) : tatsaechlich);
     state = draft;
     dirty = true;

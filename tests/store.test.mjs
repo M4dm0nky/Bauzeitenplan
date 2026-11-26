@@ -1938,5 +1938,44 @@ test('erzwingen: fremd gelöschter Vorgang kommt an seiner alten Position wieder
   assert.equal(taskById(s, 'a').title, 'Podest');
 });
 
+test('Fremde res-Zuweisung am Sammelvorgang, Undo meines Titel-Schritts daran: Konflikt; erzwingen überschreibt', () => {
+  const { s } = mitZweiKindern();
+  s.apply({ type: 'setTaskField', id: 'pa', field: 'title', value: 'Eigen' });
+  const fremd = kopie(s.state);
+  fremd.tasks.find((t) => t.id === 'pa').res = [{ rid: 'crew', n: 2, von: null, bis: null }];
+  s.applyRemote(fremd);
+  const r = s.undo();
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.konflikt, [{ coll: 'vorgaenge', eid: 'pa', art: 'geaendert' }]);
+  assert.equal(s.canUndo, true);
+  assert.equal(taskById(s, 'pa').res.length, 1);
+  assert.deepEqual(s.undo({ erzwingen: true }), { ok: true });
+  assert.equal(taskById(s, 'pa').title, 'PA hängen');
+});
+test('Fremde res-Zuweisung am Sammelvorgang, Undo meines Kind-Schritts: kein Konflikt, fremdes res bleibt', () => {
+  const { s, k1 } = mitZweiKindern();
+  s.apply({ type: 'moveTask', id: k1, start: '2026-07-13T09:00', end: '2026-07-13T11:00' });
+  const fremd = kopie(s.state);
+  fremd.tasks.find((t) => t.id === 'pa').res = [{ rid: 'crew', n: 2, von: null, bis: null }];
+  s.applyRemote(fremd);
+  assert.deepEqual(s.undo(), { ok: true });
+  assert.deepEqual(taskById(s, 'pa').res, [{ rid: 'crew', n: 2, von: null, bis: null }]);
+  assert.equal(taskById(s, 'pa').start, '2026-07-13T10:00');
+  assert.deepEqual(s.redo(), { ok: true });
+  assert.deepEqual(taskById(s, 'pa').res.length, 1);
+  assert.equal(taskById(s, 'pa').start, '2026-07-13T09:00');
+});
+test('Undo ohne tatsächliche Wirkung legt keinen leeren Eintrag auf den Gegenstapel', () => {
+  const s = createStore(seed());
+  s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: 'Neu' });
+  const fremd = kopie(s.state);                 // Fremder hat dasselbe schon zurückgesetzt
+  fremd.tasks[0].title = 'Podest';
+  s.applyRemote(fremd);
+  // vorher == aktueller Zustand wäre Konflikt; erzwingen macht den Schritt wirkungslos
+  assert.deepEqual(s.undo({ erzwingen: true }), { ok: true });
+  assert.equal(s.canUndo, false);
+  assert.equal(s.canRedo, false);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);
