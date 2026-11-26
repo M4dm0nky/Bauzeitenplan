@@ -29,8 +29,8 @@ const zeitMs = (v) => {
   const t = Date.parse(v);
   return isNaN(t) ? String(v) : t;
 };
-const zeitGleich = (a, n) => zeitMs(a.start) === zeitMs(n.start) && zeitMs(a.end) === zeitMs(n.end) && !!a.milestone === !!n.milestone;
-function statusGeaendert(altRes, neuRes, zeitUnveraendert) {
+export const zeitGleich = (a, n) => zeitMs(a.start) === zeitMs(n.start) && zeitMs(a.end) === zeitMs(n.end) && !!a.milestone === !!n.milestone;
+export function statusGeaendert(altRes, neuRes, zeitUnveraendert) {
   altRes = Array.isArray(altRes) ? altRes : [];
   neuRes = Array.isArray(neuRes) ? neuRes : [];
   if (!zeitUnveraendert) return neuRes.some(hatStatus);

@@ -37,6 +37,9 @@ export const BATCH_ABSTAND_MS = 450;
 export const BACKOFF_MS = [1000, 2000, 4000, 5000]; // danach bleibt es bei 5 s
 export const PLAN_VERSUCHE = 3;
 export const LIMIT_VERSUCHE = 4; // so oft versucht `leeren` bei 429, dann gibt es die Reihe frei (Änderung bleibt in `offen`)
+/** Wartezeit des n-ten Wiederholens eines Ladens: 1 s, 2 s, 4 s … höchstens 30 s, mit Zufallsanteil (die Hälfte bis das Ganze),
+ *  damit nicht alle Clients nach einem Serverausfall gleichzeitig anklopfen. `zufall` (0..1) ist für Tests austauschbar. */
+export const ladeBackoff = (n, zufall = Math.random) => { const b = Math.min(1000 * 2 ** n, 30000); return Math.round(b / 2 + zufall() * b / 2); };
 const backoff = (n) => BACKOFF_MS[Math.min(n, BACKOFF_MS.length - 1)];
 const standardWarte = (ms) => new Promise((r) => setTimeout(r, ms));
 

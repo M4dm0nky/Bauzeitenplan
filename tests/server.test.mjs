@@ -1,7 +1,7 @@
 // Serverplan (js/server.js) gegen einen gefälschten pb mit Datenformen wie der echte Server
 // (Mitschnitt: tests/pb.test.mjs): Datensätze mit id/plan_id/eid/daten/rev/pos, Batch-Fehler
 // als {ok:false, status:409, code:'rev', eid, rev, index}.
-import { createServerPlan as erzeuge, listePlaene, BATCH_ABSTAND_MS, BACKOFF_MS, PLAN_VERSUCHE, LIMIT_VERSUCHE } from '../js/server.js';
+import { createServerPlan as erzeuge, listePlaene, ladeBackoff, BATCH_ABSTAND_MS, BACKOFF_MS, PLAN_VERSUCHE, LIMIT_VERSUCHE } from '../js/server.js';
 import { aenderungen, zerlegen } from '../js/aenderungen.js';
 import { huellenKonflikte, fremdUebernehmen, ohne } from '../js/konflikt.js';
 import { createStore } from '../js/store.js';
@@ -730,6 +730,12 @@ test('I1: ändert die eigene Änderung am Sammelvorgang MEHR als die Hülle (Tit
   assert.equal(r.konflikt[0].eid, eltern);
   const h = huellenKonflikte(r.aend, r.konflikt, B.st.state);
   assert.deepEqual([h.auto.length, h.rest.length], [0, 1]);
+});
+test('ladeBackoff: 1/2/4/… s, höchstens 30 s, Zufallsanteil von der Hälfte bis zum Ganzen (injizierte Zufallszahl)', () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 9].map((n) => ladeBackoff(n, () => 1)), [1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000]);
+  assert.deepEqual([0, 3, 6].map((n) => ladeBackoff(n, () => 0)), [500, 4000, 15000]);
+  assert.equal(ladeBackoff(5, () => 0.5), 22500);
+  for (let i = 0; i < 50; i++) { const v = ladeBackoff(2); assert.ok(v >= 2000 && v <= 4000, String(v)); }
 });
 test('server.js: DOM-frei, keine Browser-Dialoge, kein Token', () => {
   const s = readFileSync(new URL('../js/server.js', import.meta.url), 'utf8');

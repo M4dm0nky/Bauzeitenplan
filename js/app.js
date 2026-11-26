@@ -6,7 +6,7 @@
 import { createStore, verschiebeZeit, SHIFT_MAX_TAGE, SHIFT_MAX_MIN } from './store.js';
 import { createRepo, serialize, deserialize } from './persistence.js';
 import { createPb, apiBasis, ERNEUERN_MS } from './pb.js';
-import { createServerPlan, listePlaene } from './server.js';
+import { createServerPlan, listePlaene, ladeBackoff } from './server.js';
 import { rechteFehler, darfPlanAnlegen, darfMitglieder, darfBedarfStatus } from './rechte.js';
 import { openMitglieder, openVerwaltung } from './mitglieder.js';
 import { anwenden, umkehren, aenderungen, istLeer, zerlegen, zusammensetzen } from './aenderungen.js';
@@ -677,9 +677,32 @@ function sende(aend) {
 
 // Dauerhaftes 429: server.js gibt die Reihe nach 4 Versuchen frei (nichts wird verworfen). Hier der Timer
 // für den nächsten Versuch; eine neue Änderung oder wiederVerbunden kommt auch von selbst dazwischen.
-let limitTimer = null;
+let limitTimer = null, limitRunden = 0, limitFrage = false;
 const LIMIT_WIEDER_MS = 15000;
+const LIMIT_RUNDEN_MAX = 10;   // so viele erfolglose Runden, dann fragt die App (Server lehnt anhaltend ab)
+async function frageAnhaltend(srv) {
+  limitFrage = true;
+  const n = srv.offen.length + geparkt.length;
+  const wahl = await askDialog({
+    title: 'Speichern gelingt nicht',
+    message: [`Der Server lehnt das Speichern anhaltend ab (${n} ${n === 1 ? 'Änderung' : 'Änderungen'} offen).`, 'Weiter versuchen: Die Änderungen bleiben erhalten und werden weiter gesendet. Neu laden: Die ungesendeten Änderungen gehen verloren.'],
+    buttons: [{ label: 'Weiter versuchen', value: 'weiter', primary: true }, { label: 'Neu laden (Änderungen verwerfen)', value: 'neu', danger: true }],
+  });
+  limitFrage = false;
+  if (srv !== server) return;
+  if (wahl === 'neu') {   // nur auf ausdrückliche Wahl; Escape/null = weiter versuchen
+    const id = store.state.project.id;
+    srv.offenVerwerfen(); geparkt.length = 0; unterwegs.length = 0; limitRunden = 0;
+    paintSpeicher();
+    await open(id, { still: true });
+    return;
+  }
+  limitRunden = 0;
+  planeLimitWieder(srv);
+}
 function planeLimitWieder(srv) {
+  if (limitFrage) return;
+  if (++limitRunden >= LIMIT_RUNDEN_MAX) { frageAnhaltend(srv); return; }
   clearTimeout(limitTimer);
   limitTimer = setTimeout(() => reihe(async () => {
     limitTimer = null;
@@ -692,7 +715,7 @@ function planeLimitWieder(srv) {
 // Antwort von senden/wiederVerbunden abarbeiten, bis alles gesendet oder bewusst offen ist.
 async function ergebnis(srv, r, eigene) {
   for (let i = 0; i < 20 && srv === server; i++) {
-    if (r.ok) { setOffline(false); return; }
+    if (r.ok) { setOffline(false); limitRunden = 0; return; }
     if (r.abgemeldet) { zuLogin('401'); return; }
     if (r.offline) { setOffline(true); return; }       // bleibt in srv.offen, geht später raus
     if (r.limit) { planeLimitWieder(srv); return; }    // 429 hält an: bleibt in srv.offen («offen (n)»), nächster Versuch nach 15 s
@@ -855,10 +878,9 @@ function nachladen() {
 }
 // Laden und übernehmen. Ein vorübergehender Fehler (429/5xx/Nicht-JSON) bleibt nicht still liegen: erneut planen.
 let ladeTimer = null, ladeVersuche = 0;
-const LADE_WIEDER_MS = [1000, 2000, 4000, 5000];
 function planeLadeWieder(srv) {
   if (ladeTimer) return;
-  const ms = LADE_WIEDER_MS[Math.min(ladeVersuche++, LADE_WIEDER_MS.length - 1)];
+  const ms = ladeBackoff(ladeVersuche++);   // 1 s … 30 s mit Zufallsanteil
   ladeTimer = setTimeout(() => { ladeTimer = null; if (srv === server) nachladen(); }, ms);
 }
 async function ladeStand(srv) {
@@ -892,7 +914,7 @@ function schliesseServer() {
   if (stopAbo) { stopAbo(); stopAbo = null; }
   clearTimeout(fremdTimer); fremdTimer = null; fremdListe = []; gehalten.clear(); unterwegs.length = 0;
   clearTimeout(wiederTimer); wiederTimer = null;
-  clearTimeout(limitTimer); limitTimer = null;
+  clearTimeout(limitTimer); limitTimer = null; limitRunden = 0;
   clearTimeout(ladeTimer); ladeTimer = null; ladeVersuche = 0;
   server?.beenden?.();     // ein laufender 429-Wiederversuch sendet nichts mehr
   server = null; offline = false; rolle = null; kopieModus = null;

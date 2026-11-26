@@ -16,6 +16,7 @@ import { RES_EINGEBAUT, RES_KATEGORIEN } from './res-katalog.js';
 import { phaseFehler, istPhasenArt } from './phasen.js';
 import { resStatusBereinigen } from './persistence.js';
 import { aenderungen, umkehren, anwenden, istLeer } from './aenderungen.js';
+import { statusGeaendert, zeitGleich } from './rechte.js';
 
 // Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
 // Ablage die äußere Schicht — diese Abhängigkeit liefe verkehrt herum. Für eine
@@ -967,16 +968,19 @@ function huellenAbgleich(state, aend) {
 // wieder her (oder legt einen gelöschten Vorgang mit Status neu an) — das lehnt der Server für sie ab. Darum fehlen
 // die Statusfelder im ZIEL der Umkehrung: Die Zeiten gehen zurück, der Bedarf bleibt «angefragt».
 // → {aend, entfernt}: entfernt = es ging tatsächlich ein Status verloren (die App sagt es per Toast).
-function statusEntfernen(aend) {
+function statusEntfernen(aend, state) {
   const x = aend.vorgaenge;
   if (!x) return { aend, entfernt: false };
   let entfernt = false;
-  const bereinigt = (t) => {
-    if (!Array.isArray(t.res) || !t.res.some((z) => STATUS_FELDER.some((f) => f in z && z[f] !== undefined && !(f === 'status' && z[f] === 'angefragt')))) return t;
+  const aktuell = new Map((state?.tasks || []).map((t) => [t.id, t]));
+  // Nur wo der Server die Umkehrung ablehnen würde (dieselbe Prüfung wie rechte.js): Status ginge hinzu oder bliebe
+  // trotz geänderter Zeit stehen. Sonst bleibt die Zeile, wie sie ist (z. B. Titel-Undo einer bestätigten Zeile).
+  const bereinigt = (t, alt) => {
+    if (!Array.isArray(t.res) || !statusGeaendert(alt?.res, t.res, alt ? zeitGleich(alt, t) : true)) return t;
     entfernt = true;
     return { ...t, res: t.res.map((z) => { const c = { ...z }; STATUS_FELDER.forEach((f) => delete c[f]); return c; }) };
   };
-  const neu = { ...x, anlegen: x.anlegen.map(bereinigt), aendern: x.aendern.map((e) => ({ ...e, nachher: bereinigt(e.nachher) })) };
+  const neu = { ...x, anlegen: x.anlegen.map((t) => bereinigt(t, null)), aendern: x.aendern.map((e) => ({ ...e, nachher: bereinigt(e.nachher, aktuell.get(e.vorher.id) || e.vorher) })) };
   return { aend: entfernt ? { ...aend, vorgaenge: neu } : aend, entfernt };
 }
 
@@ -1075,7 +1079,7 @@ export function createStore(initial, opt = {}) {
     const eintrag = von[von.length - 1];
     let roh = umgekehrt ? umkehren(eintrag) : eintrag;
     let statusEntfernt = false;
-    if (opt.undoOhneStatus && opt.undoOhneStatus()) { const s2 = statusEntfernen(roh); roh = s2.aend; statusEntfernt = s2.entfernt; }
+    if (opt.undoOhneStatus && opt.undoOhneStatus()) { const s2 = statusEntfernen(roh, state); roh = s2.aend; statusEntfernt = s2.entfernt; }
     const aend = huellenAbgleich(state, roh);
     const r = anwenden(state, aend, { erzwingen });
     if (!r.ok) return r;

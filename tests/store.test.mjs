@@ -2047,6 +2047,19 @@ test('I7: Undo des Löschens eines Vorgangs mit bestätigtem Bedarf: ok für den
   assert.equal(taskById(s, 'a').res[0].status, undefined);
   assert.equal(taskById(s, 'a').res[0].notiz, undefined);
 });
+test('I-neu-1: Bearbeiter ändert den TITEL eines bestätigten Vorgangs, ⌘Z → Status bleibt bestätigt, kein statusEntfernt', () => {
+  const { s, ctx } = mitRolle(PL);
+  s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'p-stagehand', n: 4, von: null, bis: null } });
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM, notiz: 'ok' });
+  ctx.rolle = BEARB;
+  assert.equal(s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: 'Neuer Titel' }).ok, true);
+  const r = s.undo();
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(r.statusEntfernt, undefined);
+  assert.equal(taskById(s, 'a').title, 'Podest');
+  assert.equal(taskById(s, 'a').res[0].status, 'bestaetigt');
+  assert.equal(taskById(s, 'a').res[0].notiz, 'ok');
+});
 test('I7: die Leitung bekommt den Status beim Undo zurück (Option aus)', () => {
   const { s } = mitRolle(PL);
   s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'p-stagehand', n: 4, von: null, bis: null } });

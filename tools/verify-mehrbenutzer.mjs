@@ -1,5 +1,5 @@
 // Mehrbenutzer-Prüfung im echten Browser (Firefox) gegen eine lokale PocketBase.
-//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG|ZWEI_NUTZER|IMPORT|OFFLINE|MONITOR|MONITOR_ABGELAUFEN|ABMELDEN|MITGLIEDER|VERWALTUNG|FIXRUNDE|SAMMELVORGANG|UNDO_BEDARF|START_OFFLINE|ZWEI_TABS]
+//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG|ZWEI_NUTZER|IMPORT|OFFLINE|MONITOR|MONITOR_ABGELAUFEN|ABMELDEN|MITGLIEDER|VERWALTUNG|FIXRUNDE|SAMMELVORGANG|UNDO_BEDARF|START_OFFLINE|ZWEI_TABS|DAUERHAFT_5XX]
 // ANMELDUNG: login.html — falsches/richtiges Passwort, «Passwort vergessen», Einladung (neues Konto,
 // vorhandenes Konto, ungültig), Passwort zurücksetzen (Mail über einen kleinen lokalen SMTP-Empfänger).
 // Task 11 ergänzt weitere Abschnitte in ABSCHNITTE. Alle Passwörter entstehen zur Laufzeit.
@@ -1044,7 +1044,54 @@ async function ZWEI_TABS({ pb, base, browser }) {
   } finally { await P.ctx.close().catch(() => {}); }
 }
 
-const ABSCHNITTE = { ANMELDUNG, ZWEI_NUTZER, IMPORT, OFFLINE, MONITOR, MONITOR_ABGELAUFEN, ABMELDEN, MITGLIEDER, VERWALTUNG, FIXRUNDE, SAMMELVORGANG, UNDO_BEDARF, START_OFFLINE, ZWEI_TABS };
+// Dauerhafter 5xx blockiert die Warteschlange nicht still: nach 10 erfolglosen Runden fragt die App
+async function DAUERHAFT_5XX({ pb, base, browser }) {
+  console.log('— DAUERHAFTER 5XX');
+  const PW = pw();
+  const planId = await planAnlegenFuer(pb, PW);
+  const P = await nutzer(browser, pb, 'pl@bzp.test', PW);
+  try {
+    await P.page.clock.install({ time: new Date('2026-08-21T10:00:00') });   // injizierte Uhr: Backoff und 15-s-Timer laufen per fastForward
+    await planOeffnen(P.page, base, pb);
+    await warte(1500);
+    const ids = await P.page.$$eval('.tb-r', (rs) => rs.filter((r) => r.querySelector('.c-title input')).slice(0, 8).map((r) => r.dataset.id));
+    const X = ids[2];
+    const orig = await titel(P.page, X).inputValue();
+    let anzahl = 0;
+    await P.page.route('**/api/batch', (r) => { anzahl++; return r.fulfill({ status: 503, contentType: 'text/plain', body: 'x' }); });
+    await titelSetzen(P.page, X, 'P: bleibt offen');
+    const frage = async () => {
+      for (let i = 0; i < 80; i++) {
+        if (await P.page.locator('.dlg:not([hidden]) .dlg-h', { hasText: 'Speichern gelingt nicht' }).count()) return true;
+        await P.page.clock.fastForward(20000); await warte(120);
+      }
+      return false;
+    };
+    ok(await frage(), 'nach vielen erfolglosen Runden fragt die App «Speichern gelingt nicht»');
+    const t = await P.page.locator('.dlg:not([hidden])').first().textContent();
+    ok(/lehnt das Speichern anhaltend ab \(1 Änderung offen\)/.test(t), 'Text nennt die Zahl offener Änderungen', t.slice(0, 200));
+    ok(await dlgKnopf(P.page, 'Weiter versuchen').isVisible() && await dlgKnopf(P.page, 'Neu laden (Änderungen verwerfen)').isVisible(), 'Knöpfe «Weiter versuchen» und «Neu laden (Änderungen verwerfen)»');
+    ok(anzahl >= 10, 'der Server wurde wiederholt versucht', String(anzahl));
+    await P.page.keyboard.press('Escape');   // Escape = weiter versuchen, nichts wird verworfen
+    await warte(300);
+    ok(!(await dlgOffen(P.page)), 'Escape schließt den Dialog');
+    ok((await titel(P.page, X).inputValue()) === 'P: bleibt offen' && /offen \(1\)/.test(await P.page.locator('#sync-state').textContent()), 'Escape verwirft nichts: Änderung sichtbar, «offen (1)»', await P.page.locator('#sync-state').textContent());
+    await P.page.unroute('**/api/batch');
+    for (let i = 0; i < 30 && (await serverTitel(pb, planId, X)) !== 'P: bleibt offen'; i++) { await P.page.clock.fastForward(20000); await warte(300); }
+    ok((await serverTitel(pb, planId, X)) === 'P: bleibt offen', 'nach «Weiter versuchen» (Server wieder da) kommt die Änderung an');
+    // «Neu laden»: ausdrücklich verwerfen
+    await P.page.route('**/api/batch', (r) => r.fulfill({ status: 503, contentType: 'text/plain', body: 'x' }));
+    await titelSetzen(P.page, X, 'P: wird verworfen');
+    ok(await frage(), 'zweiter Lauf: die Frage erscheint wieder');
+    await dlgKnopf(P.page, 'Neu laden (Änderungen verwerfen)').click();
+    await P.page.unroute('**/api/batch');
+    ok(await wertBis(P.page, X, 'P: bleibt offen', 10000), 'Neu laden zeigt den Serverstand, die ungesendete Änderung ist weg');
+    ok((await serverTitel(pb, planId, X)) === 'P: bleibt offen', 'Server unverändert');
+    void orig;
+  } finally { await P.ctx.close().catch(() => {}); }
+}
+
+const ABSCHNITTE = { ANMELDUNG, ZWEI_NUTZER, IMPORT, OFFLINE, MONITOR, MONITOR_ABGELAUFEN, ABMELDEN, MITGLIEDER, VERWALTUNG, FIXRUNDE, SAMMELVORGANG, UNDO_BEDARF, START_OFFLINE, ZWEI_TABS, DAUERHAFT_5XX };
 const i = process.argv.indexOf('--nur');
 const nur = i > 0 ? (process.argv[i + 1] || '').toUpperCase().replace(' ', '_') : null;
 if (nur && !ABSCHNITTE[nur]) { console.error('Unbekannter Abschnitt: ' + nur + ' (' + Object.keys(ABSCHNITTE).join(', ') + ')'); process.exit(2); }
