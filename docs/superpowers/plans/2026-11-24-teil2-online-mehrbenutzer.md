@@ -233,6 +233,51 @@
 - [ ] **Step 2–4:** ✗ → umsetzen → grün; Screenshot `offline.png` ansehen.
 - [ ] **Step 5:** Commit `feat: Offline nur Ansicht, Monitor zeigt lokale Kopie`.
 
+### Task 10b: Rate Limits (nachgetragen 2026-11-26 nach Rückmeldung Robs)
+
+Anlass: `docs/rueckmeldung-online-phase1-abschluss-2026-11-26.md`. Auf TEST und LIVE sind die PB-Standardregeln aktiv: `*:auth` 2/3 s, `*:create` 20/5 s, `/api/batch` 3/1 s, `/api/` 300/10 s, je Client-IP. Messung an lokaler PB 0.40.6 (2026-11-26):
+- `*:create` zählt auch die Unteranfragen eines Batches. Ab der 21. kommt ein inneres 429, und der ganze Batch wird zurückgerollt. Damit scheitert `planAnlegen` schon bei AMK (52 Unteranfragen) und Klassentreffen (407).
+- `/api/batch`: ab dem 4. Batch in 1 s kommt 429, ohne `Retry-After`. Nach etwa 0,75 s ist es wieder frei.
+- `auth-refresh` zählt nicht gegen `*:auth`, nur die Anmeldung. Der Superuser ist ausgenommen.
+- `{APP_URL}` mit Schrägstrich am Ende ergibt in der Reset-Mail `…//login.html`. TEST hat `https://m4dm0nky.github.io/Bauzeitenplan/`.
+
+**Files:**
+- Create: `pocketbase/pb_migrations/1700000003_ratelimits.js`
+- Modify:
+  - `pocketbase/pb_hooks/main.pb.js` (Reset-Mail-Link)
+  - `js/pb.js`, `js/server.js`, `js/app.js`, `js/login.js`
+  - `tools/pb-lokal.mjs` (Option `rateLimits: true`)
+  - `tools/verify-pb-regeln.mjs` (Abschnitt «RATELIMIT»)
+  - Tests, Themes/`tests/run.mjs` (Marke aus Task 10)
+
+**Interfaces / Verhalten:**
+- **Migration `1700000003_ratelimits.js`:**
+  - Setzt die Regel `*:create` auf `maxRequests 2000`, `duration 5`. Das passt zu `MAX_BATCH`, ein ganzer Plan geht in einem Batch durch.
+  - Die übrigen Regeln und `rateLimits.enabled` lässt sie unverändert. Fehlt die Regel, legt sie sie an.
+  - Idempotent.
+  - Wirkt auf dem Server erst mit dem Phase-2-Deploy; das steht im Admin-Auftrag.
+- **429 ist vorübergehend, nie ein Ablehnungsgrund:**
+  - `pb.js` liefert `code:'limit'` statt `'fehler'`, auch bei innerem 429 im Batch.
+  - `server.js` behandelt `limit` wie `netz`: Die Änderung bleibt in `offen`, und der Wiederversuch kommt automatisch mit Backoff (1 s, 2 s, 4 s, höchstens 5 s), ohne `zuruecknehmen`.
+  - `planAnlegen` versucht es bei `limit` bis zu 3-mal.
+- **Drossel:** Höchstens 2 Batch-Aufrufe je Sekunde (Mindestabstand 450 ms, in `server.js`).
+- **Login:** Bei 429 zeigt `login.js` «Zu viele Versuche – bitte kurz warten.»
+- **Reset-Mail-Link:** Der Hook `onMailerRecordPasswordResetSend` ersetzt `//login.html` durch `/login.html`.
+- **Nachträge aus dem Review von Task 10:**
+  - Die Offline-Marke entprellt 3 s und nutzt `visibility` statt `hidden`.
+  - Tokens für die Marke in allen Themes, drei Scopes, mit Kontrastprüfung in `tests/run.mjs`.
+  - 401 mit offener Warteschlange: `askDialog` statt still verwerfen.
+  - Ein Boot-Fehler, der kein Netzfehler ist, zeigt nicht «Offline».
+
+- [ ] **Step 1:** Abschnitt «RATELIMIT» in `verify-pb-regeln.mjs` mit `startePb({rateLimits:true})`:
+  - `planAnlegen` mit AMK und mit Klassentreffen gelingt.
+  - 6 schnelle `senden` hintereinander kommen alle an, nichts geht verloren.
+  - Unit-Tests: `limit` → bleibt in `offen` und wird wiederholt; Drosselabstand.
+  - Reset-Link ohne `//`.
+  - Rot-Nachweis: ohne die Migration scheitert `planAnlegen` mit AMK.
+- [ ] **Step 2–4:** ✗ → umsetzen → grün.
+- [ ] **Step 5:** Commit `feat: Rate Limits - 429 als vorübergehend, create-Regel für ganze Pläne`.
+
 ### Task 11: Mitglieder- und Superadmin-Verwaltung
 
 **Files:**
