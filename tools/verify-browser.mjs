@@ -228,6 +228,72 @@ if (FREMD) {
 }
 try {
 
+// ── Primärknopf beim Hovern lesbar (alle Themes × alle Scopes) ────────────────
+// Anlass: Callboard dunkel — `.btn:hover` (Spezifität 0,2,0) schlägt `.btn-p` (0,1,0), die Schrift
+// wurde beim Hovern weiß auf weißer Fläche. Gemessen wird der ECHTE Zustand: Maus über dem Knopf,
+// berechnete Schrift- gegen berechnete Hintergrundfarbe (halbtransparente Schichten durchgemischt).
+// Scopes je Theme: hell · @media dunkel · [data-theme="dark"] · [data-theme="light"] bei dunklem System.
+const HOVER_MIN = 4.5;
+async function primaerHover() {
+  console.log('\nPRIMÄRKNOPF BEIM HOVERN (Kontrast ≥ ' + HOVER_MIN + ':1, alle Themes, alle Scopes)');
+  const pg = await seite({ viewport: { width: 1200, height: 800 } });
+  await pg.goto(BASE + '/index.html?plan=leer', { waitUntil: 'load', timeout: 30000 });
+  await pg.waitForTimeout(argBase ? 1600 : 800);
+  await pg.evaluate(() => {
+    const w = document.createElement('div');
+    w.style.cssText = 'position:fixed;left:40px;top:40px;padding:24px;z-index:99999;background:var(--panel)';
+    const b = document.createElement('button'); b.className = 'btn btn-p'; b.id = 'probe-btnp'; b.textContent = 'Kopieren';
+    w.appendChild(b); document.body.appendChild(w);
+  });
+  const messen = async () => {
+    const info = await pg.evaluate(() => {
+      const b = document.getElementById('probe-btnp');
+      const layers = []; let deckend = false;
+      for (let p = b; p && !deckend; p = p.parentElement) {
+        const c = getComputedStyle(p).backgroundColor; layers.push(c);
+        const m = c.match(/[\d.]+/g); if (m && (m.length < 4 || parseFloat(m[3]) >= 1)) deckend = true;
+      }
+      // color-mix() liefert «color(srgb …)»: über ein Canvas in 8-Bit-RGBA umrechnen
+      const cv = document.createElement('canvas'); cv.width = cv.height = 1;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      const rgba = (c) => { g.clearRect(0, 0, 1, 1); g.fillStyle = '#000'; g.fillStyle = c; g.fillRect(0, 0, 1, 1); const d = g.getImageData(0, 0, 1, 1).data; return `rgba(${d[0]}, ${d[1]}, ${d[2]}, ${d[3] / 255})`; };
+      return { color: rgba(getComputedStyle(b).color), layers: layers.map(rgba) };
+    });
+    let bg = { r: 255, g: 255, b: 255, a: 1 };
+    for (const l of info.layers.reverse()) { const c = rgbaOf(l); if (c.a > 0) bg = mixOn(c, bg); }
+    const fg = mixOn(rgbaOf(info.color), bg);
+    return { ratio: kontrast(hexOf(fg), hexOf(bg)), fg: hexOf(fg), bg: hexOf(bg) };
+  };
+  const SCOPES = [
+    ['hell', 'light', null], ['dunkel (System)', 'dark', null],
+    ['data-theme=dark', 'light', 'dark'], ['data-theme=light', 'dark', 'light'],
+  ];
+  let aktuell = 'callboard';
+  for (const t of ['callboard', ...THEMES]) {
+    if (t !== aktuell) { await themeAn(pg, t); aktuell = t; await pg.waitForTimeout(250); }
+    for (const [name, scheme, attr] of SCOPES) {
+      await pg.emulateMedia({ colorScheme: scheme });
+      await pg.evaluate((a) => { if (a) document.documentElement.dataset.theme = a; else delete document.documentElement.dataset.theme; }, attr);
+      await pg.mouse.move(600, 600);
+      await pg.waitForTimeout(350);
+      const ruhig = await messen();
+      await pg.hover('#probe-btnp');
+      await pg.waitForTimeout(450);
+      const hover = await messen();
+      const ok = hover.ratio >= HOVER_MIN && ruhig.ratio >= HOVER_MIN;
+      if (ok) console.log(`    ✓ ${t} · ${name}: ruhig ${ruhig.ratio.toFixed(1)}:1, Hover ${hover.ratio.toFixed(1)}:1`);
+      else { console.log(`    ✗ ${t} · ${name}: ruhig ${ruhig.ratio.toFixed(2)}:1 (${ruhig.fg} auf ${ruhig.bg}), Hover ${hover.ratio.toFixed(2)}:1 (${hover.fg} auf ${hover.bg})`); problems++; }
+    }
+  }
+  await pg.screenshot({ path: join(shots, 'primaer-hover.png'), clip: { x: 0, y: 0, width: 300, height: 160 } });
+  await pg.close();
+}
+if (process.argv.includes('--nur-hover')) {   // Auswahl-Schalter: nur diese Prüfung
+  try { await primaerHover(); } finally { await browser.close().catch(() => {}); if (server) server.close(); for (const st of stops) await st().catch(() => {}); }
+  console.log(problems ? `\n${problems} Problem(e).\n` : '\nHover-Prüfung grün.\n');
+  process.exit(problems ? 1 : 0);
+}
+
 for (const pg of PAGES) {
   const v = pg.key || 'app';
   const page = await seite({ viewport: { width: 1600, height: 950 } });
@@ -804,6 +870,8 @@ for (const pg of PAGES) {
     else { console.log(`  ✗ ${w}×${h} ${modus === 'bau' ? 'Bauzeitenplan' : 'Showablauf'}: ${r} statt ${SOLL[modus]}`); problems++; }
   }
 }
+
+await primaerHover();
 
 } finally {
   await browser.close().catch(() => {});

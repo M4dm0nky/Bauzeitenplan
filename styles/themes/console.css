@@ -240,6 +240,8 @@ kbd { font: inherit; border: 1px solid var(--rule-2); background: var(--panel2);
 /* ── Bearbeiten ─────────────────────────────────────────────────────────────── */
 .hd-right { font-size: calc(9.5px * var(--fs)); }
 .btn-p { background: var(--accent-b); color: #1b1a17; border-color: var(--accent); font-weight: 700; }
+/* `.btn:hover` färbt die Schrift in --accent = Farbe der Fläche (unsichtbar): Primär behält dunkle Schrift, die Fläche hellt auf. */
+.btn-p:hover { background: color-mix(in srgb, var(--accent-b) 80%, #fff); color: #1b1a17; border-color: var(--accent); }
 .btn-warn { border-color: var(--crit); color: var(--crit); }
 .btn-warn:hover { background: var(--crit); color: #fff; }
 .btn:disabled, .seg button:disabled { opacity: .35; cursor: default; }

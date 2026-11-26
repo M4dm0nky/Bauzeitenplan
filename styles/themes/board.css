@@ -64,10 +64,17 @@ body {
 .seg button[aria-pressed="true"] { background: var(--block-t); color: var(--block); }
 .seg-icon button { padding: 6px 13px; font-size: 14px; line-height: 1; }
 .btn {
-  border: 2px solid rgba(255,255,255,.3); background: none; color: rgba(255,255,255,.8);
+  border: 2px solid var(--line-2); background: none; color: var(--ink-2);
   padding: 5px 14px; font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
 }
-.btn:hover { border-color: #fff; color: #fff; }
+.btn:hover { border-color: var(--ink); color: var(--ink); }
+/* In den dunklen Blöcken (Kopf, Schiene) stehen die Knöpfe hell auf dunkel. Außerhalb (Dialoge, Panel, Tabelle)
+   waren sie weiß auf weiß — ihre Farben folgen dort der Seite. */
+.hd .btn, .rail .btn { border-color: rgba(255,255,255,.3); color: rgba(255,255,255,.8); }
+.hd .btn:hover, .rail .btn:hover { border-color: #fff; color: #fff; }
+/* Primärknopf: volle Fläche in Schriftfarbe, auch beim Hovern lesbar */
+.btn-p, .btn-p:hover { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn-p:hover { background: var(--ink-2); border-color: var(--ink-2); }
 
 .legend { gap: 6px 16px; margin-left: auto; font-size: 11px; font-weight: 600; color: rgba(255,255,255,.7); }
 .legend-i .bz-dot { width: 11px; height: 11px; border-radius: 0; }
