@@ -1,7 +1,7 @@
 // Serverplan (js/server.js) gegen einen gefälschten pb mit Datenformen wie der echte Server
 // (Mitschnitt: tests/pb.test.mjs): Datensätze mit id/plan_id/eid/daten/rev/pos, Batch-Fehler
 // als {ok:false, status:409, code:'rev', eid, rev, index}.
-import { createServerPlan as erzeuge, listePlaene, BATCH_ABSTAND_MS, BACKOFF_MS, PLAN_VERSUCHE } from '../js/server.js';
+import { createServerPlan as erzeuge, listePlaene, BATCH_ABSTAND_MS, BACKOFF_MS, PLAN_VERSUCHE, LIMIT_VERSUCHE } from '../js/server.js';
 import { aenderungen, zerlegen } from '../js/aenderungen.js';
 import { createStore } from '../js/store.js';
 import { deserialize } from '../js/persistence.js';
@@ -486,17 +486,17 @@ test('listePlaene: name, venue, Rolle aus besitzer/superadmin/mitglieder; Token 
   await assert.rejects(listePlaene(pb), (e) => e.offline === true);
 });
 // ── Rate Limits (Task 10b) ───────────────────────────────────────────────────
-test('429 beim Senden: bleibt in offen, Wiederversuch mit Backoff 1/2/4/5/5 s, kein Fehler, am Ende gesendet', async () => {
+test('429 beim Senden: bleibt in offen, Wiederversuch mit Backoff 1/2/4 s, kein Fehler, am Ende gesendet', async () => {
   const { pb, planId, state } = await holen(KT);
   const waits = [];
   const sp = createServerPlan({ pb, planId, warte: async (ms) => { waits.push(ms); if (waits.length === 1) assert.equal(sp.offen.length, 1, 'während des Wartens noch in offen'); } });
   await sp.laden();
   const b = kl(state); b.tasks[0].title = 'LIMIT';
-  pb.limit = 5; pb.limitInnen = true; // auch das innere 429 eines Batches ist «limit»
+  pb.limit = 3; pb.limitInnen = true; // auch das innere 429 eines Batches ist «limit»
   pb.aufrufe.length = 0;
   assert.deepEqual(await sp.senden(aenderungen(state, b)), { ok: true });
-  assert.equal(pb.aufrufe.length, 6);
-  assert.deepEqual(waits.filter((w) => w >= 1000), [1000, 2000, 4000, 5000, 5000]);
+  assert.equal(pb.aufrufe.length, 4);
+  assert.deepEqual(waits.filter((w) => w >= 1000), [1000, 2000, 4000]);
   assert.deepEqual(BACKOFF_MS, [1000, 2000, 4000, 5000]);
   assert.equal(sp.offen.length, 0);
   assert.deepEqual((await sp.laden()).state, b);
@@ -512,6 +512,29 @@ test('429: spätere Änderungen reihen sich hinter die wartende ein, Reihenfolge
   assert.deepEqual([r1, r2], [{ ok: true }, { ok: true }]);
   assert.deepEqual(pb.aufrufe.slice(2).map((x) => x[0].body.rev), [1, 2]);
   assert.deepEqual((await sp.laden()).state, b);
+});
+test('Dauerhaftes 429: nach 4 Versuchen gibt senden die Reihe frei, Änderung bleibt in offen, nichts verworfen; später geht sie raus', async () => {
+  const { pb, planId, state } = await holen(KT);
+  const waits = [];
+  const sp = createServerPlan({ pb, planId, warte: async (ms) => { waits.push(ms); } });
+  await sp.laden();
+  const b = kl(state); b.tasks[0].title = 'DAUER';
+  pb.limit = 1000; pb.aufrufe.length = 0;
+  const r = await sp.senden(aenderungen(state, b)); // kehrt zurück, statt endlos zu warten
+  assert.equal(LIMIT_VERSUCHE, 4);
+  assert.deepEqual(r, { ok: false, limit: true, offen: 1 });
+  assert.equal(pb.aufrufe.length, 4);
+  assert.deepEqual(waits.filter((w) => w >= 1000), [1000, 2000, 4000]);
+  assert.equal(sp.offen.length, 1);
+  // die Reihe ist frei: andere Aufrufe (laden) laufen sofort, eine weitere Änderung reiht sich hinten an
+  assert.ok((await sp.laden()).ok);
+  const c = kl(b); c.tasks[0].title = 'DAUER2';
+  assert.equal((await sp.senden(aenderungen(b, c))).limit, true);
+  assert.equal(sp.offen.length, 2);
+  pb.limit = 0;
+  assert.deepEqual(await sp.wiederVerbunden(), { ok: true });
+  assert.equal(sp.offen.length, 0);
+  assert.deepEqual((await sp.laden()).state, c);
 });
 test('beenden(): ein wartender 429-Wiederversuch sendet nichts mehr, die Schlange ist leer', async () => {
   const { pb, planId, state } = await holen(KT);

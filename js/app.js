@@ -9,7 +9,7 @@ import { createPb, apiBasis, ERNEUERN_MS } from './pb.js';
 import { createServerPlan, listePlaene } from './server.js';
 import { rechteFehler, darfPlanAnlegen } from './rechte.js';
 import { anwenden, umkehren, aenderungen, istLeer, zerlegen, zusammensetzen } from './aenderungen.js';
-import { eintragTitel, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen, offeneSchluessel, uebernehmeOhneOffene } from './konflikt.js';
+import { abgelaufenEntscheid, eintragTitel, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen, offeneSchluessel, uebernehmeOhneOffene } from './konflikt.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
@@ -141,7 +141,7 @@ async function frageAbgelaufen(n) {
     ],
   });
   abgelaufenFrage = false;
-  if (wahl === 'kopie' && store) {
+  if (abgelaufenEntscheid(wahl) === 'kopie' && store) {
     repo.save(store.state);      // die ungesendeten Änderungen stehen im Store: in die lokale Kopie
     if (zeigeKopie('abgemeldet')) return;
   }
@@ -669,12 +669,27 @@ function sende(aend) {
   });
 }
 
+// Dauerhaftes 429: server.js gibt die Reihe nach 4 Versuchen frei (nichts wird verworfen). Hier der Timer
+// für den nächsten Versuch; eine neue Änderung oder wiederVerbunden kommt auch von selbst dazwischen.
+let limitTimer = null;
+const LIMIT_WIEDER_MS = 15000;
+function planeLimitWieder(srv) {
+  clearTimeout(limitTimer);
+  limitTimer = setTimeout(() => reihe(async () => {
+    limitTimer = null;
+    if (srv !== server || !srv.offen.length) return;
+    await ergebnis(srv, await srv.wiederVerbunden(), null);
+    paintSpeicher();
+  }), LIMIT_WIEDER_MS);
+}
+
 // Antwort von senden/wiederVerbunden abarbeiten, bis alles gesendet oder bewusst offen ist.
 async function ergebnis(srv, r, eigene) {
   for (let i = 0; i < 20 && srv === server; i++) {
     if (r.ok) { setOffline(false); return; }
     if (r.abgemeldet) { zuLogin('401'); return; }
     if (r.offline) { setOffline(true); return; }       // bleibt in srv.offen, geht später raus
+    if (r.limit) { planeLimitWieder(srv); return; }    // 429 hält an: bleibt in srv.offen («offen (n)»), nächster Versuch nach 15 s
     if (r.zuGross) {
       await askDialog({ title: 'Zu viele Änderungen auf einmal', message: ['Diese Änderung ist für einen Schritt zu groß und wurde nicht gesendet.', 'Sie wird hier zurückgenommen. Mach sie in kleineren Schritten.'], buttons: [{ label: 'OK', value: true, primary: true }] });
       zuruecknehmen(eigene);
@@ -843,6 +858,7 @@ function schliesseServer() {
   if (stopAbo) { stopAbo(); stopAbo = null; }
   clearTimeout(fremdTimer); fremdTimer = null; fremdListe = []; gehalten.clear(); unterwegs.length = 0;
   clearTimeout(wiederTimer); wiederTimer = null;
+  clearTimeout(limitTimer); limitTimer = null;
   server?.beenden?.();     // ein laufender 429-Wiederversuch sendet nichts mehr
   server = null; offline = false; rolle = null; kopieModus = null;
   geparkt.length = 0;

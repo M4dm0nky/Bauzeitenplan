@@ -1,7 +1,7 @@
 // Konfliktauflösung (js/konflikt.js) mit echten Datenformen: Plan aus den Fixtures,
 // Änderungslisten aus der echten aenderungen().
 import { aenderungen, anwenden, istLeer } from '../js/aenderungen.js';
-import { eintragTitel, konfliktArt, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen, offeneSchluessel, uebernehmeOhneOffene } from '../js/konflikt.js';
+import { abgelaufenEntscheid, eintragTitel, konfliktArt, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen, offeneSchluessel, uebernehmeOhneOffene } from '../js/konflikt.js';
 import { deserialize } from '../js/persistence.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -142,6 +142,13 @@ test('uebernehmeOhneOffene: lokal gelöschter, offener Eintrag bleibt gelöscht'
   const lokal = kl(BASIS); lokal.tasks = lokal.tasks.filter((t) => t.id !== 't1');
   const r = uebernehmeOhneOffene(lokal, kl(BASIS), new Set(['vorgaenge|t1']));
   assert.equal(task(r, 't1'), undefined);
+});
+test('abgelaufenEntscheid: nur das ausdrückliche «login» meldet an; null (Escape/Klick daneben) und Rest = Kopie', () => {
+  assert.equal(abgelaufenEntscheid('login'), 'login');
+  assert.equal(abgelaufenEntscheid('kopie'), 'kopie');
+  assert.equal(abgelaufenEntscheid(null), 'kopie');
+  assert.equal(abgelaufenEntscheid(undefined), 'kopie');
+  assert.equal(abgelaufenEntscheid(false), 'kopie');
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen`);

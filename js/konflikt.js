@@ -14,6 +14,11 @@ const ART_NAME = { vorgaenge: 'Vorgang', gewerke: 'Gewerk', phasen: 'Phase', res
 const sl = (aend, coll) => aend?.[coll] || { anlegen: [], aendern: [], loeschen: [] };
 
 /** Anzeigename eines Eintrags: aus dem fremden Stand, der Änderungsliste oder dem Plan. */
+/** Antwort des Dialogs «Anmeldung abgelaufen» → 'login' | 'kopie'. NUR das ausdrückliche 'login' führt zur
+ *  Anmeldung (die ungesendeten Änderungen gehen dann verloren); Escape/Klick daneben (null) und alles andere
+ *  sind «Kopie ansehen», damit nichts still verloren geht. */
+export const abgelaufenEntscheid = (wahl) => (wahl === 'login' ? 'login' : 'kopie');
+
 export function eintragTitel(coll, eid, { state = null, aend = null, fremd = null } = {}) {
   let rec = fremd || null;
   if (!rec && aend) {
