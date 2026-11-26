@@ -78,7 +78,7 @@ ersetze('sw.js', /const SW_VERSION = 'v[^']+'/, `const SW_VERSION = 'v${neu}'`, 
 // nur index.html. Genau dort entsteht sonst der Drift: eine Stelle wandert, zwei
 // bleiben stehen. Kommt eine Seite dazu, gehört sie in diese Liste UND in die
 // Versionsprüfung in tests/run.mjs.
-for (const datei of ['index.html', 'print.html']) {
+for (const datei of ['index.html', 'print.html', 'login.html']) {
   const s = read(datei);
   const treffer = [...s.matchAll(/\?v=[^"']+(["'])/g)].length;
   if (!treffer) { console.error(`\n  ✗ ${datei}: kein ?v= gefunden.\n`); process.exit(1); }

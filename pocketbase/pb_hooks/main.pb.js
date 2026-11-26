@@ -142,5 +142,5 @@ routerAdd("POST", "/api/bzp/einladung", (e) => {
     tx.save(m);
     tx.delete(tx.findRecordById("einladungen", inv.id));
   });
-  return e.json(200, { ok: true, plan_id: planId, rolle: inv.getString("rolle") });
+  return e.json(200, { ok: true, plan_id: planId, rolle: inv.getString("rolle"), email: email });
 });

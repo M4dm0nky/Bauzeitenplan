@@ -53,11 +53,13 @@ check('alle Importe zwischen den Modulen lassen sich auflösen', () => {
   return bad.length ? bad.join(', ') : true;
 });
 
-check('index.html lädt nur vorhandene Dateien', () => {
-  const html = readFileSync(join(root, 'index.html'), 'utf8');
+check('index.html und login.html laden nur vorhandene Dateien', () => {
   const bad = [];
-  for (const m of html.matchAll(/(?:src|href)="([^"#:]+?)(?:\?[^"]*)?"/g)) {
-    try { readFileSync(join(root, m[1])); } catch { bad.push(m[1]); }
+  for (const seite of ['index.html', 'login.html']) {
+    const html = readFileSync(join(root, seite), 'utf8');
+    for (const m of html.matchAll(/(?:src|href)="([^"#:]+?)(?:\?[^"]*)?"/g)) {
+      try { readFileSync(join(root, m[1])); } catch { bad.push(seite + ' → ' + m[1]); }
+    }
   }
   return bad.length ? 'fehlt: ' + bad.join(', ') : true;
 });
@@ -381,7 +383,7 @@ const versionStellen = () => {
   };
   // JEDE ausgelieferte HTML-Seite, nicht nur index.html — eine zweite Seite mit
   // eigenen ?v= liefe sonst still auseinander (siehe tools/version.mjs).
-  const vs = ['index.html', 'print.html'].flatMap((datei) =>
+  const vs = ['index.html', 'print.html', 'login.html'].flatMap((datei) =>
     [...raw(datei).matchAll(/\?v=([^"']+)["']/g)]
       .map((m, i) => ({ wo: `${datei} ?v= #${i + 1}`, wert: m[1] })));
   return [
