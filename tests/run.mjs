@@ -209,8 +209,9 @@ check('der Sync-Schlüssel (bzp_sync) kommt nie in die Plan-Schicht', () => {
 check('die App holt keinen mitgelieferten Plan (kein BUNDLED/openBundled, fetch nur in der Erlaubnisliste, kein XHR/JSON-Import)', () => {
   // Erlaubnisliste statt Muster: eine zusammengesetzte URL (`fetch('./' + datei + '?v=')`)
   // ist durch kein Muster auf «.json» fassbar. Darum zählt jedes `fetch(` je Datei; erlaubt
-  // sind genau die zwei Sync-Stellen (die eine Anfrage in sync.js, der gereichte Aufruf in app.js).
-  const ERLAUBT = { 'sync.js': 1, 'app.js': 1 };
+  // sind genau die Stellen mit Netzzugriff: sync.js (GitHub), pb.js (die eine Anfrage an die PocketBase-API,
+  // nie eine Plan-JSON) und der gereichte Aufruf in app.js.
+  const ERLAUBT = { 'sync.js': 1, 'app.js': 1, 'pb.js': 1 };
   // Nur ganze Kommentarzeilen fallen weg (Beginn `//`, `*`, `/*`), sonst zählt Prosa mit.
   // Kein Muster-Strip über den Text: `//` oder `/*` in einer Zeichenkette ließe sonst den
   // Rest der Zeile — und damit ein echtes `fetch(` — unsichtbar werden. Ein `fetch(` in

@@ -48,6 +48,7 @@ const HUELLE = [
   'js/live.js',
   'js/menu.js',
   'js/palette.js',
+  'js/pb.js',
   'js/persistence.js',
   'js/phasen-editor.js',
   'js/phasen.js',

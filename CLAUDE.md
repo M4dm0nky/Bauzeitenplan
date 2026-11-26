@@ -103,6 +103,7 @@ Details je Thema in `.claude/rules/` (Frontmatter `paths:`); dort stehen die Reg
 | `js/res-picker.js` | Such-Auswahl Helfer/Maschinen (`openResPicker`, `resNeuOpt`) |
 | `js/listen-editor.js` | Verwalten-Liste `mountAuswahlListe` (Tabelle + Einrichten-Seite) |
 | `js/sync.js` | GitHub-Contents-Client + `abgleich()` — **DOM-frei** |
+| `js/pb.js` | PocketBase-Client ohne SDK — **DOM-frei** |
 
 Warum was so ist: `docs/entscheidungen.md` (auch «Kritisch entfiel»: Puffer + Engpass statt kritischer Pfad).
 
