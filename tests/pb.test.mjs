@@ -28,7 +28,7 @@ const PB_CONNECT_DATA = '{"clientId":"yiZg6WTl8vm53mFGvWPfRxxkf0EgbPXyZxXuQDLY"}
 const SSE_EREIGNIS_DATA = JSON.stringify({ record: { ...gewerk(1, 'k1f6zc9jvm4q9w6'), rev: 2, daten: { id: 'g1', name: 'zwei' } }, action: 'update' });
 
 // ── Fälschungen
-const antwort = ({ status, body }) => ({ ok: status >= 200 && status < 300, status, text: async () => (body === null || body === undefined ? '' : JSON.stringify(body)) });
+const antwort = ({ status, body, raw }) => ({ ok: status >= 200 && status < 300, status, text: async () => (raw !== undefined ? raw : body === null || body === undefined ? '' : JSON.stringify(body)) });
 // Skript: Liste von Antworten (oder Funktionen) in Reihenfolge; Aufrufe werden protokolliert
 const fakeFetch = (skript) => {
   const aufrufe = [];
@@ -332,6 +332,143 @@ test('abo: stop schließt die Verbindung, danach kommt nichts mehr an', async ()
   assert.equal(es.zu, true);
   es.senden('PB_CONNECT', PB_CONNECT_DATA); await warte();
   assert.deepEqual(log, []);
+});
+
+
+// ── Fix-Runde 1: Rennen, abmelden, Antwortformen
+// Anfrage, die erst auf Zuruf antwortet
+const offen = () => { let los; const p = new Promise((r) => { los = r; }); return { p, los }; };
+const gesteuert = (...hold) => {
+  const aufrufe = [];
+  const f = async (url, opt = {}) => { aufrufe.push({ url, headers: opt.headers || {} }); const h = hold.shift(); return antwort(await h.p); };
+  f.aufrufe = aufrufe; return f;
+};
+const AUTH2 = { status: 200, body: { record: RECORD, token: 'TOKEN-PLATZHALTER-ZWEI' } };
+
+test('Race: abmelden während laufender Erneuerung → danach weder Token noch Sitzung', async () => {
+  const h = offen();
+  const speicher = angemeldet();
+  const pb = createPb({ basis: 'http://pb.test', fetch: gesteuert(h), speicher, EventSource: FakeES, autostart: false });
+  const lauf = pb.erneuern();
+  pb.abmelden();
+  h.los(REFRESH);
+  const r = await lauf;
+  assert.equal(r.ok, false); assert.equal(r.code, 'abgebrochen');
+  assert.equal(pb.auth, null); assert.equal(pb.istAngemeldet, false);
+  assert.equal(speicher.getItem(AUTH_KEY), null);
+});
+test('Race: abmelden während laufender Anmeldung → die Sitzung lebt nicht wieder auf', async () => {
+  const h = offen();
+  const speicher = fakeSpeicher();
+  const pb = createPb({ basis: 'http://pb.test', fetch: gesteuert(h), speicher, EventSource: FakeES, autostart: false });
+  const lauf = pb.anmelden('sa@bzp.test', 'pw');
+  pb.abmelden();
+  h.los(AUTH);
+  assert.equal((await lauf).code, 'abgebrochen');
+  assert.equal(pb.auth, null); assert.equal(speicher.getItem(AUTH_KEY), null);
+});
+test('Anmeldung ersetzt bewusst eine bestehende Sitzung', async () => {
+  const { pb } = neu([AUTH2], { speicher: angemeldet() });
+  assert.equal((await pb.anmelden('sa@bzp.test', 'pw')).ok, true);
+  assert.equal(pb.auth.token, 'TOKEN-PLATZHALTER-ZWEI');
+});
+test('Race: spätes 401 einer alten Anfrage beendet die neue Sitzung nicht', async () => {
+  const h = offen(), h2 = offen();
+  const pb = createPb({ basis: 'http://pb.test', fetch: gesteuert(h, h2), speicher: angemeldet(), EventSource: FakeES, autostart: false });
+  const gründe = []; pb.on('abgemeldet', (e) => gründe.push(e.grund));
+  const alt = pb.eins('gewerke', 'x');       // läuft mit TOKEN
+  const anm = pb.anmelden('sa@bzp.test', 'pw'); // ersetzt die Sitzung
+  h2.los(AUTH2); await anm;
+  assert.equal(pb.auth.token, 'TOKEN-PLATZHALTER-ZWEI');
+  h.los(UNAUTH);                                // 401 der alten Anfrage kommt jetzt
+  assert.equal((await alt).code, 'auth');
+  assert.equal(pb.auth.token, 'TOKEN-PLATZHALTER-ZWEI');
+  assert.deepEqual(gründe, []);
+});
+test('Race: spätes 401 nach einer Token-Erneuerung (anderes Token) beendet nicht', async () => {
+  const h = offen();
+  const f = gesteuert(h, { p: Promise.resolve(REFRESH) });
+  const pb = createPb({ basis: 'http://pb.test', fetch: f, speicher: angemeldet(), EventSource: FakeES, autostart: false });
+  const alt = pb.eins('gewerke', 'x');
+  await pb.erneuern();
+  h.los(UNAUTH); await alt;
+  assert.equal(pb.auth.token, TOKEN2);
+});
+test('abmelden: Ereignis {grund:manuell} und alle Abos werden geschlossen', async () => {
+  FakeES.alle.length = 0;
+  const { pb } = neu([], { speicher: angemeldet() });
+  const gründe = []; pb.on('abgemeldet', (e) => gründe.push(e.grund));
+  pb.abo(['gewerke'], () => {}); pb.abo(['vorgaenge'], () => {});
+  assert.equal(FakeES.alle.length, 2);
+  pb.abmelden();
+  assert.deepEqual(gründe, ['manuell']);
+  assert.ok(FakeES.alle.every((e) => e.zu));
+});
+test('401 beendet ebenfalls die Abos; Ereignis {grund:"401"}', async () => {
+  FakeES.alle.length = 0;
+  const { pb } = neu([UNAUTH], { speicher: angemeldet() });
+  const gründe = []; pb.on('abgemeldet', (e) => gründe.push(e.grund));
+  pb.abo(['gewerke'], () => {});
+  await pb.eins('a', 'b');
+  assert.deepEqual(gründe, ['401']);
+  assert.ok(FakeES.alle[0].zu);
+});
+test('2xx mit Nicht-JSON oder falscher Form wirft nie → code «antwort»', async () => {
+  const html = { status: 200, raw: '<html>Captive Portal</html>' };
+  const { pb } = neu([html, html, html, html, html, html, { status: 200, body: {} }, { status: 200, body: { token: '' } }, { status: 200, body: { items: 'x' } }, { status: 200, body: { items: [] } }], { speicher: angemeldet() });
+  for (const r of [await pb.liste('gewerke'), await pb.eins('g', 'x'), await pb.batch([{}]), await pb.post('/x', {}), await pb.anmelden('a@b.c', 'pw'), await pb.erneuern()]) {
+    assert.equal(r.ok, false); assert.equal(r.code, 'antwort');
+  }
+  assert.equal(pb.istAngemeldet, true); // nichts überschrieben
+  assert.equal((await pb.anmelden('a@b.c', 'pw')).code, 'antwort'); // Token fehlt
+  assert.equal((await pb.erneuern()).code, 'antwort');              // leeres Token
+  assert.equal((await pb.liste('g')).code, 'antwort');              // items kein Array
+  assert.equal((await pb.batch([{}])).code, 'antwort');             // Batch-Antwort kein Array
+  assert.equal(pb.auth.token, TOKEN);
+});
+test('liste: fehlendes totalPages → ein Aufruf, keine Endlosschleife', async () => {
+  const ohne = { status: 200, body: { items: [gewerk(1, 'a'), gewerk(2, 'b')], page: 1, perPage: 2, totalItems: 5 } };
+  const { pb, fetch } = neu([ohne], { speicher: angemeldet() });
+  const r = await pb.liste('gewerke');
+  assert.equal(r.ok, true); assert.equal(r.items.length, 2); assert.equal(fetch.aufrufe.length, 1);
+});
+test('liste: kurze Seite beendet, harte Obergrenze 1000 Seiten', async () => {
+  const kurz = { status: 200, body: { items: [gewerk(1, 'a')], page: 1, perPage: 500, totalItems: 900, totalPages: 2 } };
+  const a = neu([kurz], { speicher: angemeldet() });
+  assert.equal((await a.pb.liste('gewerke')).ok, true); assert.equal(a.fetch.aufrufe.length, 1);
+  let n = 0;
+  const endlos = async () => { n++; return antwort({ status: 200, body: { items: [gewerk(1, 'a'), gewerk(2, 'b')], page: n, perPage: 2, totalItems: 1e9, totalPages: 1e9 } }); };
+  const pb = createPb({ basis: 'http://pb.test', fetch: endlos, speicher: angemeldet(), EventSource: FakeES, autostart: false });
+  const r = await pb.liste('gewerke');
+  assert.equal(r.code, 'antwort'); assert.equal(n, 1000);
+});
+test('abo: EventSource CLOSED → selbst neu verbinden, Backoff verdoppelt bis 60 s', async () => {
+  FakeES.alle.length = 0;
+  const warten = [];
+  const { pb } = neu([], { speicher: angemeldet(), setTimeout: (f, ms) => { warten.push({ f, ms }); return warten.length; }, clearTimeout() {} });
+  const log = []; pb.on('getrennt', () => log.push('g'));
+  pb.abo(['gewerke'], () => {});
+  const ms = [];
+  for (let i = 0; i < 6; i++) {
+    const es = FakeES.alle.at(-1); es.readyState = 2; es.onerror();
+    const w = warten.at(-1); ms.push(w.ms); w.f();
+  }
+  assert.deepEqual(ms, [5000, 10000, 20000, 40000, 60000, 60000]);
+  assert.equal(FakeES.alle.length, 7);
+  assert.deepEqual(log, ['g']);
+  // CONNECTING (readyState 0): Browser verbindet selbst, wir tun nichts
+  const n = warten.length; const es = FakeES.alle.at(-1); es.readyState = 0; es.onerror();
+  assert.equal(warten.length, n);
+});
+test('abo: 403 beim Abonnieren → getrennt, Verbindung zu, KEIN Wiederholen', async () => {
+  FakeES.alle.length = 0;
+  const warten = [];
+  const { pb } = neu([{ status: 403, body: { data: {}, message: 'nein', status: 403 } }], { speicher: angemeldet(), setTimeout: (f, ms) => { warten.push(ms); return 1; }, clearTimeout() {} });
+  const log = []; pb.on('getrennt', () => log.push('g'));
+  pb.abo(['gewerke'], () => {});
+  FakeES.alle[0].senden('PB_CONNECT', PB_CONNECT_DATA); await warte();
+  assert.deepEqual(log, ['g']); assert.ok(FakeES.alle[0].zu);
+  assert.equal(warten.length, 0); assert.equal(FakeES.alle.length, 1);
 });
 
 // ── Struktursperre: DOM-frei, keine Browser-Dialoge, kein Token im Code
