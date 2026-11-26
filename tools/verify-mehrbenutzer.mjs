@@ -1,5 +1,5 @@
 // Mehrbenutzer-Prüfung im echten Browser (Firefox) gegen eine lokale PocketBase.
-//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG|ZWEI_NUTZER|IMPORT|OFFLINE|MONITOR|MONITOR_ABGELAUFEN|ABMELDEN|MITGLIEDER|VERWALTUNG]
+//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG|ZWEI_NUTZER|IMPORT|OFFLINE|MONITOR|MONITOR_ABGELAUFEN|ABMELDEN|MITGLIEDER|VERWALTUNG|FIXRUNDE|SAMMELVORGANG|UNDO_BEDARF|START_OFFLINE|ZWEI_TABS]
 // ANMELDUNG: login.html — falsches/richtiges Passwort, «Passwort vergessen», Einladung (neues Konto,
 // vorhandenes Konto, ungültig), Passwort zurücksetzen (Mail über einen kleinen lokalen SMTP-Empfänger).
 // Task 11 ergänzt weitere Abschnitte in ABSCHNITTE. Alle Passwörter entstehen zur Laufzeit.
@@ -13,6 +13,7 @@ import { mustFirefox } from './browsers.mjs';
 import { smtpEmpfaenger, qp } from './smtp-fang.mjs';
 import { createPb } from '../js/pb.js';
 import { createServerPlan } from '../js/server.js';
+import { createStore } from '../js/store.js';
 import { deserialize } from '../js/persistence.js';
 import { startePb, kontoAnlegen, anmelden as anmeldenRoh } from './pb-lokal.mjs';
 
@@ -376,6 +377,7 @@ async function ZWEI_NUTZER({ pb, base, browser }) {
     ok((await serverTitel(pb, planId, Z)) === orig[Z], 'Server: Z zurückgesetzt');
     // Abbrechen lässt Bs Wert
     await titelSetzen(A.page, Z, 'A: Z drei'); await gesendet(A.page);
+    ok(await wertBis(B.page, Z, 'A: Z drei'), 'B sieht As Z drei, bevor er selbst ändert');   // sonst ändert B auf altem Inhalt: das ist (seit C1) ein Konflikt, kein stilles Überschreiben
     await titelSetzen(B.page, Z, 'B: Z vier'); await gesendet(B.page);
     await wertBis(A.page, Z, 'B: Z vier');
     await A.page.keyboard.press('Control+z');
@@ -483,9 +485,9 @@ async function markeBis(page, text, ms = 8000) {
 async function markeWeg(page, ms = 20000) {
   try { await page.waitForFunction(() => document.getElementById('hd-offline')?.hidden === true, null, { timeout: ms }); return true; } catch { return false; }
 }
-async function planAnlegenFuer(pb, PW) {
+async function planAnlegenFuer(pb, PW, plan = fixturePlan('klassentreffen-festival')) {
   await kontoAnlegen(pb, { email: 'pl@bzp.test', name: 'Paula', passwort: PW, produktionsleitung: true });
-  const ang = await createServerPlan({ pb: await nodeClient(pb, 'pl@bzp.test', PW), planId: null }).planAnlegen(fixturePlan('klassentreffen-festival'));
+  const ang = await createServerPlan({ pb: await nodeClient(pb, 'pl@bzp.test', PW), planId: null }).planAnlegen(plan);
   if (!ang.ok) throw new Error('Plan anlegen: ' + JSON.stringify(ang).slice(0, 200));
   return ang.planId;
 }
@@ -827,7 +829,222 @@ async function VERWALTUNG({ pb, base, browser }) {
   } finally { for (const c of ctxs) await c.close().catch(() => {}); }
 }
 
-const ABSCHNITTE = { ANMELDUNG, ZWEI_NUTZER, IMPORT, OFFLINE, MONITOR, MONITOR_ABGELAUFEN, ABMELDEN, MITGLIEDER, VERWALTUNG };
+
+// ── Fix-Runde nach dem Gesamtreview (C1, C2, I1–I3, I5–I7) ─────────────────────────────────────
+const nurAnsichtBis = async (page, ms) => { // war «nur Ansicht» irgendwann in den nächsten ms an?
+  const ende = Date.now() + ms;
+  while (Date.now() < ende) { if (await nurAnsicht(page)) return true; await warte(250); }
+  return false;
+};
+const dlgOffen = (page) => page.locator('.dlg:not([hidden])').count();
+const esMerken = (ctx) => ctx.addInitScript(() => { const E = window.EventSource; window.__es = []; window.EventSource = class extends E { constructor(...a) { super(...a); window.__es.push(this); } }; });
+// Die Realtime-Verbindung wie nach 300 s Ruhe verlieren: der Browser-Strom schließt, `error` kommt an
+const stromAbbrechen = (page) => page.evaluate(() => { const es = window.__es[window.__es.length - 1]; es.close(); es.dispatchEvent(new Event('error')); });
+
+async function FIXRUNDE({ pb, base, browser }) {
+  console.log('— FIXRUNDE (C1 Basis, C2 Karenz, I2 5xx, I3 Ladefehler)');
+  const PW = pw();
+  const planId = await planAnlegenFuer(pb, PW);
+  const bearb = await kontoAnlegen(pb, { email: 'bearb@bzp.test', name: 'Ben', passwort: PW });
+  await pb.su('POST', '/api/collections/mitglieder/records', { plan_id: planId, user_id: bearb.id, rolle: 'bearbeiter', gewerke: [] });
+  const ctxs = [];
+  try {
+    // ── C1: Basis steht beim Bearbeiten fest, nicht erst wenn die Reihe dran ist ──
+    const A = await nutzer(browser, pb, 'pl@bzp.test', PW); ctxs.push(A.ctx);
+    const B = await nutzer(browser, pb, 'bearb@bzp.test', PW, { batchMs: 3500 }); ctxs.push(B.ctx);
+    await Promise.all([planOeffnen(A.page, base, pb), planOeffnen(B.page, base, pb)]);
+    await warte(1500);
+    const ids = await A.page.$$eval('.tb-r', (rs) => rs.filter((r) => r.querySelector('.c-title input')).slice(0, 8).map((r) => r.dataset.id));
+    const [X, Y] = ids.slice(2, 4);
+    await titelSetzen(B.page, Y, 'B: Y zuerst');       // Batch 1 ist 3,5 s unterwegs
+    await warte(400);
+    await titelSetzen(B.page, X, 'B: X dahinter');     // wartet in der Reihe hinter Batch 1
+    await warte(600);
+    await titelSetzen(A.page, X, 'A: X dazwischen');   // A ändert X, solange B noch wartet
+    await gesendet(A.page);
+    await B.page.locator('.dlg:not([hidden]) .dlg-h').first().waitFor({ timeout: 20000 }).catch(() => {});
+    const kt = (await B.page.locator('.dlg:not([hidden]) .dlg-h').count()) ? (await B.page.locator('.dlg:not([hidden]) .dlg-h').first().textContent()).trim() : '';
+    ok(/wurde gerade von jemand anderem geändert/.test(kt), 'C1: B sendet nach As Änderung auf alter Basis → Konfliktdialog statt stillem Überschreiben', kt || 'kein Dialog');
+    ok((await serverTitel(pb, planId, X)) === 'A: X dazwischen', 'C1: Server: As Änderung ist nicht überschrieben', await serverTitel(pb, planId, X));
+    if (kt) { await dlgKnopf(B.page, 'Ihre Fassung nehmen').click(); await gesendet(B.page); }
+    ok(await wertBis(B.page, X, 'A: X dazwischen', 5000), 'C1: B zeigt nach «Ihre Fassung nehmen» As Wert');
+    ok(await wertBis(B.page, Y, 'B: Y zuerst', 3000), 'C1: Bs Änderung an Y bleibt');
+
+    // ── C2: Realtime-Abbruch allein ist nicht «offline» (PocketBase schließt nach 300 s Ruhe) ──
+    const K = await nutzer(browser, pb, 'pl@bzp.test', PW); ctxs.push(K.ctx);
+    await esMerken(K.ctx);
+    await planOeffnen(K.page, base, pb);
+    await warte(1500);
+    const n0 = await K.page.evaluate(() => window.__es.length);
+    await stromAbbrechen(K.page);
+    ok(!(await nurAnsichtBis(K.page, 8000)), 'C2: Stromabbruch mit schnellem Neuaufbau (< 10 s) löst KEIN «nur Ansicht» aus');
+    ok((await K.page.evaluate(() => window.__es.length)) > n0, 'C2: die Verbindung wurde neu aufgebaut');
+    await warte(1500);
+    await titelSetzen(K.page, X, 'K: tippen nach Abbruch'); await gesendet(K.page);
+    ok((await serverTitel(pb, planId, X)) === 'K: tippen nach Abbruch', 'C2: Eingabe nach dem Abbruch kommt an');
+    // Gegenprobe: bleibt die Verbindung > 10 s weg, ist es offline (und kommt zurück)
+    await K.page.route('**/api/realtime', (r) => r.abort());
+    await stromAbbrechen(K.page);
+    ok(!(await nurAnsichtBis(K.page, 6000)), 'C2: nach 6 s ohne Strom noch nicht offline (Karenz 10 s)');
+    ok(await nurAnsichtBis(K.page, 12000), 'C2: nach der Karenz ohne Verbindung → «nur Ansicht»');
+    await K.page.unroute('**/api/realtime');
+    ok(await markeWeg(K.page, 60000), 'C2: Strom wieder da → Marke weg');
+
+    // ── I2: 503 beim Senden ist vorübergehend ──
+    let n503 = 0;
+    await B.page.route('**/api/batch', (r) => (n503++ < 2 ? r.fulfill({ status: 503, contentType: 'text/plain', body: 'Service Unavailable' }) : r.continue()));
+    await titelSetzen(B.page, Y, 'B: nach 503');
+    await warte(1500);
+    ok(!(await dlgOffen(B.page)), 'I2: bei 503 kein «Nicht gespeichert»-Dialog', await B.page.locator('.dlg:not([hidden])').first().textContent().catch(() => ''));
+    ok((await titel(B.page, Y).inputValue()) === 'B: nach 503', 'I2: die Änderung bleibt sichtbar (nicht zurückgenommen)');
+    await gesendet(B.page).catch(() => {});
+    ok((await serverTitel(pb, planId, Y)) === 'B: nach 503', 'I2: nach den Wiederholungen liegt sie auf dem Server', await serverTitel(pb, planId, Y));
+    ok(n503 >= 3, 'I2: der Server wurde mehrfach versucht', String(n503));
+    await B.page.unroute('**/api/batch');
+
+    // ── I3: Ladefehler nach dem Wiederverbinden bleibt nicht liegen ──
+    const T = await nutzer(browser, pb, 'bearb@bzp.test', PW, { blockRealtime: true }); ctxs.push(T.ctx);   // T erfährt Änderungen nur durchs Laden
+    await planOeffnen(T.page, base, pb);
+    await warte(1500);
+    await T.ctx.setOffline(true);
+    await warte(600);
+    await titelSetzen(A.page, X, 'A: während T offline');   // T verpasst das Realtime-Ereignis
+    await gesendet(A.page);
+    const bis = Date.now() + 26000;   // länger als jeder Auslöser eines späteren Ladens (Wiederverbinden, Realtime-Neuaufbau)
+    await T.page.route('**/api/collections/plaene/records**', (r) => (Date.now() < bis ? r.fulfill({ status: 503, contentType: 'text/plain', body: 'x' }) : r.continue()));
+    await T.ctx.setOffline(false);
+    ok(await wertBis(T.page, X, 'A: während T offline', 55000), 'I3: nach 503 beim Laden nach dem Wiederverbinden wird erneut geladen, T sieht As Änderung');
+    await T.page.unroute('**/api/collections/plaene/records**');
+    ok(await markeWeg(T.page, 20000), 'I3: Marke weg');
+  } finally { for (const c of ctxs) await c.close().catch(() => {}); }
+}
+
+// I1: zwei Nutzer ändern verschiedene Kinder eines Sammelvorgangs → kein Konflikt am Elternvorgang
+async function SAMMELVORGANG({ pb, base, browser }) {
+  console.log('— SAMMELVORGANG (I1)');
+  const PW = pw();
+  const st = createStore(fixturePlan('klassentreffen-festival'));
+  const g = st.state.gewerke[0].id;
+  const e = st.apply({ type: 'addTask', task: { gewerk: g, title: 'Sammel-E', start: '2026-07-13T08:00', end: '2026-07-13T09:00' } }).id;
+  const k1 = st.apply({ type: 'addTask', task: { gewerk: g, parent: e, title: 'Kind-1', start: '2026-07-13T08:00', end: '2026-07-13T10:00' } }).id;
+  const k2 = st.apply({ type: 'addTask', task: { gewerk: g, parent: e, title: 'Kind-2', start: '2026-07-13T09:00', end: '2026-07-13T12:00' } }).id;
+  const planId = await planAnlegenFuer(pb, PW, st.state);
+  const bearb = await kontoAnlegen(pb, { email: 'bearb@bzp.test', name: 'Ben', passwort: PW });
+  await pb.su('POST', '/api/collections/mitglieder/records', { plan_id: planId, user_id: bearb.id, rolle: 'bearbeiter', gewerke: [] });
+  const ctxs = [];
+  try {
+    const A = await nutzer(browser, pb, 'pl@bzp.test', PW); ctxs.push(A.ctx);
+    const B = await nutzer(browser, pb, 'bearb@bzp.test', PW, { blockRealtime: true }); ctxs.push(B.ctx);   // B erfährt von As Änderung nichts: die rev der Hülle ist bei B veraltet
+    await Promise.all([planOeffnen(A.page, base, pb), planOeffnen(B.page, base, pb)]);
+    await warte(1500);
+    const feld = (page, id, f) => page.locator(`.tb-r[data-id="${id}"] .c-${f} input`);
+    const setze = async (page, id, f, wert) => { await feld(page, id, f).fill(wert); await page.locator(`.tb-r[data-id="${id}"] .en-ok`).click(); };
+    await setze(A.page, k1, 'start', '2026-07-13T06:00'); await gesendet(A.page);
+    await setze(B.page, k2, 'end', '2026-07-13T14:00');
+    await warte(2500);
+    ok(!(await dlgOffen(B.page)), 'I1: kein Dialog bei B, obwohl A ein anderes Kind geändert hat', await B.page.locator('.dlg:not([hidden]) .dlg-h').first().textContent().catch(() => ''));
+    await gesendet(B.page).catch(() => {});
+    const daten = async (id) => (await pb.su('GET', `/api/collections/vorgaenge/records?filter=${encodeURIComponent(`plan_id="${planId}" && eid="${id}"`)}`)).body.items[0].daten;
+    ok((await daten(k1)).start === '2026-07-13T06:00', 'I1: Server: As Änderung an Kind-1 bleibt', (await daten(k1)).start);
+    ok((await daten(k2)).end === '2026-07-13T14:00', 'I1: Server: Bs Änderung an Kind-2 ist angekommen', (await daten(k2)).end);
+    // Die Hülle stimmt bei beiden (A bekommt Bs Kind per Realtime; ein frischer Stand rechnet sie neu)
+    await warte(1500);
+    ok((await feld(A.page, e, 'start').inputValue()) === '2026-07-13T06:00' && (await feld(A.page, e, 'end').inputValue()) === '2026-07-13T14:00', 'I1: A: Hülle 06:00–14:00', await feld(A.page, e, 'start').inputValue() + ' – ' + await feld(A.page, e, 'end').inputValue());
+    await planOeffnen(B.page, base, pb);   // frisch laden
+    await B.page.locator(`.tb-r[data-id="${e}"]`).waitFor({ timeout: 10000 });
+    ok((await feld(B.page, e, 'start').inputValue()) === '2026-07-13T06:00' && (await feld(B.page, e, 'end').inputValue()) === '2026-07-13T14:00', 'I1: B (frisch geladen): Hülle 06:00–14:00');
+  } finally { for (const c of ctxs) await c.close().catch(() => {}); }
+}
+
+// I7: Undo nach einer Zeitänderung mit bestätigtem Bedarf klappt auch ohne Leitungsrecht
+async function UNDO_BEDARF({ pb, base, browser }) {
+  console.log('— UNDO BEDARF (I7)');
+  const PW = pw();
+  const plan = fixturePlan('klassentreffen-festival');
+  const ziel = plan.tasks.find((t) => t.start && t.end && !t.parent && !plan.tasks.some((k) => k.parent === t.id));
+  ziel.res = [{ rid: 'crew', n: 2, von: null, bis: null, status: 'bestaetigt', bestaetigtAm: '2026-09-01T10:00:00.000Z', notiz: 'Zusage' }];
+  const planId = await planAnlegenFuer(pb, PW, plan);
+  const bearb = await kontoAnlegen(pb, { email: 'bearb@bzp.test', name: 'Ben', passwort: PW });
+  await pb.su('POST', '/api/collections/mitglieder/records', { plan_id: planId, user_id: bearb.id, rolle: 'bearbeiter', gewerke: [] });
+  const B = await nutzer(browser, pb, 'bearb@bzp.test', PW);
+  try {
+    await planOeffnen(B.page, base, pb);
+    await warte(1500);
+    const daten = async () => (await pb.su('GET', `/api/collections/vorgaenge/records?filter=${encodeURIComponent(`plan_id="${planId}" && eid="${ziel.id}"`)}`)).body.items[0].daten;
+    ok((await daten()).res[0].status === 'bestaetigt', 'Vorbedingung: Bedarf bestätigt auf dem Server');
+    const row = B.page.locator(`.tb-r[data-id="${ziel.id}"]`);
+    const start0 = await row.locator('.c-start input').inputValue();
+    const d = new Date(start0 + ':00Z'); d.setUTCHours(d.getUTCHours() - 1);
+    await row.locator('.c-start input').fill(d.toISOString().slice(0, 16));
+    await row.locator('.en-ok').click();
+    await gesendet(B.page);
+    const nach = await daten();
+    ok(nach.start !== ziel.start && nach.res[0].status === undefined, 'Zeit verschoben, Bedarf wieder «angefragt» (Server)', JSON.stringify(nach.res));
+    await B.page.evaluate(() => document.activeElement?.blur());
+    await B.page.keyboard.press('Control+z');
+    const toast = await B.page.waitForFunction(() => { const t = document.getElementById('toast'); return t && !t.hidden && t.textContent ? t.textContent : null; }, null, { timeout: 4000 }).then((h) => h.jsonValue()).catch(() => null);
+    await warte(1500);
+    ok(!(await dlgOffen(B.page)), 'I7: ⌘Z → kein «Nicht gespeichert»-Dialog', await B.page.locator('.dlg:not([hidden])').first().textContent().catch(() => ''));
+    await gesendet(B.page).catch(() => {});
+    const zurueck = await daten();
+    ok(zurueck.start === ziel.start, 'I7: die Zeit ist auf dem Server zurück', zurueck.start + ' vs ' + ziel.start);
+    ok(zurueck.res[0].status === undefined && zurueck.res[0].notiz === undefined, 'I7: der Bedarf bleibt «angefragt» (Status nicht wiederhergestellt)', JSON.stringify(zurueck.res));
+    ok(/angefragt/.test(toast || ''), 'I7: Toast sagt, dass der Bedarf angefragt bleibt', String(toast));
+  } finally { await B.ctx.close().catch(() => {}); }
+}
+
+// I5: Start ohne Netz zeigt für JEDEN Start die lokale Kopie (nicht nur beim Live-Monitor)
+async function START_OFFLINE({ pb, base, browser }) {
+  console.log('— START OHNE NETZ (I5)');
+  const PW = pw();
+  await planAnlegenFuer(pb, PW);
+  const KT = fixturePlan('klassentreffen-festival');
+  const P = await nutzer(browser, pb, 'pl@bzp.test', PW);   // KEIN Live-Monitor
+  try {
+    await planOeffnen(P.page, base, pb);
+    await warte(1500);
+    ok((await P.page.evaluate(() => localStorage.getItem('bzp_live'))) !== '1', 'Vorbedingung: kein Live-Monitor');
+    await pb.stop();
+    for (const [name, url] of [['normaler Start', appUrl(base, pb)], ['?plan=leer', appUrl(base, pb, '&plan=leer')]]) {
+      await P.page.goto(url);
+      ok(await markeBis(P.page, '📡 Offline – nur Ansicht', 20000), `I5: ${name} ohne Netz → «📡 Offline – nur Ansicht»`, await markeText(P.page));
+      ok(!P.page.url().includes('login.html') && !(await P.page.locator('#dlg:not([hidden])').count()), `I5: ${name}: kein login.html, kein Projektdialog`, P.page.url());
+      ok((await P.page.locator('#proj-name').textContent()).includes(KT.project.name), `I5: ${name}: der Plan steht da (aus der lokalen Kopie)`);
+    }
+    // Ohne Kopie bleibt es beim bisherigen Weg (Projektdialog mit Fehlermeldung)
+    await P.page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k !== 'bzp_auth' && k !== 'bzp_seeded') localStorage.removeItem(k); });
+    await P.page.goto(appUrl(base, pb));
+    await P.page.locator('#dlg .dlg-sub', { hasText: 'Keine Verbindung' }).waitFor({ timeout: 15000 }).catch(() => {});
+    ok(await P.page.locator('#dlg .dlg-sub', { hasText: 'Keine Verbindung' }).isVisible(), 'I5: ohne Kopie: Projektdialog nennt «Keine Verbindung»');
+  } finally { await P.ctx.close().catch(() => {}); }
+}
+
+// I6: geteilter Rechner, zwei Tabs: Abmelden in Tab 1 beendet auch Tab 2
+async function ZWEI_TABS({ pb, base, browser }) {
+  console.log('— ZWEI TABS (I6)');
+  const PW = pw();
+  await planAnlegenFuer(pb, PW);
+  const P = await nutzer(browser, pb, 'pl@bzp.test', PW);
+  try {
+    const p1 = P.page, p2 = await P.ctx.newPage();
+    p2.on('pageerror', (e) => ok(false, 'Seitenfehler (Tab 2): ' + e.message));
+    await planOeffnen(p1, base, pb);
+    await planOeffnen(p2, base, pb);
+    await warte(1500);
+    const kopien = () => p1.evaluate(() => Object.keys(localStorage).filter((k) => k === 'bzp_active' || k.startsWith('bzp_p_') || (k === 'bzp_projects' && localStorage.getItem(k) !== '[]')));
+    ok((await kopien()).length >= 2, 'Vorbedingung: lokale Kopie vorhanden');
+    await p1.locator('#proj-knopf').click();
+    await p1.locator('.mn #abmelden').click();
+    await p1.waitForURL(/login\.html/, { timeout: 10000 });
+    await p2.waitForURL(/login\.html/, { timeout: 10000 }).catch(() => {});
+    ok(p2.url().includes('login.html'), 'I6: Tab 2 ist nach dem Abmelden in Tab 1 auf login.html', p2.url());
+    await warte(2000);   // nichts darf zurückschreiben (Erneuerung, Kopie)
+    ok((await kopien()).length === 0, 'I6: keine lokale Kopie mehr', (await kopien()).join(','));
+    ok((await p1.evaluate(() => localStorage.getItem('bzp_auth'))) === null, 'I6: kein Token im Speicher');
+  } finally { await P.ctx.close().catch(() => {}); }
+}
+
+const ABSCHNITTE = { ANMELDUNG, ZWEI_NUTZER, IMPORT, OFFLINE, MONITOR, MONITOR_ABGELAUFEN, ABMELDEN, MITGLIEDER, VERWALTUNG, FIXRUNDE, SAMMELVORGANG, UNDO_BEDARF, START_OFFLINE, ZWEI_TABS };
 const i = process.argv.indexOf('--nur');
 const nur = i > 0 ? (process.argv[i + 1] || '').toUpperCase().replace(' ', '_') : null;
 if (nur && !ABSCHNITTE[nur]) { console.error('Unbekannter Abschnitt: ' + nur + ' (' + Object.keys(ABSCHNITTE).join(', ') + ')'); process.exit(2); }

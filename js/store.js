@@ -963,6 +963,23 @@ function huellenAbgleich(state, aend) {
   return { ...aend, vorgaenge: { ...x, aendern } };
 }
 
+// Undo/Redo für Rollen ohne Leitung: Die Umkehrung einer Zeitänderung stellt eine bestätigte Zuweisung samt Status
+// wieder her (oder legt einen gelöschten Vorgang mit Status neu an) — das lehnt der Server für sie ab. Darum fehlen
+// die Statusfelder im ZIEL der Umkehrung: Die Zeiten gehen zurück, der Bedarf bleibt «angefragt».
+// → {aend, entfernt}: entfernt = es ging tatsächlich ein Status verloren (die App sagt es per Toast).
+function statusEntfernen(aend) {
+  const x = aend.vorgaenge;
+  if (!x) return { aend, entfernt: false };
+  let entfernt = false;
+  const bereinigt = (t) => {
+    if (!Array.isArray(t.res) || !t.res.some((z) => STATUS_FELDER.some((f) => f in z && z[f] !== undefined && !(f === 'status' && z[f] === 'angefragt')))) return t;
+    entfernt = true;
+    return { ...t, res: t.res.map((z) => { const c = { ...z }; STATUS_FELDER.forEach((f) => delete c[f]); return c; }) };
+  };
+  const neu = { ...x, anlegen: x.anlegen.map(bereinigt), aendern: x.aendern.map((e) => ({ ...e, nachher: bereinigt(e.nachher) })) };
+  return { aend: entfernt ? { ...aend, vorgaenge: neu } : aend, entfernt };
+}
+
 // ── Store ───────────────────────────────────────────────────────────────────
 
 export function createStore(initial, opt = {}) {
@@ -1056,7 +1073,10 @@ export function createStore(initial, opt = {}) {
     const sperre = opt.gesperrt && opt.gesperrt();
     if (sperre) return err(sperre);
     const eintrag = von[von.length - 1];
-    const aend = huellenAbgleich(state, umgekehrt ? umkehren(eintrag) : eintrag);
+    let roh = umgekehrt ? umkehren(eintrag) : eintrag;
+    let statusEntfernt = false;
+    if (opt.undoOhneStatus && opt.undoOhneStatus()) { const s2 = statusEntfernen(roh); roh = s2.aend; statusEntfernt = s2.entfernt; }
+    const aend = huellenAbgleich(state, roh);
     const r = anwenden(state, aend, { erzwingen });
     if (!r.ok) return r;
     // Hüllen der Sammelvorgänge nachziehen (fremde Änderungen an Kindern, die der
@@ -1074,7 +1094,7 @@ export function createStore(initial, opt = {}) {
     state = draft;
     dirty = true;
     notify({ quelle: umgekehrt ? 'undo' : 'redo', aend: tatsaechlich });
-    return { ok: true };
+    return statusEntfernt ? { ok: true, statusEntfernt: true } : { ok: true };
   }
 
   const undo = (o) => schritt(undoStack, redoStack, true, o);

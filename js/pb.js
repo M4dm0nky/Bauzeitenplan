@@ -92,13 +92,30 @@ export function createPb({
     try { if (a) speicher?.setItem(AUTH_KEY, JSON.stringify(a)); else speicher?.removeItem(AUTH_KEY); } catch { /* Speicher gesperrt: nur im Speicher halten */ }
   };
   const setAuth = (a) => { auth = a; schreiben(a); };
+  // Was der Speicher JETZT hält (ein anderer Tab desselben Browsers kann ihn geändert haben):
+  // undefined = nicht lesbar, null = keine Sitzung, sonst {token, record}.
+  const gespeichert = () => {
+    try {
+      if (!speicher) return undefined;
+      const raw = speicher.getItem(AUTH_KEY);
+      if (raw === null || raw === undefined) return null;
+      const j = parse(raw);
+      return istObj(j) && typeof j.token === 'string' && j.token ? j : null;
+    } catch { return undefined; }
+  };
+  // Hat ein anderer Tab abgemeldet oder einen anderen Nutzer angemeldet? Dann gehört der Speicher nicht mehr dieser Sitzung.
+  const fremdeSitzung = () => {
+    const g = gespeichert();
+    if (g === undefined || !auth) return false;
+    return !g || (g.record?.id ?? null) !== (auth.record?.id ?? null);
+  };
   // Sitzungsnummer: zählt jede Anmeldung, jedes Abmelden und jeden Token-Entzug. Antworten, die
   // eine ältere Sitzung angestoßen hat, dürfen weder Token setzen noch die neue Sitzung beenden.
   let sitzung = 0;
   const stops = new Set(); // laufende Abos (stop-Funktionen)
-  const beenden = (grund) => {
+  const beenden = (grund, speicherLassen = false) => {
     sitzung++;
-    setAuth(null);
+    if (speicherLassen) auth = null; else setAuth(null);   // speicherLassen: der Speicher gehört einem anderen Tab
     for (const stop of [...stops]) stop();
     emit('abgemeldet', { grund });
   };
@@ -143,6 +160,14 @@ export function createPb({
     return { ok: true, record: r.daten.record };
   };
   const abmelden = () => { beenden('manuell'); };
+  /** Das `storage`-Ereignis eines anderen Tabs: abgemeldet oder anderer Nutzer → diese Sitzung endet ebenfalls
+   *  (grund 'manuell', schreibt nichts zurück); dieselbe Sitzung mit neuem Token → das Token übernehmen. */
+  const speicherGeaendert = () => {
+    if (!auth) return;
+    if (fremdeSitzung()) { beenden('manuell', true); return; }
+    const g = gespeichert();
+    if (g && g.token !== auth.token) auth = { token: g.token, record: g.record ?? auth.record };
+  };
   const erneuern = async () => {
     if (!auth) return { ok: false, status: 401, code: 'auth', message: 'Nicht angemeldet.' };
     const start = sitzung, altesToken = auth.token;
@@ -150,6 +175,8 @@ export function createPb({
     if (!r.ok) return r; // 401 hat abgemeldet; Netz/5xx lassen die Anmeldung bestehen
     if (!istObj(r.daten) || typeof r.daten.token !== 'string' || !r.daten.token) return falscheAntwort(r.status, 'Token fehlt');
     if (sitzung !== start || auth?.token !== altesToken) return { ok: false, status: 0, code: 'abgebrochen', message: 'Erneuerung wurde überholt.' };
+    // Ein anderer Tab hat abgemeldet (oder anders angemeldet): die Erneuerung darf die Sitzung nicht wieder in den Speicher schreiben.
+    if (fremdeSitzung()) { beenden('manuell', true); return { ok: false, status: 401, code: 'auth', message: 'In einem anderen Tab abgemeldet.' }; }
     setAuth({ token: r.daten.token, record: r.daten.record ?? null });
     return { ok: true, record: r.daten.record };
   };
@@ -248,6 +275,6 @@ export function createPb({
   return {
     get auth() { return auth; },
     get istAngemeldet() { return !!auth; },
-    on, anmelden, abmelden, erneuern, liste, eins, batch, post, abo, stopTakt,
+    on, anmelden, abmelden, speicherGeaendert, erneuern, liste, eins, batch, post, abo, stopTakt,
   };
 }

@@ -4,6 +4,7 @@ import { local } from '../js/conflicts.js';
 import assert from 'node:assert/strict';
 import { ABSCHNITTE, PUNKT_TYPEN } from '../js/ebene.js';
 import { readFileSync } from 'node:fs';
+import { rechteFehler, darfBedarfStatus } from '../js/rechte.js';
 
 let pass = 0, fail = 0;
 const test = (name, fn) => {
@@ -1999,6 +2000,61 @@ test('entferneEintrag findet auch den Gegeneintrag einer Undo-Änderung (Redo-St
   assert.equal(s.canRedo, true);
   assert.equal(s.entferneEintrag(undoAend), true);
   assert.equal(s.canRedo, false);
+});
+
+console.log('\nUndo ohne Leitungsrecht (I7)');
+// Wie app.js: pruefe = dieselben Regeln wie der Server, undoOhneStatus = Rolle ohne Leitung
+const mitRolle = (anfang) => {
+  const ctx = { rolle: anfang };
+  const s = createStore(seed(), {
+    pruefe: (vorher, nachher, aend) => rechteFehler(ctx.rolle, aend, vorher),
+    undoOhneStatus: () => !!ctx.rolle && !darfBedarfStatus(ctx.rolle),
+  });
+  return { s, ctx };
+};
+const PL = { rolle: 'produktionsleitung', gewerke: [] }, BEARB = { rolle: 'bearbeiter', gewerke: [] };
+test('I7: Bearbeiter verschiebt einen Vorgang mit bestätigter Crew, ⌘Z → ok, Zeit zurück, Status angefragt', () => {
+  const { s, ctx } = mitRolle(PL);
+  s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'p-stagehand', n: 4, von: null, bis: null } });
+  assert.equal(s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM, notiz: 'ok' }).ok, true);
+  ctx.rolle = BEARB;
+  assert.equal(s.apply({ type: 'moveTask', id: 'a', start: '2026-07-13T09:00', end: '2026-07-13T13:00' }).ok, true);
+  assert.equal('status' in taskById(s, 'a').res[0], false, 'die Zeitänderung setzt den Status zurück');
+  const r = s.undo();
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(r.statusEntfernt, true, 'die Umkehrung hätte den Status wiederhergestellt: er wird weggelassen, die App sagt es per Toast');
+});
+test('I7: Undo des Verschiebens bringt die Zeit zurück, der Bedarf bleibt angefragt (Toast-Hinweis statusEntfernt)', () => {
+  const { s, ctx } = mitRolle(PL);
+  s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'p-stagehand', n: 4, von: null, bis: null } });
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM, notiz: 'ok' });
+  ctx.rolle = BEARB;
+  s.apply({ type: 'moveTask', id: 'a', start: '2026-07-13T09:00', end: '2026-07-13T13:00' });
+  const r = s.undo();
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(taskById(s, 'a').start, '2026-07-13T08:00');
+  assert.equal(taskById(s, 'a').res[0].status, undefined);
+});
+test('I7: Undo des Löschens eines Vorgangs mit bestätigtem Bedarf: ok für den Bearbeiter, ohne Status', () => {
+  const { s, ctx } = mitRolle(PL);
+  s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'p-stagehand', n: 4, von: null, bis: null } });
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM, notiz: 'ok' });
+  ctx.rolle = BEARB;
+  assert.equal(s.apply({ type: 'removeTask', id: 'a' }).ok, true);
+  const r = s.undo();
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(r.statusEntfernt, true);
+  assert.equal(taskById(s, 'a').res[0].status, undefined);
+  assert.equal(taskById(s, 'a').res[0].notiz, undefined);
+});
+test('I7: die Leitung bekommt den Status beim Undo zurück (Option aus)', () => {
+  const { s } = mitRolle(PL);
+  s.apply({ type: 'setTaskRes', id: 'a', index: null, value: { rid: 'p-stagehand', n: 4, von: null, bis: null } });
+  s.apply({ type: 'setResStatus', id: 'a', index: 0, status: 'bestaetigt', am: AM, notiz: 'ok' });
+  s.apply({ type: 'removeTask', id: 'a' });
+  const r = s.undo();
+  assert.equal(r.ok, true);
+  assert.equal(taskById(s, 'a').res[0].status, 'bestaetigt');
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);

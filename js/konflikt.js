@@ -13,12 +13,12 @@ const ART_NAME = { vorgaenge: 'Vorgang', gewerke: 'Gewerk', phasen: 'Phase', res
 
 const sl = (aend, coll) => aend?.[coll] || { anlegen: [], aendern: [], loeschen: [] };
 
-/** Anzeigename eines Eintrags: aus dem fremden Stand, der Änderungsliste oder dem Plan. */
 /** Antwort des Dialogs «Anmeldung abgelaufen» → 'login' | 'kopie'. NUR das ausdrückliche 'login' führt zur
  *  Anmeldung (die ungesendeten Änderungen gehen dann verloren); Escape/Klick daneben (null) und alles andere
  *  sind «Kopie ansehen», damit nichts still verloren geht. */
 export const abgelaufenEntscheid = (wahl) => (wahl === 'login' ? 'login' : 'kopie');
 
+/** Anzeigename eines Eintrags: aus dem fremden Stand, der Änderungsliste oder dem Plan. */
 export function eintragTitel(coll, eid, { state = null, aend = null, fremd = null } = {}) {
   let rec = fremd || null;
   if (!rec && aend) {
@@ -163,4 +163,24 @@ export function uebernehmeOhneOffene(lokal, fremd, offene) {
     else if (c !== 'plaene') f[c].delete(eid);
   }
   return { ...fremd, ...zusammensetzen(f) };
+}
+
+const HUELLE = ['start', 'end', 'milestone'];   // abgeleitete Felder eines Sammelvorgangs (wie HUELLE_FELDER im Store)
+const ohneHuelle = (o) => { const c = { ...o }; HUELLE.forEach((f) => delete c[f]); return JSON.stringify(Object.keys(c).sort().map((k) => [k, c[k]])); };
+
+/** Konflikte an einem Sammelvorgang, die KEINE sind: Die Hülle (Start/Ende) ist aus den Kindern abgeleitet.
+ *  Ändern zwei Nutzer verschiedene Kinder, kollidieren sie sonst am Elternvorgang (Spec §9: verschiedene Einträge
+ *  kollidieren nie). Ein Konflikt gilt als Hüllenkonflikt, wenn der Eintrag ein Vorgang mit Untervorgängen ist, noch
+ *  existiert (kein «gelöscht»/«existiert») und die eigene Änderung dort NUR Hüllenfelder berührt. Dann gilt der
+ *  fremde Stand (ohne Dialog), die eigene Hüllenänderung entfällt, die Hülle rechnet jeder Store neu aus den Kindern.
+ *  → {auto:[Konflikt…], rest:[Konflikt…]} */
+export function huellenKonflikte(aend, konflikte, state) {
+  const eltern = new Set((state?.tasks || []).map((t) => t.parent).filter(Boolean));
+  const auto = [], rest = [];
+  for (const k of konflikte || []) {
+    const e = k.coll === 'vorgaenge' && k.art === 'aendern' && k.fremd && !k.unbekannt && eltern.has(k.eid)
+      ? sl(aend, 'vorgaenge').aendern.find((x) => x.vorher.id === k.eid) : null;
+    if (e && ohneHuelle(e.vorher) === ohneHuelle(e.nachher)) auto.push(k); else rest.push(k);
+  }
+  return { auto, rest };
 }

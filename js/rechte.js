@@ -10,6 +10,8 @@ const ROLLEN = [...LEITUNG, 'bearbeiter', 'gewerkeleiter', 'betrachter'];
 
 export const darfBearbeiten = (r) => !!r && ROLLEN.includes(r.rolle) && r.rolle !== 'betrachter';
 export const darfMitglieder = (r) => !!r && LEITUNG.includes(r.rolle);
+/** Bedarfsstatus setzen (bestätigen/ablehnen) darf nur die Leitung. */
+export const darfBedarfStatus = (r) => !!r && LEITUNG.includes(r.rolle);
 export const darfPlanAnlegen = (user) => !!user && (!!user.superadmin || !!user.produktionsleitung);
 
 // ── Bedarfsstatus (wie hilfen.js: Multimenge identischer Zeilen) ───────────

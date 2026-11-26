@@ -491,6 +491,44 @@ test('pb.js: keine DOM-/Dialog-Zugriffe, kein Direktzugriff auf localStorage/win
   assert.ok(!/eyJ[A-Za-z0-9_-]{20,}/.test(t), 'echtes Token im Test');
 });
 
+// ── I6: geteilter Rechner, zwei Tabs
+test('I6: erneuern schreibt nach dem Abmelden in einem anderen Tab die Sitzung NICHT zurück, sondern beendet diese', async () => {
+  const sp = angemeldet();
+  const { pb } = neu([REFRESH], { speicher: sp });
+  const gruende = []; pb.on('abgemeldet', (e) => gruende.push(e.grund));
+  sp.removeItem(AUTH_KEY);                   // der andere Tab hat abgemeldet
+  const r = await pb.erneuern();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'auth');
+  assert.equal(sp.getItem(AUTH_KEY), null, 'nichts zurückgeschrieben');
+  assert.equal(pb.istAngemeldet, false);
+  assert.deepEqual(gruende, ['manuell']);
+});
+test('I6: erneuern nach Anmeldung eines ANDEREN Nutzers im anderen Tab beendet diese Sitzung, der Speicher bleibt beim anderen', async () => {
+  const sp = angemeldet();
+  const { pb } = neu([REFRESH], { speicher: sp });
+  const fremd = JSON.stringify({ token: 'T-FREMD', record: { ...RECORD, id: 'anderernutzer' } });
+  sp.setItem(AUTH_KEY, fremd);
+  assert.equal((await pb.erneuern()).ok, false);
+  assert.equal(sp.getItem(AUTH_KEY), fremd);
+  assert.equal(pb.istAngemeldet, false);
+});
+test('I6: speicherGeaendert: abgemeldet → beendet (manuell); dieselbe Sitzung mit neuem Token → Token übernommen, nichts geschrieben; ohne Speicher nichts', () => {
+  const sp = angemeldet();
+  const { pb } = neu([], { speicher: sp });
+  const gruende = []; pb.on('abgemeldet', (e) => gruende.push(e.grund));
+  sp.setItem(AUTH_KEY, JSON.stringify({ token: 'T-NEU', record: RECORD }));
+  pb.speicherGeaendert();
+  assert.equal(pb.auth.token, 'T-NEU');
+  assert.deepEqual(gruende, []);
+  sp.removeItem(AUTH_KEY);
+  pb.speicherGeaendert();
+  assert.deepEqual(gruende, ['manuell']);
+  assert.equal(sp.getItem(AUTH_KEY), null);
+  const o = neu([], { speicher: null });
+  o.pb.speicherGeaendert();   // kein Speicher lesbar: kein Abmelden
+});
+
 for (const [name, fn] of tests) {
   try { await fn(); pass++; console.log('  ✓ ' + name); }
   catch (e) { fail++; console.log('  ✗ ' + name + '\n      ' + e.message); }

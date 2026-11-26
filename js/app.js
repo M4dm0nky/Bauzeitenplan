@@ -7,10 +7,10 @@ import { createStore, verschiebeZeit, SHIFT_MAX_TAGE, SHIFT_MAX_MIN } from './st
 import { createRepo, serialize, deserialize } from './persistence.js';
 import { createPb, apiBasis, ERNEUERN_MS } from './pb.js';
 import { createServerPlan, listePlaene } from './server.js';
-import { rechteFehler, darfPlanAnlegen, darfMitglieder } from './rechte.js';
+import { rechteFehler, darfPlanAnlegen, darfMitglieder, darfBedarfStatus } from './rechte.js';
 import { openMitglieder, openVerwaltung } from './mitglieder.js';
 import { anwenden, umkehren, aenderungen, istLeer, zerlegen, zusammensetzen } from './aenderungen.js';
-import { abgelaufenEntscheid, eintragTitel, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen, offeneSchluessel, uebernehmeOhneOffene } from './konflikt.js';
+import { abgelaufenEntscheid, huellenKonflikte, eintragTitel, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen, offeneSchluessel, uebernehmeOhneOffene } from './konflikt.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
@@ -150,6 +150,9 @@ async function frageAbgelaufen(n) {
   location.replace(loginSeite());
 }
 
+// Netz weg oder Server vorübergehend gestört (429/5xx/Nicht-JSON)? Dann gilt «ohne Verbindung»: die lokale Kopie.
+const keinServer = (r) => !!(r && (r.offline || r.limit));
+const kopieDa = () => { const id = repo.getActive() || repo.list()[0]?.id; return !!(id && repo.load(id)); };
 async function boot() {
   if (!pb.istAngemeldet) { zuLogin(); return; }
   const live = lsLies('bzp_live') === '1';
@@ -159,15 +162,15 @@ async function boot() {
     let liste = [];
     try { liste = await listePlaene(pb); } catch (e) {
       if (e.abgemeldet) { zuLogin(); return; }
-      if (live && e.offline && zeigeKopie('offline')) return;      // nur ein Netzfehler: der Monitor zeigt die lokale Kopie
-      // anderer Fehler (z. B. 429, 5xx): kein «Offline», der Projektdialog nennt ihn
+      if (keinServer(e) && zeigeKopie('offline')) return;      // ohne Verbindung: die lokale Kopie (Spec §10)
+      // anderer Fehler (z. B. 403): kein «Offline», der Projektdialog nennt ihn
     }
     const aktiv = repo.getActive();
     const erstes = liste.find((p) => p.plan_id === aktiv) || (leer ? liste[0] : null);
-    if (erstes && await open(erstes.plan_id, { still: live })) return;
-    if (live && !store && ladeGrund?.offline && zeigeKopie('offline')) return;
+    if (erstes && await open(erstes.plan_id, { still: live || kopieDa() })) return;
+    if (!store && keinServer(ladeGrund) && zeigeKopie('offline')) return;
   }
-  showProjectDialog({ firstRun: !store });
+  showProjectDialog({ firstRun: !store });   // der normale Start: der Dialog zeigt bei fehlender Verbindung selbst die Kopie
 }
 
 // Öffnet den Plan vom Server. true = offen, false = nicht geöffnet (Fehler gemeldet oder
@@ -538,6 +541,8 @@ const gewerkName = (id) => store.state.gewerke.find((g) => g.id === id)?.name ||
 const storeOptionen = () => ({
   // Dieselben Regeln wie der Server (js/rechte.js); der Server bleibt die Sicherheit.
   pruefe: (vorher, nachher, aend) => rechteFehler(rolle, aend, vorher, gewerkName),
+  // Undo/Redo ohne Leitungsrecht: der Bedarfsstatus kommt nicht zurück (Server würde ablehnen), siehe store.js
+  undoOhneStatus: () => !!rolle && !darfBedarfStatus(rolle),
   gesperrt: () => (!server ? (kopieModus ? 'Nur lokale Kopie – keine Verbindung zum Server.' : 'Kein Plan geöffnet.')
     : offline ? 'Offline – nur Ansicht'
       : rolle?.rolle === 'betrachter' ? 'Nur ansehen: du bist Betrachter.' : null),
@@ -723,6 +728,14 @@ function zuruecknehmen(aend) {
 // keinen Bearbeiter je Datensatz) → «jemand anderem». Abbrechen lässt alles offen (geparkt).
 // Rückgabe: Ergebnis des erneuten Sendens, oder null (geparkt / nichts mehr zu tun).
 async function loeseKonflikt(srv, r) {
+  // Reine Hüllenänderung an einem Sammelvorgang (anderes Kind geändert): kein Konflikt, kein Dialog (konflikt.js).
+  const h = huellenKonflikte(r.aend, r.konflikt, store.state);
+  if (h.auto.length) {
+    store.applyRemote(fremdUebernehmen(store.state, h.auto));
+    const rest = ohne(r.aend, h.auto);
+    if (!h.rest.length) return !istLeer(rest) ? srv.senden(rest) : srv.wiederVerbunden();
+    r = { ...r, konflikt: h.rest, aend: rest };
+  }
   const wer = 'jemand anderem';
   const entscheid = [];
   konfliktOffen = true; paintSpeicher();
@@ -780,6 +793,7 @@ function geparktesLoesen() {
 async function macheUndo(wieder) {
   if (!store) return;
   const r = wieder ? store.redo() : store.undo();
+  if (r && r.ok && r.statusEntfernt) toast('Zeiten zurückgesetzt. Bestätigter Bedarf bleibt «angefragt»: bestätigen darf nur die Produktionsleitung.', 'warn', 7000);
   if (!r || r.ok !== false) return;
   if (!r.konflikt) { toast(r.error || 'Nicht möglich.', 'bad', 6000); return; }
   const k = r.konflikt[0];
@@ -795,6 +809,7 @@ async function macheUndo(wieder) {
   if (wahl !== 'ja') return;
   const r2 = wieder ? store.redo({ erzwingen: true }) : store.undo({ erzwingen: true });
   if (r2 && r2.ok === false) toast(r2.error || 'Nicht möglich.', 'bad', 6000);
+  else if (r2?.statusEntfernt) toast('Zeiten zurückgesetzt. Bestätigter Bedarf bleibt «angefragt»: bestätigen darf nur die Produktionsleitung.', 'warn', 7000);
 }
 
 // ── Fremdänderungen (Realtime) ──────────────────────────────────────────────
@@ -811,10 +826,10 @@ function fremdAnwenden() {
   if (liste.some((e) => e.coll === 'plaene' && e.objekt === null && e.eid === store.state.project.id)) { planWeg(); return; }
   const offen = offeneEigene();
   const teile = zerlegen(store.state);
-  for (const { coll, eid, objekt } of liste) {
+  for (const { coll, eid, objekt, rev } of liste) {
     if (!teile[coll]) continue;
-    if (offen.has(coll + '|' + eid)) { gehalten.add(coll + '|' + eid); continue; }   // eigene Änderung offen: zurückhalten
-    if (objekt === null) { if (coll !== 'plaene') teile[coll].delete(eid); } else teile[coll].set(eid, objekt);
+    if (offen.has(coll + '|' + eid)) { gehalten.add(coll + '|' + eid); continue; }   // eigene Änderung offen: zurückhalten (die Basis bleibt alt)
+    if (objekt === null) { if (coll !== 'plaene') teile[coll].delete(eid); } else { teile[coll].set(eid, objekt); server.uebernommen?.(coll, eid, rev); }   // erst jetzt gilt die rev als Basis
   }
   store.applyRemote({ ...store.state, ...zusammensetzen(teile) });
 }
@@ -835,12 +850,28 @@ function nachladen() {
   if (!srv) return;
   reihe(async () => {
     if (srv !== server) return;
-    const l = await srv.laden();
-    if (srv !== server || !l.ok) return;
-    rolle = l.rolle;          // eine geänderte Rolle gilt sofort (Mitglieder-Dialog, Einladung angenommen)
-    syncNurAnsicht();
-    uebernehmeStand(l.state);
+    await ladeStand(srv);
   });
+}
+// Laden und übernehmen. Ein vorübergehender Fehler (429/5xx/Nicht-JSON) bleibt nicht still liegen: erneut planen.
+let ladeTimer = null, ladeVersuche = 0;
+const LADE_WIEDER_MS = [1000, 2000, 4000, 5000];
+function planeLadeWieder(srv) {
+  if (ladeTimer) return;
+  const ms = LADE_WIEDER_MS[Math.min(ladeVersuche++, LADE_WIEDER_MS.length - 1)];
+  ladeTimer = setTimeout(() => { ladeTimer = null; if (srv === server) nachladen(); }, ms);
+}
+async function ladeStand(srv) {
+  const l = await srv.laden(() => offeneEigene());   // Datensätze mit offener eigener Änderung behalten ihre Basis-rev
+  if (srv !== server) return;
+  if (l.abgemeldet) { zuLogin('401'); return; }
+  if (l.offline) { setOffline(true); return; }
+  if (l.limit) { planeLadeWieder(srv); return; }
+  if (!l.ok) return;
+  ladeVersuche = 0;
+  rolle = l.rolle;          // eine geänderte Rolle gilt sofort (Mitglieder-Dialog, Einladung angenommen)
+  syncNurAnsicht();
+  uebernehmeStand(l.state);   // Eingaben während des Ladens werden nicht überrollt
 }
 // Server-Stand anwenden, ohne Datensätze mit offener eigener Änderung zu überschreiben.
 function uebernehmeStand(serverStand) {
@@ -862,6 +893,7 @@ function schliesseServer() {
   clearTimeout(fremdTimer); fremdTimer = null; fremdListe = []; gehalten.clear(); unterwegs.length = 0;
   clearTimeout(wiederTimer); wiederTimer = null;
   clearTimeout(limitTimer); limitTimer = null;
+  clearTimeout(ladeTimer); ladeTimer = null; ladeVersuche = 0;
   server?.beenden?.();     // ein laufender 429-Wiederversuch sendet nichts mehr
   server = null; offline = false; rolle = null; kopieModus = null;
   geparkt.length = 0;
@@ -885,20 +917,14 @@ async function abgleichen(srv) {
     if (srv !== server || srv.offen.length || geparkt.length) return;
   }
   if (wartend > 0 || geparkt.length) return;     // Eigenes ist unterwegs: ein Laden würde es überrollen
-  const l = await srv.laden();
-  if (srv !== server) return;
-  if (l.abgemeldet) { zuLogin('401'); return; }
-  if (l.offline) { setOffline(true); return; }
-  if (!l.ok) return;
-  rolle = l.rolle;
-  syncNurAnsicht();
-  uebernehmeStand(l.state);     // Eingaben während des Ladens werden nicht überrollt
+  await ladeStand(srv);
 }
 
 // Offline: alle 5 s prüfen, ob der Server wieder da ist (Wiederverbinden: Anmeldung erneuern,
 // neu abonnieren, offene Warteschlange senden, Stand laden; Marke weg).
 let wiederTimer = null;
 const WIEDER_MS = 5000;
+const GETRENNT_KARENZ_MS = 10000;   // so lange gilt ein Realtime-Abbruch noch nicht als offline
 function planeWieder() {
   clearTimeout(wiederTimer);
   wiederTimer = setTimeout(() => reihe(versucheWieder), WIEDER_MS);
@@ -1495,7 +1521,7 @@ function doExport() {
   toast('Exportiert');
 }
 
-const LIMIT_TEXT = 'Der Server ist gerade ausgelastet. Bitte in ein paar Sekunden nochmal versuchen.';
+const LIMIT_TEXT = 'Der Server ist gerade ausgelastet oder gestört. Bitte in ein paar Sekunden nochmal versuchen.';
 const KEIN_ANLEGEN = 'Neue Projekte legen nur Produktionsleitung und Superadmin an.';
 
 // Neuen Plan auf dem Server anlegen und öffnen. true = offen.
@@ -1541,6 +1567,8 @@ async function showProjectDialog({ firstRun = false } = {}) {
   try { list = await listePlaene(pb); }
   catch (e) {
     if (e.abgemeldet) { zuLogin(); return; }
+    // Erster Start ohne Verbindung (kein Plan offen): die lokale Kopie statt einer Fehlermeldung, sofern es eine gibt
+    if (!store && keinServer(e) && zeigeKopie('offline')) { dlg.hidden = true; return; }
     problem = e.offline ? 'Keine Verbindung zum Server. Die Projektliste lässt sich nur mit Verbindung laden.' : e.limit ? LIMIT_TEXT : 'Die Projekte ließen sich nicht laden: ' + e.message;
   }
   const user = pb.auth?.record;
@@ -2023,11 +2051,20 @@ function main() {
     if (e?.grund === 'manuell') { kopieAus = true; for (const x of repo.list()) repo.remove(x.id); }
     zuLogin(e?.grund);
   });
-  let getrennt = false;
-  pb.on('getrennt', () => { getrennt = true; if (server) setOffline(true); });
+  // PocketBase schließt die Realtime-Verbindung nach 300 s Ruhe (gemessen, 0.40.6); der Browser baut sie nach
+  // Sekunden selbst wieder auf. Ein Abbruch allein ist darum NOCH NICHT offline: erst wenn `verbunden` nach der
+  // Karenz ausbleibt. Sofort offline: `code:'netz'` beim Senden und das Browser-Ereignis `offline`.
+  window.addEventListener('storage', (e) => { if (e.key === null || e.key === 'bzp_auth') pb.speicherGeaendert(); });   // geteilter Rechner: Abmelden in einem anderen Tab gilt hier ebenso
+  let getrennt = false, getrenntTimer = null;
+  pb.on('getrennt', () => {
+    getrennt = true;
+    clearTimeout(getrenntTimer);
+    getrenntTimer = setTimeout(() => { getrenntTimer = null; if (getrennt && server) setOffline(true); }, GETRENNT_KARENZ_MS);
+  });
   window.addEventListener('offline', () => { if (server) setOffline(true); });
   window.addEventListener('online', () => { if (server && offline) reihe(versucheWieder); });
   pb.on('verbunden', () => {
+    clearTimeout(getrenntTimer); getrenntTimer = null;
     if (!getrennt) return;
     getrennt = false;
     const srv = server;

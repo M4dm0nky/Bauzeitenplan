@@ -3,6 +3,7 @@
 // als {ok:false, status:409, code:'rev', eid, rev, index}.
 import { createServerPlan as erzeuge, listePlaene, BATCH_ABSTAND_MS, BACKOFF_MS, PLAN_VERSUCHE, LIMIT_VERSUCHE } from '../js/server.js';
 import { aenderungen, zerlegen } from '../js/aenderungen.js';
+import { huellenKonflikte, fremdUebernehmen, ohne } from '../js/konflikt.js';
 import { createStore } from '../js/store.js';
 import { deserialize } from '../js/persistence.js';
 import assert from 'node:assert/strict';
@@ -264,11 +265,11 @@ test('Realtime: Fremdes kommt als {coll,eid,objekt}, Löschen als objekt null, a
   pb.hoerer({ thema: 'vorgaenge', action: 'update', record: rec });
   pb.hoerer({ thema: 'vorgaenge', action: 'update', record: { ...rec, plan_id: 'anderer' } });
   pb.hoerer({ thema: 'vorgaenge', action: 'update', record: { ...rec, rev: 1 } }); // alt
-  assert.deepEqual(got, [{ coll: 'vorgaenge', eid: state.tasks[0].id, objekt: rec.daten }]);
+  assert.deepEqual(got, [{ coll: 'vorgaenge', eid: state.tasks[0].id, rev: 2, objekt: rec.daten }]);
   pb.hoerer({ thema: 'vorgaenge', action: 'delete', record: rec });
-  assert.deepEqual(got[1], { coll: 'vorgaenge', eid: state.tasks[0].id, objekt: null });
+  assert.deepEqual(got[1], { coll: 'vorgaenge', eid: state.tasks[0].id, rev: null, objekt: null });
   pb.hoerer({ thema: 'plaene', action: 'update', record: { plan_id: planId, id: 'p', rev: 9, daten: { name: 'P' } } });
-  assert.deepEqual(got[2], { coll: 'plaene', eid: planId, objekt: { name: 'P' } });
+  assert.deepEqual(got[2], { coll: 'plaene', eid: planId, rev: 9, objekt: { name: 'P' } });
 });
 test('Realtime: eigenes Echo (coll+eid+rev) wird verschluckt, auch wenn es VOR der Antwort kommt', async () => {
   const { pb, sp, planId, state } = await holen(KT);
@@ -289,11 +290,67 @@ test('Realtime: eigenes Echo (coll+eid+rev) wird verschluckt, auch wenn es VOR d
   const rec = kl(pb.recs.find((x) => x.eid === state.tasks[0].id));
   pb.hoerer({ thema: 'vorgaenge', action: 'update', record: { ...rec, rev: rec.rev + 1 } });
   assert.equal(got.length, 1);
-  // und die rev im Stand ist nachgezogen: nächstes Senden nutzt sie
+  // die App übernimmt den fremden Inhalt (uebernommen): erst jetzt ist die rev die Basis des nächsten Sendens
+  sp.uebernommen('vorgaenge', state.tasks[0].id, rec.rev + 1);
   pb.batch = orig;
   pb.recs.find((x) => x.eid === state.tasks[0].id).rev = rec.rev + 1;
   const nach2 = kl(nach); nach2.tasks[0].title = 'Nochmal';
   assert.ok((await sp.senden(aenderungen(nach, nach2))).ok);
+});
+test('C1: Ereignis rev 5 gehört, aber nicht übernommen → senden auf dem Inhalt von rev 4 ist ein Konflikt (nie still überschreiben)', async () => {
+  const { pb, sp, state } = await holen(KT);
+  await sp.laden();
+  sp.abonnieren(() => {});
+  const x = state.tasks[0].id;
+  const rec = pb.recs.find((r) => r.eid === x);
+  rec.daten = { ...rec.daten, title: 'Fremd' }; rec.rev = 5;
+  pb.hoerer({ thema: 'vorgaenge', action: 'update', record: kl(rec) }); // die App hält den Inhalt zurück
+  const nach = kl(state); nach.tasks[0].title = 'Eigen';
+  const r = await sp.senden(aenderungen(state, nach)); // der Store zeigt noch den Inhalt von rev 1
+  assert.equal(r.ok, false);
+  assert.equal(r.konflikt[0].art, 'aendern');
+  assert.equal(rec.daten.title, 'Fremd', 'Fremdes nicht überschrieben');
+});
+test('C1: die Basis steht beim Senden fest, auch wenn ein davor eingereihtes laden() den Stand ersetzt', async () => {
+  const { pb, sp, state } = await holen(KT);
+  await sp.laden();
+  const rec = pb.recs.find((r) => r.eid === state.tasks[0].id);
+  rec.daten = { ...rec.daten, title: 'Fremd' }; rec.rev = 2;
+  const laden = sp.laden();                      // das nachladen() der App ist schon eingereiht ...
+  const nach = kl(state); nach.tasks[0].title = 'Eigen'; // ... der Nutzer ändert auf dem Inhalt von rev 1
+  const senden = sp.senden(aenderungen(state, nach));
+  await laden;                                   // laden() ersetzt den Stand (rev 2)
+  const r = await senden;
+  assert.equal(r.ok, false);
+  assert.equal(r.konflikt[0].art, 'aendern');
+  assert.equal(rec.daten.title, 'Fremd', 'Fremdes nicht überschrieben');
+});
+test('C1: laden(halten) behält die Basis-rev gehaltener Datensätze, andere werden übernommen', async () => {
+  const { pb, sp, state } = await holen(KT);
+  await sp.laden();
+  const [a, b] = [state.tasks[0].id, state.tasks[1].id];
+  for (const id of [a, b]) { const r = pb.recs.find((x) => x.eid === id); r.daten = { ...r.daten, title: 'F' + id }; r.rev = 7; }
+  await sp.laden(() => new Set(['vorgaenge|' + a]));
+  const n1 = kl(state); n1.tasks[0].title = 'E1'; n1.tasks[1].title = 'E2';
+  const r = await sp.senden(aenderungen(state, n1));
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.konflikt.map((k) => k.eid), [a], 'nur der gehaltene (alte Basis) kollidiert; der übernommene geht durch');
+});
+test('C1: schon gehörte rev wird nicht doppelt gemeldet, uebernommen zieht die Basis nach', async () => {
+  const { pb, sp, state } = await holen(KT);
+  await sp.laden();
+  const got = []; sp.abonnieren((t) => got.push(t));
+  const x = state.tasks[0].id;
+  const rec = pb.recs.find((r) => r.eid === x);
+  rec.daten = { ...rec.daten, title: 'Fremd' }; rec.rev = 2;
+  pb.hoerer({ thema: 'vorgaenge', action: 'update', record: kl(rec) });
+  pb.hoerer({ thema: 'vorgaenge', action: 'update', record: kl(rec) });
+  assert.equal(got.length, 1);
+  assert.equal(got[0].rev, 2);
+  sp.uebernommen('vorgaenge', x, 2);
+  const nach = kl(state); nach.tasks[0].title = 'Fremd'; nach.tasks[0].notes = 'n';
+  const n2 = kl(nach); n2.tasks[0].title = 'Eigen';
+  assert.ok((await sp.senden(aenderungen(nach, n2))).ok);
 });
 test('Realtime: stop beendet, neuAbonnieren baut neu auf, ohne Handler nichts', async () => {
   const { pb, sp } = await holen(KT);
@@ -466,7 +523,7 @@ test('Echo-Erwartung läuft nach 60 s ab: ein späteres Lösch-Ereignis gleicher
   await sp.senden(aenderungen(a, b));
   t += 61000;
   pb.hoerer(ev(x2));
-  assert.deepEqual(got, [{ coll: 'vorgaenge', eid: x2.id, objekt: null }]);
+  assert.deepEqual(got, [{ coll: 'vorgaenge', eid: x2.id, rev: null, objekt: null }]);
 });
 test('listePlaene: name, venue, Rolle aus besitzer/superadmin/mitglieder; Token zuerst erneuert; Fehler wirft', async () => {
   const pb = fakePb();
@@ -592,6 +649,87 @@ test('planLoeschen und laden: 429 → {limit:true}, nicht «fehler»', async () 
   pb.liste = orig;
   pb.erneuernErgebnis = { ok: false, status: 429, code: 'limit' };
   await assert.rejects(listePlaene(pb), (e) => e.limit === true && e.offline === false);
+});
+for (const [name, fehler] of [['503', { status: 503, code: 'fehler' }], ['504 (nach dem Commit)', { status: 504, code: 'fehler' }], ['408', { status: 408, code: 'fehler' }], ['200-HTML eines Captive Portals (code antwort)', { status: 200, code: 'antwort' }]]) {
+  test('I2: ' + name + ' beim Senden ist vorübergehend: die Änderung bleibt in offen (kein fehler), später kommt sie an', async () => {
+    const { pb, sp, state } = await holen(KT);
+    await sp.laden();
+    const orig = pb.batch;
+    pb.batch = async () => ({ ok: false, message: 'x', ...fehler });
+    const nach = kl(state); nach.tasks[0].title = 'Eigen';
+    const r = await sp.senden(aenderungen(state, nach));
+    assert.equal(r.ok, false);
+    assert.equal(r.limit, true);
+    assert.equal(r.fehler, undefined);
+    assert.equal(sp.offen.length, 1);
+    pb.batch = orig;
+    assert.ok((await sp.wiederVerbunden()).ok);
+    assert.equal(pb.recs.find((x) => x.eid === state.tasks[0].id).daten.title, 'Eigen');
+  });
+}
+test('I2: 5xx/antwort bei laden() und beim Token-Erneuern ist vorübergehend (limit), 403 bleibt ein Fehler', async () => {
+  const { pb, sp } = await holen(KT);
+  const orig = pb.liste;
+  for (const f of [{ status: 502, code: 'fehler' }, { status: 200, code: 'antwort' }]) {
+    pb.liste = async () => ({ ok: false, message: 'x', ...f });
+    assert.deepEqual(await sp.laden(), { ok: false, limit: true });
+  }
+  pb.liste = async () => ({ ok: false, message: 'x', status: 403, code: 'verboten' });
+  assert.equal((await sp.laden()).fehler.status, 403);
+  pb.liste = orig;
+  pb.erneuernErgebnis = { ok: false, status: 503, code: 'fehler' };
+  assert.deepEqual(await sp.laden(), { ok: false, limit: true });
+  await assert.rejects(listePlaene(pb), (e) => e.limit === true && e.offline === false);
+  pb.erneuernErgebnis = { ok: false, status: 0, code: 'netz' };
+  assert.equal((await sp.laden()).offline, true);
+});
+test('I2: istVoruebergehend: netz ist offline, nicht vorübergehend; 400/403/404/409 sind es nicht', async () => {
+  const { istVoruebergehend: v } = await import('../js/server.js');
+  for (const r of [{ status: 0, code: 'netz' }, { status: 400 }, { status: 403 }, { status: 404 }, { status: 409, code: 'rev' }, { ok: true }]) assert.equal(v({ ok: false, ...r }), false, JSON.stringify(r));
+  for (const r of [{ status: 429, code: 'limit' }, { status: 500 }, { status: 599 }, { status: 408 }, { status: 200, code: 'antwort' }]) assert.equal(v({ ok: false, ...r }), true, JSON.stringify(r));
+});
+// I1: zwei Nutzer ändern verschiedene Kinder eines Sammelvorgangs; die Hülle (Eltern-Start/Ende) ändert sich bei beiden.
+async function sammelPlan() {
+  const st = createStore(kl(KT));
+  const g = KT.gewerke[0].id;
+  const eltern = st.apply({ type: 'addTask', task: { gewerk: g, title: 'Sammel', start: '2026-07-13T08:00', end: '2026-07-13T09:00' } }).id;
+  const k1 = st.apply({ type: 'addTask', task: { gewerk: g, parent: eltern, title: 'K1', start: '2026-07-13T08:00', end: '2026-07-13T10:00' } }).id;
+  const k2 = st.apply({ type: 'addTask', task: { gewerk: g, parent: eltern, title: 'K2', start: '2026-07-13T09:00', end: '2026-07-13T12:00' } }).id;
+  const { pb, planId } = await holen(st.state);
+  const mk = async () => { const sp = createServerPlan({ pb, planId }); const l = await sp.laden(); return { sp, st: createStore(l.state) }; };
+  return { pb, eltern, k1, k2, A: await mk(), B: await mk() };
+}
+test('I1: verschiedene Kinder eines Sammelvorgangs: rev-Konflikt nur an der Hülle → ohne Dialog, beide Änderungen kommen an', async () => {
+  const { pb, eltern, k1, k2, A, B } = await sammelPlan();
+  let aA, aB; A.st.subscribe((_, i) => { if (i?.aend) aA = i.aend; }); B.st.subscribe((_, i) => { if (i?.aend) aB = i.aend; });
+  assert.equal(A.st.apply({ type: 'moveTask', id: k1, start: '2026-07-13T06:00', end: '2026-07-13T10:00' }).ok, true);
+  assert.ok((await A.sp.senden(aA)).ok);
+  assert.equal(B.st.apply({ type: 'moveTask', id: k2, start: '2026-07-13T09:00', end: '2026-07-13T14:00' }).ok, true);
+  const r = await B.sp.senden(aB); // B kennt A's Änderung nicht: die Hülle trägt die alte rev
+  assert.equal(r.ok, false);
+  assert.equal(r.konflikt[0].eid, eltern);
+  const h = huellenKonflikte(r.aend, r.konflikt, B.st.state);
+  assert.deepEqual([h.auto.length, h.rest.length], [1, 0], 'reine Hüllenänderung: kein Konflikt');
+  B.st.applyRemote(fremdUebernehmen(B.st.state, h.auto));
+  assert.ok((await B.sp.senden(ohne(r.aend, h.auto))).ok);
+  const daten = (eid) => pb.recs.find((x) => x.eid === eid).daten;
+  assert.equal(daten(k1).start, '2026-07-13T06:00');
+  assert.equal(daten(k2).end, '2026-07-13T14:00');
+  const l = await A.sp.laden(); // ein frischer Stand: die Hülle rechnet jeder Store aus den Kindern
+  const frisch = createStore(l.state).state.tasks.find((t) => t.id === eltern);
+  assert.deepEqual([frisch.start, frisch.end], ['2026-07-13T06:00', '2026-07-13T14:00']);
+});
+test('I1: ändert die eigene Änderung am Sammelvorgang MEHR als die Hülle (Titel), bleibt es ein Konflikt', async () => {
+  const { eltern, k1, k2, A, B } = await sammelPlan();
+  let aA, aB; A.st.subscribe((_, i) => { if (i?.aend) aA = i.aend; }); B.st.subscribe((_, i) => { if (i?.aend) aB = i.aend; });
+  A.st.apply({ type: 'moveTask', id: k1, start: '2026-07-13T06:00', end: '2026-07-13T10:00' });
+  await A.sp.senden(aA);
+  B.st.apply({ type: 'moveTask', id: k2, start: '2026-07-13T09:00', end: '2026-07-13T14:00' });
+  const alle = { ...aB, vorgaenge: { ...aB.vorgaenge, aendern: aB.vorgaenge.aendern.map((e) => (e.vorher.id === eltern ? { vorher: e.vorher, nachher: { ...e.nachher, title: 'Umbenannt' } } : e)) } };
+  const r = await B.sp.senden(alle);
+  assert.equal(r.konflikt[0].eid, eltern);
+  const h = huellenKonflikte(r.aend, r.konflikt, B.st.state);
+  assert.deepEqual([h.auto.length, h.rest.length], [0, 1]);
 });
 test('server.js: DOM-frei, keine Browser-Dialoge, kein Token', () => {
   const s = readFileSync(new URL('../js/server.js', import.meta.url), 'utf8');

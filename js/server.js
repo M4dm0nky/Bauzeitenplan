@@ -26,6 +26,11 @@ const spalten = (coll, o) => (coll === 'vorgaenge' ? { gewerk: o.gewerk } : coll
 const istNetz = (r) => r?.code === 'netz' || r?.status === 0;
 const istAuth = (r) => r?.status === 401 || r?.code === 'auth';
 const istLimit = (r) => r?.code === 'limit' || r?.status === 429; // Rate Limit: vorübergehend, nie ein Ablehnungsgrund
+// EINE Klassifikation für «kommt später wieder in Ordnung»: Rate Limit, Serverfehler (5xx; ein 504 kann nach
+// dem Commit kommen), Zeitüberschreitung (408) und eine 2xx-Antwort, die kein JSON des Servers ist (Captive
+// Portal, code 'antwort'). Die Änderung bleibt in `offen` und wird mit Backoff wiederholt, nie zurückgenommen.
+// Netz (status 0) ist davon getrennt: das ist «offline».
+export const istVoruebergehend = (r) => !!r && !r.ok && !istNetz(r) && (istLimit(r) || r.code === 'antwort' || r.status === 408 || r.status >= 500);
 
 // Rate Limits (PocketBase /api/batch 3 je Sekunde): höchstens ~2 Batch-Aufrufe je Sekunde, bei 429 Backoff
 export const BATCH_ABSTAND_MS = 450;
@@ -50,7 +55,7 @@ async function sitzung(pb) {
   if (e.ok) return null;
   if (istNetz(e)) return { ok: false, offline: true };
   if (istAuth(e)) return { ok: false, abgemeldet: true };
-  if (istLimit(e)) return { ok: false, limit: true };
+  if (istVoruebergehend(e)) return { ok: false, limit: true };
   return { ok: false, fehler: { status: e.status, code: e.code, message: e.message } };
 }
 
@@ -58,7 +63,7 @@ async function sitzung(pb) {
  *  Error mit `offline` bzw. `abgemeldet` (der Projektdialog fängt ihn). */
 export async function listePlaene(pb) {
   const s = await sitzung(pb);
-  const fail = (r) => Object.assign(new Error(r.message || (r.offline ? 'offline' : r.abgemeldet ? 'abgemeldet' : 'Fehler')), { offline: !!r.offline, abgemeldet: !!r.abgemeldet, limit: !!r.limit || istLimit(r), status: r.status, code: r.code });
+  const fail = (r) => Object.assign(new Error(r.message || (r.offline ? 'offline' : r.abgemeldet ? 'abgemeldet' : 'Fehler')), { offline: !!r.offline, abgemeldet: !!r.abgemeldet, limit: !!r.limit || istVoruebergehend(r), status: r.status, code: r.code });
   if (s) throw fail(s.fehler || s);
   const pl = await pb.liste('plaene', '', 'created');
   if (!pl.ok) throw fail(pl);
@@ -75,7 +80,7 @@ export async function listePlaene(pb) {
 
 export function createServerPlan({ pb, planId, jetzt = Date.now, warte = standardWarte, uhr = Date.now }) {
   let id = planId;
-  let stand = new Map(COLLS.map((c) => [c, new Map()])); // coll → eid → {id, rev}
+  let stand = new Map(COLLS.map((c) => [c, new Map()])); // coll → eid → {id, rev, gehoert}: rev = Fassung, die die App zeigt (Basis eigener Änderungen), gehoert = höchste per Realtime/Laden gehörte rev
   const erwartet = new Map(); // Echos der eigenen Schreibzugriffe: "coll|eid|rev|action" → Zeit
   let queue = []; // Einträge {aend, basis}: basis = rev je Datensatz zum Zeitpunkt der Änderung (null = ungültig)
   const vorhergesagt = new Map(); // coll|eid → rev, die der Datensatz nach den eingereihten Einträgen hat
@@ -138,7 +143,15 @@ export function createServerPlan({ pb, planId, jetzt = Date.now, warte = standar
       for (const k of ks) if (mein.has(k)) e.basis.set(k, null);
     }
   };
-  const setze = (coll, rec) => stand.get(coll).set(eidVon(coll, rec), { id: rec.id, rev: rec.rev });
+  // Der Server-Stand wird bekannt UND übernommen (Nachschlagen für einen Konflikt, eigene Antwort).
+  const setze = (coll, rec) => stand.get(coll).set(eidVon(coll, rec), { id: rec.id, rev: rec.rev, gehoert: rec.rev });
+  // Realtime: gehört, aber noch NICHT übernommen. Die rev des angezeigten Inhalts (Basis einer eigenen Änderung)
+  // bleibt, bis die App den Inhalt wirklich übernimmt (`uebernommen`); hält sie ihn zurück, bleibt die Basis alt
+  // und die eigene Änderung wird zum Konflikt statt eine fremde zu überschreiben.
+  const hoere = (coll, rec) => {
+    const k = eidVon(coll, rec), b = stand.get(coll).get(k);
+    if (b) { b.id = rec.id; b.gehoert = Math.max(b.gehoert ?? b.rev, rec.rev); } else stand.get(coll).set(k, { id: rec.id, rev: rec.rev, gehoert: rec.rev });
+  };
 
   async function holeFremd(coll, eid) {
     const r = await pb.liste(coll, coll === 'plaene' ? planFilter(id) : eidFilter(id, eid));
@@ -225,14 +238,14 @@ export function createServerPlan({ pb, planId, jetzt = Date.now, warte = standar
       r.antworten.forEach((rec, i) => {
         const m = meta[i];
         if (m.art === 'loeschen') stand.get(m.coll).delete(m.eid);
-        else if (rec && rec.id) stand.get(m.coll).set(m.eid, { id: rec.id, rev: rec.rev ?? m.rev });
+        else if (rec && rec.id) { const rv = rec.rev ?? m.rev; stand.get(m.coll).set(m.eid, { id: rec.id, rev: rv, gehoert: rv }); }
       });
       return { ok: true };
     }
     for (const m of meta) erwartet.delete(`${m.coll}|${m.eid}|${m.rev}|${art(m)}`);
     if (istNetz(r)) return { ok: false, offline: true };
     if (istAuth(r)) return { ok: false, abgemeldet: true };
-    if (istLimit(r)) return { ok: false, limit: true };   // auch inneres 429: der Batch ist zurückgerollt, nichts angelegt
+    if (istVoruebergehend(r)) return { ok: false, limit: true };   // 429/5xx/408/Nicht-JSON, auch innen: nichts verwerfen, später wiederholen
     const m = meta[r.index ?? -1];
     if (r.code === 'rev' && m) return { ok: false, konflikt: [{ coll: m.coll, eid: m.eid, art: m.art, ...(await holeFremd(m.coll, m.eid)) }] };
     // Ändern/Löschen eines Datensatzes, den es nicht mehr gibt (404): fremd gelöscht. Eine Regelabsage
@@ -274,20 +287,23 @@ export function createServerPlan({ pb, planId, jetzt = Date.now, warte = standar
     return { ok: true };
   }
 
-  async function laden() {
+  // halten(): Schlüssel («coll|eid») der Datensätze, deren Inhalt die App NICHT übernimmt (offene eigene Änderung):
+  // ihre Basis-rev bleibt, auch wenn der Server inzwischen weiter ist.
+  async function laden(halten) {
     return seriell(async () => {
       const s = await sitzung(pb);
       if (s) return s;
       const gelesen = {};
       for (const c of COLLS) {
         const r = await pb.liste(c, planFilter(id), c === 'plaene' ? '' : 'pos,created');
-        if (!r.ok) return istNetz(r) ? { ok: false, offline: true } : istAuth(r) ? { ok: false, abgemeldet: true } : istLimit(r) ? { ok: false, limit: true } : { ok: false, fehler: { status: r.status, code: r.code, message: r.message } };
+        if (!r.ok) return istNetz(r) ? { ok: false, offline: true } : istAuth(r) ? { ok: false, abgemeldet: true } : istVoruebergehend(r) ? { ok: false, limit: true } : { ok: false, fehler: { status: r.status, code: r.code, message: r.message } };
         gelesen[c] = r.items;
       }
       if (!gelesen.plaene.length) return { ok: false, nichtGefunden: true };
       const mi = await pb.liste('mitglieder', planFilter(id));
       if (!mi.ok && istNetz(mi)) return { ok: false, offline: true };
       const neuerStand = new Map(COLLS.map((c) => [c, new Map()]));
+      const gehalten = new Set([...queue.flatMap((e) => beruehrt(e.aend)), ...(halten ? halten() : [])]);
       const teile = {}, reihe = {};
       for (const c of COLLS) {
         teile[c] = new Map();
@@ -296,7 +312,8 @@ export function createServerPlan({ pb, planId, jetzt = Date.now, warte = standar
           const eid = eidVon(c, rec);
           teile[c].set(eid, KLON(rec.daten));
           reihe[c].push(eid);
-          neuerStand.get(c).set(eid, { id: rec.id, rev: rec.rev });
+          const alt = stand.get(c).get(eid);
+          neuerStand.get(c).set(eid, { id: rec.id, rev: alt && gehalten.has(schluessel(c, eid)) ? alt.rev : rec.rev, gehoert: rec.rev });
         }
       }
       stand = neuerStand;
@@ -313,9 +330,9 @@ export function createServerPlan({ pb, planId, jetzt = Date.now, warte = standar
       const art = action === 'delete' ? 'delete' : action === 'create' ? 'create' : 'update';
       if (istEcho(`${thema}|${eid}|${record.rev}|${art}`)) return; // eigenes Echo
       const bekannt = stand.get(thema)?.get(eid);
-      if (art !== 'delete' && bekannt && bekannt.rev >= record.rev) return; // schon bekannt
-      if (art === 'delete') stand.get(thema)?.delete(eid); else setze(thema, record);
-      handler({ coll: thema, eid, objekt: art === 'delete' ? null : KLON(record.daten ?? null) });
+      if (art !== 'delete' && bekannt && (bekannt.gehoert ?? bekannt.rev) >= record.rev) return; // schon gehört
+      if (art === 'delete') stand.get(thema)?.delete(eid); else hoere(thema, record);
+      handler({ coll: thema, eid, rev: art === 'delete' ? null : record.rev, objekt: art === 'delete' ? null : KLON(record.daten ?? null) });
     });
   }
 
@@ -327,7 +344,15 @@ export function createServerPlan({ pb, planId, jetzt = Date.now, warte = standar
       if (!aend || istLeer(aend)) return Promise.resolve({ ok: true });
       // Zu groß: nichts wird gesendet oder eingereiht (ein Batch fasst höchstens MAX_BATCH Anfragen)
       if (zaehle(aend) > MAX_BATCH) return Promise.resolve({ ok: false, zuGross: true });
-      return seriell(async () => { queue.push({ aend, basis: basisFuer(aend) }); return leeren(); });
+      // Die Basis (rev je Datensatz) gilt ab JETZT, nicht erst wenn die Reihe dran ist: bis dahin kann ein Batch
+      // unterwegs sein, ein Backoff laufen oder ein Laden den Stand ersetzen. Darum auch das Einreihen sofort.
+      queue.push({ aend, basis: basisFuer(aend) });
+      return seriell(leeren);
+    },
+    /** Die App hat den Inhalt (coll, eid) in der rev übernommen (angezeigt): ab jetzt ist das die Basis eigener Änderungen. */
+    uebernommen(coll, eid, rev) {
+      const b = stand.get(coll)?.get(eid);
+      if (b && Number.isFinite(rev) && rev > b.rev) b.rev = rev;
     },
     /** Nach dem Wiederverbinden die Warteschlange senden (Ergebnis wie senden). */
     wiederVerbunden() { return seriell(leeren); },
