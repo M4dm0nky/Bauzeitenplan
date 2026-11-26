@@ -54,7 +54,7 @@ async function sende(form, fn) {
   try { await fn(); } finally { knopf.disabled = false; }
 }
 
-const fehlertext = (r, standard) => (r.code === 'netz' ? 'Keine Verbindung zum Server.' : r.status === 400 && r.message ? r.message : standard);
+const fehlertext = (r, standard) => (r.code === 'netz' ? 'Keine Verbindung zum Server.' : (r.status === 400 || r.status === 403) && r.message ? r.message : standard);
 
 /** Zwei Passwörter: gleich und lang genug; sonst Hinweis und false. */
 function passwortOk(a, b) {
@@ -104,6 +104,8 @@ $('f-einladung').addEventListener('submit', (ev) => {
     const pw = $('e-pw').value;
     if (!name) return hinweis('Bitte einen Namen angeben.');
     if (!passwortOk(pw, $('e-pw2').value)) return;
+    // Eine alte Sitzung in bzp_auth würde der Hook als «angemeldet» deuten (403): neues Konto = frisch ohne Token.
+    pb.abmelden();
     const r = await pb.post('/api/bzp/einladung', { token: q.get('einladung'), name, passwort: pw });
     if (!r.ok) {
       if (/schon ein Konto/.test(r.message || '')) return zeige('konto', { text: r.message });

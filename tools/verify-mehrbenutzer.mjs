@@ -39,7 +39,9 @@ function statischerServer() {
 // Minimaler SMTP-Empfänger: sammelt Mails, damit der Reset-Link aus der echten PB-Mail kommt.
 function smtpEmpfaenger() {
   const mails = [];
+  const socks = new Set();
   const s = tcpServer((sock) => {
+    socks.add(sock); sock.on('close', () => socks.delete(sock));
     let puffer = '', daten = null;
     sock.write('220 localhost ESMTP\r\n');
     sock.on('data', (d) => {
@@ -62,7 +64,7 @@ function smtpEmpfaenger() {
     });
     sock.on('error', () => {});
   });
-  return new Promise((r) => s.listen(0, '127.0.0.1', () => r({ s, mails, port: s.address().port })));
+  return new Promise((r) => s.listen(0, '127.0.0.1', () => r({ s, mails, port: s.address().port, schliessen: () => { for (const k of socks) k.destroy(); s.close(); } })));
 }
 const qp = (t) => t.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
 
@@ -101,6 +103,7 @@ async function ANMELDUNG({ pb, base, browser, smtp }) {
     ok(/stimmt nicht/.test(await text(page)) && (await hinweis(page).getAttribute('data-art')) === 'fehler', 'falsches Passwort → Hinweis (fehler)', await text(page));
     ok(page.url().includes('login.html'), 'falsches Passwort → keine Weiterleitung', page.url());
     ok((await auth(page)) === null, 'falsches Passwort → bzp_auth leer');
+    ok((await page.evaluate(() => getComputedStyle(document.getElementById('lg-hinweis'), '::before').content)).includes('\u2715'), 'Fehlerhinweis trägt ✕ (zweite Kodierung)');
     await page.screenshot({ path: join(shots, 'login.png') }); // dunkel, mit Fehlerhinweis
     await ctx.close();
   }
@@ -137,7 +140,7 @@ async function ANMELDUNG({ pb, base, browser, smtp }) {
   }
   // 4) Einladung: neues Konto
   const e1 = await einladung('Neu@BZP.test');
-  ok(e1.link.startsWith(`${base.replace(/127\.0\.0\.1:\d+/, '127.0.0.1:' + new URL(base).port)}/login.html?einladung=`), 'Einladungslink zeigt auf login.html der App', e1.link);
+  ok(e1.link.startsWith(`${base}/login.html?einladung=`), 'Einladungslink zeigt auf login.html der App', e1.link);
   {
     const { ctx, page, posts } = await neu();
     await page.goto(seite('&einladung=' + e1.token));
@@ -156,6 +159,23 @@ async function ANMELDUNG({ pb, base, browser, smtp }) {
     const m = await mitglied(a.record.id, 'planA');
     ok(m && m.rolle === 'gewerkeleiter' && JSON.stringify(m.gewerke) === '["g1"]', 'im Plan mit eingeladener Rolle und Gewerken', JSON.stringify(m));
     await page.locator('#dlg .dlg-box').waitFor({ timeout: 10000 });
+    await ctx.close();
+  }
+  // 4b) Fremde Sitzung in bzp_auth vorbelegt (kein Abmelden vorher): Einladung als neues Konto muss trotzdem klappen
+  {
+    const e = await einladung('frisch@bzp.test', { rolle: 'bearbeiter', gewerke: [] });
+    const { ctx, page } = await neu();
+    await page.goto(seite());
+    await page.evaluate((a) => localStorage.setItem('bzp_auth', JSON.stringify(a)), { token: konto.token, record: { id: konto.id, email: 'anna@bzp.test' } });
+    await page.goto(seite('&einladung=' + e.token));
+    const P = pw();
+    await page.fill('#e-name', 'Frisch'); await page.fill('#e-pw', P); await page.fill('#e-pw2', P);
+    await page.click('#f-einladung button[type=submit]');
+    await page.waitForURL(/index\.html/, { timeout: 10000 });
+    const a = JSON.parse(await auth(page) || 'null');
+    ok(a?.record?.email === 'frisch@bzp.test', 'fremde Sitzung vorbelegt → neues Konto ist angemeldet', JSON.stringify(a?.record?.email));
+    const m = await mitglied(a?.record?.id, 'planA');
+    ok(m && m.rolle === 'bearbeiter', 'fremde Sitzung vorbelegt → Mitgliedschaft mit eingeladener Rolle', JSON.stringify(m));
     await ctx.close();
   }
   // 5) Einladung mit unbekanntem Token → Hinweis, kein Wechsel
@@ -209,6 +229,7 @@ async function ANMELDUNG({ pb, base, browser, smtp }) {
     ok(/nicht gleich/.test(await text(page)), 'Reset: Passwörter verschieden → Hinweis', await text(page));
     await page.fill('#r-pw2', neuesPw); await page.click('#f-reset button[type=submit]');
     await page.locator('#f-fertig').waitFor({ state: 'visible', timeout: 8000 });
+    ok((await page.evaluate(() => getComputedStyle(document.getElementById('lg-hinweis'), '::before').content)).includes('\u2713'), 'Erfolgshinweis trägt ✓');
     ok(/geändert/.test(await text(page)) && (await hinweis(page).getAttribute('data-art')) === 'ok', 'Reset → «Passwort geändert» (ok)', await text(page));
     let alt = true, neuOk = false;
     try { await anmeldenRoh(pb.url, 'berta@bzp.test', PWB); } catch { alt = false; }
@@ -249,7 +270,7 @@ try {
     if (nur && nur !== n) continue;
     smtp = await smtpEmpfaenger();
     pb = await startePb({ origins: base, appUrl: base }); // frischer Server je Abschnitt
-    try { await f({ pb, base, browser, smtp }); } catch (e) { console.log('  PB-Log: ' + pb.log().slice(-800)); throw e; } finally { await pb.stop(); pb = null; smtp.s.close(); }
+    try { await f({ pb, base, browser, smtp }); } catch (e) { console.log('  PB-Log: ' + pb.log().slice(-800)); throw e; } finally { await pb.stop(); pb = null; smtp.schliessen(); }
   }
 } catch (e) { console.log('✗ Abbruch: ' + (e.stack || e.message).split('\n').slice(0, 4).join(' | ')); fehler++; }
 finally {

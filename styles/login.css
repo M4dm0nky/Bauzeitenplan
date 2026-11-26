@@ -29,5 +29,8 @@
 .lg-link:hover { color: var(--ink); }
 
 .lg-hinweis { margin: 0 0 14px; padding: 9px 12px; border-radius: 4px; border: 1px solid; border-left-width: 4px; background: var(--panel2); }
+.lg-hinweis::before { font-weight: 700; margin-right: 8px; }
 .lg-hinweis[data-art="fehler"] { color: var(--lg-fehler); border-color: var(--lg-fehler); }
+.lg-hinweis[data-art="fehler"]::before { content: "\2715"; }
+.lg-hinweis[data-art="ok"]::before { content: "\2713"; }
 .lg-hinweis[data-art="ok"] { color: var(--lg-ok); border-color: var(--lg-ok); }
