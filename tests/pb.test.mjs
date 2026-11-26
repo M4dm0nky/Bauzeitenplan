@@ -234,6 +234,18 @@ test('batch: anderer Unterfehler → eigener Status, code «fehler»; 401 im Bat
   await pb.batch([{ method: 'POST', url: '/x', body: {} }]);
   assert.equal(ab, 1);
 });
+// Rate Limit (PocketBase 429): vorübergehend, eigener Code; auch als inneres 429 eines Batches (rollt alles zurück)
+const LIMIT = { status: 429, body: { data: {}, message: 'Too Many Requests.', status: 429 } };
+const BATCH_INNEN_429 = { status: 400, body: { data: { requests: { 20: { code: 'batch_request_failed', message: 'Batch request failed.', response: { data: {}, message: 'Too Many Requests.', status: 429 } } } }, message: 'Batch transaction failed.', status: 400 } };
+test('429 → code «limit» (nie «fehler»), Anmeldung bleibt; auch das innere 429 eines Batches', async () => {
+  const { pb } = neu([LIMIT, BATCH_INNEN_429, LIMIT], { speicher: angemeldet() });
+  let ab = 0; pb.on('abgemeldet', () => ab++);
+  assert.deepEqual(await pb.batch([{ method: 'POST', url: '/x', body: {} }]), { ok: false, status: 429, code: 'limit', message: 'Too Many Requests.' });
+  assert.deepEqual(await pb.batch([{ method: 'POST', url: '/x', body: {} }]), { ok: false, status: 429, code: 'limit', message: 'Too Many Requests.', index: 20 });
+  assert.equal((await pb.anmelden('a@b.c', 'x')).code, 'limit');
+  assert.equal(pb.istAngemeldet, true);
+  assert.equal(ab, 0);
+});
 test('Netzwerkfehler → {ok:false, status:0, code:netz}; Anmeldung bleibt', async () => {
   const { pb } = neu([new TypeError('fetch failed')], { speicher: angemeldet() });
   const r = await pb.post('/api/bzp/einladung', { token: 't' });

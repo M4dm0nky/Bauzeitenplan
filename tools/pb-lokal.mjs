@@ -56,7 +56,9 @@ async function http(url, { method = 'GET', body, token, timeout = 15000 } = {}) 
   return { status: r.status, ok: r.ok, body: json };
 }
 
-export async function startePb({ port, origins = '', appUrl = 'http://localhost:8080' } = {}) {
+// rateLimits: true schaltet NACH den Migrationen die PB-Standard-Rate-Limits ein (wie auf TEST/LIVE nach dem Deploy);
+// ohne die Option bleibt `enabled` aus (so laufen alle anderen Prüfungen).
+export async function startePb({ port, origins = '', appUrl = 'http://localhost:8080', rateLimits = false } = {}) {
   const exe = await ensureBinary();
   port = port || await freierPort();
   const dir = mkdtempSync(join(tmpdir(), 'bzp-pb-'));
@@ -110,6 +112,13 @@ export async function startePb({ port, origins = '', appUrl = 'http://localhost:
     // APP_URL für Einladungslinks (Hook liest $app.settings().meta.appURL)
     const st = await su('PATCH', '/api/settings', { meta: { appURL: appUrl } });
     if (!st.ok) throw new Error('appURL setzen fehlgeschlagen: ' + JSON.stringify(st.body));
+    if (rateLimits) {
+      const g = await su('GET', '/api/settings');
+      const rl = g.body?.rateLimits;
+      if (!g.ok || !rl?.rules?.length) throw new Error('Rate-Limit-Regeln fehlen: ' + JSON.stringify(rl));
+      const p = await su('PATCH', '/api/settings', { rateLimits: { enabled: true, rules: rl.rules } });
+      if (!p.ok) throw new Error('rateLimits einschalten fehlgeschlagen: ' + JSON.stringify(p.body));
+    }
     return { url, stop, admin, su, log: () => log };
   } catch (e) { await stop(); throw e; }
 }

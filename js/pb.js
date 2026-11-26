@@ -4,7 +4,7 @@
 // bleibt. Kein Aufruf wirft: jede Anfrage liefert { ok:true, … } oder
 // { ok:false, status, code, message [, eid, rev, index] }.
 //   code: 'rev' (Versionskonflikt, mit eid + rev = aktuelle Version), 'auth' (401),
-//         'verboten' (403), 'netz' (kein Kontakt, status 0), sonst 'fehler'.
+//         'verboten' (403), 'limit' (429: Rate Limit, vorübergehend, auch als inneres 429 eines Batches), 'netz' (kein Kontakt, status 0), sonst 'fehler'.
 //         'antwort' (2xx, aber kein/falsches JSON, fehlendes Token, zu viele Seiten),
 //         'abgebrochen' (Anmeldung/Erneuerung wurde von abmelden()/anderer Anmeldung überholt).
 // Ereignisse über on(name, fn) → off: 'abgemeldet' mit { grund: 'manuell' | '401' }
@@ -60,6 +60,7 @@ function fehlerForm(status, body) {
     if (d.rev?.code !== undefined && Number.isFinite(Number(d.rev.code))) e.rev = Number(d.rev.code);
   } else if (st === 401) e.code = 'auth';
   else if (st === 403) e.code = 'verboten';
+  else if (st === 429) e.code = 'limit';
   if (index !== undefined) e.index = index;
   return e;
 }

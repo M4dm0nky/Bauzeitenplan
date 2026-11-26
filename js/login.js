@@ -54,7 +54,8 @@ async function sende(form, fn) {
   try { await fn(); } finally { knopf.disabled = false; }
 }
 
-const fehlertext = (r, standard) => (r.code === 'netz' ? 'Keine Verbindung zum Server.' : (r.status === 400 || r.status === 403) && r.message ? r.message : standard);
+const LIMIT_TEXT = 'Zu viele Versuche – bitte kurz warten.';
+const fehlertext = (r, standard) => (r.code === 'netz' ? 'Keine Verbindung zum Server.' : r.code === 'limit' ? LIMIT_TEXT : (r.status === 400 || r.status === 403) && r.message ? r.message : standard);
 
 /** Zwei Passwörter: gleich und lang genug; sonst Hinweis und false. */
 function passwortOk(a, b) {
@@ -71,7 +72,7 @@ $('f-anmelden').addEventListener('submit', (ev) => {
     const pw = $('a-pw').value;
     if (!email || !pw) return hinweis('Bitte E-Mail und Passwort eingeben.');
     const r = await pb.anmelden(email, pw);
-    if (!r.ok) return hinweis(r.code === 'netz' ? 'Keine Verbindung zum Server.' : r.status === 400 ? 'E-Mail oder Passwort stimmt nicht.' : fehlertext(r, 'Anmeldung nicht möglich.'));
+    if (!r.ok) return hinweis(r.code === 'netz' ? 'Keine Verbindung zum Server.' : r.code === 'limit' ? LIMIT_TEXT : r.status === 400 ? 'E-Mail oder Passwort stimmt nicht.' : fehlertext(r, 'Anmeldung nicht möglich.'));
     const einl = q.get('einladung');
     if (einl) {
       const a = await pb.post('/api/bzp/einladung', { token: einl });
@@ -91,6 +92,7 @@ $('f-vergessen').addEventListener('submit', (ev) => {
     if (!email) return hinweis('Bitte die E-Mail-Adresse eingeben.');
     const r = await pb.post('/api/collections/users/request-password-reset', { email });
     if (r.code === 'netz') return hinweis('Keine Verbindung zum Server.');
+    if (r.code === 'limit') return hinweis(LIMIT_TEXT);
     hinweis('Wenn die Adresse bekannt ist, kommt eine Mail.', 'ok');
   });
 });
@@ -126,7 +128,7 @@ $('f-reset').addEventListener('submit', (ev) => {
     const pw = $('r-pw').value;
     if (!passwortOk(pw, $('r-pw2').value)) return;
     const r = await pb.post('/api/collections/users/confirm-password-reset', { token: q.get('reset'), password: pw, passwordConfirm: pw });
-    if (!r.ok) return hinweis(r.code === 'netz' ? 'Keine Verbindung zum Server.' : 'Der Link ist ungültig oder abgelaufen. Fordere einen neuen an.');
+    if (!r.ok) return hinweis(r.code === 'netz' ? 'Keine Verbindung zum Server.' : r.code === 'limit' ? LIMIT_TEXT : 'Der Link ist ungültig oder abgelaufen. Fordere einen neuen an.');
     zeige('fertig', { text: 'Dein Passwort wurde geändert.', art: 'ok' });
   });
 });

@@ -5,12 +5,12 @@
 // Task 11 ergänzt weitere Abschnitte in ABSCHNITTE. Alle Passwörter entstehen zur Laufzeit.
 import { firefox } from 'playwright-core';
 import { createServer } from 'node:http';
-import { createServer as tcpServer } from 'node:net';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { mustFirefox } from './browsers.mjs';
+import { smtpEmpfaenger, qp } from './smtp-fang.mjs';
 import { createPb } from '../js/pb.js';
 import { createServerPlan } from '../js/server.js';
 import { deserialize } from '../js/persistence.js';
@@ -39,37 +39,7 @@ function statischerServer() {
   return new Promise((r) => s.listen(0, '127.0.0.1', () => r(s)));
 }
 
-// Minimaler SMTP-Empfänger: sammelt Mails, damit der Reset-Link aus der echten PB-Mail kommt.
-function smtpEmpfaenger() {
-  const mails = [];
-  const socks = new Set();
-  const s = tcpServer((sock) => {
-    socks.add(sock); sock.on('close', () => socks.delete(sock));
-    let puffer = '', daten = null;
-    sock.write('220 localhost ESMTP\r\n');
-    sock.on('data', (d) => {
-      puffer += d.toString('latin1');
-      for (;;) {
-        if (daten !== null) {
-          const i = puffer.indexOf('\r\n.\r\n');
-          if (i < 0) return;
-          mails.push(daten + puffer.slice(0, i)); daten = null; puffer = puffer.slice(i + 5);
-          sock.write('250 OK\r\n'); continue;
-        }
-        const i = puffer.indexOf('\r\n');
-        if (i < 0) return;
-        const z = puffer.slice(0, i).toUpperCase(); puffer = puffer.slice(i + 2);
-        if (z.startsWith('DATA')) { daten = ''; sock.write('354 go\r\n'); }
-        else if (z.startsWith('QUIT')) { sock.write('221 bye\r\n'); sock.end(); }
-        else if (z.startsWith('EHLO')) sock.write('250 localhost\r\n');
-        else sock.write('250 OK\r\n');
-      }
-    });
-    sock.on('error', () => {});
-  });
-  return new Promise((r) => s.listen(0, '127.0.0.1', () => r({ s, mails, port: s.address().port, schliessen: () => { for (const k of socks) k.destroy(); s.close(); } })));
-}
-const qp = (t) => t.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+// SMTP-Empfänger (tools/smtp-fang.mjs): sammelt Mails, damit der Reset-Link aus der echten PB-Mail kommt.
 
 async function ANMELDUNG({ pb, base, browser, smtp }) {
   console.log('— ANMELDUNG');
@@ -508,7 +478,7 @@ const marke = (page) => page.locator('#hd-offline');
 const markeText = async (page) => ((await marke(page).isVisible()) ? (await marke(page).textContent()).trim() : null);
 const nurAnsicht = (page) => page.evaluate(() => document.body.classList.contains('nur-ansicht'));
 async function markeBis(page, text, ms = 8000) {
-  try { await page.waitForFunction((t) => { const m = document.getElementById('hd-offline'); return m && !m.hidden && m.textContent.trim() === t; }, text, { timeout: ms }); return true; } catch { return false; }
+  try { await page.waitForFunction((t) => { const m = document.getElementById('hd-offline'); return m && !m.hidden && m.dataset.an !== '0' && m.textContent.trim() === t; }, text, { timeout: ms }); return true; } catch { return false; }
 }
 async function markeWeg(page, ms = 20000) {
   try { await page.waitForFunction(() => document.getElementById('hd-offline')?.hidden === true, null, { timeout: ms }); return true; } catch { return false; }
@@ -544,6 +514,9 @@ async function OFFLINE({ pb, base, browser }) {
     // 1) Änderung kurz vor dem Abbruch: Senden scheitert am Netz → bleibt in der Warteschlange
     await A.page.evaluate(() => { window.__batchNetz = true; });
     await titelSetzen(A.page, X, 'A: kurz vor Abbruch');
+    // Entprellt: sobald «nur Ansicht» gilt, ist die Marke noch unsichtbar (visibility:hidden, 3 s), erscheint dann aber
+    await A.page.waitForFunction(() => document.body.classList.contains('nur-ansicht'), null, { timeout: 8000 });
+    ok(!(await marke(A.page).isVisible()), 'Marke erscheint nicht sofort (entprellt 3 s)');
     ok(await markeBis(A.page, '📡 Offline – nur Ansicht'), 'Netzfehler beim Senden → Marke «📡 Offline – nur Ansicht»', await markeText(A.page));
     ok((await A.page.locator('#sync-state').textContent()).includes('offen (1)'), 'Speicherstand «⚠ offen (1)»', await A.page.locator('#sync-state').textContent());
     ok(await nurAnsicht(A.page), 'body.nur-ansicht gesetzt');

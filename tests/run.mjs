@@ -195,6 +195,31 @@ check('Phasen-Leiste: Schrift auf jeder Art-Farbe hält 4,5:1 — in allen fünf
   return fehler.length ? fehler.join(' | ') : true;
 });
 
+check('Marke «Nur Ansicht»: Schrift auf Fläche hält 4,5:1 — in allen fünf Themes, hell UND beide Dunkel-Scopes', () => {
+  const lum = (hex) => {
+    const n = hex.replace('#', '');
+    const v = [0, 2, 4].map((i) => parseInt(n.slice(i, i + 2), 16) / 255)
+      .map((u) => (u <= 0.03928 ? u / 12.92 : ((u + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  };
+  const kontrast = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  const scopes = [':root {', '@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) {', ':root[data-theme="dark"] {', ':root[data-theme="light"] {'];
+  const fehler = [];
+  for (const f of readdirSync(join(root, 'styles/themes'))) {
+    const css = readFileSync(join(root, 'styles/themes', f), 'utf8');
+    for (const sc of scopes) {
+      const i = css.lastIndexOf(sc + ' --nur-bg');
+      if (i < 0) { fehler.push(`${f}: Scope «${sc}» ohne Marken-Tokens`); continue; }
+      const b = css.slice(i, css.indexOf('}', i));
+      const bg = (b.match(/--nur-bg:\s*(#[0-9a-fA-F]{6})/) || [])[1], t = (b.match(/--nur-t:\s*(#[0-9a-fA-F]{6})/) || [])[1];
+      if (!bg || !t) { fehler.push(`${f} ${sc}: Token fehlt`); continue; }
+      const k = kontrast(lum(bg), lum(t));
+      if (k < 4.5) fehler.push(`${f} ${sc}: ${k.toFixed(2)}:1 < 4.5`);
+    }
+  }
+  return fehler.length ? fehler.join(' | ') : true;
+});
+
 check('Phasen-Farbe hängt an der ART: gantt.js klassiert nie nach ph.name', () => {
   const s = js('gantt.js');
   return /bz-ph(ase)?-'\s*\+\s*ph\.name/.test(s) ? 'Klasse aus ph.name' : true;
@@ -285,7 +310,7 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // stünde es in den anderen Themes ungestaltet im Kopf.
     'sync-state',
     // Marke «Nur Ansicht» (offline, Betrachter, Anmeldung abgelaufen): gelb mit Rahmen.
-    'hd-offline',
+    'hd-offline', '--nur-bg', '--nur-t',
     // Zeilen-Entwurf: gelbe Zeile, grünes ✓, rotes ✗, Grund darunter.
     // Ohne eigene Regeln verlöre ✓ gegen `.tb-ico { color: var(--muted) }`.
     'is-entwurf', 'en-ok', 'en-no', 'en-grund',

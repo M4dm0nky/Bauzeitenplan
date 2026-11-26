@@ -3,6 +3,12 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unveröffentlicht (Branch `online`)
+
+- **Rate Limits:** 429 gilt als vorübergehend (`code:'limit'`): Änderungen bleiben in der Warteschlange und gehen mit Backoff (1/2/4/max 5 s) selbst raus, nichts wird zurückgenommen. Batch-Aufrufe höchstens zwei je Sekunde (450 ms). Neue Pläne versuchen es bei 429 dreimal. Migration `1700000003_ratelimits.js` hebt die create-Regel auf 2000 je 5 s, damit ein ganzer Plan durchgeht.
+- **Reset-Mail:** Link ohne doppelten Schrägstrich (`onMailerRecordPasswordResetSend`).
+- **Offline-Marke:** erscheint erst nach 3 s; Tokens in allen Themes. Abgelaufene Anmeldung mit ungesendeten Änderungen fragt nach. Ladefehler, die keine Netzfehler sind, zeigen nicht «Offline».
+
 ## 0.25.1 — 2026-11-24
 
 - **Res-Picker (Issue #11):** Pfeiltasten nur noch mit Fokus in der Box; der Picker schließt, wenn sein Anker neu gebaut wird (Undo, Sync); Optionen tragen `aria-selected`.

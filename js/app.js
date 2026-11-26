@@ -121,7 +121,30 @@ let zuLoginLaeuft = false;
 // Manuelles Abmelden (grund 'manuell') gilt nie als Ausnahme: der Rechner kann geteilt sein.
 function zuLogin(grund) {
   if (grund !== 'manuell' && lsLies('bzp_live') === '1' && zeigeKopie('abgemeldet')) return;
-  if (zuLoginLaeuft) return;
+  if (zuLoginLaeuft || abgelaufenFrage) return;
+  const n = grund === '401' && server && store ? Math.max(server.offen.length + geparkt.length, wartend) : 0;
+  if (n > 0) { frageAbgelaufen(n); return; }
+  zuLoginLaeuft = true;
+  location.replace(loginSeite());
+}
+// Anmeldung abgelaufen, aber es gibt Änderungen, die noch nicht gesendet sind: nicht still verwerfen.
+let abgelaufenFrage = false;
+async function frageAbgelaufen(n) {
+  abgelaufenFrage = true;
+  const wahl = await askDialog({
+    title: 'Anmeldung abgelaufen',
+    message: [n === 1 ? 'Eine Änderung ist noch nicht gesendet.' : `${n} Änderungen sind noch nicht gesendet.`,
+      'Neu anmelden: Die Änderungen gehen verloren. Kopie ansehen: Der Stand bleibt sichtbar, ändern geht erst nach neuer Anmeldung.'],
+    buttons: [
+      { label: 'Neu anmelden (Änderungen gehen verloren)', value: 'login', danger: true },
+      { label: 'Kopie ansehen', value: 'kopie', primary: true },
+    ],
+  });
+  abgelaufenFrage = false;
+  if (wahl === 'kopie' && store) {
+    repo.save(store.state);      // die ungesendeten Änderungen stehen im Store: in die lokale Kopie
+    if (zeigeKopie('abgemeldet')) return;
+  }
   zuLoginLaeuft = true;
   location.replace(loginSeite());
 }
@@ -135,18 +158,20 @@ async function boot() {
     let liste = [];
     try { liste = await listePlaene(pb); } catch (e) {
       if (e.abgemeldet) { zuLogin(); return; }
-      if (live && zeigeKopie('offline')) return;      // kein Netz: der Monitor zeigt die lokale Kopie
+      if (live && e.offline && zeigeKopie('offline')) return;      // nur ein Netzfehler: der Monitor zeigt die lokale Kopie
+      // anderer Fehler (z. B. 429, 5xx): kein «Offline», der Projektdialog nennt ihn
     }
     const aktiv = repo.getActive();
     const erstes = liste.find((p) => p.plan_id === aktiv) || (leer ? liste[0] : null);
     if (erstes && await open(erstes.plan_id, { still: live })) return;
-    if (live && !store && zeigeKopie('offline')) return;
+    if (live && !store && ladeGrund?.offline && zeigeKopie('offline')) return;
   }
   showProjectDialog({ firstRun: !store });
 }
 
 // Öffnet den Plan vom Server. true = offen, false = nicht geöffnet (Fehler gemeldet oder
 // «Abbrechen» bei ungesendeten Änderungen des bisherigen Plans).
+let ladeGrund = null;   // Ergebnis des letzten gescheiterten Ladens in open() (boot unterscheidet Netz von anderen Fehlern)
 async function open(planId, { still = false } = {}) {
   await ablauf;     // laufende Sendungen und Konfliktfragen des bisherigen Plans abwarten
   if (server && (server.offen.length || geparkt.length)) {
@@ -163,6 +188,7 @@ async function open(planId, { still = false } = {}) {
   }
   const srv = createServerPlan({ pb, planId });
   const r = await srv.laden();
+  ladeGrund = r.ok ? null : r;
   if (!r.ok) { if (!still || r.abgemeldet) await ladeFehler(r); return false; }
 
   const wechsel = !!store;
@@ -199,6 +225,7 @@ async function open(planId, { still = false } = {}) {
 async function ladeFehler(r) {
   if (r.abgemeldet) { zuLogin('401'); return; }
   const text = r.offline ? 'Keine Verbindung zum Server. Der Plan lässt sich nur mit Verbindung öffnen.'
+    : r.limit ? LIMIT_TEXT
     : r.nichtGefunden ? 'Dieser Plan existiert nicht mehr oder du hast keinen Zugriff darauf.'
       : 'Der Plan konnte nicht geladen werden' + (r.fehler?.message ? ': ' + r.fehler.message : '.');
   await askDialog({ title: 'Nicht geöffnet', message: [text], buttons: [{ label: 'OK', value: true, primary: true }] });
@@ -552,10 +579,26 @@ const NUR_TEXT = {
   betrachter: '👁 Nur ansehen',
   abgemeldet: '🔑 Anmeldung abgelaufen – lokale Kopie',
 };
+// Die Marke «Offline» erscheint erst nach MARKE_MS ohne Verbindung (kurze Aussetzer flackern nicht);
+// bis dahin steht sie mit `visibility:hidden` (data-an="0") und hält ihren Platz. Alle anderen Gründe sofort.
+const MARKE_MS = 3000;
+let markeTimer = null;
 function setNurAnsicht(grund) {
   document.body.classList.toggle('nur-ansicht', !!grund);
   const m = $('hd-offline');
-  if (m) { m.hidden = !grund; m.textContent = grund ? NUR_TEXT[grund] : ''; m.dataset.grund = grund || ''; }
+  if (m) {
+    const warteGleich = grund === 'offline' && m.dataset.grund === 'offline';  // läuft schon: Timer nicht neu starten
+    if (!warteGleich) { clearTimeout(markeTimer); markeTimer = null; }
+    m.hidden = !grund;
+    m.textContent = grund ? NUR_TEXT[grund] : '';
+    m.dataset.grund = grund || '';
+    if (grund === 'offline') {
+      if (!warteGleich) {
+        m.dataset.an = '0';
+        markeTimer = setTimeout(() => { markeTimer = null; m.dataset.an = '1'; }, MARKE_MS);
+      }
+    } else m.dataset.an = '1';
+  }
   felderSperren(!!grund);
 }
 const nurAnsichtGrund = () => kopieModus || (offline ? 'offline' : rolle?.rolle === 'betrachter' ? 'betrachter' : null);
@@ -800,6 +843,7 @@ function schliesseServer() {
   if (stopAbo) { stopAbo(); stopAbo = null; }
   clearTimeout(fremdTimer); fremdTimer = null; fremdListe = []; gehalten.clear(); unterwegs.length = 0;
   clearTimeout(wiederTimer); wiederTimer = null;
+  server?.beenden?.();     // ein laufender 429-Wiederversuch sendet nichts mehr
   server = null; offline = false; rolle = null; kopieModus = null;
   geparkt.length = 0;
   syncNurAnsicht();
@@ -1317,7 +1361,7 @@ async function loescheProjekt(planId) {
   const r = await s.planLoeschen();
   if (!r.ok && !r.nichtGefunden) {
     if (r.abgemeldet) zuLogin();
-    else toast(r.offline ? 'Keine Verbindung – das Projekt wurde nicht gelöscht.' : 'Löschen nicht möglich: ' + (r.fehler?.message || 'Fehler'), 'bad', 8000);
+    else toast(r.offline ? 'Keine Verbindung – das Projekt wurde nicht gelöscht.' : r.limit ? 'Der Server ist gerade ausgelastet – das Projekt wurde nicht gelöscht. Bitte gleich nochmal versuchen.' : 'Löschen nicht möglich: ' + (r.fehler?.message || 'Fehler'), 'bad', 8000);
     return false;
   }
   if (istOffen) schliesseServer();
@@ -1432,6 +1476,7 @@ function doExport() {
   toast('Exportiert');
 }
 
+const LIMIT_TEXT = 'Der Server ist gerade ausgelastet. Bitte in ein paar Sekunden nochmal versuchen.';
 const KEIN_ANLEGEN = 'Neue Projekte legen nur Produktionsleitung und Superadmin an.';
 
 // Neuen Plan auf dem Server anlegen und öffnen. true = offen.
@@ -1441,7 +1486,7 @@ async function planNeu(plan) {
   if (!r.ok) {
     if (r.abgemeldet) zuLogin();
     else if (r.zuGross) await askDialog({ title: 'Plan zu groß', message: ['Dieser Plan hat zu viele Einträge für einen Schritt und wurde nicht angelegt.'], buttons: [{ label: 'OK', value: true, primary: true }] });
-    else toast(r.offline ? 'Keine Verbindung – der Plan wurde nicht angelegt.' : 'Der Plan konnte nicht angelegt werden: ' + (r.fehler?.message || r.message || 'Fehler'), 'bad', 8000);
+    else toast(r.offline ? 'Keine Verbindung – der Plan wurde nicht angelegt.' : r.limit ? 'Der Server ist gerade ausgelastet – der Plan wurde nicht angelegt. Bitte gleich nochmal versuchen.' : 'Der Plan konnte nicht angelegt werden: ' + (r.fehler?.message || r.message || 'Fehler'), 'bad', 8000);
     return false;
   }
   return open(r.planId);
@@ -1477,7 +1522,7 @@ async function showProjectDialog({ firstRun = false } = {}) {
   try { list = await listePlaene(pb); }
   catch (e) {
     if (e.abgemeldet) { zuLogin(); return; }
-    problem = e.offline ? 'Keine Verbindung zum Server. Die Projektliste lässt sich nur mit Verbindung laden.' : 'Die Projekte ließen sich nicht laden: ' + e.message;
+    problem = e.offline ? 'Keine Verbindung zum Server. Die Projektliste lässt sich nur mit Verbindung laden.' : e.limit ? LIMIT_TEXT : 'Die Projekte ließen sich nicht laden: ' + e.message;
   }
   const user = pb.auth?.record;
   const darfAnlegen = darfPlanAnlegen(user);

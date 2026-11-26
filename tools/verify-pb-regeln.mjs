@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { startePb, kontoAnlegen, anmelden as anmeldenRoh } from './pb-lokal.mjs';
+import { smtpEmpfaenger, qp } from './smtp-fang.mjs';
 import { createPb } from '../js/pb.js';
 import { createServerPlan, listePlaene } from '../js/server.js';
 import { deserialize } from '../js/persistence.js';
@@ -677,7 +678,96 @@ async function SERVERPLAN(pb) {
   } finally { await pbA.abmelden(); await pbB.abmelden(); }
 }
 
-const ABSCHNITTE = { SCHEMA, REV, GEWERKELEITER, STATUS, KONTEN, EINLADUNG, BESITZER, KONSISTENZ, DATEN, LOESCHEN, SERVERPLAN };
+// ── RATELIMIT: PB-Standard-Rate-Limits wie auf TEST/LIVE (Task 10b) ────────────────────────────
+// Eigene Startoption: erst Migrationen, dann `enabled: true` (tools/pb-lokal.mjs `rateLimits`). appURL mit
+// Schrägstrich am Ende wie auf TEST. Grundaufbau entfällt (11 Anmeldungen sprengen `*:auth` 2/3 s).
+const regelnLesen = async (pb) => (await pb.su('GET', '/api/settings')).body.rateLimits;
+const createRegel = async (pb, maxRequests) => {
+  const rl = await regelnLesen(pb);
+  return pb.su('PATCH', '/api/settings', { rateLimits: { enabled: true, rules: rl.rules.map((r) => (r.label === '*:create' ? { ...r, maxRequests } : r)) } });
+};
+async function RATELIMIT(pb, { smtp } = {}) {
+  console.log('— RATELIMIT');
+  const KT = fixturePlan('klassentreffen-festival');
+  const AMK = fixturePlan('amk-singleshow');
+  // Migration: nur `*:create` angehoben, Rest = PB-Standard, enabled hat der Start gesetzt
+  const rl = await regelnLesen(pb);
+  const regel = (l) => rl.rules.find((r) => r.label === l);
+  ok(regel('*:create')?.maxRequests === 2000 && regel('*:create')?.duration === 5, 'Migration: *:create = 2000 je 5 s', JSON.stringify(regel('*:create')));
+  ok(regel('*:auth')?.maxRequests === 2 && regel('*:auth')?.duration === 3 && regel('/api/batch')?.maxRequests === 3 && regel('/api/batch')?.duration === 1 && regel('/api/')?.maxRequests === 300 && regel('/api/')?.duration === 10, 'Migration: *:auth 2/3, /api/batch 3/1, /api/ 300/10 unverändert', JSON.stringify(rl.rules));
+  ok(rl.enabled === true, 'Limits sind eingeschaltet (Start mit rateLimits:true)');
+  await kontoAnlegen(pb, { email: 'pl@bzp.test', name: 'pl', passwort: PW, produktionsleitung: true });
+  await warte(3200); // `*:auth` 2/3 s: die Anmeldung von kontoAnlegen soll aus dem Fenster sein
+  const pbA = await clientFuer(pb, 'pl@bzp.test');
+  try {
+    // 1) Große Pläne: AMK (52 Anfragen) und Klassentreffen (407) in je EINEM Batch, mit Limits an
+    const angelegt = {};
+    for (const [name, vorlage] of [['AMK', AMK], ['Klassentreffen', KT]]) {
+      const r = await createServerPlan({ pb: pbA, planId: 'x' }).planAnlegen(vorlage);
+      ok(r.ok, `${name}: planAnlegen gelingt unter den Standard-Limits`, JSON.stringify(r).slice(0, 300));
+      angelegt[name] = r;
+    }
+    const lade = angelegt.AMK.ok && await createServerPlan({ pb: pbA, planId: angelegt.AMK.planId }).laden();
+    ok(lade && lade.ok && isDeepStrictEqual(lade.state, angelegt.AMK.state), 'AMK: laden = angelegter Plan (deepEqual)');
+
+    // 2) Sechs schnelle senden hintereinander (ohne zu warten): alle kommen an, nichts geht verloren
+    const start = angelegt.Klassentreffen;
+    const sp = createServerPlan({ pb: pbA, planId: start.planId });
+    await sp.laden();
+    const staende = [start.state];
+    for (let i = 0; i < 6; i++) { const n = kl(staende[i]); n.tasks[i].title = 'Schnell ' + (i + 1); staende.push(n); }
+    const t0 = Date.now();
+    const erg = await Promise.all(staende.slice(1).map((n, i) => sp.senden(aenderungen(staende[i], n))));
+    ok(erg.every((r) => r.ok === true), '6 schnelle senden: alle ok', JSON.stringify(erg));
+    ok(Date.now() - t0 >= 5 * 400, 'Drossel: 6 Batches brauchen mindestens ~5 Abstände', String(Date.now() - t0) + ' ms');
+    const danach = await createServerPlan({ pb: pbA, planId: start.planId }).laden();
+    ok(danach.ok && isDeepStrictEqual(danach.state, staende[6]), 'alle sechs Änderungen stehen auf dem Server (deepEqual)');
+    ok(sp.offen.length === 0, 'Warteschlange leer');
+
+    // 3) Reset-Mail: appURL endet auf «/» → Link ohne «//login.html»
+    if (smtp) {
+      const r = await pb.su('PATCH', '/api/settings', { smtp: { enabled: true, host: '127.0.0.1', port: smtp.port, tls: false, username: '', password: '' }, meta: { senderAddress: 'bzp@bzp.test', senderName: 'BZP' } });
+      ok(r.ok, 'SMTP gesetzt', JSON.stringify(r.body));
+      const anf = await pbA.post('/api/collections/users/request-password-reset', { email: 'pl@bzp.test' });
+      ok(anf.ok, 'request-password-reset');
+      const bis = Date.now() + 10000;
+      while (!smtp.mails.length && Date.now() < bis) await warte(100);
+      const mail = qp(smtp.mails[0] || '');
+      const m = mail.match(/href="?(http[^"\s>]*login\.html\?reset=[^"\s>]+)/);
+      ok(!!m && m[1].startsWith('http://localhost:8080/login.html?reset='), 'Reset-Link = appURL + login.html (ein Schrägstrich)', m ? m[1] : mail.slice(0, 300));
+      ok(!/[^:]\/\/login\.html/.test(mail), 'Mail enthält nirgends «//login.html»');
+    }
+
+    // 4) Rot-Nachweis: ohne die Migration (create-Regel auf dem PB-Standard 20 je 5 s) scheitert AMK
+    ok((await createRegel(pb, 20)).ok, 'Regel *:create auf 20/5 s zurückgesetzt (Zustand ohne Migration)');
+    await warte(5500);
+    const rot = await createServerPlan({ pb: pbA, planId: 'x' }).planAnlegen(AMK);
+    ok(rot.ok === false && rot.limit === true, 'OHNE Migration scheitert planAnlegen(AMK) mit limit', JSON.stringify(rot).slice(0, 200));
+    const nach = await pb.su('GET', '/api/collections/plaene/records?perPage=1&filter=' + encodeURIComponent('daten.name="' + AMK.project.name + '"') + '&sort=-created');
+    ok(nach.ok && nach.body.totalItems === 1, 'der gescheiterte Versuch hat nichts angelegt (Batch zurückgerollt)', String(nach.body.totalItems));
+    ok((await createRegel(pb, 2000)).ok, 'Regel *:create wieder auf 2000/5 s');
+    await warte(5500);
+    const gruen = await createServerPlan({ pb: pbA, planId: 'x' }).planAnlegen(AMK);
+    ok(gruen.ok, 'MIT Migration: planAnlegen(AMK) gelingt wieder', JSON.stringify(gruen).slice(0, 200));
+
+    // 5) Anmeldung: ab der 3. Anmeldung in 3 s kommt 429 → code «limit» (login.js zeigt «Zu viele Versuche»)
+    await warte(3200);
+    const codes = [];
+    for (let i = 0; i < 4; i++) codes.push((await createPb({ basis: pb.url, fetch, speicher: new Map(), autostart: false }).anmelden('pl@bzp.test', 'falsch-' + i)).code);
+    ok(codes.includes('limit') && codes[0] !== 'limit', 'Anmeldung: Limit liefert code «limit»', JSON.stringify(codes));
+  } finally { await pbA.abmelden(); }
+}
+// Prüft, dass die Migration `enabled` nicht anfasst: ohne rateLimits-Option bleibt es aus
+async function RATELIMIT_AUS() {
+  const pb = await startePb();
+  try {
+    const rl = await regelnLesen(pb);
+    ok(rl.enabled === false, 'Migration schaltet die Limits nicht ein (enabled bleibt false)', JSON.stringify(rl));
+    ok(rl.rules.find((r) => r.label === '*:create')?.maxRequests === 2000, 'Migration setzt *:create auch ohne Einschalten');
+  } finally { await pb.stop(); }
+}
+
+const ABSCHNITTE = { SCHEMA, REV, GEWERKELEITER, STATUS, KONTEN, EINLADUNG, BESITZER, KONSISTENZ, DATEN, LOESCHEN, SERVERPLAN, RATELIMIT };
 
 const i = process.argv.indexOf('--nur');
 const nur = i > 0 ? process.argv[i + 1].toUpperCase() : null;
@@ -685,7 +775,7 @@ if (nur && !ABSCHNITTE[nur]) { console.error('Unbekannter Abschnitt: ' + nur + '
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   // SERVERPLAN braucht EventSource (Node 24: nur mit --experimental-eventsource) → Selbstneustart mit dem Flag
-  if (typeof EventSource === 'undefined' && (!nur || nur === 'SERVERPLAN')) {
+  if (typeof EventSource === 'undefined' && (!nur || nur === 'SERVERPLAN' || nur === 'RATELIMIT')) {
     const r = spawnSync(process.execPath, ['--experimental-eventsource', '--disable-warning=UNDICI-ES', ...process.argv.slice(1)], { stdio: 'inherit' });
     process.exit(r.status ?? 1);
   }
@@ -694,8 +784,14 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
     // frischer Server je Abschnitt: Abschnitte beeinflussen sich nicht
     for (const [n, f] of Object.entries(ABSCHNITTE)) {
       if (nur && nur !== n) continue;
-      pb = await startePb();
-      try { await f(pb); } catch (e) { console.log('  PB-Log: ' + pb.log().slice(-1200)); throw e; } finally { await pb.stop(); pb = null; }
+      // RATELIMIT: Standard-Limits an, appURL mit Schrägstrich am Ende (wie TEST), SMTP-Fänger für die Reset-Mail
+      const rate = n === 'RATELIMIT';
+      const smtp = rate ? await smtpEmpfaenger() : null;
+      try {
+        pb = await startePb(rate ? { rateLimits: true, appUrl: 'http://localhost:8080/' } : {});
+        try { await f(pb, { smtp }); } catch (e) { console.log('  PB-Log: ' + pb.log().slice(-1200)); throw e; } finally { await pb.stop(); pb = null; }
+        if (rate) await RATELIMIT_AUS();
+      } finally { smtp?.schliessen(); }
     }
   } catch (e) { console.log('✗ Abbruch: ' + e.message); fehler++; }
   finally { if (pb) await pb.stop(); }

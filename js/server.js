@@ -25,6 +25,14 @@ const spalten = (coll, o) => (coll === 'vorgaenge' ? { gewerk: o.gewerk } : coll
 // Fehlerform von pb.js → Kategorie
 const istNetz = (r) => r?.code === 'netz' || r?.status === 0;
 const istAuth = (r) => r?.status === 401 || r?.code === 'auth';
+const istLimit = (r) => r?.code === 'limit' || r?.status === 429; // Rate Limit: vorübergehend, nie ein Ablehnungsgrund
+
+// Rate Limits (PocketBase /api/batch 3 je Sekunde): höchstens ~2 Batch-Aufrufe je Sekunde, bei 429 Backoff
+export const BATCH_ABSTAND_MS = 450;
+export const BACKOFF_MS = [1000, 2000, 4000, 5000]; // danach bleibt es bei 5 s
+export const PLAN_VERSUCHE = 3;
+const backoff = (n) => BACKOFF_MS[Math.min(n, BACKOFF_MS.length - 1)];
+const standardWarte = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function rolleVon(user, planRec, mitglieder) {
   if (!user) return null;
@@ -41,6 +49,7 @@ async function sitzung(pb) {
   if (e.ok) return null;
   if (istNetz(e)) return { ok: false, offline: true };
   if (istAuth(e)) return { ok: false, abgemeldet: true };
+  if (istLimit(e)) return { ok: false, limit: true };
   return { ok: false, fehler: { status: e.status, code: e.code, message: e.message } };
 }
 
@@ -48,7 +57,7 @@ async function sitzung(pb) {
  *  Error mit `offline` bzw. `abgemeldet` (der Projektdialog fängt ihn). */
 export async function listePlaene(pb) {
   const s = await sitzung(pb);
-  const fail = (r) => Object.assign(new Error(r.message || (r.offline ? 'offline' : r.abgemeldet ? 'abgemeldet' : 'Fehler')), { offline: !!r.offline, abgemeldet: !!r.abgemeldet, status: r.status, code: r.code });
+  const fail = (r) => Object.assign(new Error(r.message || (r.offline ? 'offline' : r.abgemeldet ? 'abgemeldet' : 'Fehler')), { offline: !!r.offline, abgemeldet: !!r.abgemeldet, limit: !!r.limit || istLimit(r), status: r.status, code: r.code });
   if (s) throw fail(s.fehler || s);
   const pl = await pb.liste('plaene', '', 'created');
   if (!pl.ok) throw fail(pl);
@@ -63,7 +72,7 @@ export async function listePlaene(pb) {
   }));
 }
 
-export function createServerPlan({ pb, planId, jetzt = Date.now }) {
+export function createServerPlan({ pb, planId, jetzt = Date.now, warte = standardWarte, uhr = Date.now }) {
   let id = planId;
   let stand = new Map(COLLS.map((c) => [c, new Map()])); // coll → eid → {id, rev}
   const erwartet = new Map(); // Echos der eigenen Schreibzugriffe: "coll|eid|rev|action" → Zeit
@@ -72,6 +81,16 @@ export function createServerPlan({ pb, planId, jetzt = Date.now }) {
   let kette = Promise.resolve();
   let handler = null;
   let stopAbo = null;
+
+  let letzterBatch = -Infinity;   // Zeit des letzten Batch-Aufrufs (`uhr`, unabhängig von `jetzt`)
+  let abbruch = 0;                // zählt beenden(): ein laufender Backoff erkennt daran, dass sein Server geschlossen wurde
+  // Alle Batch-Aufrufe laufen hier durch (Mindestabstand BATCH_ABSTAND_MS). Immer unter `seriell`.
+  async function batchDrosselt(reqs) {
+    const warten = BATCH_ABSTAND_MS - (uhr() - letzterBatch);
+    if (warten > 0) await warte(warten);
+    letzterBatch = uhr();
+    return pb.batch(reqs);
+  }
 
   const seriell = (fn) => { const p = kette.then(fn, fn); kette = p.catch(() => {}); return p; };
   const merke = (coll, eid, rev, action) => {
@@ -200,7 +219,7 @@ export function createServerPlan({ pb, planId, jetzt = Date.now }) {
     }
     const art = (m) => (m.art === 'loeschen' ? 'delete' : m.art === 'anlegen' ? 'create' : 'update');
     for (const m of meta) merke(m.coll, m.eid, m.rev, art(m));
-    const r = await pb.batch(reqs);
+    const r = await batchDrosselt(reqs);
     if (r.ok) {
       r.antworten.forEach((rec, i) => {
         const m = meta[i];
@@ -212,6 +231,7 @@ export function createServerPlan({ pb, planId, jetzt = Date.now }) {
     for (const m of meta) erwartet.delete(`${m.coll}|${m.eid}|${m.rev}|${art(m)}`);
     if (istNetz(r)) return { ok: false, offline: true };
     if (istAuth(r)) return { ok: false, abgemeldet: true };
+    if (istLimit(r)) return { ok: false, limit: true };   // auch inneres 429: der Batch ist zurückgerollt, nichts angelegt
     const m = meta[r.index ?? -1];
     if (r.code === 'rev' && m) return { ok: false, konflikt: [{ coll: m.coll, eid: m.eid, art: m.art, ...(await holeFremd(m.coll, m.eid)) }] };
     // Ändern/Löschen eines Datensatzes, den es nicht mehr gibt (404): fremd gelöscht. Eine Regelabsage
@@ -232,10 +252,17 @@ export function createServerPlan({ pb, planId, jetzt = Date.now }) {
   // Fehler: genau dieser Eintrag verlässt die Schlange und kommt als `aend` zurück, der Rest bleibt
   // liegen (er baut womöglich darauf auf) und wartet auf die Entscheidung des Aufrufers.
   async function leeren() {
+    let limits = 0;
+    const meine = abbruch;
     while (queue.length) {
       const r = await schicke(queue[0]);
-      if (r.ok) { queue.shift(); continue; }
+      if (r.ok) { queue.shift(); limits = 0; continue; }
       if (r.offline || r.abgemeldet) return r;
+      if (r.limit) { // vorübergehend: Eintrag bleibt in `offen`, Wiederversuch mit Backoff, kein Zurücknehmen
+        await warte(backoff(limits++));
+        if (abbruch !== meine) return { ok: false, offline: true }; // Server wurde geschlossen: nichts mehr senden
+        continue;
+      }
       const kopf = queue.shift();
       entwerten(kopf.aend);
       if (!queue.length) vorhergesagt.clear();
@@ -252,7 +279,7 @@ export function createServerPlan({ pb, planId, jetzt = Date.now }) {
       const gelesen = {};
       for (const c of COLLS) {
         const r = await pb.liste(c, planFilter(id), c === 'plaene' ? '' : 'pos,created');
-        if (!r.ok) return istNetz(r) ? { ok: false, offline: true } : istAuth(r) ? { ok: false, abgemeldet: true } : { ok: false, fehler: { status: r.status, code: r.code, message: r.message } };
+        if (!r.ok) return istNetz(r) ? { ok: false, offline: true } : istAuth(r) ? { ok: false, abgemeldet: true } : istLimit(r) ? { ok: false, limit: true } : { ok: false, fehler: { status: r.status, code: r.code, message: r.message } };
         gelesen[c] = r.items;
       }
       if (!gelesen.plaene.length) return { ok: false, nichtGefunden: true };
@@ -328,7 +355,12 @@ export function createServerPlan({ pb, planId, jetzt = Date.now }) {
         const alt = { id, stand };
         id = neu_id;
         stand = new Map(COLLS.map((c) => [c, new Map()]));
-        const r = await schicke({ aend, basis: new Map() });
+        let r;
+        for (let versuch = 0; versuch < PLAN_VERSUCHE; versuch++) {
+          r = await schicke({ aend, basis: new Map() });
+          if (!r.limit || versuch === PLAN_VERSUCHE - 1) break;
+          await warte(backoff(versuch)); // 429: der Batch ist zurückgerollt, derselbe Plan nochmal
+        }
         if (r.ok) { vorhergesagt.clear(); return { ok: true, planId: id, state: neu }; }
         id = alt.id; stand = alt.stand; // ein Batch: bei Fehler ist nichts angelegt
         return r;
@@ -340,12 +372,15 @@ export function createServerPlan({ pb, planId, jetzt = Date.now }) {
         if (!stand.get('plaene').has(id)) { const f = await holeFremd('plaene', id); if (f.unbekannt) return { ok: false, offline: true }; }
         const p = stand.get('plaene').get(id);
         if (!p) return { ok: false, nichtGefunden: true };
-        const r = await pb.batch([{ method: 'DELETE', url: `/api/collections/plaene/records/${p.id}?rev=${p.rev}` }]);
+        const r = await batchDrosselt([{ method: 'DELETE', url: `/api/collections/plaene/records/${p.id}?rev=${p.rev}` }]);
         if (r.ok) { stand = new Map(COLLS.map((c) => [c, new Map()])); queue = []; vorhergesagt.clear(); return { ok: true }; }
         if (istNetz(r)) return { ok: false, offline: true };
         if (istAuth(r)) return { ok: false, abgemeldet: true };
+        if (istLimit(r)) return { ok: false, limit: true };
         return { ok: false, fehler: { status: r.status, code: r.code, message: r.message } };
       });
     },
+    /** Schließen: Warteschlange verwerfen, ein laufender 429-Backoff sendet nichts mehr. */
+    beenden() { abbruch++; queue = []; vorhergesagt.clear(); },
   };
 }
