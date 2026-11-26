@@ -19,10 +19,11 @@ const server = createServer((req, res) => {
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const BASE = 'http://127.0.0.1:' + server.address().port;
 const browser = await firefox.launch({ executablePath: mustFirefox() });
+const stops = [];   // lokale PocketBase (tools/plan-fixture.mjs)
 try {
   for (const [theme, scheme] of [['console', 'dark'], ['blueprint', 'dark'], ['studio', 'dark'], ['board', 'dark'], ['callboard', 'dark'], ['studio', 'light']]) {
     const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: scheme, timezoneId: 'Europe/Berlin' });
-    await planLaden(ctx, 'festival-mit-daten.json');
+    stops.push((await planLaden(ctx, 'festival-mit-daten.json', { frisch: true })).stop);
     const page = await ctx.newPage();
     await page.goto(BASE + '/index.html?plan=leer&ansicht=bau');
     await page.waitForSelector('.bz-t-major', { timeout: 20000 });
@@ -53,4 +54,4 @@ try {
     await page.screenshot({ path: join(here, 'shots', `proj-menue-${theme}-${scheme}.png`), clip: { x: 800, y: 0, width: 600, height: 300 } });
     await ctx.close();
   }
-} finally { await browser.close(); server.close(); }
+} finally { await browser.close().catch(() => {}); server.close(); for (const st of stops) await st().catch(() => {}); }

@@ -31,8 +31,12 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const BASE = 'http://127.0.0.1:' + server.address().port;
 
 const b = await firefox.launch({ executablePath: exe });
+const stops = [];   // lokale PocketBase (tools/plan-fixture.mjs), wird im finally beendet
+const laden = async (z) => { stops.push((await planLaden(z, 'klassentreffen-festival.json', { frisch: true })).stop); };
+let bad = 0;
+try {
 const ctx = await b.newContext({ viewport: { width: 1700, height: 1000 } });
-await planLaden(ctx);
+await laden(ctx);
 const p = await ctx.newPage();
 const errors = [];
 p.on('pageerror', (e) => errors.push('JS: ' + e.message));
@@ -65,7 +69,6 @@ async function gehe(a) {
   await p.waitForTimeout(200);
 }
 
-let bad = 0;
 const check = async (name, fn) => {
   let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
   if (r === true) console.log('  ✓ ' + name); else { console.log('  ✗ ' + name + ': ' + r); bad++; }
@@ -375,7 +378,7 @@ await check('die Tabelle scrollt in sich, die Seite nicht', async () => {
 // Über die id, nicht über [value="…"]: `input.value` ist eine EIGENSCHAFT, kein
 // Attribut — der Attributselektor findet nie etwas und läuft stumm in den Timeout.
 const idVon = (titel) => p.evaluate((t) => {
-  const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+  const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
   return (raw.tasks || []).find((x) => x.title === t)?.id;
 }, titel);
 const zeileVon = async (titel) => p.locator('tr[data-id="' + await idVon(titel) + '"]');
@@ -387,7 +390,7 @@ await check('eine Anforderung tippen kommt an — und ⌘Z nimmt sie zurück', a
   await feld.press('Tab');
   await p.waitForTimeout(1400);        // Auto-Save wartet 800 ms
   const drin = await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     return (raw.tasks || []).find((t) => t.title === 'CURSE')?.anforderungen;
   });
   if (drin !== '2× Wedge, Barrierengasse') return 'gespeichert: ' + JSON.stringify(drin);
@@ -405,7 +408,7 @@ await check('Material und Kontakt gehen denselben Weg', async () => {
   await r.locator('.c-kon input').press('Tab');
   await p.waitForTimeout(1400);        // Auto-Save wartet 800 ms
   const t = await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     return (raw.tasks || []).find((x) => x.title === 'SIDO');
   });
   return t.material === '1 Riser 2×1 m' && t.kontakt === 'Tourmanager Ruth'
@@ -706,7 +709,7 @@ await check('eine Uhrzeit ändern verschiebt den Eintrag NICHT auf einen anderen
   await p.locator('.tb-r.is-entwurf .en-ok').click();   // Entwurf: erst ✓ speichert
   await p.waitForTimeout(1400);
   const t = await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     return (raw.tasks || []).find((x) => x.title === 'DOORS' && x.start.startsWith('2026-08-29'));
   });
   if (!t) return 'DOORS ist vom 29.08. verschwunden';
@@ -730,7 +733,7 @@ await check('ANLEGEN ERZEUGT EINEN BALKEN IM SETUP', async () => {
   await p.locator('#ins .ins-sc button').first().click();
   await p.waitForTimeout(900);
   const sc = await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     const sido = (raw.tasks || []).find((x) => x.title === 'SIDO');
     return (raw.tasks || []).find((x) => x.fuer === (sido || {}).id) || null;
   });
@@ -761,7 +764,7 @@ await check('er hat eine Dauer, die sich ändern lässt', async () => {
   await dauer.press('Enter');          // Entwurf: Enter übernimmt (Tab würde verwerfen)
   await p.waitForTimeout(1400);
   const min = await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     const sido = (raw.tasks || []).find((x) => x.title === 'SIDO');
     const sc = (raw.tasks || []).find((x) => x.fuer === (sido || {}).id);
     return sc ? (new Date(sc.end) - new Date(sc.start)) / 60000 : null;
@@ -771,7 +774,7 @@ await check('er hat eine Dauer, die sich ändern lässt', async () => {
 
 // Der Soundcheck im Panel ist wie der Termin des Acts ein ENTWURF (js/entwurf.js).
 const scLesen = () => p.evaluate(() => {
-  const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+  const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
   const sido = (raw.tasks || []).find((x) => x.title === 'SIDO');
   const sc = (raw.tasks || []).find((x) => x.fuer === (sido || {}).id);
   return sc ? sc.start.slice(11, 16) + '-' + sc.end.slice(11, 16) : null;
@@ -819,7 +822,7 @@ await check('Feld verlassen verwirft den Entwurf: alter Wert steht wieder da', a
 await check('den Act löschen nimmt den Soundcheck mit', async () => {
   // Sonst bliebe eine Waise mit totem `fuer` zurück, die niemand mehr findet.
   await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     window.__sido = (raw.tasks || []).find((x) => x.title === 'SIDO').id;
   });
   await p.locator('#ins .ins-x').click();
@@ -829,7 +832,7 @@ await check('den Act löschen nimmt den Soundcheck mit', async () => {
   await p.locator('.mn-i', { hasText: 'Löschen' }).first().click();
   await p.waitForTimeout(1400);
   const rest = await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     return (raw.tasks || []).filter((x) => x.fuer === window.__sido).length;
   });
   if (rest) return rest + ' verwaiste Soundchecks';
@@ -849,7 +852,7 @@ await check('den Soundcheck wieder entfernen räumt den Setup leer', async () =>
   await p.locator('#ins .ins-sc .btn-danger').click();
   await p.waitForTimeout(1200);
   const rest = await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     return (raw.tasks || []).filter((x) => x.abschnitt === 'setup').length;
   });
   return rest === 0 ? true : rest + ' Setup-Einträge übrig';
@@ -918,7 +921,7 @@ await check('EIN NEUER ZEITEINTRAG LANDET IM GEZEIGTEN ABSCHNITT UND TAG', async
   if (zeilen !== 1) return zeilen + ' Zeilen in der Tabelle, erwartet 1';
   // Das Feld zeigt nur noch die Uhrzeit — der Tag steht in den Daten.
   const start = await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     const neu = (raw.tasks || []).find((t) => t.title === 'Neuer Zeiteintrag');
     return neu ? neu.start : '(nicht angelegt)';
   });
@@ -965,7 +968,7 @@ await check('EINE UHRZEIT LÄSST SICH ZIFFER FÜR ZIFFER EINTIPPEN', async () =>
   // bis hierhin ist also nichts gespeichert. ✓ übernimmt, und der Auto-Save
   // (800 ms) schreibt den Stand in die Ablage.
   const vorher = await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     const neu = (raw.tasks || []).find((t) => t.title === 'Neuer Zeiteintrag');
     return neu ? neu.start : '(weg)';
   });
@@ -973,7 +976,7 @@ await check('EINE UHRZEIT LÄSST SICH ZIFFER FÜR ZIFFER EINTIPPEN', async () =>
   await p.locator('.tb-r.is-entwurf .en-ok').click();
   await p.waitForTimeout(1200);
   const gespeichert = await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     const neu = (raw.tasks || []).find((t) => t.title === 'Neuer Zeiteintrag');
     return neu ? neu.start : '(weg)';
   });
@@ -996,7 +999,7 @@ await check('ein ⌘Z aus dem Feld heraus zeichnet SOFORT neu', async () => {
 
 await check('Zeitfeld ohne Datum: Zeile verlassen verwirft den Entwurf, nichts gespeichert', async () => {
   const stored = () => p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     return JSON.stringify((raw.tasks || []).map((t) => [t.id, t.start, t.end]));
   });
   await p.waitForTimeout(1000);
@@ -1017,7 +1020,7 @@ await check('«22:00 bis 03:00» meint nach ✓ den Folgetag (Start bleibt am Ta
   const id = await p.locator('.tb-r').first().getAttribute('data-id');
   const row = p.locator(`.tb-r[data-id="${id}"]`);
   const tag0 = await p.evaluate((i) => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     return (raw.tasks || []).find((t) => t.id === i).start.slice(0, 10);
   }, id);
   await row.locator('.c-start input').fill('22:00');
@@ -1027,7 +1030,7 @@ await check('«22:00 bis 03:00» meint nach ✓ den Folgetag (Start bleibt am Ta
   await row.locator('.en-ok').click();
   await p.waitForTimeout(1300);
   const t = await p.evaluate((i) => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     return (raw.tasks || []).find((x) => x.id === i);
   }, id);
   const folge = new Date(new Date(tag0 + 'T00:00:00Z').getTime() + 86400000).toISOString().slice(0, 10);
@@ -1072,7 +1075,7 @@ await check('sie überlebt das Neuladen und steht im Plan', async () => {
   const labels = await p.locator('.tb-r .c-typ select option').allTextContents();
   if (!labels.includes('Line-Check')) return 'nach dem Neuladen weg: ' + labels.join(' · ');
   const imPlan = await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('bzp_p_klassentreffen-festival-2026') || '{}');
+    const raw = JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')) || '{}');
     return (raw.project && raw.project.punktTypen) || [];
   });
   return imPlan.some((t) => t.id === 'linecheck' && t.kompakt === true)
@@ -1520,7 +1523,10 @@ try {
 if (chromeExe && existsSync(chromeExe)) {
   const cb = await chromium.launch({ executablePath: chromeExe });
   const cp = await cb.newPage();
-  await planLaden(cp);
+  await laden(cp);
+  // print.html liest die lokale Kopie: erst die App den Plan vom Server öffnen lassen
+  await cp.goto(BASE + '/index.html?plan=leer');
+  await cp.waitForSelector('.bz-lab', { timeout: 30000 });
   await cp.goto(BASE + '/print.html?ansicht=show');
   await cp.waitForSelector('.pr-ro', { timeout: 20000 });
   await cp.waitForTimeout(600);
@@ -1539,7 +1545,7 @@ if (chromeExe && existsSync(chromeExe)) {
 console.log('\nNACH DER SHOW (Uhr 23:00)');
 {
   const sCtx = await b.newContext({ viewport: { width: 1600, height: 950 } });
-  await planLaden(sCtx);
+  await laden(sCtx);
   const sp = await sCtx.newPage();
   await sp.clock.install({ time: new Date('2026-08-29T23:00:00') });
   await sp.goto(BASE + '/index.html?plan=leer&ansicht=show');
@@ -1560,7 +1566,7 @@ console.log('\nNACH DER SHOW (Uhr 23:00)');
 {
   console.log('\nSUCHE IM SHOWABLAUF');
   const xCtx = await b.newContext({ viewport: { width: 1700, height: 1000 } });
-  await planLaden(xCtx);
+  await laden(xCtx);
   const xp = await xCtx.newPage();
   xp.setDefaultTimeout(5000);
   const xerr = [];
@@ -1602,7 +1608,9 @@ console.log('\nNACH DER SHOW (Uhr 23:00)');
 console.log('');
 await check('keine JS-Fehler', async () => (errors.length ? errors.slice(0, 3).join(' | ') : true));
 
-await b.close();
-server.close();
+} finally {
+  await b.close().catch(() => {}); server.close();
+  for (const st of stops) await st().catch(() => {});
+}
 console.log(bad ? `\n${bad} Problem(e).\n` : '\nAlle Prüfungen bestanden.\n');
 process.exit(bad ? 1 : 0);
