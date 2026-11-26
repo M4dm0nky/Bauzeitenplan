@@ -534,6 +534,7 @@ console.log('\nFOKUSTAG NACH EBENENWECHSEL');
   await hp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
   await hp.waitForSelector('.bz-lab', { timeout: 20000 });
   await hp.waitForTimeout(800);
+  // 300 px (vorher 285): seit Mehrbenutzer steht die Sende-Marke «✓ gesendet» im Studio-Theme in einer eigenen Zeile.
   await check('Suche Handy: erreichbar, Kopf ≤ 300 px, Gantt ≥ 50 %', async () => {
     const sichtbar = await hp.locator('#suche').isVisible();
     if (!sichtbar) return 'Suchfeld nicht sichtbar';
@@ -579,18 +580,29 @@ console.log('\nIMPORT MIT RATE-LIMITS');
   await pg.waitForTimeout(700);
   await pg.locator('.dlg-act .btn', { hasText: 'JSON importieren' }).click();
   await pg.locator('#import-file').setInputFiles(join(FIXTURES, 'klassentreffen-festival.json'));
-  const vorgaenge = () => pg.locator('.kpi', { hasText: 'Vorgänge' }).locator('.kpi-v').textContent().then((t) => t.trim()).catch(() => '');
-  await pg.waitForFunction(() => [...document.querySelectorAll('.kpi')].some((k) => /Vorgänge/.test(k.textContent) && k.querySelector('.kpi-v')?.textContent.trim() === '353'), null, { timeout: 60000 }).catch(() => {});
+  const vorgaenge = () => pg.locator('.kpi', { hasText: 'Vorgänge' }).locator('.kpi-v').textContent().then((t) => t.trim());
   await check('Import mit Limits: Plan offen, 353 Vorgänge', async () => {
+    // Timeout wird NICHT geschluckt: kommt die Zahl nicht, scheitert die Prüfung mit dem Timeout als Grund
+    await pg.waitForFunction(() => [...document.querySelectorAll('.kpi')].some((k) => /Vorgänge/.test(k.textContent) && k.querySelector('.kpi-v')?.textContent.trim() === '353'), null, { timeout: 60000 });
     const v = await vorgaenge();
     return v === '353' ? true : 'Vorgänge: «' + v + '»' + (rerr[0] ? ' / ' + rerr[0] : '');
   });
-  await check('Import mit Limits: auf dem Server angekommen (Neuladen zeigt 353, kein Fehlerhinweis)', async () => {
-    await pg.waitForTimeout(1500);
-    await pg.goto(BASEURL + '?plan=leer');
-    await pg.waitForFunction(() => document.querySelector('.bz-lab'), null, { timeout: 20000 }).catch(() => {});
-    const v = await vorgaenge();
-    return v === '353' ? true : 'nach dem Neuladen: «' + v + '»';
+  // Maßgeblich ist der SERVER, nicht die Anzeige: nach dem Neuladen könnte die App die lokale Kopie zeigen.
+  // Darum je Collection die Datensätze der neuen plan_id per Superuser zählen (Summe = 407 laut Fixture).
+  await check('Import mit Limits: der Server hat alle 407 Datensätze (je Collection per Superuser gezählt)', async () => {
+    const planId = await pg.evaluate(() => localStorage.getItem('bzp_active'));
+    if (!planId) return 'keine aktive plan_id im Browser';
+    const je = {}; let summe = 0;
+    for (const coll of ['plaene', 'ressourcen', 'gewerke', 'vorgaenge', 'phasen', 'verknuepfungen']) {
+      const r = await rl.pb.su('GET', `/api/collections/${coll}/records?perPage=1&skipTotal=false&filter=${encodeURIComponent(`plan_id="${planId}"`)}`);
+      if (!r.ok) return coll + ': HTTP ' + r.status + ' ' + JSON.stringify(r.body).slice(0, 120);
+      je[coll] = r.body.totalItems; summe += r.body.totalItems;
+    }
+    // Soll je Collection aus der Fixture (385 Zeilen = 353 Vorgänge der Kennzahl + Meilensteine/Unterzeilen), nicht geraten
+    const fx = JSON.parse(readFileSync(join(FIXTURES, 'klassentreffen-festival.json'), 'utf8'));
+    const soll = { plaene: 1, ressourcen: (fx.project.ressourcen || []).length, gewerke: fx.gewerke.length, vorgaenge: fx.tasks.length, phasen: (fx.phases || []).length, verknuepfungen: (fx.deps || []).length };
+    if (JSON.stringify(je) !== JSON.stringify(soll)) return 'Server ' + JSON.stringify(je) + ' statt ' + JSON.stringify(soll);
+    return summe === 407 ? true : 'Summe ' + summe + ' statt 407 (' + JSON.stringify(je) + ')';
   });
   console.log('  (429-Antworten während des Imports: ' + r429.length + ')');
   await c.close();

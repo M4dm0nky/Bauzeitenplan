@@ -55,7 +55,8 @@ if (process.argv.includes('--base') && !argBase) {
 }
 
 // Lokal = localhost/127.0.0.1: dort startet das Skript eine eigene PocketBase. Alles andere ist «fremd».
-const FREMD = !!argBase && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(argBase);
+const hostVon = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
+const FREMD = !!argBase && !['localhost', '127.0.0.1'].includes(hostVon(argBase));
 let server = null, BASE;
 if (argBase) {
   BASE = argBase.replace(/\/+$/, '');
@@ -826,6 +827,8 @@ for (const pg of PAGES) {
         const r = n.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) return s + ' unsichtbar';
         if (r.right > window.innerWidth + 1 || r.left < -1) return s + ' ragt aus dem Bild';
+        // Ausnahme #sync-state: eine Status-Marke (✓ gesendet / ⟳ sendet… / ⚠ offen) in Textzeilenhöhe, kein Dauer-Bedienelement;
+        // sie klickt nur im Konfliktfall. Die 40 px Höhe würden den Kopf (Grenze 300 px) sprengen.
         if (s !== '#sync-state' && r.height < 39.5) return s + ' nur ' + Math.round(r.height) + ' px hoch';
         return null;
       }).filter(Boolean), MUSS[modus]);
