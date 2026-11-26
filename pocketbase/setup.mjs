@@ -69,7 +69,7 @@ export async function richteEin(z, { trocken = false } = {}) {
   if (trocken) return { aktion: 'angelegt', id: null };
   const c = await http(z.url + '/api/collections/users/records', {
     method: 'POST', token,
-    body: { email: z.konto.email, emailVisibility: true, name: z.konto.name, password: z.konto.passwort, passwordConfirm: z.konto.passwort, verified: true, ...FLAGS },
+    body: { email: z.konto.email, name: z.konto.name, password: z.konto.passwort, passwordConfirm: z.konto.passwort, verified: true, ...FLAGS },
   });
   if (!c.ok) throw new Error('Konto anlegen fehlgeschlagen (Status ' + c.status + '): ' + JSON.stringify(c.body?.data || c.body?.message || ''));
   return { aktion: 'angelegt', id: c.body.id };

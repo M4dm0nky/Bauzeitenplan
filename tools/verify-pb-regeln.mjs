@@ -562,6 +562,11 @@ async function LOESCHEN(pb) {
   // Plan löschen: Kaskade, Neuanlage erbt nichts
   await api(pb, k.pl.token, 'POST', '/api/collections/einladungen/records', { plan_id: 'planA', email: 'z@bzp.test', rolle: 'betrachter', gewerke: [] });
   const pa = (await pb.su('GET', '/api/collections/plaene/records?filter=plan_id="planA"')).body.items[0];
+  // I4: Löschen nur durch Besitzer oder Superadmin (Migration 1700000004), nicht durch ein PL-Mitglied
+  verboten4(await api(pb, k.plmit.token, 'DELETE', `/api/collections/plaene/records/${pa.id}?rev=${pa.rev}`), 'I4: PL-Mitglied (nicht Besitzer) löscht den Plan');
+  verboten4(await api(pb, k.bearb.token, 'DELETE', `/api/collections/plaene/records/${pa.id}?rev=${pa.rev}`), 'I4: Bearbeiter löscht den Plan');
+  ok((await pb.su('GET', '/api/collections/plaene/records?filter=plan_id="planA"')).body.totalItems === 1, 'I4: der Plan ist nach den abgelehnten Löschversuchen unverändert da');
+  ok((await pb.su('GET', '/api/collections/vorgaenge/records?filter=plan_id="planA"')).body.totalItems > 0, 'I4: die Kaskade lief nicht (Vorgänge noch da)');
   status(await api(pb, k.pl.token, 'DELETE', `/api/collections/plaene/records/${pa.id}`), 409, 'Plan löschen ohne rev');
   status(await api(pb, k.pl.token, 'DELETE', `/api/collections/plaene/records/${pa.id}?rev=${pa.rev}`), 204, 'Plan löschen (Besitzer, mit rev)');
   const rest = {};
@@ -649,7 +654,8 @@ async function SERVERPLAN(pb) {
     ok(gotB.some((t) => t.coll === 'vorgaenge' && t.eid === a1.tasks[4].id && t.objekt === null), 'B bekommt das Löschen (objekt null)', JSON.stringify(gotB.map((t) => [t.coll, t.eid])));
     ok(gotB.some((t) => t.coll === 'gewerke' && t.eid === 'gneu' && t.objekt?.name === 'Neu'), 'B bekommt das neue Gewerk');
     ok(gotB.length === 3 && gotA.length === 0, 'sonst nichts', `B ${gotB.length}, A ${gotA.length}`);
-    // B hat den fremden Stand nachgezogen: sein nächstes Senden mit der gehörten rev klappt
+    // B hat den fremden Inhalt übernommen (die App meldet es per uebernommen): erst jetzt gilt die gehörte rev als Basis
+    for (const t of gotB) B.uebernommen(t.coll, t.eid, t.rev);
     const b0 = kl(a2); b0.tasks[3].title = 'von B';
     ok((await B.senden(aenderungen(a2, b0))).ok, 'B ändert X nach dem Realtime-Ereignis (rev nachgezogen)');
     await warte(800);

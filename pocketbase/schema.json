@@ -240,7 +240,7 @@
     "viewRule": "(@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || (@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id))",
     "createRule": "@request.auth.superadmin = true || (@request.auth.produktionsleitung = true && (@request.body.besitzer:isset = false || @request.body.besitzer = @request.auth.id))",
     "updateRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && (@collection.mitglieder.rolle ?= 'produktionsleitung' || @collection.mitglieder.rolle ?= 'bearbeiter')))) && (@request.body.plan_id:isset = false || @request.body.plan_id = plan_id) && (@request.auth.superadmin = true || @request.body.besitzer:isset = false || @request.body.besitzer = besitzer)",
-    "deleteRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id) || ((@collection.mitglieder.plan_id ?= plan_id && @collection.mitglieder.user_id ?= @request.auth.id) && @collection.mitglieder.rolle ?= 'produktionsleitung')))",
+    "deleteRule": "(@request.auth.id != '' && (@request.auth.superadmin = true || (@collection.plaene.plan_id ?= plan_id && @collection.plaene.besitzer ?= @request.auth.id)))",
     "name": "plaene",
     "type": "base",
     "fields": [

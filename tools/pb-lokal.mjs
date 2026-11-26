@@ -63,7 +63,7 @@ export async function startePb({ port, origins = '', appUrl = 'http://localhost:
   port = port || await freierPort();
   const dir = mkdtempSync(join(tmpdir(), 'bzp-pb-'));
   const admin = { email: 'admin@bzp.test', passwort: randomBytes(12).toString('hex') };
-  const gemeinsam = ['--dir', dir, '--hooksDir', join(WURZEL, 'pocketbase', 'pb_hooks'), '--migrationsDir', join(WURZEL, 'pocketbase', 'pb_migrations')];
+  const gemeinsam = ['--dir', dir, '--hooksDir', join(WURZEL, 'pocketbase', 'pb_hooks'), '--migrationsDir', join(WURZEL, 'pocketbase', 'pb_migrations'), '--automigrate=false'];
   // Migrationen laufen schon beim ersten Start/Superuser-Befehl; Fehler sofort sichtbar machen
   try {
     execFileSync(exe, ['superuser', 'upsert', admin.email, admin.passwort, ...gemeinsam], { stdio: 'pipe', timeout: 30000 });

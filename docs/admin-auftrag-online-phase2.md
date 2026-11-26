@@ -28,13 +28,14 @@ das Log lesen. Erst TEST, messen, dann LIVE.
 
 ### Was eingespielt wird
 
-Fünf Dateien aus dem öffentlichen Repo `M4dm0nky/Bauzeitenplan`, Ordner `pocketbase/`:
+Sechs Dateien aus dem öffentlichen Repo `M4dm0nky/Bauzeitenplan`, Ordner `pocketbase/`:
 
 | Datei | Ziel im Container | Wirkung |
 |---|---|---|
 | `pb_migrations/1700000001_schema.js` | `/app/pb_migrations/` | legt die Collections an (`plaene`, `mitglieder`, `einladungen`, `ressourcen`, `gewerke`, `vorgaenge`, `phasen`, `verknuepfungen`), Felder `superadmin`/`produktionsleitung` an `users`, alle API-Regeln |
 | `pb_migrations/1700000002_reset_mail.js` | `/app/pb_migrations/` | Reset-Mail der Konten verweist auf `login.html?reset=…` |
 | `pb_migrations/1700000003_ratelimits.js` | `/app/pb_migrations/` | hebt **nur** die Regel `*:create` von 20 auf **2000 je 5 s** (legt sie an, falls sie fehlt). `enabled` und die anderen Regeln (`*:auth`, `/api/batch`, `/api/`) fasst sie **nicht** an. |
+| `pb_migrations/1700000004_plan_loeschen.js` | `/app/pb_migrations/` | setzt **nur** `plaene.deleteRule`: einen Plan löschen darf nur der Besitzer oder der Superadmin (zuvor auch ein Mitglied «produktionsleitung»). Fasst sonst nichts an. |
 | `pb_hooks/main.pb.js` | Hooks-Volume `/app/pb_hooks/` | Revisionsprüfung, Rollen, Konten, Einladung (`POST /api/bzp/einladung`) |
 | `pb_hooks/hilfen.js` | Hooks-Volume `/app/pb_hooks/` | Hilfsfunktionen des Hooks (muss neben `main.pb.js` liegen) |
 
@@ -57,6 +58,7 @@ Gate: Diese Werte müssen **genau** stimmen, sonst nichts einspielen.
 7fa4baf2fe76f4dd90853f118b2cf93064dbe2d52093d31bdde564ec0a83d121  1700000001_schema.js
 9ef292de18e8ca6fecc46a2317604bcfbaad646acdb11dbd6b6de65043533701  1700000002_reset_mail.js
 b4e3928e9536c72bf5013388780bb480ad32005aefc0a6ce1022c18d7975b2cf  1700000003_ratelimits.js
+e033757076260624374a15549381754df594cd69277a4d359cb11382773c2efd  1700000004_plan_loeschen.js
 969d70621e96d00e27ef0c284a88dc5d944cb04ee468290f3889e187fc62e543  main.pb.js
 218fe878ca685d6ccc1c7d042047d2c185c4f588bff2bbcc141d070ab2d09ae2  hilfen.js
 ```
@@ -77,17 +79,19 @@ Variablen (Werte aus deiner Rückmeldung vom 23.11.):
 mkdir -p /tmp/bzp-phase2 && cd /tmp/bzp-phase2
 R=https://raw.githubusercontent.com/M4dm0nky/Bauzeitenplan/online/pocketbase
 for f in pb_migrations/1700000001_schema.js pb_migrations/1700000002_reset_mail.js \
-         pb_migrations/1700000003_ratelimits.js pb_hooks/main.pb.js pb_hooks/hilfen.js; do
+         pb_migrations/1700000003_ratelimits.js pb_migrations/1700000004_plan_loeschen.js \
+         pb_hooks/main.pb.js pb_hooks/hilfen.js; do
   curl -fsSL "$R/$f" -o "$(basename "$f")"
 done
 cat > SHA256SUMS <<'EOF'
 7fa4baf2fe76f4dd90853f118b2cf93064dbe2d52093d31bdde564ec0a83d121  1700000001_schema.js
 9ef292de18e8ca6fecc46a2317604bcfbaad646acdb11dbd6b6de65043533701  1700000002_reset_mail.js
 b4e3928e9536c72bf5013388780bb480ad32005aefc0a6ce1022c18d7975b2cf  1700000003_ratelimits.js
+e033757076260624374a15549381754df594cd69277a4d359cb11382773c2efd  1700000004_plan_loeschen.js
 969d70621e96d00e27ef0c284a88dc5d944cb04ee468290f3889e187fc62e543  main.pb.js
 218fe878ca685d6ccc1c7d042047d2c185c4f588bff2bbcc141d070ab2d09ae2  hilfen.js
 EOF
-sha256sum -c SHA256SUMS          # alle fünf «OK», sonst STOPP und Marco melden
+sha256sum -c SHA256SUMS          # alle sechs «OK», sonst STOPP und Marco melden
 ```
 
 (Ist der Branch `online` schon in `main` gemergt, steht dasselbe unter `main`; die Prüfsummen gelten
@@ -122,6 +126,7 @@ docker exec "$CT" mkdir -p /app/pb_migrations
 docker cp 1700000001_schema.js     "$CT":/app/pb_migrations/
 docker cp 1700000002_reset_mail.js "$CT":/app/pb_migrations/
 docker cp 1700000003_ratelimits.js "$CT":/app/pb_migrations/
+docker cp 1700000004_plan_loeschen.js "$CT":/app/pb_migrations/
 docker restart "$CT"
 sleep 8
 docker logs --tail 40 "$CT"       # keine Fehlerzeile zu Migration oder Hook
@@ -231,7 +236,7 @@ Dein Zugriff ist dafür nicht nötig, und es gehen **keine Passwörter** über d
 
 - Application URL, Rate Limiting (an), User-IP-Proxy-Header (`X-Forwarded-For`, **rechter** Eintrag, nicht auf
   «leftmost» stellen), CORS-Datei, Backups, Mail-Einstellungen. Die einzige Änderung an den Einstellungen
-  ist die Migration `1700000003`.
+  ist die Migration `1700000003` (Rate Limit); `1700000004` ändert nur die Löschregel von `plaene`.
 - Keine Collections oder Regeln von Hand in `/_/` ändern: Sie würden beim nächsten Redeploy oder bei einer
   Migration überschrieben, und die Regeln sind die erste Sicherheitsschranke.
 - Der Crewplaner bleibt unberührt.
@@ -242,7 +247,7 @@ Bitte als Datei `docs/rueckmeldung-online-phase2-<datum>.md` (oder per Mail), **
 
 | | TEST | LIVE |
 |---|---|---|
-| `sha256sum -c` alle fünf OK | ☐ | ☐ |
+| `sha256sum -c` alle sechs OK | ☐ | ☐ |
 | Backup vor dem Einspielen (Pfad, `integrity_check` = ok) | ☐ | ☐ |
 | Ordner der Migrationen im Container (`/app/pb_migrations` oder anderer) | | |
 | Vorher: `plaene` 404, Hook 404 | ☐ | ☐ |
@@ -252,6 +257,14 @@ Bitte als Datei `docs/rueckmeldung-online-phase2-<datum>.md` (oder per Mail), **
 | `/api/health` = 200, Crewplaner-Gegenprobe = 200 | ☐ | ☐ |
 | Teil B: App umgestellt/angelegt (Branch `live`, Port 80, Auto-Deploy) | — | ☐ |
 | Teil B: Messungen (Cache-Header, `/healthz`, `/docs/` 404, CORS) | — | ☐ |
+
+## Bitte an Marco/Robs: Token-Laufzeit für den Wandmonitor
+
+Der Live-Monitor läuft tagelang ohne Bedienung und erneuert sein Anmelde-Token selbst alle 6 Stunden. Damit ein
+Monitor nach einer längeren Pause (Wochenende, Server-Neustart) nicht abgemeldet ist, bitte in PocketBase unter
+`users` → Optionen → «Auth token duration» eine **lange Laufzeit** einstellen (z. B. 30 Tage statt der
+PocketBase-Vorgabe; Marco entscheidet über den Wert). Das ist eine Einstellung der
+Collection `users`, **keine** Migration, und wird nicht still per Skript gesetzt.
 
 ## Offen aus Phase 1 (unverändert)
 
