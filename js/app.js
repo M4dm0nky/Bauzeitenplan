@@ -9,7 +9,7 @@ import { createPb, apiBasis, ERNEUERN_MS } from './pb.js';
 import { createServerPlan, listePlaene } from './server.js';
 import { rechteFehler, darfPlanAnlegen } from './rechte.js';
 import { anwenden, umkehren, aenderungen, istLeer, zerlegen, zusammensetzen } from './aenderungen.js';
-import { eintragTitel, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen } from './konflikt.js';
+import { eintragTitel, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen, offeneSchluessel, uebernehmeOhneOffene } from './konflikt.js';
 import { TEMPLATES, planFromTemplate } from './templates.js';
 import { createGantt } from './gantt.js';
 import { createTable } from './table.js';
@@ -482,6 +482,11 @@ let offline = false;
 let wartend = 0;             // eigene Änderungen, die noch nicht beim Server angekommen sind
 let konfliktOffen = false;   // ein Konfliktdialog wartet auf Antwort
 const geparkt = [];          // Konflikte, die mit «Abbrechen» offen blieben ({aend, konflikt})
+const unterwegs = [];        // Änderungslisten, die gerade gesendet werden (Schritt in `reihe` läuft)
+const gehalten = new Set();  // Fremdereignisse für Datensätze mit offener eigener Änderung (coll|eid)
+// Datensätze, die eine eigene, noch nicht abgeschlossene Änderung berühren: sie darf kein
+// Fremdstand überschreiben (nie still überschreiben), bis der Konflikt gelöst oder gesendet ist.
+const offeneEigene = () => offeneSchluessel([...unterwegs, ...(server ? server.offen : []), ...geparkt.map((p) => p.aend)]);
 let ablauf = Promise.resolve();
 const reihe = (fn) => { const p = ablauf.then(fn); ablauf = p.catch((e) => console.error(e)); return p; };
 
@@ -507,6 +512,7 @@ function paintSpeicher() {
   if (!n) return;
   const st = speicherStand();
   n.dataset.state = st.s;
+  if (geparkt.length) n.dataset.klick = '1'; else delete n.dataset.klick;
   n.textContent = st.t;
   n.title = st.titel + (geparkt.length ? ' – anklicken, um den Konflikt zu klären' : '');
   n.setAttribute('aria-label', st.t.replace(/^\S+\s/, ''));
@@ -523,12 +529,18 @@ function sende(aend) {
   const srv = server;
   if (!srv) return;
   wartend++;
+  unterwegs.push(aend);
   paintSpeicher();
   reihe(async () => {
     try {
       if (srv !== server) return;
       await ergebnis(srv, await srv.senden(aend), aend);
-    } finally { wartend--; paintSpeicher(); }
+    } finally {
+      wartend--;
+      const i = unterwegs.indexOf(aend); if (i >= 0) unterwegs.splice(i, 1);
+      paintSpeicher();
+      freigeben();
+    }
   });
 }
 
@@ -552,6 +564,8 @@ async function ergebnis(srv, r, eigene) {
     }
     return;
   }
+  // Nach 20 Runden ohne Ende: nicht still aufgeben. Der Rest bleibt in der Warteschlange (offen (n)).
+  if (srv === server) await askDialog({ title: 'Senden nicht abgeschlossen', message: ['Die Änderungen ließen sich nach mehreren Versuchen nicht senden. Sie bleiben offen und gehen beim nächsten Senden mit.'], buttons: [{ label: 'OK', value: true, primary: true }] });
 }
 
 // Eine Änderungsliste lokal rückgängig machen, OHNE Undo-Eintrag (sie war nie gültig).
@@ -559,6 +573,8 @@ function zuruecknehmen(aend) {
   if (!aend || !store) return;
   const x = anwenden(store.state, umkehren(aend), { erzwingen: true });
   if (x.ok) store.applyRemote(x.state);
+  store.entferneEintrag(aend);   // ⌘Z soll keine Änderung «zurücknehmen», die nie gültig war
+  refreshChrome();
 }
 
 // Konfliktdialog je Art. Der Name des anderen steht nicht in den Daten (der Server speichert
@@ -605,11 +621,16 @@ async function loeseKonflikt(srv, r) {
 
 // Klick auf den Speicherstand: einen offen gelassenen Konflikt erneut stellen.
 function geparktesLoesen() {
-  const p = geparkt.shift();
+  const p = geparkt[0];
   if (!p || !server) return;
   const srv = server;
+  unterwegs.push(p.aend);       // bleibt «offen», solange der Dialog steht
+  geparkt.shift();
   paintSpeicher();
-  reihe(() => ergebnis(srv, { ok: false, konflikt: p.konflikt, aend: p.aend }));
+  reihe(async () => {
+    try { await ergebnis(srv, { ok: false, konflikt: p.konflikt, aend: p.aend }); }
+    finally { const i = unterwegs.indexOf(p.aend); if (i >= 0) unterwegs.splice(i, 1); paintSpeicher(); freigeben(); }
+  });
 }
 
 // ⌘Z / ⌘⇧Z: hat jemand den betroffenen Eintrag inzwischen geändert, fragt der Store nicht,
@@ -646,12 +667,36 @@ function fremdAnwenden() {
   const liste = fremdListe; fremdListe = [];
   if (!store || !server) return;
   if (liste.some((e) => e.coll === 'plaene' && e.objekt === null && e.eid === store.state.project.id)) { planWeg(); return; }
+  const offen = offeneEigene();
   const teile = zerlegen(store.state);
   for (const { coll, eid, objekt } of liste) {
     if (!teile[coll]) continue;
+    if (offen.has(coll + '|' + eid)) { gehalten.add(coll + '|' + eid); continue; }   // eigene Änderung offen: zurückhalten
     if (objekt === null) { if (coll !== 'plaene') teile[coll].delete(eid); } else teile[coll].set(eid, objekt);
   }
   store.applyRemote({ ...store.state, ...zusammensetzen(teile) });
+}
+
+// Zurückgehaltene Fremdereignisse, deren eigene Änderung erledigt ist: den DANN gültigen Stand vom
+// Server holen (hat meine Fassung gewonnen, bleibt sie; gilt die fremde, steht sie schon da).
+function freigeben() {
+  if (!gehalten.size || !server) return;
+  const offen = offeneEigene();
+  const frei = [...gehalten].filter((k) => !offen.has(k));
+  if (!frei.length) return;
+  for (const k of frei) gehalten.delete(k);
+  const srv = server;
+  reihe(async () => {
+    if (srv !== server) return;
+    const l = await srv.laden();
+    if (srv !== server || !l.ok) return;
+    uebernehmeStand(l.state);
+  });
+}
+// Server-Stand anwenden, ohne Datensätze mit offener eigener Änderung zu überschreiben.
+function uebernehmeStand(serverStand) {
+  const neu = uebernehmeOhneOffene(store.state, serverStand, offeneEigene());
+  if (!istLeer(aenderungen(store.state, neu))) store.applyRemote(neu);
 }
 
 // Der offene Plan wurde von jemand anderem gelöscht.
@@ -665,7 +710,7 @@ async function planWeg() {
 
 function schliesseServer() {
   if (stopAbo) { stopAbo(); stopAbo = null; }
-  clearTimeout(fremdTimer); fremdTimer = null; fremdListe = [];
+  clearTimeout(fremdTimer); fremdTimer = null; fremdListe = []; gehalten.clear(); unterwegs.length = 0;
   clearTimeout(wiederTimer); wiederTimer = null;
   server = null; offline = false;
   geparkt.length = 0;
@@ -688,7 +733,7 @@ async function abgleichen(srv) {
   if (l.offline) { setOffline(true); return; }
   if (!l.ok) return;
   rolle = l.rolle;
-  if (!istLeer(aenderungen(store.state, l.state))) store.applyRemote(l.state);
+  uebernehmeStand(l.state);     // Eingaben während des Ladens werden nicht überrollt
 }
 
 // Offline: alle 5 s prüfen, ob der Server wieder da ist (Task 10 baut darauf die Offline-Ansicht).

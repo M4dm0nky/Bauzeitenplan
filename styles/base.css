@@ -438,9 +438,10 @@ body { margin: 0; }
 .suche-leer, .suche-w { padding: 8px; font-size: .85em; opacity: .7; }
 /* Der Treffer in der Tabelle: kurz markiert, damit man ihn in 150 Zeilen findet. */
 .tb-r.is-treffer { outline: 2px solid var(--sel, currentColor); outline-offset: -2px; }
-.save-state { white-space: nowrap; }
 /* Sync-Symbol im Kopf: Zustand ok / wartet / fehler. Farben je Theme. */
-.sync-state { white-space: nowrap; cursor: default; line-height: 1; }
+.sync-state { white-space: nowrap; cursor: default; line-height: 1; font: inherit; background: none; }
+.sync-state[data-klick] { cursor: pointer; }
+.sync-state:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
 /* ── Tabellen-Editor ────────────────────────────────────────────────────────── */
 .tb { flex: 1; min-height: 0; overflow: auto; }

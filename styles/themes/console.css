@@ -243,10 +243,6 @@ kbd { font: inherit; border: 1px solid var(--rule-2); background: var(--panel2);
 .btn-warn { border-color: var(--crit); color: var(--crit); }
 .btn-warn:hover { background: var(--crit); color: #fff; }
 .btn:disabled, .seg button:disabled { opacity: .35; cursor: default; }
-.save-state { font-size: calc(8.5px * var(--fs)); letter-spacing: .08em; text-transform: uppercase; padding: 3px 7px; border: 1px solid var(--rule-2); }
-.save-state[data-state="saved"] { color: var(--muted); }
-.save-state[data-state="dirty"] { color: var(--accent); border-color: var(--accent); }
-.save-state[data-state="error"] { color: #fff; background: var(--crit); border-color: var(--crit); font-weight: 700; }
 .legend { padding: 0 16px 9px; }
 
 /* Konflikt */

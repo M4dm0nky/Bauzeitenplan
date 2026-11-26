@@ -271,11 +271,14 @@ async function nodeClient(pb, email, passwort) {
   return createPb({ basis: pb.url, fetch, speicher: sp, autostart: false });
 }
 // Browserkontext, bereits angemeldet (bzp_auth wie nach login.html); blockRealtime kappt die SSE-Strecke
-async function nutzer(browser, pb, email, passwort, { blockRealtime = false } = {}) {
+async function nutzer(browser, pb, email, passwort, { blockRealtime = false, batchMs = 0 } = {}) {
   const a = await anmeldenRoh(pb.url, email, passwort);
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block', acceptDownloads: true });
   await ctx.addInitScript((v) => { try { if (!localStorage.getItem('bzp_seeded')) { localStorage.setItem('bzp_seeded', '1'); localStorage.setItem('bzp_auth', v); } } catch (e) { /* egal */ } }, JSON.stringify({ token: a.token, record: a.record }));
   if (blockRealtime) await ctx.route('**/api/realtime**', (r) => r.abort());
+  // Senden verzögern: fetch an /api/batch im Seitenkontext aufhalten. (page.route würde in Firefox auch die
+  // Realtime-Strecke (EventSource) puffern; hier läuft sie unberührt.)
+  if (batchMs) await ctx.addInitScript((ms) => { const f = window.fetch.bind(window); window.fetch = (u, o) => (String(u && u.url || u).includes('/api/batch') ? new Promise((r) => setTimeout(r, ms)).then(() => f(u, o)) : f(u, o)); }, batchMs);
   const page = await ctx.newPage();
   page.on('dialog', (d) => { ok(false, 'Browser-Dialog erschienen: ' + d.type()); d.dismiss(); });
   page.on('pageerror', (e) => ok(false, 'Seitenfehler: ' + e.message));
@@ -402,6 +405,29 @@ async function ZWEI_NUTZER({ pb, base, browser }) {
     await A.page.keyboard.press('Control+z');
     await dlgKnopf(A.page, 'Abbrechen').click();
     ok((await titel(A.page, Z).inputValue()) === 'B: Z vier', 'A: Undo-Konflikt «Abbrechen» ändert nichts');
+    // 6) Fremdänderung überschreibt keine offene eigene Änderung (Realtime LÄUFT bei E, nur dessen Senden ist verzögert)
+    const E = await nutzer(browser, pb, 'bearb@bzp.test', PW, { batchMs: 3500 }); ctxs.push(E.ctx);
+    await planOeffnen(E.page, base, pb);
+    await warte(1500);
+    await titelSetzen(E.page, X, 'E: mein Wert');          // Senden hängt 3,5 s
+    await warte(400);
+    // Zweimal: das Ereignis mit der rev, die Es eigenes Senden erwartet (Echo-Schlüssel), schluckt server.js;
+    // erst das zweite (rev+2) kommt als Fremdereignis bei E an.
+    await titelSetzen(A.page, X, 'A: kommt dazwischen');
+    await gesendet(A.page);
+    await titelSetzen(A.page, X, 'A: und nochmal');
+    await gesendet(A.page);
+    await warte(1500);                                      // As Ereignis ist längst bei E angekommen
+    ok((await titel(E.page, X).inputValue()) === 'E: mein Wert', 'E: Realtime-Ereignis überschreibt die offene eigene Änderung nicht');
+    await E.page.locator('.dlg:not([hidden]) .dlg-h').first().waitFor({ timeout: 10000 });
+    ok(/wurde gerade von jemand anderem geändert/.test(await E.page.locator('.dlg:not([hidden]) .dlg-h').first().textContent()), 'E: Konfliktdialog');
+    ok((await titel(E.page, X).inputValue()) === 'E: mein Wert', 'E: Bildschirm zeigt im Dialog den eigenen Wert');
+    await dlgKnopf(E.page, 'Meine behalten').click();
+    await gesendet(E.page);
+    await warte(1200);
+    ok((await titel(E.page, X).inputValue()) === 'E: mein Wert', 'E: nach «Meine behalten» zeigt der Bildschirm den eigenen Wert');
+    ok((await serverTitel(pb, planId, X)) === 'E: mein Wert', 'Server: Es Wert nach «Meine behalten»');
+    ok(await wertBis(A.page, X, 'E: mein Wert'), 'A sieht Es Wert');
     // Ein Betrachter darf nicht ändern
     const betr = await kontoAnlegen(pb, { email: 'betr@bzp.test', name: 'Bea', passwort: PW });
     await pb.su('POST', '/api/collections/mitglieder/records', { plan_id: planId, user_id: betr.id, rolle: 'betrachter', gewerke: [] });
@@ -411,7 +437,7 @@ async function ZWEI_NUTZER({ pb, base, browser }) {
     await D.page.locator('#toast').waitFor({ state: 'visible', timeout: 3000 });
     ok(/Nur ansehen: du bist Betrachter/.test(await D.page.locator('#toast').textContent()), 'Betrachter: «Nur ansehen: du bist Betrachter.»');
     await warte(800);
-    ok((await serverTitel(pb, planId, X)) === 'A: Konfliktwert', 'Betrachter: Server unverändert');
+    ok((await serverTitel(pb, planId, X)) === 'E: mein Wert', 'Betrachter: Server unverändert');
     await A.page.screenshot({ path: join(shots, 'mehrbenutzer-kopfzeile.png') });
   } finally { for (const c of ctxs) await c.close().catch(() => {}); }
 }

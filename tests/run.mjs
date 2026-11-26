@@ -206,7 +206,10 @@ check('gantt.js liest keine erfundene Gewerk-Eigenschaft (g.light)', () => {
 check('GitHub-Sync entfernt: js/sync.js existiert nicht, kein bzp_sync in js/', () => {
   if (existsSync(join(root, 'js/sync.js'))) return 'js/sync.js existiert noch';
   const treffer = readdirSync(join(root, 'js')).filter((f) => f.endsWith('.js') && readFileSync(join(root, 'js', f), 'utf8').includes('bzp_sync'));
-  return treffer.length ? 'bzp_sync in js/' + treffer.join(', js/') : true;
+  if (treffer.length) return 'bzp_sync in js/' + treffer.join(', js/');
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const rest = ['sync-dlg', 'sync-oeffnen', 'save-state'].filter((x) => html.includes(x));
+  return rest.length ? 'index.html enthält noch: ' + rest.join(', ') : true;
 });
 
 check('die App holt keinen mitgelieferten Plan (kein BUNDLED/openBundled, fetch nur in der Erlaubnisliste, kein XHR/JSON-Import)', () => {

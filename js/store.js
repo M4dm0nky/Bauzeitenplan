@@ -1089,6 +1089,18 @@ export function createStore(initial, opt = {}) {
     undo,
     redo,
     markSaved() { dirty = false; },
+    // Den Verlaufseintrag einer Änderung entfernen, die nie gültig wurde (Server lehnte sie ab):
+    // ⌘Z soll sie nicht «zurücknehmen». Gesucht wird die Liste selbst (Undo/Redo-Stapel) bzw. ihr
+    // Gegenstück (eine Undo-/Redo-Änderung legt die umgekehrte Liste auf den Gegenstapel).
+    entferneEintrag(aend) {
+      const ziel = [JSON.stringify(aend), JSON.stringify(umkehren(aend))];
+      for (const st of [undoStack, redoStack]) {
+        for (let i = st.length - 1; i >= 0; i--) {
+          if (st[i] === aend || ziel.includes(JSON.stringify(st[i]))) { st.splice(i, 1); notify({ quelle: 'verlauf', aend: null }); return true; }
+        }
+      }
+      return false;
+    },
     // Fremde Änderung übernehmen: kein Undo-Eintrag, nicht ungesichert, Stapel bleiben.
     applyRemote(next) {
       const alt = state;

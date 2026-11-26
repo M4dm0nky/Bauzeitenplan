@@ -238,10 +238,6 @@ kbd { font-family: var(--mono); border: 1px solid var(--rule-2); background: var
 .btn-warn { border-color: var(--crit); color: var(--crit); }
 .btn-warn:hover { background: var(--crit); color: #fff; }
 .btn:disabled, .seg button:disabled { opacity: .35; cursor: default; }
-.save-state { font-family: var(--mono); font-size: calc(8.5px * var(--fs)); letter-spacing: .06em; text-transform: uppercase; padding: 3px 7px; border: 1px solid var(--rule-2); }
-.save-state[data-state="saved"] { color: var(--muted); }
-.save-state[data-state="dirty"] { color: var(--ink); border-color: var(--ink); }
-.save-state[data-state="error"] { color: #fff; background: var(--crit); border-color: var(--crit); font-weight: 700; }
 .legend { padding: 0 18px 9px; }
 
 /* Theme-Umschalter (Sonne/Mond) */

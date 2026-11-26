@@ -130,3 +130,32 @@ function ohneLoeschen(aend, konflikte) {
   }
   return aend;
 }
+
+/** Die Datensätze (coll|eid), die eine Liste von Änderungslisten berührt (anlegen, ändern, löschen). */
+export function offeneSchluessel(listen) {
+  const out = new Set();
+  for (const a of listen || []) {
+    for (const c of COLLS) {
+      const x = a?.[c]; if (!x) continue;
+      for (const o of x.anlegen || []) out.add(c + '|' + o.id);
+      for (const e of x.aendern || []) out.add(c + '|' + e.vorher.id);
+      for (const o of x.loeschen || []) out.add(c + '|' + o.id);
+    }
+  }
+  return out;
+}
+
+/** Fremden Stand übernehmen, aber Datensätze mit noch offener eigener Änderung behalten (nie still
+ *  überschreiben): für sie gilt der lokale Stand (auch «lokal gelöscht»). Ändert die Eingänge nicht. */
+export function uebernehmeOhneOffene(lokal, fremd, offene) {
+  if (!offene || !offene.size) return fremd;
+  const l = zerlegen(lokal), f = zerlegen(fremd);
+  for (const k of offene) {
+    const i = k.indexOf('|');
+    const c = k.slice(0, i), eid = k.slice(i + 1);
+    if (!f[c]) continue;
+    if (l[c].has(eid)) f[c].set(eid, KLON(l[c].get(eid)));
+    else if (c !== 'plaene') f[c].delete(eid);
+  }
+  return { ...fremd, ...zusammensetzen(f) };
+}

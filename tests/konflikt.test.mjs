@@ -1,7 +1,7 @@
 // Konfliktauflösung (js/konflikt.js) mit echten Datenformen: Plan aus den Fixtures,
 // Änderungslisten aus der echten aenderungen().
 import { aenderungen, anwenden, istLeer } from '../js/aenderungen.js';
-import { eintragTitel, konfliktArt, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen } from '../js/konflikt.js';
+import { eintragTitel, konfliktArt, gruppen, fremdUebernehmen, ohne, meineBehalten, wiederherstellen, offeneSchluessel, uebernehmeOhneOffene } from '../js/konflikt.js';
 import { deserialize } from '../js/persistence.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -113,6 +113,35 @@ test('Rundweg: Anna hat t1 geändert; «Ihre Fassung nehmen» + Rest senden ergi
   assert.equal(task(ergebnis, 't1').title, 'Von Anna');
   assert.equal(task(ergebnis, 't2').title, 'Auch meine');
   assert.deepEqual(aenderungen(stand, ergebnis), aenderungen(ergebnis, ergebnis));
+});
+
+test('offeneSchluessel: anlegen, ändern und löschen aller Listen', () => {
+  const n = kl(BASIS);
+  task(n, 't1').title = 'x';
+  n.tasks = n.tasks.filter((t) => t.id !== 't3');
+  const k = offeneSchluessel([aenderungen(BASIS, n), null]);
+  assert.ok(k.has('vorgaenge|t1') && k.has('vorgaenge|t3'));
+  assert.ok(!k.has('vorgaenge|t2'));
+  assert.equal(offeneSchluessel([]).size, 0);
+});
+
+test('uebernehmeOhneOffene: fremder Stand, aber Einträge mit offener eigener Änderung bleiben lokal', () => {
+  const fremd = kl(BASIS);
+  task(fremd, 't1').title = 'Fremd t1';
+  task(fremd, 't2').title = 'Fremd t2';
+  const lokal = kl(BASIS);
+  task(lokal, 't1').title = 'Mein t1';
+  const r = uebernehmeOhneOffene(lokal, fremd, new Set(['vorgaenge|t1']));
+  assert.equal(task(r, 't1').title, 'Mein t1', 'offen → lokal bleibt');
+  assert.equal(task(r, 't2').title, 'Fremd t2', 'nicht offen → fremd gilt');
+  assert.equal(task(fremd, 't1').title, 'Fremd t1', 'Eingang unverändert');
+  assert.equal(uebernehmeOhneOffene(lokal, fremd, new Set()), fremd, 'nichts offen → fremder Stand unverändert');
+});
+
+test('uebernehmeOhneOffene: lokal gelöschter, offener Eintrag bleibt gelöscht', () => {
+  const lokal = kl(BASIS); lokal.tasks = lokal.tasks.filter((t) => t.id !== 't1');
+  const r = uebernehmeOhneOffene(lokal, kl(BASIS), new Set(['vorgaenge|t1']));
+  assert.equal(task(r, 't1'), undefined);
 });
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen`);

@@ -1976,6 +1976,30 @@ test('Undo ohne tatsächliche Wirkung legt keinen leeren Eintrag auf den Gegenst
   assert.equal(s.canUndo, false);
   assert.equal(s.canRedo, false);
 });
+test('entferneEintrag: eine nie gültige Änderung bleibt nicht im Undo-Verlauf', () => {
+  const s = createStore(seed());
+  const gehoert = [];
+  s.subscribe((_st, info) => gehoert.push(info));
+  s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: 'Erste' });
+  s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: 'Zweite' });
+  const zweite = gehoert[1].aend;
+  assert.equal(s.entferneEintrag(zweite), true);
+  assert.equal(s.entferneEintrag(zweite), false, 'zweimal nichts mehr zu entfernen');
+  assert.equal(s.canUndo, true, 'die erste Änderung bleibt im Verlauf');
+  assert.deepEqual(s.undo({ erzwingen: true }), { ok: true });
+  assert.equal(s.canUndo, false, 'nur die erste Änderung war im Verlauf (die zweite wurde entfernt)');
+});
+test('entferneEintrag findet auch den Gegeneintrag einer Undo-Änderung (Redo-Stapel)', () => {
+  const s = createStore(seed());
+  const gehoert = [];
+  s.subscribe((_st, info) => gehoert.push(info));
+  s.apply({ type: 'setTaskField', id: 'a', field: 'title', value: 'Neu' });
+  s.undo();
+  const undoAend = gehoert[1].aend;
+  assert.equal(s.canRedo, true);
+  assert.equal(s.entferneEintrag(undoAend), true);
+  assert.equal(s.canRedo, false);
+});
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);
