@@ -273,13 +273,11 @@ Bitte als Datei `docs/rueckmeldung-online-phase2-<datum>.md` (oder per Mail), **
 | Teil B: App umgestellt/angelegt (Branch `live`, Port 80, Auto-Deploy) | — | ☐ |
 | Teil B: Messungen (Cache-Header, `/healthz`, `/docs/` 404, CORS) | — | ☐ |
 
-## Bitte an Marco/Robs: Token-Laufzeit für den Wandmonitor
+## Token-Laufzeit: entschieden, nichts zu tun
 
-Der Live-Monitor läuft tagelang ohne Bedienung und erneuert sein Anmelde-Token selbst alle 6 Stunden. Damit ein
-Monitor nach einer längeren Pause (Wochenende, Server-Neustart) nicht abgemeldet ist, bitte in PocketBase unter
-`users` → Optionen → «Auth token duration» eine **lange Laufzeit** einstellen (z. B. 30 Tage statt der
-PocketBase-Vorgabe; Marco entscheidet über den Wert). Das ist eine Einstellung der
-Collection `users`, **keine** Migration, und wird nicht still per Skript gesetzt.
+Marco hat am 27.11. entschieden: **PocketBase-Vorgabe 7 Tage bleibt.** Auf TEST und LIVE nichts einstellen.
+(Der Monitor erneuert sein Token selbst alle 6 Stunden, solange er läuft; wer länger als 7 Tage nicht in der App
+war, meldet sich neu an.)
 
 ## Offen aus Phase 1 (unverändert)
 
