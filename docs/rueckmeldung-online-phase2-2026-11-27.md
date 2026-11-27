@@ -1,36 +1,40 @@
-# Rückmeldung: Bauzeitenplan online, Phase 2 – Teil A auf TEST
+# Rückmeldung: Bauzeitenplan online, Phase 2 – Teil A auf TEST und LIVE
 
-**An:** Marco · **Von:** Server-Admin (Robs) · **Stand:** 2026-11-27
-**Bezug:** [`admin-auftrag-online-phase2.md`](https://github.com/M4dm0nky/Bauzeitenplan/blob/online/docs/admin-auftrag-online-phase2.md) (Branch `online`, Stand `22d18d6`)
+**An:** Marco · **Von:** Server-Admin (Robs) · **Stand:** 2026-11-27, 14:15 Uhr
+**Bezug:** [`admin-auftrag-online-phase2.md`](admin-auftrag-online-phase2.md) (TEST nach Stand `22d18d6` auf
+Branch `online`, LIVE nach Stand `main` `3e9f886`)
 
-**TEST läuft.** Migrationen und Hooks sind eingespielt, alle Messungen sind wie erwartet, und es gab
-keine Laufzeitfehler. Auf deinen Wunsch ist das **nur TEST**. LIVE, die statische Seite auf
-`callboard.nyxlightwork.de` und der Crewplaner sind unverändert (nachgemessen).
+**Teil A läuft auf TEST und auf LIVE.** Auf beiden Instanzen sind Migrationen und Hooks eingespielt, alle
+Messungen sind wie erwartet, und es gab keine Laufzeitfehler. Die statische Seite auf
+`callboard.nyxlightwork.de` ist unverändert, ebenso der Crewplaner (beides nachgemessen). Teil B wartet auf
+dein «`live` ist gepusht».
 
 ## Ergebnis
 
 | | TEST | LIVE |
 |---|---|---|
-| `sha256sum -c` alle sechs OK | ☑ (nach dem Download **und** direkt vor dem Kopieren noch einmal) | — |
-| Backup vor dem Einspielen | ☑ `data.db` + `auxiliary.db`, `integrity_check` = ok (Pfad unten) | — |
-| Ordner der Migrationen im Container | `/app/pb_migrations` (Image startet ohne `--migrationsDir`) | — |
-| Vorher: `plaene` 404, Hook 404 | ☑ 404 / 404 | ☑ (heute noch so) |
-| Nachher: `plaene` 200 leer, Hook 400 «Einladung unbekannt…» | ☑ | — |
-| `verify-pb-regeln.mjs --gegen` = «alles wie erwartet» | ☑ 11 × ✓, Exit 0 | — |
-| `*:create` = 2000 / 5 s | ☑ (direkt in der Datenbank gelesen, siehe unten) | — |
+| `sha256sum -c` alle sechs OK | ☑ (nach dem Download **und** direkt vor dem Kopieren noch einmal) | ☑ ebenso, Dateien frisch von `main` geladen |
+| Backup vor dem Einspielen | ☑ `data.db` + `auxiliary.db`, `integrity_check` = ok | ☑ `data.db` + `auxiliary.db`, `integrity_check` = ok |
+| Ordner der Migrationen im Container | `/app/pb_migrations` (Image startet ohne `--migrationsDir`) | `/app/pb_migrations` (ebenso) |
+| Vorher: `plaene` 404, Hook 404 | ☑ 404 / 404 | ☑ 404 / 404 |
+| Nachher: `plaene` 200 leer, Hook 400 «Einladung unbekannt…» | ☑ | ☑ |
+| `verify-pb-regeln.mjs --gegen` = «alles wie erwartet» | ☑ 11 × ✓, Exit 0 | ☑ 11 × ✓, Exit 0 |
+| `*:create` = 2000 / 5 s | ☑ (direkt in der Datenbank gelesen, siehe unten) | ☑ (ebenso) |
 | `/api/health` = 200, Crewplaner-Gegenprobe = 200 | ☑ / ☑ | ☑ / ☑ |
 | Teil B | — | wartet auf dein Zeichen |
 
-Eingespielt am 27.11. um 08:13 Uhr. Alle vier Migrationen stehen in `_migrations`, angewendet um
-08:13:51. Der Container ist healthy, `RestartCount` 0.
+**TEST** wurde am 27.11. um 08:13 Uhr eingespielt, **LIVE** am 27.11. um 14:14 Uhr. Auf beiden stehen alle
+vier Migrationen in `_migrations`, die Container sind healthy und haben `RestartCount` 0. Auf LIVE gab es
+vorher genau einen Superuser (dich) und null Konten in `users`. Danach ist es genauso.
 
-## Was genau sich geändert hat
+## Was genau sich geändert hat (auf beiden Instanzen gleich)
 
 **Collections:** neu `plaene`, `mitglieder`, `einladungen`, `ressourcen`, `gewerke`, `vorgaenge`,
 `phasen`, `verknuepfungen`. An `users` sind `superadmin` und `produktionsleitung` dazugekommen.
 
 **Einstellungen.** Ich habe sie vor und nach dem Einspielen verglichen
-(`meta`, `rateLimits`, `trustedProxy`, `batch`). Es gibt genau diese Unterschiede:
+(`meta`, `rateLimits`, `trustedProxy`, `batch`, auf LIVE zusätzlich `smtp`). Es gibt genau diese
+Unterschiede, auf TEST und LIVE identisch:
 
 | Einstellung | vorher | nachher | aus |
 |---|---|---|---|
@@ -39,64 +43,61 @@ Eingespielt am 27.11. um 08:13 Uhr. Alle vier Migrationen stehen in `_migrations
 | `batch.maxRequests` | 50 | **2000** | `1700000001` |
 | `batch.timeout` | 3 s | **30 s** | `1700000001` |
 
-Unverändert sind Application name und URL, `rateLimits.enabled` (an), `*:auth`, `/api/batch`,
-`/api/`, die Proxy-Header (`X-Forwarded-For`, rechter Eintrag) und Mail (aus).
-
-> **Kleine Abweichung vom Auftrag, nur zur Info:** Dort steht, `1700000003` sei die *einzige* Änderung
-> an den Einstellungen. Die Schema-Migration `1700000001` schaltet aber zusätzlich die **Batch-API**
-> ein (Zeilen 108–113). Das ist für die App nötig und in Ordnung, gehört aber in den Auftrag für LIVE,
-> damit dort niemand über den Diff stolpert.
+Unverändert sind Application name und URL, `rateLimits.enabled` (an), `*:auth`, `/api/batch`, `/api/` und
+die Proxy-Header (`X-Forwarded-For`, rechter Eintrag). Auch die Mail-Einstellungen sind unverändert: auf TEST
+aus, auf LIVE der SMTP-Eintrag für Resend, siehe «Offen».
 
 **Hook-Laufzeit:** In `_logs` gibt es seit dem Einspielen keinen `ReferenceError`, `TypeError`,
-`SyntaxError` und kein «Something went wrong». Die einzigen zwei Einträge mit Level 8 sind meine
-Kontrollaufrufe an `/api/bzp/einladung` (400, gewollt).
+`SyntaxError` und kein «Something went wrong». Die einzigen Einträge mit Level 8 sind meine
+Kontrollaufrufe an `/api/bzp/einladung` (400, gewollt): zwei auf TEST, zwei auf LIVE.
 
-**CORS** ist unverändert: `https://m4dm0nky.github.io` wird gespiegelt, eine fremde Origin bekommt keinen
-Header. Das gilt jetzt auch für die neuen Collections, gemessen an `plaene`.
+**CORS** ist unverändert. Auf TEST wird `https://m4dm0nky.github.io` gespiegelt, auf LIVE
+`https://callboard.nyxlightwork.de`. Eine fremde Origin bekommt keinen Header. Das gilt jetzt auch für die
+neuen Collections, gemessen an `plaene`.
 
-## Wie ich es gemacht habe (Abweichungen vom Ablauf)
+## Wie ich es gemacht habe
 
-1. **Reihenfolge beim Kopieren:** erst die vier Migrationen, dann `hilfen.js`, **dann** `main.pb.js`,
-   danach `docker restart`. PocketBase überwacht das Hooks-Verzeichnis und startet sich schon beim
-   Kopieren von `main.pb.js` selbst neu (`File … changed, restarting…`). Läge `hilfen.js` in dem Moment
-   noch nicht da, liefe für ein paar Sekunden ein Hook ohne seine Hilfen. Im Auftrag steht
-   `cp main.pb.js hilfen.js`, also umgekehrt.
-2. **Backup nicht in `/root/backups/bauzeitenplan-pb/`,** sondern in einem eigenen Ordner
-   `/root/backups/bauzeitenplan-pb-phase2-2026-11-27-0813/`, zusammen mit beiden Datenbanken, den
-   Einstellungen vorher und nachher und der Collection-Liste. Grund: Im Live-Ordner räumt die tägliche
-   Sicherung nach 7 Tagen auf, und der Rückweg soll nicht von dieser Rotation abhängen.
-3. **Auch `auxiliary.db` gesichert,** nicht nur `data.db`.
-4. **Die Dateien habe ich vorher gelesen,** nicht nur die Prüfsummen verglichen. Darin gibt es keine
-   Shell- oder Netzaufrufe, gelöscht wird nur in der Rückweg-Migration von `1700000001`. Auch beim
-   Prüfwerkzeug habe ich vorher nachgesehen, dass `--gegen` nur liest.
-5. `/tmp/bzp-phase2` ist schon gelöscht. Für LIVE lade ich die Dateien neu und prüfe sie wieder gegen die
-   Prüfsummen.
+Auf LIVE genau nach dem überarbeiteten Auftrag, also mit derselben Kopierreihenfolge
+(`hilfen.js` vor `main.pb.js`), Backup im eigenen Ordner mit `auxiliary.db`, Einstellungen vorher und
+nachher sowie Collection-Liste daneben. Ein paar Kleinigkeiten zusätzlich bzw. anders als im Auftrag:
+
+1. **Download von `main` statt `online`:** Der Branch ist gemergt, und die Prüfsummen haben es bestätigt.
+   Es sind dieselben sechs Dateien wie auf TEST.
+2. **Backup-Ordner** für LIVE `/root/backups/bauzeitenplan-pb-phase2-live-2026-11-27-1414/`, für TEST
+   `/root/backups/bauzeitenplan-pb-phase2-2026-11-27-0813/`. Beide liegen außerhalb der 7-Tage-Rotation.
+3. **Vorher-Zustand als Gate:** Hätte LIVE vor dem Kopieren nicht 404/404 geliefert, hätte das Skript
+   abgebrochen.
+4. **Prüfwerkzeug** aus `main` (`3e9f886`). Ich habe nachgesehen, dass `verify-pb-regeln.mjs` seit der
+   TEST-Prüfung unverändert ist, also weiterhin nur liest.
+5. `/tmp/bzp-phase2` ist nach LIVE gelöscht.
+
+**Zur Version 1.0.0 auf `main`:** Die statische Seite deployt nicht automatisch. Sie läuft unverändert aus
+dem Container vom Juli und hat deinen Merge also nicht mitgenommen. Erst Teil B stellt die Seite um.
 
 ## Gut zu wissen
 
 - **Die Migrationsdateien liegen nur im Container,** nicht in einem Volume. Bei jedem Recreate durch
-  Coolify, zum Beispiel einem Redeploy, sind sie weg. Das ist, wie du schreibst, unschädlich, weil
-  `_migrations` sie schon als angewendet führt. **Folge für künftige Migrationen:** Jede neue Datei
-  muss wieder per `docker cp` hinein. Ein Redeploy bringt sie nicht mit, und ein `ls
-  /app/pb_migrations` nach einem Recreate ist leer, auch wenn alles in Ordnung ist.
+  Coolify, zum Beispiel bei einem Redeploy, sind sie weg. Das ist unschädlich, weil `_migrations` sie als
+  angewendet führt. Jede **neue** Migration muss aber wieder per `docker cp` hinein.
 - **Die Einstellungen habe ich nicht mit Superuser-Token geprüft** (`PB_SU_TOKEN` bleibt bei dir), sondern
-  direkt aus der Datenbank gelesen (`_params`, nur lesend): `*:create` 2000/5 s, Rate Limiting an,
-  Application URL `https://m4dm0nky.github.io/Bauzeitenplan/` mit Schrägstrich am Ende. Den
-  Lesemodus mit Token kannst du jederzeit selbst zusätzlich laufen lassen.
+  direkt aus der Datenbank gelesen (`_params`, nur lesend). Den Lesemodus mit Token kannst du jederzeit
+  zusätzlich laufen lassen.
+- **Token-Laufzeit:** Die Vorgabe von 7 Tagen bleibt laut deiner Entscheidung, ich habe nichts eingestellt.
 
 ## Offen
 
-1. **Teil A auf LIVE:** auf dein Zeichen. Vorher bitte die Batch-Notiz oben in den Auftrag übernehmen.
-   Am Ablauf ändert sich nichts.
-2. **Teil B** (Coolify-App aus Branch `live`): erst auf dein Zeichen «`live` ist gepusht». Bis dahin bleibt
-   die heutige statische Seite, wie sie ist.
-3. **Teil C** (erstes Superadmin-Konto mit `setup.mjs`): dein Teil, auf TEST ab sofort möglich.
-4. **Token-Laufzeit für den Wandmonitor** (`users` → «Auth token duration»): Ich warte auf deinen Wert und
-   stelle es dann auf TEST und LIVE ein. Oder du machst es selbst in `/_/`.
-5. Aus Phase 1 unverändert: **Mailversand LIVE** und eine **Backup-Kopie außerhalb des Servers**.
+1. **Teil B** (Coolify-App aus Branch `live`): erst auf dein Zeichen «`live` ist gepusht». Bis dahin bleibt
+   die statische Seite, wie sie ist.
+2. **Teil C** (erstes Superadmin-Konto mit `setup.mjs`): dein Teil, ab sofort auf TEST und LIVE möglich.
+3. **Mailversand LIVE:** Die DNS-Einträge für Resend stehen, und SMTP ist in der LIVE-Instanz eingetragen
+   (Absender `no-reply@callboard.nyxlightwork.de`). Resend hat die Domain aber noch nicht als «Verified»
+   bestätigt. Bis dahin lehnt Resend den Versand ab, «Passwort vergessen» funktioniert also noch nicht.
+   Sobald die Domain verifiziert ist, schicke ich dir eine Testmail.
+4. **Backup-Kopie außerhalb des Servers** fehlt weiterhin.
 
-## Rückweg TEST
+## Rückweg
 
-`main.pb.js` und `hilfen.js` aus dem Hooks-Volume löschen, dann `docker restart`. Wenn die
-Collections auch weg sollen: Container stoppen, `data.db` und `auxiliary.db` aus dem Backup-Ordner oben
-zurückspielen, starten. Auf TEST gibt es noch keine Daten.
+`main.pb.js` und `hilfen.js` aus dem Hooks-Volume der jeweiligen Instanz löschen, dann `docker restart`.
+Wenn auch die Collections weg sollen: Container stoppen, `data.db` und `auxiliary.db` aus dem passenden
+Backup-Ordner oben zurückspielen, starten. Auf LIVE geht das ohne Verlust nur, solange dort noch keine echten
+Daten liegen, also bis zu deinem ersten Konto.
