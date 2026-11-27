@@ -242,7 +242,7 @@ async function nodeClient(pb, email, passwort) {
   return createPb({ basis: pb.url, fetch, speicher: sp, autostart: false });
 }
 // Browserkontext, bereits angemeldet (bzp_auth wie nach login.html); blockRealtime kappt die SSE-Strecke
-async function nutzer(browser, pb, email, passwort, { blockRealtime = false, batchMs = 0, batchSchalter = false, live = false } = {}) {
+async function nutzer(browser, pb, email, passwort, { blockRealtime = false, batchMs = 0, batchHalt = false, batchSchalter = false, live = false } = {}) {
   const a = await anmeldenRoh(pb.url, email, passwort);
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block', acceptDownloads: true });
   await ctx.addInitScript((v) => { try { if (!localStorage.getItem('bzp_seeded')) { localStorage.setItem('bzp_seeded', '1'); localStorage.setItem('bzp_auth', v); } } catch (e) { /* egal */ } }, JSON.stringify({ token: a.token, record: a.record }));
@@ -252,6 +252,8 @@ async function nutzer(browser, pb, email, passwort, { blockRealtime = false, bat
   // Senden verzögern: fetch an /api/batch im Seitenkontext aufhalten. (page.route würde in Firefox auch die
   // Realtime-Strecke (EventSource) puffern; hier läuft sie unberührt.)
   if (batchMs) await ctx.addInitScript((ms) => { const f = window.fetch.bind(window); window.fetch = (u, o) => (String(u && u.url || u).includes('/api/batch') ? new Promise((r) => setTimeout(r, ms)).then(() => f(u, o)) : f(u, o)); }, batchMs);
+  // Senden anhalten, bis der Test es freigibt (window.__batchHalt = false): lastunabhängig, anders als ein fester Zeitverzug.
+  if (batchHalt) await ctx.addInitScript(() => { window.__batchHalt = true; const f = window.fetch.bind(window); window.fetch = async (u, o) => { if (String(u && u.url || u).includes('/api/batch')) while (window.__batchHalt) await new Promise((r) => setTimeout(r, 50)); return f(u, o); }; });
   // Netzfehler beim Senden nachstellen: solange window.__batchNetz gesetzt ist, scheitert /api/batch wie ohne Netz
   // (Realtime bleibt unberührt, anders als bei page.route).
   if (batchSchalter) await ctx.addInitScript(() => { const f = window.fetch.bind(window); window.fetch = (u, o) => (window.__batchNetz && String(u && u.url || u).includes('/api/batch') ? Promise.reject(new TypeError('NetworkError')) : f(u, o)); });
@@ -358,7 +360,7 @@ async function ZWEI_NUTZER({ pb, base, browser }) {
     await gesendet(C.page);
     ok((await titel(C.page, Y).inputValue()) === 'C: ich bleibe', 'C: «Meine behalten» bleibt stehen');
     ok((await serverTitel(pb, planId, Y)) === 'C: ich bleibe', 'Server: Cs Fassung nach «Meine behalten»');
-    ok(await wertBis(A.page, Y, 'C: ich bleibe'), 'A bekommt Cs Fassung per Realtime');
+    ok(await wertBis(A.page, Y, 'C: ich bleibe', 10000), 'A bekommt Cs Fassung per Realtime');
 
     // 5) Undo-Konflikt: A ändert Z, B ändert Z danach, A macht rückgängig
     await titelSetzen(A.page, Z, 'A: Z eins');
@@ -384,19 +386,22 @@ async function ZWEI_NUTZER({ pb, base, browser }) {
     await A.page.locator('.dlg-act .btn', { hasText: 'Abbrechen' }).click();
     ok((await titel(A.page, Z).inputValue()) === 'B: Z vier', 'A: Undo-Konflikt «Abbrechen» ändert nichts');
     // 6) Fremdänderung überschreibt keine offene eigene Änderung (Realtime LÄUFT bei E, nur dessen Senden ist verzögert)
-    const E = await nutzer(browser, pb, 'bearb@bzp.test', PW, { batchMs: 3500 }); ctxs.push(E.ctx);
+    const E = await nutzer(browser, pb, 'bearb@bzp.test', PW, { batchHalt: true }); ctxs.push(E.ctx);
     await planOeffnen(E.page, base, pb);
     await warte(1500);
-    await titelSetzen(E.page, X, 'E: mein Wert');          // Senden hängt 3,5 s
-    await warte(400);
+    await titelSetzen(E.page, X, 'E: mein Wert');          // Senden steht, bis der Test es freigibt
     // Zweimal: das Ereignis mit der rev, die Es eigenes Senden erwartet (Echo-Schlüssel), schluckt server.js;
     // erst das zweite (rev+2) kommt als Fremdereignis bei E an.
     await titelSetzen(A.page, X, 'A: kommt dazwischen');
     await gesendet(A.page);
     await titelSetzen(A.page, X, 'A: und nochmal');
     await gesendet(A.page);
+    // Beide Änderungen müssen WIRKLICH auf dem Server stehen, bevor E sendet (gesendet() kann vor dem Senden schon grün sein)
+    let sv = null; for (let i = 0; i < 100 && sv !== 'A: und nochmal'; i++) { sv = await serverTitel(pb, planId, X); if (sv !== 'A: und nochmal') await warte(100); }
+    ok(sv === 'A: und nochmal', 'Server: As zwei Änderungen stehen, bevor E sendet', sv);
     await warte(1500);                                      // As Ereignis ist längst bei E angekommen
     ok((await titel(E.page, X).inputValue()) === 'E: mein Wert', 'E: Realtime-Ereignis überschreibt die offene eigene Änderung nicht');
+    await E.page.evaluate(() => { window.__batchHalt = false; });   // jetzt darf E senden: Konflikt
     await E.page.locator('.dlg:not([hidden]) .dlg-h').first().waitFor({ timeout: 10000 });
     ok(/wurde gerade von jemand anderem geändert/.test(await E.page.locator('.dlg:not([hidden]) .dlg-h').first().textContent()), 'E: Konfliktdialog');
     ok((await titel(E.page, X).inputValue()) === 'E: mein Wert', 'E: Bildschirm zeigt im Dialog den eigenen Wert');
