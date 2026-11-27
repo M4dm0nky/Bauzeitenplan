@@ -3,7 +3,7 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
-## Unveröffentlicht (Branch `online`)
+## 1.0.0 — 2026-11-27 — Online und Mehrbenutzer
 
 - **Online und Mehrbenutzer:** Die App läuft gegen PocketBase 0.40.6 (`pocketbase/`: Migrationen, Hook, `schema.json`). Anmeldung über `login.html` (Anmelden, Passwort vergessen, Einladung annehmen), Rollen je Plan (Superadmin, Besitzer, Produktionsleitung, Bearbeiter, Gewerkeleiter, Betrachter), Änderungen anderer erscheinen live (Realtime), gesendet wird mit Revisionsprüfung (`rev`), Konflikte fragen nach («von jemand anderem geändert»). Undo nimmt nur die eigenen Schritte zurück (patch-basiert, `js/aenderungen.js`). Neu: `js/pb.js`, `js/server.js`, `js/rechte.js`, `js/konflikt.js`, `js/login.js`, `login.html`.
 - **Offline nur Ansicht:** Ohne Netz oder bei Rolle Betrachter sperrt die App das Bearbeiten, der Live-Monitor zeigt die lokale Kopie weiter. `print.html` liest die lokale Kopie (vorher die App öffnen). Manuelles Abmelden löscht die lokalen Kopien der Server-Pläne.
