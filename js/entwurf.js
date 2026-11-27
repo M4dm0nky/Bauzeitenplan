@@ -101,7 +101,9 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
     const now = lesen();
     if (!now) return;
     const basis = e || { start: now.start ?? null, end: now.end ?? null };
-    const r = entwurfAendern(basis, feld, input.value, { nurZeit, tag: tag(), milestone: !!now.milestone });
+    // fest = das zuletzt angefasste ANDERE Feld (beruehrt ist nach Aktualität geordnet)
+    const fest = [...beruehrt].filter((f) => f !== feld).pop() || null;
+    const r = entwurfAendern(basis, feld, input.value, { nurZeit, tag: tag(), milestone: !!now.milestone, fest });
     fehlerEingabe = r.fehler || null;
     fehlerStore = null;
     const neu = { start: r.start, end: r.end };
@@ -114,11 +116,22 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
       return;
     }
     e = neu;
+    beruehrt.delete(feld);
     beruehrt.add(feld);
     // Beim Tippen (`input`) bleibt der getippte Text stehen, auch wenn er
     // unterwegs noch nichts ergibt («» auf dem Weg zu «6h»).
     malen(input === dauer && fehlerEingabe && !tippt ? null : input);
     melden();
+  }
+
+  // Weicht der Feldinhalt von dem ab, was der Entwurf zeigt? Nur dann ist da noch
+  // Getipptes, das nicht übernommen ist. Ein unberührtes Feld (zeigt «8h») darf
+  // beim ✓/Enter NICHT als frische Eingabe gelten, sonst überschriebe es das Ende.
+  function ausstehend(feld, input) {
+    const x = e || lesen();
+    if (!x) return false;
+    const soll = feld === 'start' ? zeige(x.start) : feld === 'end' ? zeige(x.end) : dauerText(x);
+    return input.value !== soll;
   }
 
   function bestaetigen() {
@@ -164,7 +177,7 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
     // Noch nicht abgegebener Feldinhalt zählt mit (Fokus liegt weiter im Feld).
     const a = document.activeElement;
     const f = felder.find(([i]) => i === a);
-    if (f && e) aendern(f[1], f[0]);
+    if (f && e && ausstehend(f[1], f[0])) aendern(f[1], f[0]);
     bestaetigen();
   });
   no.addEventListener('click', verwerfen);
@@ -179,7 +192,7 @@ export function entwurfBinden({ start, ende, dauer, gruppe, markiere, popIn, les
       ev.preventDefault();
       // Das `change` eines Textfelds kommt erst NACH diesem keydown — den
       // getippten Wert deshalb jetzt schon übernehmen.
-      aendern(f[1], f[0]);
+      if (!e || ausstehend(f[1], f[0])) aendern(f[1], f[0]);
       bestaetigen();
     });
     // Fokus verlässt die Felder → verwerfen. activeElement erst im nächsten Tick

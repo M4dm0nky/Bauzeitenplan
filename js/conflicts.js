@@ -150,6 +150,21 @@ export function endeNachStart(startISO, hhmm) {
   return local(d);
 }
 
+/** «HH:MM» am Vortag, Tag oder Folgetag von `bezugISO` — der zeitlich nächste der drei. */
+function naechsteUhrzeit(bezugISO, hhmm) {
+  const roh = mitUhrzeit(bezugISO, hhmm);
+  if (!roh) return null;
+  const bezug = toMin(bezugISO);
+  let best = null;
+  for (const tage of [-1, 0, 1]) {
+    const d = new Date(roh);
+    d.setDate(d.getDate() + tage);
+    const k = local(d);
+    if (best === null || Math.abs(toMin(k) - bezug) < Math.abs(toMin(best) - bezug)) best = k;
+  }
+  return best;
+}
+
 // ── Zeilen-Entwurf ──────────────────────────────────────────────────────────
 // Start, Ende und Dauer einer Zeile ändern zuerst nur einen ENTWURF; erst ✓
 // schickt EINEN moveTask. Hier die reine Rechnung dazu — der Entwurf ist
@@ -157,18 +172,22 @@ export function endeNachStart(startISO, hhmm) {
 
 /**
  * Ein Feld des Entwurfs ändern.
- * - start: bei vollständigem Entwurf wandert das Ende mit (Dauer bleibt).
- * - end:   nur das Ende; ohne Datum («22:00 bis 03:00») gilt der Folgetag.
- * - dauer: das Ende = Start + Dauer.
+ * Regel: «Was getippt wurde, gilt; das nicht angefasste Feld wird gerechnet.»
+ * `fest` ist das ZULETZT angefasste ANDERE Feld des Entwurfs (null = keines).
+ * - start: bei vollständigem Entwurf wandert das Ende mit (Dauer bleibt) —
+ *          außer `fest==='end'`: dann bleibt das getippte Ende, die Dauer ergibt sich.
+ * - end:   Start bleibt — außer `fest==='dauer'`: Start = Ende − Dauer (rückwärts).
+ *          Ohne Datum («22:00 bis 03:00») gilt der Folgetag.
+ * - dauer: das Ende = Start + Dauer — außer `fest==='end'`: Start = Ende − Dauer.
  * @param {{start:?string,end:?string}} e
  * @param {'start'|'end'|'dauer'} feld
  * @param {string} wert    Feldinhalt; bei `nurZeit` «HH:MM», sonst «JJJJ-MM-TTThh:mm»
- * @param {{nurZeit?:boolean, tag?:?string, milestone?:boolean}} opt  `tag` = Tag für ein Zeitfeld ohne Bezug;
+ * @param {{nurZeit?:boolean, tag?:?string, milestone?:boolean, fest?:?('start'|'end'|'dauer')}} opt  `tag` = Tag für ein Zeitfeld ohne Bezug;
  *   `milestone`: Start setzt auch das Ende (das Ende-Feld ist bei Meilensteinen gesperrt)
  * @returns {{start:?string,end:?string,fehler:?string}} `fehler` nur bei unlesbarer
  *   EINGABE (der Entwurf bleibt dann unverändert); die Spanne prüft entwurfFehler.
  */
-export function entwurfAendern(e, feld, wert, { nurZeit = false, tag = null, milestone = false } = {}) {
+export function entwurfAendern(e, feld, wert, { nurZeit = false, tag = null, milestone = false, fest = null } = {}) {
   const alt = { start: e.start ?? null, end: e.end ?? null };
   const unlesbar = (msg) => ({ ...alt, fehler: msg });
   const basis = alt.start || alt.end || (tag ? tag + 'T00:00' : null);
@@ -179,18 +198,24 @@ export function entwurfAendern(e, feld, wert, { nurZeit = false, tag = null, mil
     if (!ns || Number.isNaN(toMin(ns))) return unlesbar('Start nicht lesbar.');
     let end = alt.end;
     if (milestone) end = ns;   // ein Meilenstein hat keine Dauer: Ende = Start
+    else if (fest === 'end') end = alt.end;   // getipptes Ende gilt, die Dauer ergibt sich
     else if (alt.start && alt.end) end = local(toDate(toMin(ns) + (toMin(alt.end) - toMin(alt.start))));
     return { start: ns, end, fehler: null };
   }
   if (feld === 'end') {
     if (!roh) return { ...alt, end: null, fehler: null };
-    const ne = nurZeit ? (alt.start ? endeNachStart(alt.start, roh) : mitUhrzeit(basis, roh)) : roh;
+    const rueck = fest === 'dauer' && !milestone && alt.start && alt.end;   // Ende + Dauer fest: Start rechnen
+    // Rückwärts (Showablauf): die Uhrzeit landet am Tag, der dem bisherigen Ende am nächsten liegt
+    // (Ende 22:00 → «18:00» = derselbe Abend, «01:00» = die Nacht danach).
+    const ne = nurZeit ? (rueck ? naechsteUhrzeit(alt.end, roh) : alt.start ? endeNachStart(alt.start, roh) : mitUhrzeit(basis, roh)) : roh;
     if (!ne || Number.isNaN(toMin(ne))) return unlesbar('Ende nicht lesbar.');
+    if (rueck) return { start: local(toDate(toMin(ne) - (toMin(alt.end) - toMin(alt.start)))), end: ne, fehler: null };
     return { ...alt, end: ne, fehler: null };
   }
   if (feld === 'dauer') {
     const m = parseDuration(roh);
     if (m == null || m === 0) return unlesbar('Dauer nicht lesbar (z. B. 4h, 90m, 2t).');
+    if (fest === 'end' && alt.end && !milestone) return { start: local(toDate(toMin(alt.end) - m)), end: alt.end, fehler: null };
     if (!alt.start) return unlesbar('Für eine Dauer fehlt der Start.');
     return { start: alt.start, end: local(toDate(toMin(alt.start) + m)), fehler: null };
   }

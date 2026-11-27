@@ -1372,6 +1372,22 @@ der Name woanders im Befehl gehört (`addGewerk` z. B. in `gewerk.name`).
 `grep -rn "window\.prompt\|[^.]prompt(\|confirm(\|alert(" js/*.js` muss leer
 bleiben (Kommentare ausgenommen).
 
+### Zeilen-Entwurf: getippte Werte haben Vorrang vor gerechneten.
+Ein neuer Vorgang steht auf 2h. Wer in der Zeile erst das Ende (18:00) und dann
+den Start (10:00) tippt, meint «10 bis 18». Die frühere Regel («Start ändern
+hält die Dauer und schiebt das Ende mit») überschrieb das getippte Ende. Jetzt
+entscheiden die zwei ZULETZT angefassten Felder des Entwurfs (`beruehrt`,
+nach Aktualität geordnet), das dritte wird gerechnet; nur Start angefasst
+bleibt wie früher (Ende wandert mit). Ende+Dauer rechnet rückwärts
+(Start = Ende − Dauer). Im Showablauf (Zeitfeld ohne Datum) landet das getippte
+Ende am Tag, der dem BISHERIGEN Ende am nächsten liegt (`naechsteUhrzeit`):
+nach einer Show bis 22:00 ist «01:00» die Nacht danach, «18:00» derselbe Abend.
+«Folgetag nach Start» (`endeNachStart`) passt hier nicht, weil der Start ja
+gerade neu gerechnet wird. ✓/Enter wendet ein unberührtes Feld nicht noch einmal an, sonst
+überschriebe das angezeigte «8h» das getippte Ende. Ein datetime-local-Feld
+feuert je Segment ein `change`; das ist unschädlich, weil jede Neuberechnung
+vom selben `fest` ausgeht.
+
 ### Local-first (ersetzt durch den Server-Plan, siehe «Online und Mehrbenutzer»).
 
 *Historisch: Dieser Abschnitt beschreibt den GitHub-Sync bis v0.25.1. Auf Branch `online` ist er entfernt (`js/sync.js`, `bzp_sync`, `verify-sync.mjs` gibt es nicht mehr; `tests/run.mjs` sperrt `bzp_sync` und `sync.js`).*

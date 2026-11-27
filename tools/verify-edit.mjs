@@ -220,6 +220,41 @@ await check('neuen Vorgang anlegen', async () => {
   return after === before + 1 ? true : `${before} → ${after}`;
 });
 
+// Start · Ende · Dauer: was getippt wurde, gilt; das nicht angefasste Feld wird gerechnet.
+// Der neue Vorgang steht auf 2h. Echte Felder, echtes fill, ✓ als Klick.
+async function neuerVorgangZeile() {
+  const vorher = await page.evaluate(() => [...document.querySelectorAll('.tb-r')].map((r) => r.dataset.id));
+  await page.locator('.tb-add').first().click();
+  await page.waitForTimeout(400);
+  const id = await page.evaluate((v) => {
+    const r = [...document.querySelectorAll('.tb-r')].find((x) => !v.includes(x.dataset.id));
+    return r ? r.dataset.id : null;
+  }, vorher);
+  return id ? page.locator(`.tb-r[data-id="${id}"]`) : null;
+}
+await check('Entwurf: erst Ende 18:00, dann Start 10:00 — beides gilt wie getippt, Dauer = Differenz', async () => {
+  const row = await neuerVorgangZeile();
+  if (!row) return 'neue Zeile nicht gefunden';
+  const tag = (await row.locator('.c-start input').inputValue()).slice(0, 10);
+  await row.locator('.c-end input').fill(tag + 'T18:00');
+  await row.locator('.c-start input').fill(tag + 'T10:00');
+  await row.locator('.en-ok').click();
+  await page.waitForTimeout(500);
+  const [s, e, d] = [await row.locator('.c-start input').inputValue(), await row.locator('.c-end input').inputValue(), await row.locator('.c-dur input').inputValue()];
+  return s === tag + 'T10:00' && e === tag + 'T18:00' && d === '8h' ? true : `Start ${s}, Ende ${e}, Dauer ${d} (erwartet 10:00, 18:00, 8h)`;
+});
+await check('Entwurf: Ende 18:00 + Dauer 4h — der Start wird rückwärts gerechnet (14:00)', async () => {
+  const row = await neuerVorgangZeile();
+  if (!row) return 'neue Zeile nicht gefunden';
+  const tag = (await row.locator('.c-start input').inputValue()).slice(0, 10);
+  await row.locator('.c-end input').fill(tag + 'T18:00');
+  await row.locator('.c-dur input').fill('4h');
+  await row.locator('.en-ok').click();
+  await page.waitForTimeout(500);
+  const [s, e, d] = [await row.locator('.c-start input').inputValue(), await row.locator('.c-end input').inputValue(), await row.locator('.c-dur input').inputValue()];
+  return s === tag + 'T14:00' && e === tag + 'T18:00' && d === '4h' ? true : `Start ${s}, Ende ${e}, Dauer ${d} (erwartet 14:00, 18:00, 4h)`;
+});
+
 console.log('\nKONFLIKTE');
 await check('Start vorziehen erzeugt einen sichtbaren Konflikt', async () => {
   // «Podest & Unterbau» hängt an «Anlieferung Bühnenteile» — 3 Tage vorziehen.

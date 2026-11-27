@@ -5,6 +5,7 @@ nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
 ## Unveröffentlicht
 
+- **Behoben (Zeilen-Entwurf):** Wer bei einem neuen Vorgang (2h) erst das Ende und dann den Start tippte, verlor das Ende: Start-Änderung schob es immer mit. Jetzt gilt, was getippt wurde, das nicht angefasste Feld wird gerechnet (Start+Ende → Dauer, Start+Dauer → Ende, Ende+Dauer → Start rückwärts; nur Start → Ende wandert mit). Tests in `tests/conflicts.test.mjs`, Browserprüfung in `verify-edit`.
 - **Mailvorlagen (Issue #14):** Migration `1700000005_mailvorlagen.js`: Anmeldewarnung, E-Mail-Bestätigung und E-Mail-Änderung auf Deutsch; die Bestätigung verweist auf `login.html?verify=…` (neu: die Anmeldeseite bestätigt die Adresse per `confirm-verification`), die Änderungsmail hat keinen Link (Änderung ist gesperrt). Keine Vorlage der `users` führt mehr auf `/_/`. Der Hook entfernt `//login.html` jetzt auch in Bestätigungs- und Warnmail. Prüfungen in `verify-pb-regeln` und `verify-mehrbenutzer`. Migration und Hook müssen auf TEST und LIVE eingespielt werden (`docs/admin-auftrag-online-phase2.md`, Nachtrag).
 - **Dockerfile (Issue #12):** Basis `nginx:stable-alpine` statt fester Linie `1.27`; gesperrt in `tests/run.mjs`.
 - **Prüfskripte (Issue #13):** feste Pausen in `verify-edit` («DAUERHAFTIGKEIT») und `verify-mehrbenutzer` («Projektdialog sichtbar») durch Warten auf den Zustand ersetzt.

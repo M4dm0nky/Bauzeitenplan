@@ -412,5 +412,46 @@ test('Entwurf: Ende vor Start meldet den Grund (kein stilles Verwerfen)', () => 
   assert.match(entwurfFehler(r), /nach dem Start/);
 });
 
+test('Entwurf: Start + Ende angefasst — Start ändern lässt das getippte Ende stehen (Dauer ergibt sich)', () => {
+  const r = entwurfAendern({ start: '2026-07-13T08:00', end: '2026-07-13T18:00' }, 'start', '2026-07-13T10:00', { fest: 'end' });
+  assert.deepEqual([r.start, r.end, r.fehler], ['2026-07-13T10:00', '2026-07-13T18:00', null]);
+});
+test('Entwurf: Start + Dauer angefasst — Start ändern hält die Dauer, Ende wandert', () => {
+  const r = entwurfAendern(E, 'start', '2026-07-13T09:00', { fest: 'dauer' });
+  assert.deepEqual([r.start, r.end], ['2026-07-13T09:00', '2026-07-13T11:00']);
+});
+test('Entwurf: Ende + Dauer angefasst — Ende ändern rechnet den Start rückwärts', () => {
+  const r = entwurfAendern(E, 'end', '2026-07-13T18:00', { fest: 'dauer' });   // Dauer 2h
+  assert.deepEqual([r.start, r.end, r.fehler], ['2026-07-13T16:00', '2026-07-13T18:00', null]);
+});
+test('Entwurf: Ende angefasst, dann Dauer — Start = Ende − Dauer', () => {
+  const r = entwurfAendern({ start: '2026-07-13T08:00', end: '2026-07-13T18:00' }, 'dauer', '4h', { fest: 'end' });
+  assert.deepEqual([r.start, r.end, r.fehler], ['2026-07-13T14:00', '2026-07-13T18:00', null]);
+});
+test('Entwurf: Start angefasst, dann Dauer — Ende = Start + Dauer; nur Ende — Start bleibt', () => {
+  assert.equal(entwurfAendern(E, 'dauer', '4h', { fest: 'start' }).end, '2026-07-13T12:00');
+  assert.equal(entwurfAendern(E, 'end', '2026-07-13T12:00', { fest: 'start' }).start, E.start);
+});
+test('Entwurf: Ende vor Start bleibt Fehler, wenn das Ende fest ist', () => {
+  const r = entwurfAendern(E, 'start', '2026-07-13T11:00', { fest: 'end' });
+  assert.match(entwurfFehler(r), /nach dem Start/);
+});
+test('Entwurf: Showablauf (nurZeit) Ende + Dauer — Ende am Tag nächst dem alten Ende, Start = Ende − Dauer', () => {
+  const x = { start: '2026-08-29T20:00', end: '2026-08-29T22:00' };
+  const r = entwurfAendern(x, 'end', '18:00', { nurZeit: true, fest: 'dauer' });
+  assert.deepEqual([r.start, r.end], ['2026-08-29T16:00', '2026-08-29T18:00']);
+  // 01:00 nach einer Show bis 22:00 ist die Nacht DANACH, nicht der Morgen davor
+  const v = entwurfAendern(x, 'end', '01:00', { nurZeit: true, fest: 'dauer' });
+  assert.deepEqual([v.start, v.end], ['2026-08-29T23:00', '2026-08-30T01:00']);
+  // Frühmorgens: Ende 02:00, neues Ende 23:30 → der Abend davor
+  const y = { start: '2026-08-30T00:00', end: '2026-08-30T02:00' };
+  const w = entwurfAendern(y, 'end', '23:30', { nurZeit: true, fest: 'dauer' });
+  assert.deepEqual([w.start, w.end], ['2026-08-29T21:30', '2026-08-29T23:30']);
+});
+test('Entwurf: Meilenstein ignoriert fest', () => {
+  const r = entwurfAendern({ start: '2026-07-13T08:00', end: '2026-07-13T08:00' }, 'start', '2026-07-13T09:00', { milestone: true, fest: 'end' });
+  assert.deepEqual([r.start, r.end], ['2026-07-13T09:00', '2026-07-13T09:00']);
+});
+
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen\n`);
 process.exit(fail ? 1 : 0);
