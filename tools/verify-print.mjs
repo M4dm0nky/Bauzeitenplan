@@ -25,21 +25,31 @@ const BASE = 'http://127.0.0.1:' + server.address().port;
 // Ursprungstext der Fixture: der localStorage-Stand wird von den Tests verändert
 const KT_TEXT = readFileSync(join(FIXTURES, 'klassentreffen-festival.json'), 'utf8');
 const b = await firefox.launch({ executablePath: exe });
+const stops = [];   // lokale PocketBase (tools/plan-fixture.mjs), wird im finally beendet
+let bad = 0;
+let skipped = 0;   // ehrlich zählen: «bestanden» heißt nicht «alles geprüft»
+// print.html liest die LOKALE Kopie des aktiven Plans. Die entsteht, wenn die App den Plan vom Server
+// geöffnet hat — also erst die App öffnen, dann das Blatt (wie ein Nutzer: Plan öffnen, dann «Drucken»).
+const kopieAnlegen = async (pg, base = BASE) => {
+  await pg.goto(base + '/index.html?plan=leer');
+  await pg.waitForSelector('.bz-lab', { timeout: 30000 });
+  await pg.waitForTimeout(500);
+};
+try {
 const ctx = await b.newContext({ viewport: { width: 1700, height: 1000 }, timezoneId: 'Europe/Berlin' });
-await planLaden(ctx);
+stops.push((await planLaden(ctx, 'klassentreffen-festival.json', { frisch: true })).stop);
 const p = await ctx.newPage();
 const errors = [];
 p.on('pageerror', (e) => errors.push('JS: ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
-let bad = 0;
-let skipped = 0;   // ehrlich zählen: «bestanden» heißt nicht «alles geprüft»
 const check = async (name, fn) => {
   let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
   if (r === true) console.log('  ✓ ' + name); else { console.log('  ✗ ' + name + ': ' + r); bad++; }
 };
 
 console.log('\nTAGESBLÄTTER');
+await kopieAnlegen(p);
 await p.goto(BASE + '/print.html');
 await p.waitForSelector('.pr-sheet', { timeout: 15000 });
 await p.waitForTimeout(600);
@@ -179,7 +189,8 @@ if (!chromExe) {
 } else {
   const cb = await chromium.launch({ executablePath: chromExe });
   const cp = await cb.newPage();
-  await planLaden(cp);
+  stops.push((await planLaden(cp, 'klassentreffen-festival.json', { frisch: true })).stop);
+  await kopieAnlegen(cp);
   await cp.goto(BASE + '/print.html');
   await cp.waitForSelector('.pr-sheet', { timeout: 15000 });
   await cp.waitForTimeout(600);
@@ -239,7 +250,8 @@ for (const [w, h] of [[1440, 900], [1000, 800]]) {
   const kb = await firefox.launch({ executablePath: exe, firefoxUserPrefs: { 'ui.useOverlayScrollbars': 0 } });
   try {
     const kp = await (await kb.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
-    await planLaden(kp);
+    stops.push((await planLaden(kp, 'klassentreffen-festival.json', { frisch: true })).stop);
+    await kopieAnlegen(kp);
     await kp.goto(BASE + '/print.html');
     await kp.waitForSelector('.pr-sheet', { timeout: 15000 });
     await kp.waitForTimeout(400);
@@ -272,6 +284,7 @@ console.log('\nZEITUMSTELLUNG');
     const pl = r.plan;
     const t0 = pl.tasks[0];
     pl.tasks = [{ ...t0, id: 'zeitumstellung-nacht', title: 'Nachtschicht Zeitumstellung', start: '2026-10-25T22:00', end: '2026-10-26T02:00', milestone: false, parent: null, deps: [], fuer: null }];
+    pl.project.id = localStorage.getItem('bzp_active');   // der Plan trägt die Server-plan_id
     m.createRepo(window.localStorage).save(pl);
   }, KT_TEXT);
   const fehler0 = errors.length;
@@ -321,6 +334,7 @@ console.log('\nVORGÄNGE OHNE TERMIN');
     const pl = r.plan;
     let c = 0;
     pl.tasks.forEach((t, i) => { if (i % 3 === 0) { t.start = null; t.end = null; c++; } });
+    pl.project.id = localStorage.getItem('bzp_active');   // der Plan trägt die Server-plan_id
     m.createRepo(window.localStorage).save(pl);
     return c;
   }, KT_TEXT);
@@ -359,6 +373,7 @@ console.log('\nPROJEKTANGABEN IM KOPF');
         { id: 'k2', name: 'Bo Muster', rolle: 'Technik', tel: '0160 7654321' }];
       if (mit === 'lang') pl.project.kontakte.push({ id: 'k3', name: 'Cornelia Langername-Beispielfrau', rolle: 'Sicherheitsbeauftragte', tel: '+49 89 1234567-890' });
     }
+    pl.project.id = localStorage.getItem('bzp_active');   // der Plan trägt die Server-plan_id
     m.createRepo(window.localStorage).save(pl);
   }, [KT_TEXT, mit]);
   const kopfHoehe = async (url) => {
@@ -389,6 +404,9 @@ console.log('\nPROJEKTANGABEN IM KOPF');
 
 if (errors.length) { console.log('\n  ✗ Fehler:'); errors.slice(0, 5).forEach((e) => console.log('      ' + e)); bad += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
-await b.close(); server.close();
+} finally {
+  await b.close().catch(() => {}); server.close();
+  for (const st of stops) await st().catch(() => {});
+}
 console.log(bad ? `\n${bad} Problem(e).\n` : `\nAlle Prüfungen bestanden${skipped ? `, ${skipped} übersprungen` : ''}.\n`);
 process.exit(bad ? 1 : 0);

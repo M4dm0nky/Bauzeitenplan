@@ -109,7 +109,7 @@ test('addPhase legt an, vergibt id, ist ein Undo-Schritt', () => {
   assert.ok(r.id);
   assert.equal(s.state.phases.length, 1);
   assert.equal(s.state.phases[0].art, 'show');
-  assert.equal(s.undo(), true);
+  assert.equal(s.undo().ok, true);
   assert.equal(s.state.phases.length, 0);
   assert.equal(s.canUndo, false);
 });

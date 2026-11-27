@@ -240,13 +240,11 @@ kbd { font: inherit; border: 1px solid var(--rule-2); background: var(--panel2);
 /* ── Bearbeiten ─────────────────────────────────────────────────────────────── */
 .hd-right { font-size: calc(9.5px * var(--fs)); }
 .btn-p { background: var(--accent-b); color: #1b1a17; border-color: var(--accent); font-weight: 700; }
+/* `.btn:hover` färbt die Schrift in --accent = Farbe der Fläche (unsichtbar): Primär behält dunkle Schrift, die Fläche hellt auf. */
+.btn-p:hover { background: color-mix(in srgb, var(--accent-b) 80%, #fff); color: #1b1a17; border-color: var(--accent); }
 .btn-warn { border-color: var(--crit); color: var(--crit); }
 .btn-warn:hover { background: var(--crit); color: #fff; }
 .btn:disabled, .seg button:disabled { opacity: .35; cursor: default; }
-.save-state { font-size: calc(8.5px * var(--fs)); letter-spacing: .08em; text-transform: uppercase; padding: 3px 7px; border: 1px solid var(--rule-2); }
-.save-state[data-state="saved"] { color: var(--muted); }
-.save-state[data-state="dirty"] { color: var(--accent); border-color: var(--accent); }
-.save-state[data-state="error"] { color: #fff; background: var(--crit); border-color: var(--crit); font-weight: 700; }
 .legend { padding: 0 16px 9px; }
 
 /* Konflikt */
@@ -380,6 +378,12 @@ kbd { font: inherit; border: 1px solid var(--rule-2); background: var(--panel2);
 .sync-state { font-size: 13px; padding: 2px 7px; border: 1px solid var(--rule-2); }
 .sync-state[data-state="ok"] { color: var(--live-run, #1a7a46); border-color: var(--live-run, #1a7a46); }
 .sync-state[data-state="wartet"] { color: color-mix(in srgb, #e0a100 65%, var(--ink)); border-color: color-mix(in srgb, #e0a100 65%, var(--ink)); }
+.hd-offline { font-size: 13px; padding: 2px 7px; color: var(--nur-t); background: var(--nur-bg); border: 1px solid var(--nur-bg); }
+/* Marke «Nur Ansicht»: Fläche + Schrift als Token (Kontrast 4,5:1, tests/run.mjs), in allen drei Scopes. */
+:root { --nur-bg: #e0a100; --nur-t: #1b1a17; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --nur-bg: #f2c14b; --nur-t: #1b1a17; } }
+:root[data-theme="dark"] { --nur-bg: #f2c14b; --nur-t: #1b1a17; }
+:root[data-theme="light"] { --nur-bg: #e0a100; --nur-t: #1b1a17; }
 .sync-state[data-state="fehler"] { color: #fff; background: var(--crit); border-color: var(--crit); }
 
 /* Entwurf für Start · Ende · Dauer (js/entwurf.js): Zeile gelb, ✓ grün, ✗ rot. */
@@ -449,3 +453,16 @@ kbd { font: inherit; border: 1px solid var(--rule-2); background: var(--panel2);
 .res-st-bestaetigt { background: var(--ein-ok); color: var(--ein-ok-t); }
 .res-st-abgelehnt { background: var(--crit); color: var(--panel); }
 .bd-offen { background: var(--panel); border: 1px solid var(--line, var(--rule-2, currentColor)); color: var(--ink); }
+
+/* Mitglieder und Verwaltung */
+.mg-zeile { background: var(--panel2); border: 1px solid var(--rule); color: var(--ink); }
+.mg-feld { background: var(--panel); border: 1px solid var(--rule); color: var(--ink); }
+.mg-chip { color: var(--ink); }
+.mg-weg { background: var(--panel); border: 1px solid var(--rule); color: var(--ink); }
+.mg-weg:hover:not(:disabled) { background: var(--crit); border-color: var(--crit); color: #fff; }
+.mg-fehler { color: var(--crit); }
+
+/* Alte lokale Pläne im Projektdialog: gelb = «braucht eine Entscheidung», nicht Fehler */
+.alt-sec { background: var(--panel2); border: 1px solid var(--rule); border-left: 4px solid #d9a21b; }
+.alt-zeile { border-top: 1px solid var(--rule); padding-top: 8px; }
+.alt-ueb:disabled, .alt-exp:disabled { opacity: .55; cursor: not-allowed; }

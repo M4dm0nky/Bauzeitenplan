@@ -1,0 +1,36 @@
+/* Anmeldeseite (login.html). Farben kommen aus dem Theme (base.css + callboard.css),
+   hier nur Aufbau und die Statusfarben für Hinweise. */
+:root { --lg-akzent: #1f5fbf; --lg-akzent-t: #ffffff; --lg-ok: #1a7a46; --lg-fehler: #b3261e; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --lg-akzent: #f2b134; --lg-akzent-t: #1b1405; --lg-ok: #5fcc8a; --lg-fehler: #ff8a7a; } }
+:root[data-theme="dark"] { --lg-akzent: #f2b134; --lg-akzent-t: #1b1405; --lg-ok: #5fcc8a; --lg-fehler: #ff8a7a; }
+:root[data-theme="light"] { --lg-akzent: #1f5fbf; --lg-akzent-t: #ffffff; --lg-ok: #1a7a46; --lg-fehler: #b3261e; }
+
+.lg-body { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; background: var(--bg); }
+.lg-karte { width: 100%; max-width: 420px; background: var(--panel); border: 1px solid var(--rule-2); border-top: 4px solid var(--lg-akzent); border-radius: 6px; padding: 26px 28px 28px; box-shadow: 0 24px 60px -12px rgba(4, 10, 25, .45); }
+.lg-marke { display: flex; align-items: center; gap: 12px; color: var(--lg-akzent); margin-bottom: 18px; }
+.lg-name { font-weight: 600; font-size: 1.25rem; letter-spacing: -.015em; color: var(--ink); }
+.lg-titel { margin: 0 0 4px; font-size: 1.35rem; font-weight: 600; color: var(--ink); }
+.lg-sub { margin: 0 0 16px; color: var(--ink-2); }
+
+.lg-form { display: flex; flex-direction: column; gap: 14px; }
+.lg-form[hidden], .lg-hinweis[hidden] { display: none; }
+.lg-feld { display: flex; flex-direction: column; gap: 5px; }
+.lg-lab { display: flex; align-items: center; gap: 7px; color: var(--ink-2); font-size: .9rem; }
+.lg-ico { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.lg-lab .lg-ico { color: var(--lg-akzent); }
+.lg-feld input { font: inherit; color: var(--ink); background: var(--panel2); border: 1px solid var(--rule-2); border-radius: 4px; padding: 9px 11px; }
+.lg-feld input:focus-visible { outline: 2px solid var(--lg-akzent); outline-offset: 1px; border-color: var(--lg-akzent); }
+
+.lg-knopf { display: flex; align-items: center; justify-content: center; gap: 8px; font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 4px; padding: 10px 14px; background: var(--lg-akzent); color: var(--lg-akzent-t); }
+.lg-knopf:hover { filter: brightness(1.08); }
+.lg-knopf:disabled { opacity: .6; cursor: wait; }
+.lg-knopf:focus-visible, .lg-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.lg-link { align-self: flex-start; font: inherit; background: none; border: 0; padding: 2px 0; cursor: pointer; color: var(--ink-2); text-decoration: underline; }
+.lg-link:hover { color: var(--ink); }
+
+.lg-hinweis { margin: 0 0 14px; padding: 9px 12px; border-radius: 4px; border: 1px solid; border-left-width: 4px; background: var(--panel2); }
+.lg-hinweis::before { font-weight: 700; margin-right: 8px; }
+.lg-hinweis[data-art="fehler"] { color: var(--lg-fehler); border-color: var(--lg-fehler); }
+.lg-hinweis[data-art="fehler"]::before { content: "\2715"; }
+.lg-hinweis[data-art="ok"]::before { content: "\2713"; }
+.lg-hinweis[data-art="ok"] { color: var(--lg-ok); border-color: var(--lg-ok); }

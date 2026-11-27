@@ -3,13 +3,16 @@
 //
 //   node tools/verify-browser.mjs                 lokal (eigener Server)
 //   node tools/verify-browser.mjs --base <url>    gegen eine veröffentlichte Seite
+//   (Seit Mehrbenutzer: lokal läuft eine eigene PocketBase mit Prüfkonto und Plan, tools/plan-fixture.mjs.
+//    Bei einer NICHT lokalen --base wird nichts angelegt und nicht angemeldet: geprüft wird nur,
+//    was ohne Anmeldung geht — login.html in allen Themes und dass index.html dorthin weiterleitet.)
 //
 // Lokal läuft ein eigener HTTP-Server statt file:// — index.html lädt ES-Module,
 // und die blockiert der Browser bei file:// per CORS.
 //
 // --base prüft die echte Live-Seite. Das ist die einzige Prüfung, die beantwortet,
 // ob die Module über die Unteradresse (/Bauzeitenplan/) wirklich laden. Die
-// Themes liegen im Deploy und laufen dort mit.
+// Themes liegen im Deploy und laufen dort mit. Gegen fremde Server wird NICHTS geschrieben.
 import { firefox } from 'playwright-core';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +20,7 @@ import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
-import { planLaden } from './plan-fixture.mjs';
+import { planLaden, planSeed } from './plan-fixture.mjs';
 import { kontrast } from './farbpruefung.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -51,6 +54,9 @@ if (process.argv.includes('--base') && !argBase) {
   process.exit(2);
 }
 
+// Lokal = localhost/127.0.0.1: dort startet das Skript eine eigene PocketBase. Alles andere ist «fremd».
+const hostVon = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
+const FREMD = !!argBase && !['localhost', '127.0.0.1'].includes(hostVon(argBase));
 let server = null, BASE;
 if (argBase) {
   BASE = argBase.replace(/\/+$/, '');
@@ -159,10 +165,139 @@ async function kontrastFehler(page, label) {
 
 const browser = await firefox.launch({ executablePath: exe });
 let problems = 0;
+const stops = [];   // lokale PocketBase je Skript (tools/plan-fixture.mjs), wird im finally beendet
+// Seite mit Anmeldung bei der lokalen PB, eigenem Konto; `datei`: Plan, der dort schon liegt (null = keiner → Projektdialog)
+const seite = async (opt, datei = null) => {
+  const pg = await browser.newPage(opt);
+  stops.push((await planLaden(pg, datei, { frisch: true })).stop);
+  return pg;
+};
+
+// ── Fremde Seite (--base auf eine veröffentlichte URL): nur, was ohne Anmeldung geht ─────────
+if (FREMD) {
+  console.log('\nFREMDE SEITE: nur login.html und die Weiterleitung (nichts wird angelegt, niemand angemeldet)');
+  try {
+    // 1. index.html ohne Anmeldung leitet auf login.html weiter
+    {
+      const pg = await browser.newPage({ viewport: { width: 1600, height: 950 } });
+      const err = [];
+      pg.on('pageerror', (e) => err.push('JS: ' + e.message));
+      await pg.goto(BASE + '/index.html', { waitUntil: 'load', timeout: 30000 }).catch(() => {});
+      let ok = true;
+      try { await pg.waitForURL(/login\.html/, { timeout: 15000 }); } catch { ok = false; }
+      if (ok) console.log('    ✓ index.html ohne Anmeldung leitet auf login.html weiter');
+      else { console.log('    ✗ index.html ohne Anmeldung: keine Weiterleitung auf login.html (URL: ' + pg.url() + ')'); problems++; }
+      await pg.close();
+    }
+    // 2. login.html in allen fünf Themes, hell und dunkel
+    const fpL = new Map();
+    for (const t of ['callboard', ...THEMES]) for (const scheme of ['light', 'dark']) {
+      const pg = await browser.newPage({ viewport: { width: 1200, height: 800 }, colorScheme: scheme });
+      const err = [], missing = [];
+      pg.on('pageerror', (e) => err.push('JS: ' + e.message));
+      pg.on('console', (m) => { if (m.type() === 'error') err.push('console: ' + m.text()); });
+      pg.on('response', (r) => { if (r.status() >= 400 && /\/(styles|js)\//.test(r.url())) missing.push(r.status() + ' ' + r.url()); });
+      await pg.goto(BASE + '/login.html', { waitUntil: 'load', timeout: 30000 });
+      await pg.waitForTimeout(1200);
+      let themaFehler = null;
+      if (t !== 'callboard') { try { await themeAn(pg, t); await pg.waitForTimeout(300); } catch (e) { themaFehler = e.message; } }
+      const label = `login.html ${t} ${scheme === 'light' ? 'hell' : 'dunkel'}`;
+      const r = await pg.evaluate(() => {
+        const f = document.getElementById('f-anmelden'), k = f && f.querySelector('.lg-knopf');
+        const sicht = (n) => { if (!n) return false; const q = n.getBoundingClientRect(); return q.width > 0 && q.height > 0 && getComputedStyle(n).visibility !== 'hidden'; };
+        const c = getComputedStyle(document.body);
+        return { formular: sicht(f), knopf: sicht(k), fp: c.backgroundColor + ' | ' + c.fontFamily };
+      });
+      const fehler = [];
+      if (themaFehler) fehler.push(themaFehler);
+      if (!r.formular) fehler.push('Anmeldeformular nicht sichtbar');
+      if (!r.knopf) fehler.push('Anmelde-Knopf nicht sichtbar');
+      if (missing.length) fehler.push('fehlende Dateien: ' + missing.slice(0, 2).join(' · '));
+      if (err.length) fehler.push(err[0]);
+      const key = t + '|' + scheme;
+      const gleich = [...fpL].find(([k2, v2]) => v2 === r.fp && k2.split('|')[1] === scheme);
+      if (gleich) fehler.push('sieht aus wie ' + gleich[0]);
+      fpL.set(key, r.fp);
+      if (fehler.length) { console.log(`    ✗ ${label}: ${fehler.join(' / ')}`); problems++; }
+      else console.log(`    ✓ ${label}`);
+      if (t === 'callboard') await pg.screenshot({ path: join(shots, `fremd-login-${scheme}.png`) });
+      await pg.close();
+    }
+  } finally { await browser.close().catch(() => {}); }
+  console.log(problems ? `\n${problems} Problem(e) gefunden.\n` : '\nAlle Prüfungen bestanden (fremde Seite: login.html + Weiterleitung).\n');
+  process.exit(problems ? 1 : 0);
+}
+try {
+
+// ── Primärknopf beim Hovern lesbar (alle Themes × alle Scopes) ────────────────
+// Anlass: Callboard dunkel — `.btn:hover` (Spezifität 0,2,0) schlägt `.btn-p` (0,1,0), die Schrift
+// wurde beim Hovern weiß auf weißer Fläche. Gemessen wird der ECHTE Zustand: Maus über dem Knopf,
+// berechnete Schrift- gegen berechnete Hintergrundfarbe (halbtransparente Schichten durchgemischt).
+// Scopes je Theme: hell · @media dunkel · [data-theme="dark"] · [data-theme="light"] bei dunklem System.
+const HOVER_MIN = 4.5;
+async function primaerHover() {
+  console.log('\nPRIMÄRKNOPF BEIM HOVERN (Kontrast ≥ ' + HOVER_MIN + ':1, alle Themes, alle Scopes)');
+  const pg = await seite({ viewport: { width: 1200, height: 800 } });
+  await pg.goto(BASE + '/index.html?plan=leer', { waitUntil: 'load', timeout: 30000 });
+  await pg.waitForTimeout(argBase ? 1600 : 800);
+  await pg.evaluate(() => {
+    const w = document.createElement('div');
+    w.style.cssText = 'position:fixed;left:40px;top:40px;padding:24px;z-index:99999;background:var(--panel)';
+    const b = document.createElement('button'); b.className = 'btn btn-p'; b.id = 'probe-btnp'; b.textContent = 'Kopieren';
+    w.appendChild(b); document.body.appendChild(w);
+  });
+  const messen = async () => {
+    const info = await pg.evaluate(() => {
+      const b = document.getElementById('probe-btnp');
+      const layers = []; let deckend = false;
+      for (let p = b; p && !deckend; p = p.parentElement) {
+        const c = getComputedStyle(p).backgroundColor; layers.push(c);
+        const m = c.match(/[\d.]+/g); if (m && (m.length < 4 || parseFloat(m[3]) >= 1)) deckend = true;
+      }
+      // color-mix() liefert «color(srgb …)»: über ein Canvas in 8-Bit-RGBA umrechnen
+      const cv = document.createElement('canvas'); cv.width = cv.height = 1;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      const rgba = (c) => { g.clearRect(0, 0, 1, 1); g.fillStyle = '#000'; g.fillStyle = c; g.fillRect(0, 0, 1, 1); const d = g.getImageData(0, 0, 1, 1).data; return `rgba(${d[0]}, ${d[1]}, ${d[2]}, ${d[3] / 255})`; };
+      return { color: rgba(getComputedStyle(b).color), layers: layers.map(rgba) };
+    });
+    let bg = { r: 255, g: 255, b: 255, a: 1 };
+    for (const l of info.layers.reverse()) { const c = rgbaOf(l); if (c.a > 0) bg = mixOn(c, bg); }
+    const fg = mixOn(rgbaOf(info.color), bg);
+    return { ratio: kontrast(hexOf(fg), hexOf(bg)), fg: hexOf(fg), bg: hexOf(bg) };
+  };
+  const SCOPES = [
+    ['hell', 'light', null], ['dunkel (System)', 'dark', null],
+    ['data-theme=dark', 'light', 'dark'], ['data-theme=light', 'dark', 'light'],
+  ];
+  let aktuell = 'callboard';
+  for (const t of ['callboard', ...THEMES]) {
+    if (t !== aktuell) { await themeAn(pg, t); aktuell = t; await pg.waitForTimeout(250); }
+    for (const [name, scheme, attr] of SCOPES) {
+      await pg.emulateMedia({ colorScheme: scheme });
+      await pg.evaluate((a) => { if (a) document.documentElement.dataset.theme = a; else delete document.documentElement.dataset.theme; }, attr);
+      await pg.mouse.move(600, 600);
+      await pg.waitForTimeout(350);
+      const ruhig = await messen();
+      await pg.hover('#probe-btnp');
+      await pg.waitForTimeout(450);
+      const hover = await messen();
+      const ok = hover.ratio >= HOVER_MIN && ruhig.ratio >= HOVER_MIN;
+      if (ok) console.log(`    ✓ ${t} · ${name}: ruhig ${ruhig.ratio.toFixed(1)}:1, Hover ${hover.ratio.toFixed(1)}:1`);
+      else { console.log(`    ✗ ${t} · ${name}: ruhig ${ruhig.ratio.toFixed(2)}:1 (${ruhig.fg} auf ${ruhig.bg}), Hover ${hover.ratio.toFixed(2)}:1 (${hover.fg} auf ${hover.bg})`); problems++; }
+    }
+  }
+  await pg.screenshot({ path: join(shots, 'primaer-hover.png'), clip: { x: 0, y: 0, width: 300, height: 160 } });
+  await pg.close();
+}
+if (process.argv.includes('--nur-hover')) {   // Auswahl-Schalter: nur diese Prüfung
+  try { await primaerHover(); } finally { await browser.close().catch(() => {}); if (server) server.close(); for (const st of stops) await st().catch(() => {}); }
+  console.log(problems ? `\n${problems} Problem(e).\n` : '\nHover-Prüfung grün.\n');
+  process.exit(problems ? 1 : 0);
+}
 
 for (const pg of PAGES) {
   const v = pg.key || 'app';
-  const page = await browser.newPage({ viewport: { width: 1600, height: 950 } });
+  const page = await seite({ viewport: { width: 1600, height: 950 } });
   const errors = [];
   const missing = [];
   page.on('pageerror', (e) => errors.push('JS: ' + e.message));
@@ -414,7 +549,7 @@ for (const pg of PAGES) {
   });
 
   // Dunkelmodus
-  const dark = await browser.newPage({ viewport: { width: 1600, height: 950 }, colorScheme: 'dark' });
+  const dark = await seite({ viewport: { width: 1600, height: 950 }, colorScheme: 'dark' });
   await dark.goto(pg.url);
   await dark.waitForTimeout(700);
   if (pg.theme) { await themeAn(dark, pg.theme); await dark.waitForTimeout(300); }
@@ -444,7 +579,7 @@ for (const pg of PAGES) {
   console.log('\nHANDY (390×844)');
   // isMobile/hasTouch unterstützt Firefox nicht — der schmale Viewport allein
   // löst die Media-Query aus, mehr braucht die Darstellungsprüfung nicht.
-  const m = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const m = await seite({ viewport: { width: 390, height: 844 } });
   const merr = [];
   m.on('pageerror', (e) => merr.push('JS: ' + e.message));
   m.on('console', (e) => { if (e.type() === 'error') merr.push('console: ' + e.text()); });
@@ -625,20 +760,12 @@ for (const pg of PAGES) {
 // an, bevor die App lädt (Form wie addPhase: id, art, name, start, end).
 {
   console.log('\nPHASE NACH PROJEKTENDE (Achse = planSpanne)');
-  const m = await browser.newPage({ viewport: { width: 1600, height: 950 } });
-  const id = await planLaden(m);
-  await m.addInitScript(`try {
-    const k = 'bzp_p_' + ${JSON.stringify(id)};
-    if (localStorage.getItem('bzp_phase_nach_ende') !== '1') {
-      localStorage.setItem('bzp_phase_nach_ende', '1');
-      const p = JSON.parse(localStorage.getItem(k));
-      const ende = new Date(p.project.end);
-      const fmt = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-      const a = new Date(ende.getTime() + 10 * 86400000), b = new Date(ende.getTime() + 12 * 86400000);
-      (p.phases ||= []).push({ id: 'ph-nach-ende', art: 'abbau', name: '', start: fmt(a), end: fmt(b) });
-      localStorage.setItem(k, JSON.stringify(p));
-    }
-  } catch (e) {}`);
+  // Die Phase kommt mit dem Plan auf den Server (die App lädt von dort, ein Eingriff in die lokale Kopie wäre wirkungslos).
+  const plan = planSeed('klassentreffen-festival.json').plan;
+  const ende = new Date(plan.project.end);
+  const fmt = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  (plan.phases ||= []).push({ id: 'ph-nach-ende', art: 'abbau', name: '', start: fmt(new Date(ende.getTime() + 10 * 86400000)), end: fmt(new Date(ende.getTime() + 12 * 86400000)) });
+  const m = await seite({ viewport: { width: 1600, height: 950 } }, plan);
   await m.goto(BASE + '/index.html?plan=leer', { waitUntil: 'load', timeout: 30000 });
   await m.waitForSelector('.bz-lab', { timeout: 20000 });
   await m.waitForTimeout(argBase ? 1600 : 800);
@@ -657,19 +784,18 @@ for (const pg of PAGES) {
 
 // ── Handy-Kopf in allen fünf Themes, beide Modi ──────────────────────────────
 // Der Kopf belegte auf 390×844 ~470 px (Board: 574) — die Hälfte des Bildes.
-// Ziel: ≤ 285 px, ohne dass ein Bedienelement wegfällt. Themes überschreiben
+// Ziel: ≤ 300 px (vorher 285; seit Mehrbenutzer steht die Sende-Marke «✓ gesendet» im Studio-Theme in einer eigenen Zeile), ohne dass ein Bedienelement wegfällt. Themes überschreiben
 // Kopfmaße (Titelgröße, Kennzahlen, Abstände), deshalb läuft es in jedem.
 {
   console.log('\nHANDY-KOPF (390×844, alle Themes, Bauzeitenplan + Showablauf)');
   const HANDY_THEMES = ['callboard', ...THEMES];
   // Was je Modus sichtbar bleiben MUSS (Zoom-Gruppe gibt es nur im Bauzeitenplan).
   const MUSS = {
-    bau: ['#tag-wahl', '[data-view="gantt"]', '[data-view="tabelle"]', '[data-view="bedarf"]', '#zoom-stufe', '#zout', '#zin', '#now', '#fold', '#undo', '#redo', '#live', '#suche', '#theme-toggle', '#drucken', '#save-state'],
-    show: ['#tag-wahl', '[data-ansicht="setup"]', '[data-ansicht="show"]', '[data-view="gantt"]', '[data-view="tabelle"]', '[data-view="bedarf"]', '#undo', '#redo', '#live', '#suche', '#theme-toggle', '#drucken', '#save-state'],
+    bau: ['#tag-wahl', '[data-view="gantt"]', '[data-view="tabelle"]', '[data-view="bedarf"]', '#zoom-stufe', '#zout', '#zin', '#now', '#fold', '#undo', '#redo', '#live', '#suche', '#theme-toggle', '#drucken', '#sync-state'],
+    show: ['#tag-wahl', '[data-ansicht="setup"]', '[data-ansicht="show"]', '[data-view="gantt"]', '[data-view="tabelle"]', '[data-view="bedarf"]', '#undo', '#redo', '#live', '#suche', '#theme-toggle', '#drucken', '#sync-state'],
   };
   for (const t of HANDY_THEMES) for (const modus of ['bau', 'show']) {
-    const m = await browser.newPage({ viewport: { width: 390, height: 844 } });
-    await planLaden(m);
+    const m = await seite({ viewport: { width: 390, height: 844 } }, 'klassentreffen-festival.json');
     const label = `${t} · ${modus === 'bau' ? 'Bauzeitenplan' : 'Showablauf'}`;
     const mc = async (name, fn) => {
       let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
@@ -680,9 +806,9 @@ for (const pg of PAGES) {
     await m.waitForSelector('.bz-lab', { timeout: 20000 });
     await m.waitForTimeout(argBase ? 1600 : 800);
     if (t !== 'callboard') { await themeAn(m, t); await m.waitForTimeout(400); }
-    await mc('Kopf ≤ 285 px', async () => {
+    await mc('Kopf ≤ 300 px', async () => {
       const h = await m.evaluate(() => Math.round(document.querySelector('.hd').getBoundingClientRect().bottom));
-      return h <= 285 ? true : `Kopf ${h} px hoch`;
+      return h <= 300 ? true : `Kopf ${h} px hoch`;
     });
     await mc('Titel einzeilig, Ort ausgeblendet, Kennzahlen in einer Reihe', async () => {
       const r = await m.evaluate(() => {
@@ -701,7 +827,9 @@ for (const pg of PAGES) {
         const r = n.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) return s + ' unsichtbar';
         if (r.right > window.innerWidth + 1 || r.left < -1) return s + ' ragt aus dem Bild';
-        if (s !== '#save-state' && r.height < 39.5) return s + ' nur ' + Math.round(r.height) + ' px hoch';
+        // Ausnahme #sync-state: eine Status-Marke (✓ gesendet / ⟳ sendet… / ⚠ offen) in Textzeilenhöhe, kein Dauer-Bedienelement;
+        // sie klickt nur im Konfliktfall. Die 40 px Höhe würden den Kopf (Grenze 300 px) sprengen.
+        if (s !== '#sync-state' && r.height < 39.5) return s + ' nur ' + Math.round(r.height) + ' px hoch';
         return null;
       }).filter(Boolean), MUSS[modus]);
       return bad.length ? bad.join(' · ') : true;
@@ -729,10 +857,9 @@ for (const pg of PAGES) {
 // Desktop UND Handy müssen dieselbe Zahl liefern: nichts fällt weg, nichts kommt dazu.
 {
   console.log('\nBEDIENELEMENTE (sichtbare button/input/select in .hd-bar)');
-  const SOLL = { bau: 16, show: 14 };
+  const SOLL = { bau: 17, show: 15 };   // inkl. #sync-state (Button seit Mehrbenutzer; war #save-state, ein Text)
   for (const [w, h] of [[1600, 950], [390, 844]]) for (const modus of ['bau', 'show']) {
-    const m = await browser.newPage({ viewport: { width: w, height: h } });
-    await planLaden(m);
+    const m = await seite({ viewport: { width: w, height: h } }, 'klassentreffen-festival.json');
     let r;
     try {
       await m.goto(BASE + '/index.html?plan=leer&ansicht=' + modus, { waitUntil: 'load', timeout: 30000 });
@@ -747,7 +874,12 @@ for (const pg of PAGES) {
   }
 }
 
-await browser.close();
-if (server) server.close();
+await primaerHover();
+
+} finally {
+  await browser.close().catch(() => {});
+  if (server) server.close();
+  for (const st of stops) await st().catch(() => {});
+}
 console.log(problems ? `\n${problems} Problem(e) gefunden.\n` : `\nAlle Prüfungen bestanden (${PAGES.length} Seiten).\n`);
 process.exit(problems ? 1 : 0);

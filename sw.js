@@ -32,6 +32,8 @@ const HUELLE = [
   './',
   'index.html',
   'print.html',
+  'login.html',
+  'js/aenderungen.js',
   'js/app.js',
   'js/bedarf.js',
   'js/conflicts.js',
@@ -42,27 +44,34 @@ const HUELLE = [
   'js/ebene.js',
   'js/gantt.js',
   'js/inspector.js',
+  'js/konflikt.js',
   'js/listen-editor.js',
   'js/res-picker.js',
   'js/live.js',
+  'js/login.js',
   'js/menu.js',
+  'js/mitglieder-logik.js',
+  'js/mitglieder.js',
   'js/palette.js',
+  'js/pb.js',
   'js/persistence.js',
   'js/phasen-editor.js',
   'js/phasen.js',
   'js/print.js',
   'js/rail.js',
+  'js/rechte.js',
   'js/res-katalog.js',
   'js/resources.js',
   'js/schedule.js',
+  'js/server.js',
   'js/store.js',
   'js/suche.js',
-  'js/sync.js',
   'js/table.js',
   'js/templates.js',
   'js/timeaxis.js',
   'js/version.js',
   'styles/base.css',
+  'styles/login.css',
   'styles/print.css',
   'styles/themes/blueprint.css',
   'styles/themes/board.css',
@@ -110,7 +119,10 @@ self.addEventListener('fetch', (event) => {
     fetch(req, { cache: 'no-cache' }).then((res) => {
       if (res.ok) {
         const kopie = res.clone();
-        event.waitUntil(caches.open(CACHE).then((c) => c.put(req, kopie)).catch(() => {}));
+        // Navigationen nur unter dem Pfad ohne Query cachen: `login.html?einladung=<token>`/`?reset=<token>` sollen nie im
+        // Cache landen (die Seite selbst ist für alle Queries dieselbe; die Offline-Suche nutzt ignoreSearch).
+        const schluessel = isNavigation ? new Request(url.origin + url.pathname) : req;
+        event.waitUntil(caches.open(CACHE).then((c) => c.put(schluessel, kopie)).catch(() => {}));
       }
       return res;
     }).catch(async () => {

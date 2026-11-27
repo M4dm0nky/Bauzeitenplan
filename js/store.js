@@ -15,6 +15,8 @@ import { local } from './conflicts.js';
 import { RES_EINGEBAUT, RES_KATEGORIEN } from './res-katalog.js';
 import { phaseFehler, istPhasenArt } from './phasen.js';
 import { resStatusBereinigen } from './persistence.js';
+import { aenderungen, umkehren, anwenden, istLeer } from './aenderungen.js';
+import { statusGeaendert, zeitGleich } from './rechte.js';
 
 // Bewusst NICHT aus persistence.js importiert: der Store ist der Kern, die
 // Ablage die äußere Schicht — diese Abhängigkeit liefe verkehrt herum. Für eine
@@ -931,9 +933,60 @@ function freeSlot(state, art = 'gewerk') {
   for (let i = 0; ; i++) if (!used.has(i)) return i;
 }
 
+// Die Zeiten eines Sammelvorgangs sind abgeleitet (Hülle der Kinder). Hat ein
+// Fremder ein anderes Kind geändert, weicht die Hülle im aktuellen Zustand vom
+// `vorher` des Undo-Eintrags ab — das ist KEIN Konflikt, reflowParents rechnet sie
+// danach neu. Weicht nur dies ab, gilt der aktuelle Datensatz als Ausgangszustand
+// und die Hülle im `nachher` wird durch die aktuelle ersetzt (übernommen werden
+// nur die übrigen Felder). Jede andere Abweichung, auch `res`, bleibt Konflikt.
+const HUELLE_FELDER = ['start', 'end', 'milestone'];   // res NICHT: Zuweisungen sind keine abgeleiteten Werte
+function huellenAbgleich(state, aend) {
+  const eltern = new Set(state.tasks.map((t) => t.parent).filter(Boolean));
+  const x = aend.vorgaenge;
+  if (!x || !x.aendern.some((e) => eltern.has(e.vorher.id))) return aend;
+  const ohne = (o) => { const c = { ...o }; HUELLE_FELDER.forEach((f) => delete c[f]); return JSON.stringify(Object.keys(c).sort().map((k) => [k, c[k]])); };
+  const aktuell = new Map(state.tasks.map((t) => [t.id, t]));
+  // Wer nach dem Anwenden noch Eltern ist, bekommt seine Hülle von reflowParents.
+  const weg = new Set(x.loeschen.map((o) => o.id));
+  const danach = new Set([...state.tasks.filter((t) => !weg.has(t.id)), ...x.anlegen].map((t) => t.parent).filter(Boolean));
+  const aendern = [];
+  for (const e of x.aendern) {
+    const a = aktuell.get(e.vorher.id);
+    // Kein Eltern mehr danach (Kinder fallen weg): die Hülle ist dann echter Inhalt.
+    if (!(a && eltern.has(a.id) && danach.has(a.id))) { aendern.push(e); continue; }
+    // Reine Hüllenänderung eines weiter bestehenden Sammelvorgangs: abgeleitet, nichts zu tun.
+    if (ohne(e.vorher) === ohne(e.nachher)) continue;
+    if (ohne(a) !== ohne(e.vorher)) { aendern.push(e); continue; }
+    const nachher = { ...e.nachher };
+    HUELLE_FELDER.forEach((f) => { if (f in a) nachher[f] = a[f]; else delete nachher[f]; });
+    aendern.push({ ...e, vorher: JSON.parse(JSON.stringify(a)), nachher });
+  }
+  return { ...aend, vorgaenge: { ...x, aendern } };
+}
+
+// Undo/Redo für Rollen ohne Leitung: Die Umkehrung einer Zeitänderung stellt eine bestätigte Zuweisung samt Status
+// wieder her (oder legt einen gelöschten Vorgang mit Status neu an) — das lehnt der Server für sie ab. Darum fehlen
+// die Statusfelder im ZIEL der Umkehrung: Die Zeiten gehen zurück, der Bedarf bleibt «angefragt».
+// → {aend, entfernt}: entfernt = es ging tatsächlich ein Status verloren (die App sagt es per Toast).
+function statusEntfernen(aend, state) {
+  const x = aend.vorgaenge;
+  if (!x) return { aend, entfernt: false };
+  let entfernt = false;
+  const aktuell = new Map((state?.tasks || []).map((t) => [t.id, t]));
+  // Nur wo der Server die Umkehrung ablehnen würde (dieselbe Prüfung wie rechte.js): Status ginge hinzu oder bliebe
+  // trotz geänderter Zeit stehen. Sonst bleibt die Zeile, wie sie ist (z. B. Titel-Undo einer bestätigten Zeile).
+  const bereinigt = (t, alt) => {
+    if (!Array.isArray(t.res) || !statusGeaendert(alt?.res, t.res, alt ? zeitGleich(alt, t) : true)) return t;
+    entfernt = true;
+    return { ...t, res: t.res.map((z) => { const c = { ...z }; STATUS_FELDER.forEach((f) => delete c[f]); return c; }) };
+  };
+  const neu = { ...x, anlegen: x.anlegen.map((t) => bereinigt(t, null)), aendern: x.aendern.map((e) => ({ ...e, nachher: bereinigt(e.nachher, aktuell.get(e.vorher.id) || e.vorher) })) };
+  return { aend: entfernt ? { ...aend, vorgaenge: neu } : aend, entfernt };
+}
+
 // ── Store ───────────────────────────────────────────────────────────────────
 
-export function createStore(initial) {
+export function createStore(initial, opt = {}) {
   let state = clone(initial);
   if (!state.deps) state.deps = [];
   if (!state.tasks) state.tasks = [];
@@ -955,7 +1008,7 @@ export function createStore(initial) {
   const subs = new Set();
   let dirty = false;
 
-  const notify = () => subs.forEach((fn) => fn(state));
+  const notify = (info = { quelle: 'replace', aend: null }) => subs.forEach((fn) => fn(state, info));
 
   // Führt cmd auf draft aus. Rückgabe: {ok:true,...} oder {ok:false,error}
   function run(draft, cmd) {
@@ -973,7 +1026,22 @@ export function createStore(initial) {
     return r || ok();
   }
 
+  // Gemeinsame Grundform für replace und applyRemote.
+  function normalisieren(st) {
+    if (!Array.isArray(st.phases)) st.phases = [];
+    if (!Array.isArray(st.deps)) st.deps = [];
+    if (!Array.isArray(st.tasks)) st.tasks = [];
+    st.tasks.forEach((t) => {
+      if (t.parent === undefined) t.parent = null;
+      if (!Array.isArray(t.res)) t.res = [];
+      t.bereitstellung = !!t.bereitstellung;
+    });
+    reflowParents(st);
+  }
+
   function apply(cmd) {
+    const sperre = opt.gesperrt && opt.gesperrt();
+    if (sperre) return err(sperre);
     // Auf einer Kopie arbeiten: scheitert der Befehl (oder ein Teil eines
     // Sammelbefehls), wird die Kopie weggeworfen und nichts ist passiert.
     const draft = clone(state);
@@ -983,32 +1051,58 @@ export function createStore(initial) {
     // jedem erfolgreichen Befehl, damit kein Handler es einzeln bedenken muss.
     reflowParents(draft);
 
-    undoStack.push(state);
+    // Der Undo-Eintrag ist die Änderungsliste des Befehls (nach reflowParents
+    // gerechnet, enthält also die Hüllen): so nimmt ⌘Z nur den eigenen Schritt
+    // zurück und lässt fremde Änderungen (applyRemote) stehen.
+    const aend = aenderungen(state, draft);
+    // Änderte der Befehl nichts, bleibt keine Spur: kein Undo-Eintrag, nicht
+    // ungesichert, kein Neuzeichnen.
+    if (istLeer(aend)) return r;
+    const abgelehnt = opt.pruefe ? opt.pruefe(state, draft, aend) : null;
+    if (abgelehnt) return err(abgelehnt);
+
+    undoStack.push(aend);
     if (undoStack.length > UNDO_MAX) undoStack.shift();
     redoStack.length = 0;   // neuer Zweig — der alte Redo-Ast ist tot
     state = draft;
     dirty = true;
-    notify();
+    notify({ quelle: 'lokal', aend });
     return r;
   }
 
-  function undo() {
-    if (!undoStack.length) return false;
-    redoStack.push(state);
-    state = undoStack.pop();
+  // Undo/Redo: Eintrag (umgekehrt) auf den AKTUELLEN Zustand anwenden. Weicht ein
+  // betroffener Datensatz ab (fremde Änderung), Konflikt und Stapel unverändert.
+  function schritt(von, nach, umgekehrt, { erzwingen = false } = {}) {
+    if (!von.length) return false;
+    const sperre = opt.gesperrt && opt.gesperrt();
+    if (sperre) return err(sperre);
+    const eintrag = von[von.length - 1];
+    let roh = umgekehrt ? umkehren(eintrag) : eintrag;
+    let statusEntfernt = false;
+    if (opt.undoOhneStatus && opt.undoOhneStatus()) { const s2 = statusEntfernen(roh, state); roh = s2.aend; statusEntfernt = s2.entfernt; }
+    const aend = huellenAbgleich(state, roh);
+    const r = anwenden(state, aend, { erzwingen });
+    if (!r.ok) return r;
+    // Hüllen der Sammelvorgänge nachziehen (fremde Änderungen an Kindern, die der
+    // Eintrag nicht kennt). Was wirklich geschah, steht in `tatsaechlich`; der
+    // Eintrag für den Gegenstapel wird daraus gerechnet, damit Redo/Undo
+    // symmetrisch bleiben.
+    const draft = r.state;
+    reflowParents(draft);
+    const tatsaechlich = aenderungen(state, draft);
+    const abgelehnt = opt.pruefe ? opt.pruefe(state, draft, tatsaechlich) : null;
+    if (abgelehnt) return err(abgelehnt);
+    von.pop();
+    if (istLeer(tatsaechlich)) return { ok: true };   // nichts geschah: kein Eintrag auf den Gegenstapel
+    nach.push(umgekehrt ? umkehren(tatsaechlich) : tatsaechlich);
+    state = draft;
     dirty = true;
-    notify();
-    return true;
+    notify({ quelle: umgekehrt ? 'undo' : 'redo', aend: tatsaechlich });
+    return statusEntfernt ? { ok: true, statusEntfernt: true } : { ok: true };
   }
 
-  function redo() {
-    if (!redoStack.length) return false;
-    undoStack.push(state);
-    state = redoStack.pop();
-    dirty = true;
-    notify();
-    return true;
-  }
+  const undo = (o) => schritt(undoStack, redoStack, true, o);
+  const redo = (o) => schritt(redoStack, undoStack, false, o);
 
   return {
     get state() { return state; },
@@ -1019,16 +1113,29 @@ export function createStore(initial) {
     undo,
     redo,
     markSaved() { dirty = false; },
+    // Den Verlaufseintrag einer Änderung entfernen, die nie gültig wurde (Server lehnte sie ab):
+    // ⌘Z soll sie nicht «zurücknehmen». Gesucht wird die Liste selbst (Undo/Redo-Stapel) bzw. ihr
+    // Gegenstück (eine Undo-/Redo-Änderung legt die umgekehrte Liste auf den Gegenstapel).
+    entferneEintrag(aend) {
+      const ziel = [JSON.stringify(aend), JSON.stringify(umkehren(aend))];
+      for (const st of [undoStack, redoStack]) {
+        for (let i = st.length - 1; i >= 0; i--) {
+          if (st[i] === aend || ziel.includes(JSON.stringify(st[i]))) { st.splice(i, 1); notify({ quelle: 'verlauf', aend: null }); return true; }
+        }
+      }
+      return false;
+    },
+    // Fremde Änderung übernehmen: kein Undo-Eintrag, nicht ungesichert, Stapel bleiben.
+    applyRemote(next) {
+      const alt = state;
+      state = clone(next);
+      normalisieren(state);
+      notify({ quelle: 'remote', aend: aenderungen(alt, state) });
+    },
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
     replace(next) {           // Projektwechsel / Import
       state = clone(next);
-      if (!Array.isArray(state.phases)) state.phases = [];
-      state.tasks.forEach((t) => {
-        if (t.parent === undefined) t.parent = null;
-        if (!Array.isArray(t.res)) t.res = [];
-        t.bereitstellung = !!t.bereitstellung;
-      });
-      reflowParents(state);
+      normalisieren(state);
       undoStack.length = 0;
       redoStack.length = 0;
       dirty = false;

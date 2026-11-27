@@ -64,10 +64,17 @@ body {
 .seg button[aria-pressed="true"] { background: var(--block-t); color: var(--block); }
 .seg-icon button { padding: 6px 13px; font-size: 14px; line-height: 1; }
 .btn {
-  border: 2px solid rgba(255,255,255,.3); background: none; color: rgba(255,255,255,.8);
+  border: 2px solid var(--line-2); background: none; color: var(--ink-2);
   padding: 5px 14px; font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
 }
-.btn:hover { border-color: #fff; color: #fff; }
+.btn:hover { border-color: var(--ink); color: var(--ink); }
+/* In den dunklen Blöcken (Kopf, Schiene) stehen die Knöpfe hell auf dunkel. Außerhalb (Dialoge, Panel, Tabelle)
+   waren sie weiß auf weiß — ihre Farben folgen dort der Seite. */
+.hd .btn, .rail .btn { border-color: rgba(255,255,255,.3); color: rgba(255,255,255,.8); }
+.hd .btn:hover, .rail .btn:hover { border-color: #fff; color: #fff; }
+/* Primärknopf: volle Fläche in Schriftfarbe, auch beim Hovern lesbar */
+.btn-p, .btn-p:hover { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn-p:hover { background: var(--ink-2); border-color: var(--ink-2); }
 
 .legend { gap: 6px 16px; margin-left: auto; font-size: 11px; font-weight: 600; color: rgba(255,255,255,.7); }
 .legend-i .bz-dot { width: 11px; height: 11px; border-radius: 0; }
@@ -261,6 +268,12 @@ kbd { font: inherit; font-size: 10px; border: 1.5px solid var(--ink-3); backgrou
 .sync-state { font-size: 13px; padding: 2px 7px; border: 1px solid var(--line); }
 .sync-state[data-state="ok"] { color: var(--live-run, #1a7a46); border-color: var(--live-run, #1a7a46); }
 .sync-state[data-state="wartet"] { color: color-mix(in srgb, #e0a100 65%, var(--ink)); border-color: color-mix(in srgb, #e0a100 65%, var(--ink)); }
+.hd-offline { font-size: 13px; padding: 2px 7px; color: var(--nur-t); background: var(--nur-bg); border: 1px solid var(--nur-bg); }
+/* Marke «Nur Ansicht»: Fläche + Schrift als Token (Kontrast 4,5:1, tests/run.mjs), in allen drei Scopes. */
+:root { --nur-bg: #e0a100; --nur-t: #1b1a17; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --nur-bg: #f2c14b; --nur-t: #1b1a17; } }
+:root[data-theme="dark"] { --nur-bg: #f2c14b; --nur-t: #1b1a17; }
+:root[data-theme="light"] { --nur-bg: #e0a100; --nur-t: #1b1a17; }
 .sync-state[data-state="fehler"] { color: #fff; background: var(--crit); border-color: var(--crit); }
 
 /* Entwurf für Start · Ende · Dauer (js/entwurf.js): Zeile gelb, ✓ grün, ✗ rot. */
@@ -330,3 +343,16 @@ kbd { font: inherit; font-size: 10px; border: 1.5px solid var(--ink-3); backgrou
 .res-st-bestaetigt { background: var(--ein-ok); color: var(--ein-ok-t); }
 .res-st-abgelehnt { background: var(--crit); color: var(--panel); }
 .bd-offen { background: var(--panel); border: 1px solid var(--line, var(--rule-2, currentColor)); color: var(--ink); }
+
+/* Mitglieder und Verwaltung */
+.mg-zeile { background: var(--panel2); border: 1px solid var(--line); color: var(--ink); }
+.mg-feld { background: var(--panel); border: 1px solid var(--line); color: var(--ink); }
+.mg-chip { color: var(--ink); }
+.mg-weg { background: var(--panel); border: 1px solid var(--line); color: var(--ink); }
+.mg-weg:hover:not(:disabled) { background: var(--crit); border-color: var(--crit); color: #fff; }
+.mg-fehler { color: var(--crit); }
+
+/* Alte lokale Pläne im Projektdialog: gelb = «braucht eine Entscheidung», nicht Fehler */
+.alt-sec { background: var(--panel2); border: 1px solid var(--line); border-left: 4px solid #d9a21b; }
+.alt-zeile { border-top: 1px solid var(--line); padding-top: 8px; }
+.alt-ueb:disabled, .alt-exp:disabled { opacity: .55; cursor: not-allowed; }

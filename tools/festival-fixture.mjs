@@ -29,7 +29,7 @@ function vorgabe() {
  * @param {string} name   Projektname (eindeutig wählen, sonst fragt der Import «ersetzen?»)
  * @param {{venue?:string, loadIn?:string, phasen?:object[], ressourcen?:object[]}} o  loadIn verschiebt alle Termine (wie früher das Dialogfeld)
  */
-export async function festivalMitDaten(page, name, { venue = '', loadIn = vorgabe(), phasen = null, ressourcen = null } = {}) {
+export async function festivalMitDaten(page, name, { venue = '', loadIn = vorgabe(), phasen = null, ressourcen = null, timezone = null } = {}) {
   const j = JSON.parse(readFileSync(DATEI, 'utf8'));
   // Abstand zum Anker in ECHTEN Minuten (die Fixture liegt im September, ohne
   // Zeitumstellung), aufgesetzt auf den lokalen Aufbaubeginn — genau so rechnete
@@ -38,6 +38,7 @@ export async function festivalMitDaten(page, name, { venue = '', loadIn = vorgab
   const v = (s) => (s == null ? s : lokal(new Date(a + (msVon(s) - msVon(ANKER)))));
   j.project.name = name;
   j.project.venue = venue;
+  if (timezone) j.project.timezone = timezone;   // fest statt vom Browser geerbt
   j.project.id = 'fx' + Date.now().toString(36) + (nr++).toString(36);
   j.project.start = v(j.project.start);
   j.project.end = v(j.project.end);

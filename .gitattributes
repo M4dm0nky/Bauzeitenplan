@@ -1,0 +1,5 @@
+# Binaries und generierte Dateien nicht als Text diffen
+tools/.pb/** binary
+*.zip binary
+*.stl -diff
+*.3mf -diff

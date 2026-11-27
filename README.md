@@ -1,6 +1,6 @@
 # Bauzeitenplan
 
-**Live: https://m4dm0nky.github.io/Bauzeitenplan/** · [Changelog](CHANGELOG.md)
+**Live: https://callboard.nyxlightwork.de** · **Test: https://m4dm0nky.github.io/Bauzeitenplan/** · [Changelog](CHANGELOG.md)
 
 Digitaler Gantt-Ablaufplan für die Veranstaltungsbranche. Jedes Gewerk — Licht, Ton,
 Video, Pyro, Catering, Sanitär, Bühne, Rigging — pflegt seine eigenen Vorgänge, alle
@@ -11,9 +11,53 @@ der Load-In läuft stundengenau.
 
 ## Stand
 
-**Benutzbar.** Projekte anlegen (Vorlagen), befüllen, bearbeiten — alles im
-Browser, ohne Backend. Gantt mit vier Zoomstufen, Abhängigkeiten (FS/SS/FF/SF
-mit Lag), Meilensteine, Puffer/Engpass, Undo/Redo, Auto-Save, JSON-Export.
+**Benutzbar.** Projekte anlegen (Vorlagen), befüllen, bearbeiten — online, mit
+Anmeldung, gemeinsam mit anderen (siehe «Online und Mehrbenutzer»). Gantt mit vier
+Zoomstufen, Abhängigkeiten (FS/SS/FF/SF mit Lag), Meilensteine, Puffer/Engpass,
+Undo/Redo, JSON-Export und -Import.
+
+## Online und Mehrbenutzer
+
+Die App läuft gegen eine eigene **PocketBase** (0.40.6): Die Pläne liegen auf dem
+Server, nicht mehr im Browser. Wer hinein will, meldet sich an (`login.html`:
+Anmelden, «Passwort vergessen», Einladung annehmen). Änderungen anderer erscheinen
+live (Realtime), jede Änderung geht sofort zum Server; der Knopf rechts in der
+Kopfzeile zeigt den **Speicherstand** (✓ gesendet · ⟳ sendet… · ⚠ offen). Hat
+jemand dasselbe inzwischen geändert, fragt die App («von jemand anderem geändert»),
+statt still zu überschreiben.
+
+**Rollen je Plan:** *Superadmin* (alles, verwaltet Konten) · *Besitzer* und
+*Produktionsleitung* (alles im Plan, Mitglieder einladen, Bedarf bestätigen) ·
+*Bearbeiter* (alles bearbeiten) · *Gewerkeleiter* (nur Vorgänge der eigenen
+Gewerke) · *Betrachter* (nur ansehen). Die Rechte erzwingt der Server; die App
+blendet nur vorab aus. Im Projektmenü: «Mitglieder…» (einladen per E-Mail oder
+Link, Rolle und Gewerke ändern, entfernen) und «Verwaltung…» (Superadmin: wer
+darf Pläne anlegen, alle Pläne).
+
+**Offline ist nur Ansicht.** Ohne Netz sperrt die App das Bearbeiten («📡 Offline –
+nur Ansicht») und verbindet sich wieder von selbst; ein kurzer Abbruch der
+Live-Verbindung (der Server trennt nach 5 Minuten Ruhe) zählt erst nach 10 s als
+offline. Auch ein Start ohne Netz (oder bei gestörtem Server) zeigt die lokale
+Kopie, sofern es eine gibt. Der **Live-Monitor** (Live-Modus mit aktivem Projekt)
+öffnet ohne Dialog und zeigt bei abgelaufener Anmeldung die lokale Kopie weiter.
+Meldest du dich selbst ab, löscht die App die lokalen Kopien der Server-Pläne, auch in einem zweiten
+Tab desselben Browsers. Ein Fehler des Servers (5xx, 429, kein JSON) nimmt
+Änderungen nie zurück: sie bleiben offen und gehen später raus. Löschen darf einen
+Plan nur der Besitzer oder der Superadmin. **`print.html` liest diese lokale Kopie** — vor dem Drucken also
+die App einmal öffnen.
+
+**Umstieg von der bisherigen Version:** Pläne, die die frühere Fassung nur in diesem
+Browser gespeichert hat, gehen nicht verloren. Abmelden löscht sie nicht. Nach der
+Anmeldung zeigt der Projektdialog sie im Abschnitt «Pläne aus der bisherigen Version
+(nur in diesem Browser)» mit Name, Ort und Zeitraum. «Auf den Server übernehmen» legt den
+Plan wie ein Import neu an (neue Plan-ID, nur Produktionsleitung und Superadmin) und
+entfernt den lokalen Eintrag erst, wenn der Server ihn angenommen hat; «Exportieren» speichert
+eine JSON-Sicherung.
+
+**Test und Live:** Der Hostname wählt die Instanz — `callboard.nyxlightwork.de`
+nutzt die Live-API, alles andere (GitHub Pages, `localhost`) die Test-API; auf
+`localhost` überschreibt `?api=<url>`. Auf Test sind keine Mails eingerichtet
+(«Passwort vergessen» geht dort nicht, Einladungen gehen per Link).
 
 **Dazugekommen (bis v0.12.1):** **Die Schiene links** — Bauzeitenplan und
 Showablauf sind zwei getrennte Modi mit je eigener Leiste, eigener Tabelle und
@@ -131,7 +175,7 @@ den **Abschnitt**: ein Setup-Blatt für die Crew am Vormittag, ein Show-Blatt f�
 den Abend, oder beides auf einem. Kopf und Fuß nennen ihn, damit ein abgelegtes
 Blatt sich selbst erklärt.
 
-**Pläne kommen über Export/Import (JSON-Datei) oder den Sync auf andere Geräte.** Beim Start fragt immer der Projektdialog (eigene Projekte, Neu, Import); nur ein Live-Monitor mit aktivem Projekt öffnet ohne Dialog. Die App holt nie von selbst einen Plan aus dem Netz. `?plan=leer` ist der Schalter der Prüfwerkzeuge.
+**Pläne liegen auf dem Server; Import/Export (JSON-Datei) bleibt für Sicherung und Austausch.** Beim Start fragt nach der Anmeldung der Projektdialog (deine Pläne, Neu, Import); nur ein Live-Monitor mit aktivem Projekt öffnet ohne Dialog. Die App holt nie von selbst eine Plan-Datei. `?plan=leer` ist der Schalter der Prüfwerkzeuge.
 
 **Drucken: ein A3 quer je Tag.** Der Knopf **Drucken** im Kopf öffnet
 `print.html` — die Tagesblätter für die Wand im Produktionsbüro. Dort wählst du
@@ -147,18 +191,10 @@ vergleichbar bleiben — von Hand übersteuerbar.
 Im Druckdialog **A3 · Querformat** wählen und **Hintergrundgrafiken einschalten**,
 sonst drucken die Balken weiß.
 
-**Deine Daten liegen im Browser.** Privater Modus, Verlauf löschen, anderer
-Rechner — und sie sind weg. Es gibt kein Backend und keine Anmeldung: der
-**JSON-Export ist die einzige Sicherung**. Nutze ihn.
-
-**Daten-Repo und zwei Tabs.** Ist ein Projekt im GitHub-Daten-Repo (Projektmenü →
-Speicherort) nicht mehr vorhanden, fragt die App, bevor sie es lokal löscht: «Lokal
-löschen» oder «Behalten und neu hochladen». Ist das Repo selbst nicht erreichbar,
-wird nichts gelöscht. Öffnest du denselben Plan in zwei Tabs, fragt der andere Tab
-bei einer Änderung, wenn er selbst Ungesichertes hat («Meine behalten», «Die aus dem
-anderen Tab nehmen», «Beide behalten (Kopie)»); Abbrechen behält deinen Stand. Nach
-der Wahl gilt der Stand des anderen Tabs von jetzt, auch wenn er während der Frage
-weitergespeichert hat.
+**Deine Daten liegen auf dem Server.** Anmeldung, Rollen und Rechte ersetzen die
+frühere Browser-Ablage; der **JSON-Export** bleibt als eigene Sicherung (Projektmenü →
+Export). Neu, Import und Löschen gehen nur mit dem passenden Recht (Plan anlegen:
+Produktionsleitung oder Superadmin; löschen: Besitzer oder Superadmin).
 
 **Live-Modus** für den Aufbau: Zeitlinie läuft mit, Ansicht folgt, laufende
 Vorgänge leuchten, Verzug wird benannt («sollte seit 20m laufen»). Der Status
@@ -185,11 +221,9 @@ sonst stünde der Plan am nächsten Morgen kommentarlos daneben.
 **Als Nächstes:** Balken und Dauern im Gantt ziehen (Verknüpfungen gehen schon),
 danach Ansichten & Export (öffentlicher Link, PDF/ICS).
 
-**PocketBase liegt auf Eis.** Eine Login- und Rollenschicht war vorbereitet,
-wurde aber in v0.8.0 aus `main` entfernt: die Seite ist eine reine
-GitHub-Pages-Auslieferung ohne Nutzerverwaltung, und die Schicht kostete bei
-jedem Commit eine Isolationsprozedur. Der vollständige Stand liegt im Branch
-`pocketbase-vorbereitung` und wird weder deployt noch gemergt.
+**PocketBase** war bis v0.25 vorbereitet, aber auf Eis (Branch `pocketbase-vorbereitung`,
+bleibt als Vorlage liegen). Die Online-Fassung wurde neu gebaut (Branch `online`);
+Hintergründe: `docs/entscheidungen.md` → «Online und Mehrbenutzer».
 
 ## Starten
 
@@ -197,10 +231,12 @@ Ein Server ist nötig — ohne ihn blockiert der Browser die ES-Module per CORS.
 
 ```bash
 python3 -m http.server 8080
-# → http://localhost:8080
+# → http://localhost:8080   (spricht die Test-API; ein Konto dort braucht eine Einladung)
 ```
 
-Kein Build, keine Abhängigkeiten zur Laufzeit.
+Kein Build, keine Abhängigkeiten zur Laufzeit. Zum Entwickeln startet
+`node tools/pb-lokal.mjs` eine eigene lokale PocketBase (Binary nach `tools/.pb/`,
+leere Daten, Konto per Zufallspasswort), `pocketbase/README.md` erklärt den Server-Teil.
 
 ### Die Schiene links
 
@@ -221,8 +257,8 @@ Bereich zeigt seinen Stand (✓ fertig, ⚠ Warnung, ○ offen). Passt ein Teil 
 mehr in den Zeitraum, warnt die Seite, und ein Knopf übernimmt die Hülle. Nach
 «Neu» führt dich die Seite einmal Schritt für Schritt durch (Zurück/Weiter,
 «Fertig»). Der Plan bleibt dahinter stehen; „Zum Plan" gibt dir genau den
-Ausschnitt zurück, bei dem du warst. Projekt anlegen/wechseln, Import/Export und
-den Speicherort findest du im Menü «📁 Projekt» in der Kopfzeile. Ort, Adresse und
+Ausschnitt zurück, bei dem du warst. Projekt anlegen/wechseln, Import/Export,
+Mitglieder und Abmelden findest du im Menü «📁 Projekt» in der Kopfzeile. Ort, Adresse und
 Ansprechpartner stehen auch im Kopf der Tagesblätter. Die schnellen Wege bleiben
 daneben bestehen — eine Bezeichnung legst du weiter mit „+ Neu…" im Auswahlfeld
 an, mitten im Tippen; Einrichten ist der Weg zum Aufräumen danach.
@@ -294,11 +330,19 @@ node tools/verify-amk.mjs     # AMK-Plan importieren und prüfen
 node tools/verify-print.mjs   # Tagesblätter: Zuschnitt, Filter, Maßstab, PDF
 node tools/verify-klassentreffen.mjs  # V07-Plan importieren + Negativprüfung «kein mitgelieferter Plan»
 node tools/verify-showablauf.mjs      # Showablauf: Ebene, Bühnen, Live-Kopfzeile, Blatt
+node tools/verify-pb-regeln.mjs       # Server: Schema, API-Regeln, Hook, Rate Limits (frische lokale PocketBase je Abschnitt)
+node tools/verify-mehrbenutzer.mjs    # Anmeldung, Rollen, Realtime, Offline, Mitglieder (zwei Browser; allein laufen lassen)
 node tools/make-amk.mjs       # tools/fixtures/amk-singleshow.json (Testdaten) aus den PDF-Daten neu bauen
 
-# gegen die veröffentlichte Seite statt lokal:
-node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
+# gegen die veröffentlichte Seite statt lokal (prüft nur Anmeldeseite und Weiterleitung):
+node tools/verify-browser.mjs --base https://callboard.nyxlightwork.de/
+# gegen eine laufende PocketBase, nur lesend (Health, Collections, Hook-Route; PB_SU_TOKEN für Einstellungen):
+node tools/verify-pb-regeln.mjs --gegen https://api-test.callboard.nyxlightwork.de
 ```
+
+Alle zehn Skripte plus `tests/run.mjs` müssen grün sein, bevor etwas fertig ist. Die
+Browser-Skripte legen ihre Pläne über eine lokale PocketBase an (`tools/pb-lokal.mjs`);
+das braucht einmalig Internet für die Binary.
 
 `verify-browser.mjs` braucht einmalig einen Browser: `npx playwright install firefox`.
 Er prüft Verhalten (Sticky-Spalten, Zoomstufen, Pfeilgeometrie, Beschriftungen,
@@ -315,14 +359,18 @@ Soundcheck, den die Vorgabe eine Stunde vor den Act setzte statt an den Nachmitt
 node tools/version.mjs 0.2.0   # eine Nummer, alle Stellen
 # CHANGELOG.md füllen
 node tests/run.mjs             # prüft, dass nichts auseinanderläuft
-git push origin main
+git push origin main           # Test: GitHub Pages (~1 Minute), Quelle main / root
+git push origin live           # Live: Coolify baut das Dockerfile (nginx), callboard.nyxlightwork.de
 ```
 
-GitHub Pages aktualisiert sich automatisch ~1 Minute nach dem Push — kein Build,
-kein Workflow, Quelle ist `main` / `root`. Danach live prüfen:
+**Test** (GitHub Pages, API `api-test`) und **Live** (Coolify aus Branch `live`, API
+`api`) sind getrennt; der Server-Teil (Migrationen, Hooks, Einstellungen) wird nur vom
+Admin eingespielt — Ablauf in [`docs/admin-auftrag-online-phase2.md`](docs/admin-auftrag-online-phase2.md).
+Das Image (`Dockerfile`, `nginx.conf`) enthält nur die ausgelieferten Dateien. Danach prüfen:
 
 ```bash
-node tools/verify-browser.mjs --base https://m4dm0nky.github.io/Bauzeitenplan/
+node tools/verify-browser.mjs --base https://callboard.nyxlightwork.de/
+node tools/verify-pb-regeln.mjs --gegen https://api.callboard.nyxlightwork.de
 ```
 
 ### Warum es einen Service Worker gibt
@@ -345,7 +393,8 @@ alles danach.
 
 ```
 index.html              Die App
-print.html              Tagesblätter zum Drucken
+login.html              Anmeldung, Passwort, Einladung
+print.html              Tagesblätter zum Drucken (liest die lokale Kopie)
 js/
   app.js                Einstieg: Projektverwaltung, Speichern, Ansichten
   store.js              Zustand + Befehle + Undo/Redo — DOM-frei
@@ -355,7 +404,12 @@ js/
   conflicts.js          Konflikte, Dauer-Kurzform, Uhrzeit-Eingabe — DOM-frei
   timeaxis.js           Zeit ↔ Pixel, Zoomstufen, Ticks, Kalenderwochen — DOM-frei
   templates.js          Vier Vorlagen (Festival, Tour, Corporate, Messe) + leerer Plan
-  persistence.js        localStorage, Export/Import, Migration — DOM-frei
+  persistence.js        localStorage (Token, lokale Kopie), Export/Import, Migration — DOM-frei
+  pb.js, server.js      PocketBase-Client (Anmeldung, Token) · Plan lesen/senden mit rev, Realtime, Warteschlange — DOM-frei
+  aenderungen.js        Änderungsliste je Store-Befehl (anlegen/ändern/löschen je Collection) — DOM-frei
+  rechte.js, konflikt.js  Rechte-Vorabprüfung nach Rolle · Konfliktauflösung beim Senden — DOM-frei
+  mitglieder.js         Dialoge «Mitglieder…» und «Verwaltung…» (Logik: mitglieder-logik.js, DOM-frei)
+  login.js              login.html: Anmelden, Passwort vergessen, Einladung annehmen
   palette.js            Gewerk-Farben: 10 Töne × 2 Schraffuren = 20 Plätze
   ebene.js              Ansichten: Bänder, Abschnitt, Showtage, Zeitfenster — DOM-frei
   resources.js          Personal & Maschinen: Bezeichnungen, Deckung, Bedarfsraster — DOM-frei
@@ -370,8 +424,11 @@ styles/
   print.css             Blattgeometrie in mm, @page A3 quer
   themes/*.css          Fünf Gestaltungsebenen; callboard ist aktiv
 tests/                  Unit-Tests + statische Prüfungen
+pocketbase/             Server-Teil: Migrationen, Hooks, setup.mjs, schema.json
+Dockerfile, nginx.conf  Live-Image (Coolify, Branch live)
 tools/
   verify-browser.mjs    Verhaltensprüfung im echten Browser
+  pb-lokal.mjs          lokale PocketBase für die Prüfskripte
 docs/                   Entscheidungen, Themes, Farbsuche
 ```
 
@@ -423,7 +480,7 @@ Knopf gebaut — siehe **[docs/themes.md](docs/themes.md)**.
 | ✅ | «Einrichten» als eigene Seite (fünf Bereiche, geführter Erststart) · Tageswahl nur über Tage, die es gibt |
 | → | Drag & Drop der Balken im Gantt: Balken ziehen, Dauer ziehen |
 | | Ansichten & Export: öffentlicher Link, PDF/ICS |
-| ❄️ | PocketBase, Login, Rollen — auf Eis, Stand im Branch `pocketbase-vorbereitung` |
+| ✅ | Online: PocketBase, Anmeldung, Rollen, Realtime, Mitglieder, Offline nur Ansicht (Branch `online`, Live nach Freigabe) |
 
 **Zu den Vorlagen:** «Festival» ist abgenommener Praxisstand. Tour, Corporate und
 Messe sind entworfene Gerüste — richtige Gewerke und Meilensteine, aber keine

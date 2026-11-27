@@ -19,15 +19,20 @@ const server = createServer((q, s) => {
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const b = await firefox.launch({ executablePath: exe });
+const stops = [];   // lokale PocketBase je Skript (tools/plan-fixture.mjs), wird im finally beendet
+// Angemeldet, ohne Plan (frisches Konto): der Import läuft über den Server-Weg (Import-Knopf → planAnlegen)
+const ohnePlan = async (c, o = {}) => { const r = await planLaden(c, null, { frisch: true, ...o }); stops.push(r.stop); return r; };
+let bad = 0;
+const errors = [];
+try {
 const ctx = await b.newContext({ viewport: { width: 1600, height: 950 } });
+await ohnePlan(ctx);
 const p = await ctx.newPage();
 // Uhr mitten in die Aufbauwoche stellen, damit die Ansicht sinnvoll steht.
 await p.clock.install({ time: new Date('2026-08-27T10:00:00') });
-const errors = [];
 p.on('pageerror', (e) => errors.push('JS: ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
-let bad = 0;
 const zoomWahl = async (pg, z) => { await pg.click('#zoom-stufe'); await pg.locator('.mn .mn-i', { hasText: z[0].toUpperCase() + z.slice(1) }).click(); };
 const check = async (name, fn) => {
   let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
@@ -173,6 +178,7 @@ const jsonZaehler = (pg) => { const z = { n: 0, urls: [] }; pg.on('request', (r)
 {
   // (a) frischer Browser, Direktlink
   const c = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  await ohnePlan(c);
   const pg = await c.newPage();
   pg.on('pageerror', (e) => ferr.push('JS: ' + e.message));
   const z = jsonZaehler(pg);
@@ -185,33 +191,30 @@ const jsonZaehler = (pg) => { const z = { n: 0, urls: [] }; pg.on('request', (r)
   });
   await c.close();
 
-  // (b) Altbestand mit quelle + uraltem Stempel: Zeile öffnet ohne «Zwei Fassungen»
+  // (b) Plan mit quelle + uraltem Stempel (Altbestand-Form) auf dem Server: Zeile öffnet ohne «Zwei Fassungen»
   const c2 = await b.newContext({ viewport: { width: 1600, height: 950 } });
-  const { plan, id } = planSeed('klassentreffen-festival.json');
+  const { plan } = planSeed('klassentreffen-festival.json');
   plan.project.quelle = { datei: 'klassentreffen-festival.json', exported: '2000-01-01T00:00:00.000Z' };
   plan.tasks[0].title = 'LOKAL GEÄNDERT';
-  await c2.addInitScript(([i, text]) => {
-    try {
-      if (localStorage.getItem('bzp_seeded_' + i) === '1') return;
-      localStorage.setItem('bzp_seeded_' + i, '1');
-      localStorage.setItem('bzp_p_' + i, text);
-      localStorage.setItem('bzp_projects', JSON.stringify([{ id: i, name: 'Klassentreffen Festival 2026 (Altbestand)', venue: '', modified: new Date().toISOString(), remoteSha: null, dirty: false }]));
-    } catch { /* */ }
-  }, [id, JSON.stringify(plan)]);
+  plan.project.name = 'Klassentreffen Festival 2026 (Altbestand)';
+  const alt = await planLaden(c2, plan, { frisch: true }); stops.push(alt.stop);
   const pg2 = await c2.newPage();
   pg2.on('pageerror', (e) => ferr.push('JS: ' + e.message));
   const z2 = jsonZaehler(pg2);
   await pg2.goto(BASEURL);
   await pg2.waitForTimeout(1200);
-  await check('(b) Altbestand mit quelle + altem Stempel: Zeile öffnet das Projekt, kein «Zwei Fassungen», kein .json-Abruf', async () => {
+  await check('(b) Plan mit quelle + altem Stempel: Zeile öffnet das Projekt, kein «Zwei Fassungen», kein .json-Abruf', async () => {
     if (!(await pg2.locator('#dlg').isVisible())) return 'kein Projektdialog';
     await pg2.locator('#dlg .dlg-open', { hasText: 'Altbestand' }).first().click();
     await pg2.waitForTimeout(1500);
     const f = [];
     if (await pg2.locator('.dlg h2', { hasText: 'Zwei Fassungen' }).count()) f.push('Dialog «Zwei Fassungen»');
     if (!((await pg2.locator('#proj-name').textContent()) || '').includes('Klassentreffen')) f.push('Projekt nicht offen');
-    const t = await pg2.evaluate((i) => JSON.parse(localStorage.getItem('bzp_p_' + i)).tasks[0].title, id);
-    if (t !== 'LOKAL GEÄNDERT') f.push('lokale Fassung ersetzt: ' + t);
+    const t = await pg2.evaluate(() => {
+      const k = Object.keys(localStorage).find((x) => x.startsWith('bzp_p_'));
+      return k ? JSON.parse(localStorage.getItem(k)).tasks[0].title : '(keine lokale Kopie)';
+    });
+    if (t !== 'LOKAL GEÄNDERT') f.push('Titel nicht erhalten: ' + t);
     if (z2.n) f.push(z2.n + ' .json-Abrufe: ' + z2.urls.join(', '));
     return f.length ? f.join(' / ') : true;
   });
@@ -223,7 +226,7 @@ const jsonZaehler = (pg) => { const z = { n: 0, urls: [] }; pg.on('request', (r)
 console.log('\nSTART OHNE KENNUNG: PROJEKTDIALOG');
 {
   const lc = await b.newContext({ viewport: { width: 1600, height: 950 } });
-  await planLaden(lc);
+  const lcPl = await planLaden(lc, 'klassentreffen-festival.json', { frisch: true }); stops.push(lcPl.stop);
   const lpg = await lc.newPage();
   await lpg.goto(BASEURL);
   await lpg.waitForTimeout(1200);
@@ -231,17 +234,10 @@ console.log('\nSTART OHNE KENNUNG: PROJEKTDIALOG');
     if (!(await lpg.locator('#dlg').isVisible())) return 'kein Dialog';
     return (await lpg.locator('#dlg .dlg-open', { hasText: 'Klassentreffen Festival 2026' }).count()) ? true : 'Zeile fehlt';
   });
-  // Zweites Projekt «Alpha» anlegen (Kopie des Plans, jüngster Stand).
-  await lpg.evaluate(() => {
-    const idx = JSON.parse(localStorage.getItem('bzp_projects'));
-    const q = idx[0];
-    const plan = JSON.parse(localStorage.getItem('bzp_p_' + q.id));
-    plan.project.id = 'alpha1'; plan.project.name = 'Alpha';
-    localStorage.setItem('bzp_p_alpha1', JSON.stringify(plan));
-    idx.push({ ...q, id: 'alpha1', name: 'Alpha', modified: new Date(Date.now() + 60000).toISOString() });
-    localStorage.setItem('bzp_projects', JSON.stringify(idx));
-    localStorage.setItem('bzp_active', q.id);
-  });
+  // Zweites Projekt «Alpha» anlegen (Kopie des Plans, jüngster Stand) — auf dem Server, für dasselbe Konto.
+  const alpha = planSeed('klassentreffen-festival.json').plan;
+  alpha.project.id = 'alpha1'; alpha.project.name = 'Alpha';
+  await lcPl.planDazu(alpha);
   await lpg.goto(BASEURL);
   await lpg.waitForTimeout(1200);
   await check('mit Projekten: Dialog mit Zeile «Alpha», noch kein Plan gewechselt', async () => {
@@ -278,6 +274,7 @@ console.log('\nSTART AN EINEM TAG OHNE VORGÄNGE');
   const a = new Date('2026-08-27T00:00').getTime(), z = new Date('2026-08-28T00:00').getTime();
   plan.tasks = plan.tasks.filter((t) => !(new Date(t.start).getTime() < z && new Date(t.end).getTime() >= a));
   const gCtx = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  await ohnePlan(gCtx);
   const gp = await gCtx.newPage();
   await gp.clock.install({ time: new Date('2026-08-27T10:00:00') });
   await gp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
@@ -302,6 +299,7 @@ console.log('\nSTART NACH DEM PLANENDE');
 // mit Bühne/Rigging/Licht und keinem einzigen Balken im Bild.
 for (const [vw, vh, minBalken] of [[1600, 950, 3], [390, 844, 1]]) {   // Handy: Kopf frisst die Hälfte, ein Balken genügt
   const nCtx = await b.newContext({ viewport: { width: vw, height: vh } });
+  await ohnePlan(nCtx);
   const np = await nCtx.newPage();
   await np.clock.install({ time: new Date('2026-11-19T10:00:00') });
   await np.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
@@ -360,6 +358,7 @@ console.log('\nFOKUSTAG NACH EBENENWECHSEL');
   plan.tasks = plan.tasks.filter((t) => !beruehrt(t, '2026-08-28') && (!beruehrt(t, '2026-08-27') || t.gewerk === unten));
   const hatUnten = plan.tasks.some((t) => t.gewerk === unten && beruehrt(t, '2026-08-27'));
   const fCtx = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  await ohnePlan(fCtx);
   const fpg = await fCtx.newPage();
   await fpg.clock.install({ time: new Date('2026-08-27T21:00:00') });
   await fpg.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
@@ -393,7 +392,7 @@ console.log('\nFOKUSTAG NACH EBENENWECHSEL');
   const serr = [];
   sp.on('pageerror', (e) => serr.push('JS: ' + e.message));
   await sp.clock.install({ time: new Date('2026-08-27T10:00:00') });
-  await planLaden(sCtx);
+  stops.push((await planLaden(sCtx, 'klassentreffen-festival.json', { frisch: true })).stop);
   await sp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
   await sp.waitForSelector('.bz-lab', { timeout: 20000 });
   await sp.waitForTimeout(800);
@@ -531,10 +530,11 @@ console.log('\nFOKUSTAG NACH EBENENWECHSEL');
   const hp = await hCtx.newPage();
   hp.setDefaultTimeout(5000);
   await hp.clock.install({ time: new Date('2026-08-27T10:00:00') });
-  await planLaden(hCtx);
+  stops.push((await planLaden(hCtx, 'klassentreffen-festival.json', { frisch: true })).stop);
   await hp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
   await hp.waitForSelector('.bz-lab', { timeout: 20000 });
   await hp.waitForTimeout(800);
+  // 300 px (vorher 285): seit Mehrbenutzer steht die Sende-Marke «✓ gesendet» im Studio-Theme in einer eigenen Zeile.
   await check('Suche Handy: erreichbar, Kopf ≤ 300 px, Gantt ≥ 50 %', async () => {
     const sichtbar = await hp.locator('#suche').isVisible();
     if (!sichtbar) return 'Suchfeld nicht sichtbar';
@@ -560,10 +560,59 @@ console.log('\nFOKUSTAG NACH EBENENWECHSEL');
   await hCtx.close();
 }
 
+// ── Import gegen eine PocketBase MIT Rate-Limits ──────────────────────────────
+// Auf TEST/LIVE sind die PB-Standard-Limits an. Der Import des Klassentreffen-Plans
+// (353 Vorgänge, 407 Datensätze) muss auch dann gelingen, nicht nur gegen die lokale PB
+// ohne Limits. Eigene PB (eigener Port, startePb({ rateLimits: true })), eigener Browser-Kontext.
+console.log('\nIMPORT MIT RATE-LIMITS');
+{
+  const c = await b.newContext({ viewport: { width: 1600, height: 950 } });
+  const rl = await planLaden(c, null, { frisch: true, rateLimits: true }); stops.push(rl.stop);
+  const g = await rl.pb.su('GET', '/api/settings');
+  await check('Vorbedingung: Rate-Limits der lokalen PB sind eingeschaltet', async () =>
+    g.body?.rateLimits?.enabled === true ? true : 'rateLimits.enabled = ' + g.body?.rateLimits?.enabled);
+  const pg = await c.newPage();
+  const rerr = [];
+  pg.on('pageerror', (e) => rerr.push('JS: ' + e.message));
+  const r429 = [];
+  pg.on('response', (r) => { if (r.status() === 429) r429.push(r.url()); });
+  await pg.goto(BASEURL + '?plan=leer');
+  await pg.waitForTimeout(700);
+  await pg.locator('.dlg-act .btn', { hasText: 'JSON importieren' }).click();
+  await pg.locator('#import-file').setInputFiles(join(FIXTURES, 'klassentreffen-festival.json'));
+  const vorgaenge = () => pg.locator('.kpi', { hasText: 'Vorgänge' }).locator('.kpi-v').textContent().then((t) => t.trim());
+  await check('Import mit Limits: Plan offen, 353 Vorgänge', async () => {
+    // Timeout wird NICHT geschluckt: kommt die Zahl nicht, scheitert die Prüfung mit dem Timeout als Grund
+    await pg.waitForFunction(() => [...document.querySelectorAll('.kpi')].some((k) => /Vorgänge/.test(k.textContent) && k.querySelector('.kpi-v')?.textContent.trim() === '353'), null, { timeout: 60000 });
+    const v = await vorgaenge();
+    return v === '353' ? true : 'Vorgänge: «' + v + '»' + (rerr[0] ? ' / ' + rerr[0] : '');
+  });
+  // Maßgeblich ist der SERVER, nicht die Anzeige: nach dem Neuladen könnte die App die lokale Kopie zeigen.
+  // Darum je Collection die Datensätze der neuen plan_id per Superuser zählen (Summe = 407 laut Fixture).
+  await check('Import mit Limits: der Server hat alle 407 Datensätze (je Collection per Superuser gezählt)', async () => {
+    const planId = await pg.evaluate(() => localStorage.getItem('bzp_active'));
+    if (!planId) return 'keine aktive plan_id im Browser';
+    const je = {}; let summe = 0;
+    for (const coll of ['plaene', 'ressourcen', 'gewerke', 'vorgaenge', 'phasen', 'verknuepfungen']) {
+      const r = await rl.pb.su('GET', `/api/collections/${coll}/records?perPage=1&skipTotal=false&filter=${encodeURIComponent(`plan_id="${planId}"`)}`);
+      if (!r.ok) return coll + ': HTTP ' + r.status + ' ' + JSON.stringify(r.body).slice(0, 120);
+      je[coll] = r.body.totalItems; summe += r.body.totalItems;
+    }
+    // Soll je Collection aus der Fixture (385 Zeilen = 353 Vorgänge der Kennzahl + Meilensteine/Unterzeilen), nicht geraten
+    const fx = JSON.parse(readFileSync(join(FIXTURES, 'klassentreffen-festival.json'), 'utf8'));
+    const soll = { plaene: 1, ressourcen: (fx.project.ressourcen || []).length, gewerke: fx.gewerke.length, vorgaenge: fx.tasks.length, phasen: (fx.phases || []).length, verknuepfungen: (fx.deps || []).length };
+    if (JSON.stringify(je) !== JSON.stringify(soll)) return 'Server ' + JSON.stringify(je) + ' statt ' + JSON.stringify(soll);
+    return summe === 407 ? true : 'Summe ' + summe + ' statt 407 (' + JSON.stringify(je) + ')';
+  });
+  console.log('  (429-Antworten während des Imports: ' + r429.length + ')');
+  await c.close();
+}
+
 // ?plan=leer im WIRKLICH frischen Browser (leerer Speicher) — so starten die
 // Erststart-Prüfungen. Im Kontext oben liegt der Plan schon, dort öffnet die App
 // dann richtigerweise das vorhandene Projekt statt eines Dialogs.
 const leerCtx = await b.newContext({ viewport: { width: 1400, height: 900 } });
+await ohnePlan(leerCtx);
 const lp = await leerCtx.newPage();
 await lp.goto('http://127.0.0.1:' + server.address().port + '/index.html?plan=leer');
 await lp.waitForTimeout(1000);
@@ -573,6 +622,9 @@ if (ferr.length) { console.log('  ✗ JS-Fehler beim Start ohne Plan: ' + ferr[0
 
 if (errors.length) { console.log('\n  ✗ Fehler:'); errors.slice(0, 5).forEach((e) => console.log('      ' + e)); bad += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
-await b.close(); server.close();
+} finally {
+  await b.close().catch(() => {}); server.close();
+  for (const st of stops) await st().catch(() => {});
+}
 console.log(bad ? `\n${bad} Problem(e).\n` : '\nAlle Prüfungen bestanden.\n');
 process.exit(bad ? 1 : 0);

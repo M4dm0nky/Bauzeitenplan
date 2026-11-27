@@ -9,7 +9,7 @@ import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
-import { planLaden, planSeed } from './plan-fixture.mjs';
+import { planLaden } from './plan-fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -27,13 +27,16 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const BASE = 'http://127.0.0.1:' + server.address().port;
 
 const browser = await firefox.launch({ executablePath: exe });
-const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+const stops = [];   // lokale PocketBase je Skript (tools/plan-fixture.mjs), wird im finally beendet
+let problems = 0;
+try {
+const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 }, serviceWorkers: 'block' });
+stops.push((await planLaden(ctx, 'klassentreffen-festival.json')).stop);
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push('JS: ' + e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
-let problems = 0;
 const check = async (name, fn) => {
   let r;
   try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
@@ -427,40 +430,22 @@ await check('Live ausschalten räumt die Marken weg', async () => {
 });
 
 console.log('\nLIVE-MONITOR ÖFFNET DAS AKTIVE PROJEKT OHNE ABRUF');
-// Die App liefert keinen Plan mit: der Monitor liest das aktive Projekt aus dem
-// localStorage, ohne Dialog und ohne einen einzigen .json-Abruf (Module enden auf .js).
-// Geseedet wird der Altbestand wie in verify-klassentreffen (b): `project.quelle` mit
-// uraltem Stempel und lokal geänderter Titel. Nur so wird die Prüfung rot, wenn der Live-Pfad
-// die Datei der `quelle` wieder nachlädt (ohne `quelle` hätte der alte Pfad nie geladen).
+// Die App liefert keinen Plan mit: der Monitor öffnet das aktive Projekt vom Server, ohne Dialog
+// und ohne einen einzigen .json-Abruf (Module enden auf .js).
 for (const adresse of ['/index.html', '/index.html?plan=klassentreffen']) {
   const wie = adresse.includes('plan=') ? '?plan= bei Live an' : 'nackte Adresse bei Live an';
-  const c = await browser.newContext({ viewport: { width: 1600, height: 950 } });
-  const { plan, id } = planSeed('klassentreffen-festival.json');
-  plan.project.quelle = { datei: 'klassentreffen-festival.json', exported: '2000-01-01T00:00:00.000Z' };
-  plan.tasks[0].title = 'LOKAL GEÄNDERT';
-  await c.addInitScript(([i, text, name]) => {
-    try {
-      if (localStorage.getItem('bzp_seeded_' + i) === '1') return;
-      localStorage.setItem('bzp_seeded_' + i, '1');
-      localStorage.setItem('bzp_p_' + i, text);
-      localStorage.setItem('bzp_projects', JSON.stringify([{ id: i, name, venue: '', modified: new Date().toISOString(), remoteSha: null, dirty: false }]));
-      localStorage.setItem('bzp_active', i);
-      localStorage.setItem('bzp_live', '1');
-    } catch { /* */ }
-  }, [id, JSON.stringify(plan), plan.project.name]);
+  const c = await browser.newContext({ viewport: { width: 1600, height: 950 }, serviceWorkers: 'block' });
+  stops.push((await planLaden(c, 'klassentreffen-festival.json')).stop);
+  await c.addInitScript(() => { try { localStorage.setItem('bzp_live', '1'); } catch { /* */ } });
   const p = await c.newPage();
   let json = 0;
   p.on('request', (r) => { if (new URL(r.url()).pathname.endsWith('.json')) json++; });
   await p.goto(BASE + adresse);
-  await p.waitForTimeout(1500);
+  await p.locator('#proj-name').filter({ hasText: 'Klassentreffen' }).waitFor({ timeout: 10000 }).catch(() => {});
   const offen = (await p.locator('#proj-name').textContent()) || '';
   const dlgHidden = await p.locator('#dlg').isHidden();
-  // Aus der Oberfläche, nicht aus dem Speicher: gezeigt wird, was die App wirklich geöffnet hat.
-  const zeigtLokal = ((await p.locator('body').textContent()) || '').includes('LOKAL GEÄNDERT')
-    || await p.locator('input[value="LOKAL GEÄNDERT"]').count() > 0;
-  await check(wie + ': aktives Projekt offen, lokaler Titel bleibt, kein Dialog, kein .json-Abruf', async () => {
+  await check(wie + ': aktives Projekt offen, kein Dialog, kein .json-Abruf', async () => {
     if (!offen.includes('Klassentreffen')) return 'nicht offen: «' + offen + '»';
-    if (!zeigtLokal) return 'lokaler Titel «LOKAL GEÄNDERT» nicht sichtbar';
     if (!dlgHidden) return 'Dialog sichtbar';
     return json === 0 ? true : json + ' .json-Abrufe';
   });
@@ -480,30 +465,14 @@ console.log('\nDIE LINIE ZEIGT DIE PROJEKT-ZEITZONE, NICHT DIE DES BETRACHTERS')
 // new Date() ein Invalid Date. Ein geschütztes Leerzeichen aus Intl endet ebenso.
 const BERLIN_MITTERNACHT = new Date('2026-08-05T22:00:00Z');   // = 06.08. 00:00 in Berlin
 async function linieBeiBetrachterZone(tz) {
-  const c = await browser.newContext({ viewport: { width: 1600, height: 950 }, timezoneId: tz });
+  const c = await browser.newContext({ viewport: { width: 1600, height: 950 }, timezoneId: tz, serviceWorkers: 'block' });
+  stops.push((await planLaden(c, 'klassentreffen-festival.json')).stop);
   const p = await c.newPage();
   await p.clock.install({ time: BERLIN_MITTERNACHT });
   await p.goto(BASE + '/index.html?plan=leer');
   await p.waitForTimeout(600);
-  await festivalMitDaten(p, 'Zonen-Test', { loadIn: '2026-08-05T06:00' });
-  await p.waitForTimeout(800);
-  // Das Projekt erbt die Zone des Browsers — genau deshalb fällt der Fehler nie
-  // auf. Hier wird sie fest auf Berlin gesetzt, damit die beiden Betrachter
-  // wirklich dasselbe Projekt sehen.
-  await p.evaluate(() => {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      try {
-        const v = JSON.parse(localStorage.getItem(k));
-        if (v && v.project && v.project.timezone) {
-          v.project.timezone = 'Europe/Berlin';
-          localStorage.setItem(k, JSON.stringify(v));
-        }
-      } catch { /* kein Plan unter diesem Schlüssel */ }
-    }
-  });
-  await p.reload();
-  await p.waitForTimeout(1000);
+  await festivalMitDaten(p, 'Zonen-Test', { loadIn: '2026-08-05T06:00', timezone: 'Europe/Berlin' });
+  await p.waitForTimeout(1500);
   const x = await p.locator('.bz-now').evaluate((n) => parseFloat(n.style.left));
   const zone = await p.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   await c.close();
@@ -524,7 +493,10 @@ await check('beide Betrachter sehen die Linie an derselben Stelle', async () => 
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 6).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 
-await browser.close();
-server.close();
+} finally {
+  await browser.close().catch(() => {});
+  server.close();
+  for (const st of stops) await st().catch(() => {});
+}
 console.log(problems ? `\n${problems} Problem(e).\n` : '\nAlle Prüfungen bestanden.\n');
 process.exit(problems ? 1 : 0);

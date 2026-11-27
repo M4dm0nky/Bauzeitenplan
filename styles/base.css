@@ -438,9 +438,18 @@ body { margin: 0; }
 .suche-leer, .suche-w { padding: 8px; font-size: .85em; opacity: .7; }
 /* Der Treffer in der Tabelle: kurz markiert, damit man ihn in 150 Zeilen findet. */
 .tb-r.is-treffer { outline: 2px solid var(--sel, currentColor); outline-offset: -2px; }
-.save-state { white-space: nowrap; }
 /* Sync-Symbol im Kopf: Zustand ok / wartet / fehler. Farben je Theme. */
-.sync-state { white-space: nowrap; cursor: default; line-height: 1; }
+.sync-state { white-space: nowrap; cursor: default; line-height: 1; font: inherit; background: none; }
+.sync-state[data-klick] { cursor: pointer; }
+.sync-state:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+/* Marke «Nur Ansicht»: gelb (Statusfarbe mittel), Symbol + Text. Farben je Theme. */
+.hd-offline { white-space: nowrap; line-height: 1; font-weight: 600; }
+.hd-offline[hidden] { display: none; }
+/* Entprellt: der Platz ist reserviert, die Marke erscheint erst nach 3 s ohne Verbindung (kein Flackern, kein Sprung). */
+.hd-offline[data-an="0"] { visibility: hidden; }
+/* body.nur-ansicht (setNurAnsicht): nichts, was ändern würde, sieht bedienbar aus */
+body.nur-ansicht .bz-link, body.nur-ansicht .bz-grip { visibility: hidden; }
+body.nur-ansicht .bz-bar, body.nur-ansicht .bz-ms { cursor: default; }
 
 /* ── Tabellen-Editor ────────────────────────────────────────────────────────── */
 .tb { flex: 1; min-height: 0; overflow: auto; }
@@ -554,6 +563,11 @@ body { margin: 0; }
 .dlg-open-n { display: block; }
 .dlg-open-m { display: block; }
 .dlg-del { border: 0; font: inherit; cursor: pointer; padding: 0 12px; }
+.alt-sec { margin-top: 18px; padding: 4px 12px 12px; }
+.alt-sec .dlg-h3 { margin-top: 8px; }
+.alt-zeile { align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.alt-info { flex: 1 1 200px; min-width: 0; }
+.alt-ueb, .alt-exp { white-space: nowrap; }
 .dlg-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .dlg-f { display: flex; flex-direction: column; gap: 3px; }
 .dlg-f:first-child, .dlg-f:nth-child(2) { grid-column: 1 / -1; }
@@ -1045,3 +1059,33 @@ body { margin: 0; }
   .ph-entw { grid-column: 1 / -1; }
 }
 .ph-z.is-entwurf { outline: 2px solid var(--en); outline-offset: 2px; border-radius: 4px; }
+
+/* ── Mitglieder und Verwaltung (js/mitglieder.js) ──────────────────────────
+   Aufbau hier, Flächen und Linien je Theme (mg-zeile, mg-feld, mg-weg, mg-fehler, mg-chip). */
+.mg-box { width: min(780px, 100%); }
+.mg-liste { display: flex; flex-direction: column; gap: 6px; }
+.mg-zeile { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 10px; }
+.mg-person { display: flex; flex-direction: column; min-width: 150px; flex: 1 1 150px; }
+.mg-name { font-weight: 600; }
+.mg-mail { opacity: .72; font-size: .85em; }
+.mg-rolle-text { white-space: nowrap; }
+.mg-chips, .mg-chipfeld { display: flex; flex-wrap: wrap; gap: 5px; }
+.mg-chipfeld { flex-basis: 100%; }
+.mg-chipfeld:empty { display: none; }
+.mg-chip { font: inherit; font-size: .88em; padding: 2px 10px; border-radius: 999px; border: 2px solid var(--gw); background: transparent; color: inherit; cursor: pointer; }
+span.mg-chip { cursor: default; }
+button.mg-chip[aria-pressed="true"], .mg-chip[data-an] { background: var(--gw); color: var(--gw-ink); font-weight: 600; }
+button.mg-chip[aria-pressed="true"]::before { content: '✓ '; }
+.mg-chip[data-tex] { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 1px, transparent 1px 4px); }
+.mg-feld { font: inherit; padding: 6px 8px; min-width: 0; }
+.mg-einladen { margin-top: 4px; }
+.mg-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mg-form input[type="email"] { flex: 1 1 240px; }
+.mg-link { margin-top: 10px; }
+.mg-link-feld { flex: 1 1 300px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .85em; }
+.mg-fehler { margin: 10px 0 0; font-weight: 600; }
+.mg-fehler::before { content: '⚠ '; }
+.mg-leer { opacity: .7; }
+.mg-schalter { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.mg-weg { margin-left: auto; }
+.mg-speichern { margin-left: 0; }

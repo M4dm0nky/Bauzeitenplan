@@ -5,7 +5,7 @@
 // Prüfungen am DOM-Code, den Node nicht ausführen kann. Das Verhalten im
 // Browser prüft `node tools/verify-browser.mjs`.
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -53,11 +53,13 @@ check('alle Importe zwischen den Modulen lassen sich auflösen', () => {
   return bad.length ? bad.join(', ') : true;
 });
 
-check('index.html lädt nur vorhandene Dateien', () => {
-  const html = readFileSync(join(root, 'index.html'), 'utf8');
+check('index.html und login.html laden nur vorhandene Dateien', () => {
   const bad = [];
-  for (const m of html.matchAll(/(?:src|href)="([^"#:]+?)(?:\?[^"]*)?"/g)) {
-    try { readFileSync(join(root, m[1])); } catch { bad.push(m[1]); }
+  for (const seite of ['index.html', 'login.html']) {
+    const html = readFileSync(join(root, seite), 'utf8');
+    for (const m of html.matchAll(/(?:src|href)="([^"#:]+?)(?:\?[^"]*)?"/g)) {
+      try { readFileSync(join(root, m[1])); } catch { bad.push(seite + ' → ' + m[1]); }
+    }
   }
   return bad.length ? 'fehlt: ' + bad.join(', ') : true;
 });
@@ -193,6 +195,31 @@ check('Phasen-Leiste: Schrift auf jeder Art-Farbe hält 4,5:1 — in allen fünf
   return fehler.length ? fehler.join(' | ') : true;
 });
 
+check('Marke «Nur Ansicht»: Schrift auf Fläche hält 4,5:1 — in allen fünf Themes, hell UND beide Dunkel-Scopes', () => {
+  const lum = (hex) => {
+    const n = hex.replace('#', '');
+    const v = [0, 2, 4].map((i) => parseInt(n.slice(i, i + 2), 16) / 255)
+      .map((u) => (u <= 0.03928 ? u / 12.92 : ((u + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  };
+  const kontrast = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  const scopes = [':root {', '@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) {', ':root[data-theme="dark"] {', ':root[data-theme="light"] {'];
+  const fehler = [];
+  for (const f of readdirSync(join(root, 'styles/themes'))) {
+    const css = readFileSync(join(root, 'styles/themes', f), 'utf8');
+    for (const sc of scopes) {
+      const i = css.lastIndexOf(sc + ' --nur-bg');
+      if (i < 0) { fehler.push(`${f}: Scope «${sc}» ohne Marken-Tokens`); continue; }
+      const b = css.slice(i, css.indexOf('}', i));
+      const bg = (b.match(/--nur-bg:\s*(#[0-9a-fA-F]{6})/) || [])[1], t = (b.match(/--nur-t:\s*(#[0-9a-fA-F]{6})/) || [])[1];
+      if (!bg || !t) { fehler.push(`${f} ${sc}: Token fehlt`); continue; }
+      const k = kontrast(lum(bg), lum(t));
+      if (k < 4.5) fehler.push(`${f} ${sc}: ${k.toFixed(2)}:1 < 4.5`);
+    }
+  }
+  return fehler.length ? fehler.join(' | ') : true;
+});
+
 check('Phasen-Farbe hängt an der ART: gantt.js klassiert nie nach ph.name', () => {
   const s = js('gantt.js');
   return /bz-ph(ase)?-'\s*\+\s*ph\.name/.test(s) ? 'Klasse aus ph.name' : true;
@@ -201,16 +228,21 @@ check('gantt.js liest keine erfundene Gewerk-Eigenschaft (g.light)', () => {
   return /\bg\.light\b/.test(js('gantt.js')) ? 'g.light in gantt.js' : true;
 });
 
-check('der Sync-Schlüssel (bzp_sync) kommt nie in die Plan-Schicht', () => {
-  const s = readFileSync(join(root, 'js/persistence.js'), 'utf8');
-  return s.includes('bzp_sync') ? 'js/persistence.js kennt den Schlüssel' : true;
+check('GitHub-Sync entfernt: js/sync.js existiert nicht, kein bzp_sync in js/', () => {
+  if (existsSync(join(root, 'js/sync.js'))) return 'js/sync.js existiert noch';
+  const treffer = readdirSync(join(root, 'js')).filter((f) => f.endsWith('.js') && readFileSync(join(root, 'js', f), 'utf8').includes('bzp_sync'));
+  if (treffer.length) return 'bzp_sync in js/' + treffer.join(', js/');
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const rest = ['sync-dlg', 'sync-oeffnen', 'save-state'].filter((x) => html.includes(x));
+  return rest.length ? 'index.html enthält noch: ' + rest.join(', ') : true;
 });
 
 check('die App holt keinen mitgelieferten Plan (kein BUNDLED/openBundled, fetch nur in der Erlaubnisliste, kein XHR/JSON-Import)', () => {
   // Erlaubnisliste statt Muster: eine zusammengesetzte URL (`fetch('./' + datei + '?v=')`)
   // ist durch kein Muster auf «.json» fassbar. Darum zählt jedes `fetch(` je Datei; erlaubt
-  // sind genau die zwei Sync-Stellen (die eine Anfrage in sync.js, der gereichte Aufruf in app.js).
-  const ERLAUBT = { 'sync.js': 1, 'app.js': 1 };
+  // sind genau die Stellen mit Netzzugriff: pb.js (die eine Anfrage an die PocketBase-API,
+  // nie eine Plan-JSON).
+  const ERLAUBT = { 'pb.js': 1 };
   // Nur ganze Kommentarzeilen fallen weg (Beginn `//`, `*`, `/*`), sonst zählt Prosa mit.
   // Kein Muster-Strip über den Text: `//` oder `/*` in einer Zeichenkette ließe sonst den
   // Rest der Zeile — und damit ein echtes `fetch(` — unsichtbar werden. Ein `fetch(` in
@@ -277,6 +309,8 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // Sync-Symbol (Speicherort): grün/gelb/rot je Zustand. Ohne eigene Regeln
     // stünde es in den anderen Themes ungestaltet im Kopf.
     'sync-state',
+    // Marke «Nur Ansicht» (offline, Betrachter, Anmeldung abgelaufen): gelb mit Rahmen.
+    'hd-offline', '--nur-bg', '--nur-t',
     // Zeilen-Entwurf: gelbe Zeile, grünes ✓, rotes ✗, Grund darunter.
     // Ohne eigene Regeln verlöre ✓ gegen `.tb-ico { color: var(--muted) }`.
     'is-entwurf', 'en-ok', 'en-no', 'en-grund',
@@ -297,7 +331,11 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // Such-Auswahl Helfer/Maschinen: schwebende Fläche, Suchfeld, Kategorie-Kopf, Eintrag.
     'rp-pop', 'rp-kopf', 'rp-item', 'rp-such',
     // Bedarfsstatus (⏳ ✓ ✕) und der Bereich «Offene Bedarfe».
-    'res-st-angefragt', 'res-st-bestaetigt', 'res-st-abgelehnt', 'bd-offen'];
+    'res-st-angefragt', 'res-st-bestaetigt', 'res-st-abgelehnt', 'bd-offen',
+    // Mitglieder- und Verwaltungsdialog: Zeile, Feld, Entfernen, Fehlerhinweis, Gewerk-Chip.
+    'mg-zeile', 'mg-feld', 'mg-weg', 'mg-fehler', 'mg-chip',
+    // Alte lokale Pläne im Projektdialog (Abschnitt, Zeile, Knöpfe)
+    'alt-sec', 'alt-zeile', 'alt-ueb', 'alt-exp'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');
@@ -380,7 +418,7 @@ const versionStellen = () => {
   };
   // JEDE ausgelieferte HTML-Seite, nicht nur index.html — eine zweite Seite mit
   // eigenen ?v= liefe sonst still auseinander (siehe tools/version.mjs).
-  const vs = ['index.html', 'print.html'].flatMap((datei) =>
+  const vs = ['index.html', 'print.html', 'login.html'].flatMap((datei) =>
     [...raw(datei).matchAll(/\?v=([^"']+)["']/g)]
       .map((m, i) => ({ wo: `${datei} ?v= #${i + 1}`, wert: m[1] })));
   return [
@@ -441,6 +479,86 @@ check('jede ausgelieferte Datei steht in HUELLE (sw.js) — und keine tote', () 
   if (dopp.length) r.push('doppelt: ' + dopp.join(', '));
   return r.length ? r.join(' | ') : true;
 });
+
+// ── Auslieferung: Docker-Image enthält genau die ausgelieferten Dateien ───────────────────────────
+// Rein: welche Repo-Dateien landen laut Dockerfile (COPY) und .dockerignore im Image? `dateien` = Repo-relative
+// Pfade (real: `git ls-files`, wie Coolify sie auscheckt). Mustersprache wie Docker: letzter Treffer gewinnt,
+// `!` hebt auf, `*` bleibt in einer Ebene, `**/` darf Ebenen überspringen, ein Muster gilt auch für alles darunter.
+const dockerRe = (g) => new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  .replace(/\*\*\//g, '\u0000').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\u0000/g, '(?:.*/)?') + '(?:/.*)?$');
+const imageDateien = (dockerfile, ignore, dateien) => {
+  const regeln = ignore.split('\n').map((z) => z.trim()).filter((z) => z && !z.startsWith('#'))
+    .map((z) => ({ neg: z.startsWith('!'), re: dockerRe(z.replace(/^!/, '').replace(/^\//, '').replace(/\/$/, '')) }));
+  const ausgeschlossen = (f) => regeln.reduce((aus, r) => (r.re.test(f) ? !r.neg : aus), false);
+  const quellen = [];
+  for (const z of dockerfile.split('\n')) {
+    const m = z.match(/^\s*COPY\s+(.+)$/i);
+    if (!m) continue;
+    const teile = m[1].trim().split(/\s+/).filter((x) => !x.startsWith('--'));
+    quellen.push(...teile.slice(0, -1));
+  }
+  const drin = new Set();
+  for (const q of quellen) {
+    const pfad = q.replace(/^\.\//, '');
+    const alle = pfad === '.' || pfad === './';
+    for (const f of dateien) {
+      if (ausgeschlossen(f)) continue;
+      if (alle || f === pfad.replace(/\/$/, '') || f.startsWith(pfad.replace(/\/?$/, '/'))) drin.add(f);
+    }
+  }
+  return [...drin].sort();
+};
+const huelleListe = () => {
+  const sw = readFileSync(join(root, 'sw.js'), 'utf8');
+  const m = sw.match(/const HUELLE = \[([\s\S]*?)\];/);
+  return m ? [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).filter((x) => x !== './') : [];
+};
+const imageProbleme = (dockerfile, ignore, dateien, huelle) => {
+  const drin = imageDateien(dockerfile, ignore, dateien);
+  const r = [];
+  const verboten = drin.filter((f) => /^(docs|tools|tests|pocketbase|\.superpowers|\.claude|node_modules|\.git)\//.test(f) || /\.(md|mjs)$/.test(f) || f === 'Dockerfile');
+  if (verboten.length) r.push('gehört nicht ins Image: ' + verboten.slice(0, 5).join(', ') + (verboten.length > 5 ? ` (+${verboten.length - 5})` : ''));
+  const fehlt = [...huelle, 'sw.js'].filter((f) => !drin.includes(f));
+  if (fehlt.length) r.push('fehlt im Image (steht in HUELLE): ' + fehlt.join(', '));
+  const extra = drin.filter((f) => ![...huelle, 'sw.js', 'nginx.conf'].includes(f) && !verboten.includes(f));
+  if (extra.length) r.push('nicht ausgeliefert, aber im Image: ' + extra.slice(0, 5).join(', '));
+  return r;
+};
+
+check('Docker-Image (Dockerfile + .dockerignore): genau die ausgelieferten Dateien, alle aus HUELLE, nichts aus docs/tools/tests/pocketbase', () => {
+  const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean);
+  const df = readFileSync(join(root, 'Dockerfile'), 'utf8');
+  const ign = readFileSync(join(root, '.dockerignore'), 'utf8');
+  // Selbstprüfung (Rot-Nachweis): die Prüfung MUSS bei einem kaputten Image anschlagen.
+  const baum = ['index.html', 'print.html', 'login.html', 'sw.js', 'nginx.conf', 'Dockerfile', 'js/app.js', 'js/version.js', 'styles/base.css',
+    'assets/a.svg', 'docs/x.md', 'tools/t.mjs', 'tests/run.mjs', 'pocketbase/setup.mjs', '.claude/rules/a.md', 'README.md'];
+  const huelle = ['index.html', 'print.html', 'login.html', 'js/app.js', 'js/version.js', 'styles/base.css', 'assets/a.svg'];
+  const gut = 'COPY nginx.conf /c\nCOPY index.html print.html login.html sw.js /h/\nCOPY js/ /h/js/\nCOPY styles/ /h/styles/\nCOPY assets/ /h/assets/\n';
+  const gutIgn = '*\n!index.html\n!print.html\n!login.html\n!sw.js\n!nginx.conf\n!js\n!styles\n!assets\n';
+  const selbst = [
+    ['Allowlist ok', gut, gutIgn, 0],
+    ['COPY . ohne .dockerignore', 'COPY . /h/\n', '', 1],
+    ['COPY . mit leerem Ausschluss von docs', 'COPY . /h/\n', '*\n!js\n!styles\n!assets\n!index.html\n!print.html\n!login.html\n!sw.js\n!docs\n', 1],
+    ['assets fehlt', gut.replace('COPY assets/ /h/assets/\n', ''), gutIgn, 1],
+    ['.dockerignore sperrt js', gut, gutIgn.replace('!js\n', ''), 1],
+  ];
+  const kaputt = selbst.filter(([, d, i, n]) => (imageProbleme(d, i, baum, huelle).length > 0) !== (n > 0)).map(([n]) => n);
+  if (kaputt.length) return 'Selbstprüfung der Image-Sperre falsch bei: ' + kaputt.join(', ');
+  const r = imageProbleme(df, ign, tracked, huelleListe());
+  return r.length ? r.join(' | ') : true;
+});
+
+check('nginx.conf: sw.js ohne HTTP-Cache, gzip an, kein SPA-Fallback, Health-Check', () => {
+  const n = readFileSync(join(root, 'nginx.conf'), 'utf8');
+  const r = [];
+  if (!/location = \/sw\.js \{[^}]*Cache-Control "no-cache/.test(n)) r.push('sw.js ohne no-cache');
+  if (!/^\s*gzip on;/m.test(n)) r.push('gzip aus');
+  if (/try_files[^;]*\/index\.html/.test(n)) r.push('SPA-Fallback auf index.html (unbekannte Pfade müssen 404 sein)');
+  if (!/location = \/healthz/.test(n)) r.push('/healthz fehlt (HEALTHCHECK im Dockerfile)');
+  if (!/EXPOSE 80/.test(readFileSync(join(root, 'Dockerfile'), 'utf8'))) r.push('Dockerfile: EXPOSE 80 fehlt');
+  return r.length ? r.join(' | ') : true;
+});
+
 
 check('sw.js legt die HUELLE am HTTP-Cache vorbei an (cache: reload)', () => {
   const sw = readFileSync(join(root, 'sw.js'), 'utf8');

@@ -8,7 +8,7 @@ import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { festivalMitDaten } from './festival-fixture.mjs';
 import { createServer } from 'node:http';
-import { planSeed } from './plan-fixture.mjs';
+import { planSeed, planLaden } from './plan-fixture.mjs';
 import { einrichten, zumPlan, projektMenue } from './ui-helfer.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -35,14 +35,37 @@ const BASE = 'http://127.0.0.1:' + server.address().port;
 // Unit-Tests laufen ebenfalls mit TZ=Europe/Berlin. Alle Kontexte dieser Datei sind darauf gepinnt.
 const ZONE = 'Europe/Berlin';
 const browser = await firefox.launch({ executablePath: exe });
-const ctx = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+// Jeder Kontext ist bei der lokalen PocketBase (tools/plan-fixture.mjs) angemeldet, mit EIGENEM Konto und OHNE Plan:
+// so verhält er sich wie früher ein frischer Browser (Projektdialog, Import legt über den Server-Weg an).
+const stops = [];
+const neuerKontext = async (br, opt) => {
+  const c = await br.newContext(opt);
+  const r = await planLaden(c, null, { frisch: true });
+  stops.push(r.stop);
+  c.planDazu = r.planDazu;   // legt einen weiteren Plan für das Konto dieses Kontexts auf dem Server an
+  return c;
+};
+// Der Plan lebt auf dem Server: eine Fassung, die ein Test VOR dem Laden verändert braucht, geht über den Server-Weg.
+// Lokale Kopie lesen → in Node ändern (`aendern(plan)`) → als neuen Plan für das Konto anlegen → aktiv setzen → neu laden.
+const planErsetzen = async (c, pg, aendern, url = null) => {
+  // Der Import läuft asynchron (Server-Batch): unter Last steht die lokale Kopie erst später da als die feste Pause davor.
+  await pg.waitForFunction(() => !!localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')), null, { timeout: 30000 });
+  const pl = await pg.evaluate(() => JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active'))));
+  const r = aendern(pl);
+  const id = await c.planDazu(pl);
+  await pg.evaluate((i) => localStorage.setItem('bzp_active', i), id);
+  if (url) await pg.goto(url); else await pg.reload();
+  return r;
+};
+let problems = 0;
+let skipped = 0;   // ehrlich zählen: «bestanden» heißt nicht «alles geprüft»
+try {
+const ctx = await neuerKontext(browser, { timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push('JS: ' + e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
-let problems = 0;
-let skipped = 0;   // ehrlich zählen: «bestanden» heißt nicht «alles geprüft»
 // ⌘Z in einem fokussierten Feld gehört dem Browser (Fund 11). Wer den Store-
 // Undo prüft, löst vorher den Fokus, sonst greift der Guard in app.js.
 const undoOhneFeld = async (pg = page) => {
@@ -82,7 +105,7 @@ await check('Gantt zeigt Balken', async () => {
 await check('Vorlage startet ohne Konflikte', async () =>
   (await page.locator('#resolve').isHidden()) ? true : 'Konfliktknopf sichtbar — die Vorlage ist nicht stimmig');
 await check('als gesichert markiert', async () =>
-  (await page.locator('#save-state').getAttribute('data-state')) === 'saved' ? true : 'nicht gesichert');
+  (await page.locator('#sync-state').getAttribute('data-state')) === 'ok' ? true : 'nicht gesichert');
 await page.screenshot({ path: join(here, 'shots', 'edit-2-gantt.png') });
 
 console.log('\nTABELLE');
@@ -106,8 +129,8 @@ await check('Vorgang umbenennen wirkt', async () => {
 });
 await check('Änderung markiert als ungesichert, dann gesichert', async () => {
   await page.waitForTimeout(1200);
-  const s = await page.locator('#save-state').getAttribute('data-state');
-  return s === 'saved' ? true : 'Zustand: ' + s;
+  const s = await page.locator('#sync-state').getAttribute('data-state');
+  return s === 'ok' ? true : 'Zustand: ' + s;
 });
 await check('Dauer-Kurzform «6h» wird übernommen', async () => {
   const d = page.locator('.tb-r .tb-dur').first();
@@ -854,18 +877,16 @@ await check('Wechsel über den Projektdialog verwirft den Entwurf', async () => 
   // läuft per DOM-click, damit kein focusout den Entwurf schon vorher verwirft.
   // Projekt B ist eine KOPIE von A (gleiche Zeilen-Ids UND gleiche Zeiten) — nur
   // dann würde die Wiederöffnungs-Regel (Zeiten stimmen) allein den Entwurf
-  // zurückholen. Hier greift aber schon focusout (der Dialog nimmt den Fokus) — die
-  // Sperre für table.js:72 selbst steht in verify-sync («Löschen unter offenem Entwurf»).
-  await page.evaluate(() => {
-    const idx = JSON.parse(localStorage.getItem('bzp_projects'));
-    const a = idx.find((e) => e.name === 'Testprojekt Halle 7');
-    const plan = JSON.parse(localStorage.getItem('bzp_p_' + a.id));
-    plan.project.id = 'kopie-entwurf'; plan.project.name = 'Kopie Entwurf';
-    localStorage.setItem('bzp_p_kopie-entwurf', JSON.stringify(plan));
-    localStorage.setItem('bzp_projects', JSON.stringify([...idx, { ...a, id: 'kopie-entwurf', name: 'Kopie Entwurf' }]));
-  });
-  await page.reload();
-  await page.waitForTimeout(900);
+  // zurückholen. Hier greift aber schon focusout (der Dialog nimmt den Fokus).
+  // Die Kopie entsteht über den Import-Weg (Server): derselbe festivalMitDaten-Plan, gleiche Zeilen-Ids UND Zeiten.
+  await projektMenue(page, 'new-proj');
+  await page.waitForTimeout(400);
+  await festivalMitDaten(page, 'Kopie Entwurf', { venue: 'Messe Hannover' });
+  await page.waitForTimeout(1200);
+  await projektMenue(page, 'proj-menu');
+  await page.waitForTimeout(400);
+  await page.evaluate(() => [...document.querySelectorAll('.dlg-open')].find((b) => b.textContent.includes('Testprojekt Halle 7')).click());
+  await page.waitForTimeout(1200);
   await page.locator('[data-view="tabelle"]').click();
   await page.waitForTimeout(500);
   const zeile = page.locator('.tb-r:not(.is-parent):not(.is-child)').first();
@@ -892,10 +913,6 @@ await check('Wechsel über den Projektdialog verwirft den Entwurf', async () => 
     const t = JSON.parse(localStorage.getItem(k)).tasks.find((x) => x.id === i);
     return t.start;
   }, id);
-  await page.evaluate(() => {
-    localStorage.removeItem('bzp_p_kopie-entwurf');
-    localStorage.setItem('bzp_projects', JSON.stringify(JSON.parse(localStorage.getItem('bzp_projects')).filter((e) => e.id !== 'kopie-entwurf')));
-  });
   if (inB) return 'Entwurf taucht im anderen Projekt auf (' + inB + ')';
   if (inA) return 'Entwurf nach der Rückkehr noch offen (' + inA + ')';
   return wertA === store.slice(0, 16) && wertA === wert0 ? true : `Feld ${wertA}, Store ${store}, vorher ${wert0}`;
@@ -1548,13 +1565,15 @@ await page.screenshot({ path: join(here, 'shots', 'edit-11-schiene.png') });
 
 console.log('\nGESPERRTER SPEICHER');
 await check('Gesperrter Speicher: keine Ausnahme, Ansicht-Umschalter wechselt', async () => {
-  const c2 = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+  const c2 = await neuerKontext(browser, { timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   const fehler = [];
   try {
-    // Jeder Zugriff wirft (Privatmodus/gesperrt), vom ersten Aufruf an — auch Lesen.
+    // Jeder Zugriff wirft (Privatmodus/gesperrt), vom ersten Aufruf an — auch Lesen. Einzige Ausnahme: das Token
+    // (`bzp_auth`): ohne Anmeldung gäbe es keine App, und pb.js hält es bei gesperrtem Speicher ohnehin nur im Speicher.
     await c2.addInitScript(() => {
-      const wirf = () => { throw new DOMException('gesperrt', 'SecurityError'); };
-      Storage.prototype.getItem = wirf; Storage.prototype.setItem = wirf; Storage.prototype.removeItem = wirf;
+      const o = { g: Storage.prototype.getItem, s: Storage.prototype.setItem, r: Storage.prototype.removeItem };
+      const sperre = (f) => function (k, ...a) { if (k === 'bzp_auth') return f.call(this, k, ...a); throw new DOMException('gesperrt', 'SecurityError'); };
+      Storage.prototype.getItem = sperre(o.g); Storage.prototype.setItem = sperre(o.s); Storage.prototype.removeItem = sperre(o.r);
     });
     const p2 = await c2.newPage();
     p2.on('pageerror', (e) => fehler.push(e.message + ' @' + String(e.stack).split('\n').slice(0, 3).join(' < ')));
@@ -1575,124 +1594,14 @@ await check('Gesperrter Speicher: keine Ausnahme, Ansicht-Umschalter wechselt', 
   } finally { await c2.close(); }
 });
 
-console.log('\nVOLLER SPEICHER BEIM PROJEKTWECHSEL');
-await check('Voller Speicher beim Projektwechsel fragt (Abbrechen / Trotzdem wechseln / Exportieren)', async () => {
-  const c3 = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
-  try {
-    const p3 = await c3.newPage();
-    const fehler = [];
-    p3.on('pageerror', (e) => fehler.push(e.message));
-    await p3.goto(BASE + '/index.html?plan=leer');
-    await p3.waitForTimeout(700);
-    const anlegen = async (name) => {
-      await festivalMitDaten(p3, name);
-      await p3.waitForTimeout(700);
-    };
-    await anlegen('Alpha');
-    await projektMenue(p3, 'new-proj');
-    await p3.waitForTimeout(300);
-    await anlegen('Beta');
-    await p3.waitForTimeout(1200);
-    // Ein ausstehender Eintrag im offenen Projekt, Speicher voll NUR für dessen Plan-Schlüssel.
-    const aendern = async (neu) => {
-      await p3.locator('#ein-zu').click({ timeout: 2000 }).catch(() => {});
-      await p3.locator('.bz-lab-group .bz-lab-name').first().dblclick();
-      await p3.locator('.bz-lab-edit').fill(neu);
-      await p3.keyboard.press('Enter');
-      await p3.evaluate(() => {
-        const key = 'bzp_p_' + localStorage.getItem('bzp_active');
-        const orig = Storage.prototype.setItem;
-        Storage.prototype.setItem = function (k, v) {
-          if (k === key) throw new DOMException('voll', 'QuotaExceededError');
-          return orig.call(this, k, v);
-        };
-      });
-    };
-    const projektOeffnen = async (name) => {
-      await projektMenue(p3, 'proj-menu');
-      await p3.waitForTimeout(300);
-      await p3.locator('.dlg-open', { hasText: name }).click();
-      await p3.waitForTimeout(500);
-    };
-    const labelName = () => p3.locator('.bz-lab-group .bz-lab-name').first().textContent();
-    await aendern('Geändert-1');
-    await projektOeffnen('Alpha');
-    const dlg = p3.locator('.dlg-h', { hasText: 'Nicht gespeichert' });
-    if ((await dlg.count()) !== 1) return 'kein Dialog «Nicht gespeichert»';
-    const knoepfe = await p3.locator('body > .dlg').last().locator('.btn').allTextContents();
-    for (const t of ['Exportieren', 'Trotzdem wechseln', 'Abbrechen']) if (!knoepfe.includes(t)) return 'Knopf fehlt: ' + t + ' (' + knoepfe + ')';
-    if (!(await p3.locator('.dlg-sub', { hasText: 'Der Browser-Speicher ist voll' }).count())) return 'Nachricht ohne «Der Browser-Speicher ist voll»';
-    // (a) Abbrechen
-    await p3.locator('body > .dlg').last().locator('.btn', { hasText: 'Abbrechen' }).click();
-    await p3.waitForTimeout(300);
-    if ((await p3.locator('#proj-name').textContent()) !== 'Beta') return '(a) Projekt gewechselt';
-    if ((await labelName()) !== 'Geändert-1') return '(a) Eingabe weg: ' + (await labelName());
-    // (b) Trotzdem wechseln — der Projektdialog steht noch, Alpha erneut wählen.
-    await p3.locator('.dlg-open', { hasText: 'Alpha' }).click();
-    await p3.waitForTimeout(400);
-    await p3.locator('body > .dlg').last().locator('.btn', { hasText: 'Trotzdem wechseln' }).click();
-    await p3.waitForTimeout(700);
-    if ((await p3.locator('#proj-name').textContent()) !== 'Alpha') return '(b) nicht gewechselt';
-    // (c) Exportieren: Speicher jetzt für Alpha voll, offene Eingabe in Alpha.
-    await p3.evaluate(() => { location.reload(); });
-    await p3.waitForTimeout(1200);
-    await aendern('Geändert-2');
-    await projektOeffnen('Beta');
-    await p3.locator('.dlg-h', { hasText: 'Nicht gespeichert' }).waitFor({ timeout: 3000 });
-    const [dl] = await Promise.all([
-      p3.waitForEvent('download', { timeout: 5000 }),
-      p3.locator('body > .dlg').last().locator('.btn', { hasText: 'Exportieren' }).click(),
-    ]);
-    if (!/\.json$/.test(dl.suggestedFilename())) return 'Download: ' + dl.suggestedFilename();
-    await p3.waitForTimeout(700);
-    if ((await p3.locator('#proj-name').textContent()) !== 'Beta') return '(c) nicht gewechselt';
-    if (fehler.length) return 'pageerror: ' + fehler[0];
-    return true;
-  } finally { await c3.close(); }
-});
-
-console.log('\nNIE GESPEICHERTER PLAN BEIM WECHSEL');
-await check('Neu angelegter Plan, dessen erstes Speichern scheitert, gilt als ungesichert (Wechsel fragt)', async () => {
-  const c4 = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
-  try {
-    const p4 = await c4.newPage();
-    const fehler = [];
-    p4.on('pageerror', (e) => fehler.push(e.message));
-    await p4.goto(BASE + '/index.html?plan=leer');
-    await p4.waitForTimeout(700);
-    const anlegen = async (name) => {
-      await festivalMitDaten(p4, name);
-      await p4.waitForTimeout(700);
-    };
-    await anlegen('Alpha');
-    await p4.waitForTimeout(1200);
-    // Ab jetzt ist der Speicher für jeden Plan voll: das erste Speichern von Beta scheitert.
-    await p4.evaluate(() => {
-      const orig = Storage.prototype.setItem;
-      Storage.prototype.setItem = function (k, v) {
-        if (k.startsWith('bzp_p_')) throw new DOMException('voll', 'QuotaExceededError');
-        return orig.call(this, k, v);
-      };
-    });
-    await projektMenue(p4, 'new-proj');
-    await p4.waitForTimeout(300);
-    await anlegen('Beta');
-    await p4.waitForTimeout(1200);
-    if ((await p4.locator('#proj-name').textContent()) !== 'Beta') return 'Beta nicht offen';
-    await projektMenue(p4, 'proj-menu');
-    await p4.waitForTimeout(300);
-    await p4.locator('.dlg-open', { hasText: 'Alpha' }).click();
-    await p4.waitForTimeout(600);
-    if ((await p4.locator('.dlg-h', { hasText: 'Nicht gespeichert' }).count()) !== 1) return 'kein Dialog «Nicht gespeichert» beim Wechsel weg vom nie gespeicherten Plan';
-    if ((await p4.locator('#proj-name').textContent()) !== 'Beta') return 'Projekt trotzdem gewechselt';
-    if (fehler.length) return 'pageerror: ' + fehler[0];
-    return true;
-  } finally { await c4.close(); }
-});
+// Entfallen seit Mehrbenutzer (Task 9): «VOLLER SPEICHER BEIM PROJEKTWECHSEL» und «NIE GESPEICHERTER PLAN BEIM WECHSEL»
+// prüften die Rückfrage «Nicht gespeichert», wenn der localStorage den Plan nicht aufnahm. Der Plan lebt jetzt auf dem
+// Server; localStorage hält nur noch Token und eine Kopie. Ein Fehlschlag der Kopie ist kein Datenverlust mehr, die
+// Rückfrage gibt es nicht mehr (nur «Server lehnt ab», verify-pb-regeln/-mehrbenutzer). Ersatz: GESPERRTER SPEICHER.
 
 console.log('\nLEERE ZUSTÄNDE');
 await check('Leere Tabelle, Bedarf und Showablauf ohne Bühne bieten den passenden Knopf an', async () => {
-  const c5 = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+  const c5 = await neuerKontext(browser, { timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   try {
     const p5 = await c5.newPage();
     const fehler = [];
@@ -1744,7 +1653,7 @@ await check('Leere Tabelle, Bedarf und Showablauf ohne Bühne bieten den passend
 });
 
 await check('Leerer Bauzeitenplan: der GANTT (nicht die Tabelle) bietet EINEN Knopf an, und er legt einen Vorgang an', async () => {
-  const c6 = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+  const c6 = await neuerKontext(browser, { timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   try {
     const p6 = await c6.newPage();
     const fehler = [];
@@ -1779,7 +1688,7 @@ console.log('\nTOUCH: VERKNÜPFEN-GRIFF NUR AM AUSGEWÄHLTEN BALKEN (Handy 390×
   if (!chromExe) { skipped++; console.log('  – übersprungen: Chromium nicht installiert (npx playwright install chromium).'); }
   else {
     const cb = await chromium.launch({ executablePath: chromExe });
-    const ct = await cb.newContext({ timezoneId: ZONE, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const ct = await neuerKontext(cb, { timezoneId: ZONE, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
     const pt = await ct.newPage();
     pt.on('pageerror', (e) => errors.push('JS: ' + e.message));
     try {
@@ -1916,7 +1825,7 @@ console.log('\nTOUCH: VERKNÜPFEN-GRIFF NUR AM AUSGEWÄHLTEN BALKEN (Handy 390×
 
 console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur)');
 {
-  const cz = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+  const cz = await neuerKontext(browser, { timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   const pz = await cz.newPage();
   pz.on('pageerror', (e) => errors.push('JS: ' + e.message));
   try {
@@ -1925,9 +1834,7 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
     await festivalMitDaten(pz, 'Zieh-Test', { loadIn: '2026-08-05T06:00' });
     await pz.waitForTimeout(900);
     // Plan präparieren: ein Sammelvorgang (Elternvorgang mit einem Kind).
-    const prep = await pz.evaluate(() => {
-      const id = localStorage.getItem('bzp_active');
-      const plan = JSON.parse(localStorage.getItem('bzp_p_' + id));
+    const prep = await planErsetzen(cz, pz, (plan) => {
       const flach = plan.tasks.filter((t) => !t.milestone);
       let elter = null, kind = null;
       for (const g of plan.gewerke) {
@@ -1936,7 +1843,6 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
       }
       kind.parent = elter.id;
       elter.start = kind.start; elter.end = kind.end;
-      localStorage.setItem('bzp_p_' + id, JSON.stringify(plan));
       const andere = plan.tasks.filter((t) => !t.milestone && t.id !== elter.id && t.id !== kind.id && !t.parent);
       // Ein einlaufender Pfeil legt eine breite Trefferspur über den Balkenanfang:
       // der linke Griff braucht einen Balken ohne Vorgänger.
@@ -1944,7 +1850,6 @@ console.log('\nBALKEN ZIEHEN (Verschieben, Ende, Escape, Klick, Griffe, Tastatur
       return { elter: elter.id, kind: kind.id,
         ms: (plan.tasks.find((t) => t.milestone) || {}).id, frei: andere.map((t) => t.id), mitDep: andere.filter((t) => plan.deps.some((d) => d.from === t.id || d.to === t.id)).map((t) => t.id), ohneVor: ohneVor.map((t) => t.id) };
     });
-    await pz.reload();
     await pz.waitForTimeout(1100);
     const zeit = async (id) => {
       await pz.waitForTimeout(1100);   // Auto-Save
@@ -2229,7 +2134,7 @@ console.log('\nENTWURF: DER STORE LEHNT ✓ AB (echte Tabelle, Store absichtlich
   // Entwurf sichtbar. Deshalb bekommt DIESE Seite einen Store, dessen moveTask
   // auf Zuruf («window.__lehneAb») ablehnt — alles andere ist die echte App.
   // Ohne Service Worker: dessen Abruf läuft an page.route vorbei, der Patch griffe nicht.
-  const cr = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 }, serviceWorkers: 'block' });
+  const cr = await neuerKontext(browser, { timezoneId: ZONE, viewport: { width: 1600, height: 950 }, serviceWorkers: 'block' });
   await cr.route('**/js/store.js*', async (route) => {
     const src = readFileSync(join(root, 'js/store.js'), 'utf8')
       .replace('\n  moveTask(state, cmd) {', "\n  moveTask(state, cmd) {\n    if (globalThis.__lehneAb) return 'Test: Die Zeiten ergeben sich aus den Untervorgängen.';");
@@ -2321,7 +2226,7 @@ console.log('\nENTWURF: DER STORE LEHNT ✓ AB (echte Tabelle, Store absichtlich
 
 console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
 {
-  const cv = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+  const cv = await neuerKontext(browser, { timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   const pv = await cv.newPage();
   const fehlerV = [];
   pv.on('pageerror', (e) => fehlerV.push(e.message));
@@ -2406,15 +2311,9 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
     return v.length === 0 ? true : 'nicht leer: ' + JSON.stringify(v.slice(0, 3));
   });
   // Gemischter Plan: drei Vorgänge bekommen einen Termin, der Rest bleibt ohne.
-  await pv.evaluate(async () => {
-    const m = await import('/js/persistence.js');
-    const repo = m.createRepo(window.localStorage);
-    const id = repo.list().find((x) => x.name === 'Ohne Termine').id;
-    const pl = repo.load(id);
-    pl.tasks.slice(0, 3).forEach((t, i) => { t.start = '2027-05-10T' + String(8 + i).padStart(2, '0') + ':00'; t.end = '2027-05-10T' + String(10 + i) + ':00'; });
-    repo.save(pl);
+  await planErsetzen(cv, pv, (pl) => {
+    pl.tasks.slice(0, 3).forEach((t, i) => { t.start = '2027-05-10T' + String(8 + i).padStart(2, '0') + ':00'; t.end = t.milestone ? t.start : '2027-05-10T' + String(10 + i) + ':00'; });
   });
-  await pv.reload();
   await pv.waitForTimeout(1200);
   await check('Gemischter Plan: drei Balken, übrige Zeilen mit Kennzeichnung, keine JS-Fehler', async () => {
     const bars = await pv.locator('.bz-bar, .bz-ms').count();
@@ -2443,7 +2342,7 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
 // Aufbau 14.–18.09.; zwei Show-Phasen = zwei Showtage (Fr 18:00–Sa 02:00, Sa 18:00–So 02:00).
 {
   console.log('\nPHASEN');
-  const cp = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+  const cp = await neuerKontext(browser, { timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   const pp = await cp.newPage();
   const fehlerP = [];
   pp.on('pageerror', (e) => fehlerP.push(e.message));
@@ -2666,7 +2565,7 @@ console.log('\nNEUES PROJEKT AUS DER VORLAGE (ohne Termine)');
 
 console.log('\nMEILENSTEIN OHNE TERMIN DATIEREN (Vorlage, Tabelle und Panel)');
 {
-  const cm = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+  const cm = await neuerKontext(browser, { timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
   const mp = await cm.newPage();
   const fehlerM = [];
   mp.on('pageerror', (e) => fehlerM.push(e.message));
@@ -2746,17 +2645,11 @@ console.log('\nMEILENSTEIN OHNE TERMIN DATIEREN (Vorlage, Tabelle und Panel)');
 console.log('\nABSCHNITT IM PANEL');
 // Das Panel zeigt das Abschnittsfeld nur bei Bühnen-Einträgen. Die Festival-
 // Vorlage hat keine Bühne, daher der Plan mit Hauptbühne (wie verify-showablauf).
-// Der Plan kommt als Testdaten in den localStorage (App liefert keinen mehr mit);
-// das Klassentreffen-Projekt wird zum aktiven, die übrigen Projekte bleiben im Index.
-const { plan: kt, id: ktId } = planSeed('klassentreffen-festival.json');
-const ktText = JSON.stringify(kt);   // Ursprungstext: der localStorage-Stand wird von den Tests verändert
-await page.evaluate(({ text, id, name, venue }) => {
-  localStorage.setItem('bzp_p_' + id, text);
-  const idx = JSON.parse(localStorage.getItem('bzp_projects') || '[]').filter((e) => e.id !== id);
-  idx.push({ id, name, venue: venue || '', modified: new Date().toISOString(), remoteSha: null, dirty: false });
-  localStorage.setItem('bzp_projects', JSON.stringify(idx));
-  localStorage.setItem('bzp_active', id);
-}, { text: ktText, id: ktId, name: kt.project.name, venue: kt.project.venue });
+// Der Plan liegt als Testdaten auf dem Server (App liefert keinen mehr mit) und wird zum aktiven Projekt;
+// die übrigen Projekte des Kontos bleiben in der Liste.
+const { plan: kt } = planSeed('klassentreffen-festival.json');
+const ktId = await ctx.planDazu(kt);
+await page.evaluate((id) => localStorage.setItem('bzp_active', id), ktId);
 await page.goto(BASE + '/index.html?plan=leer&ansicht=show');
 await page.waitForSelector('[data-ansicht="show"][aria-pressed="true"]', { timeout: 20000 });
 await page.waitForTimeout(900);
@@ -2791,10 +2684,8 @@ console.log('\nZEITUMSTELLUNG');
   // dass gescrollt werden muss), der letzte Gewerk-Vorgang um 23:30 am 25.10., einer am 26.10.
   await page.goto(BASE + '/index.html?plan=leer');
   await page.waitForTimeout(900);
-  const letztesGewerk = await page.evaluate(async (orig) => {
-    const m = await import('/js/persistence.js');
-    const r = m.deserialize(orig);
-    const pl = r.plan;
+  const letztesGewerk = await (async () => {
+    const pl = planSeed('klassentreffen-festival.json').plan;
     const t0 = pl.tasks[0];
     const gw = [...pl.gewerke].sort((a, b) => a.sort - b.sort).filter((g) => g.art === 'gewerk');
     const vor = (id, g, a, e) => ({ ...t0, id, gewerk: g.id, title: 'Z ' + id, start: a, end: e, milestone: false, parent: null, deps: [], fuer: null });
@@ -2804,11 +2695,10 @@ console.log('\nZEITUMSTELLUNG');
     const last = gw[gw.length - 1];
     pl.tasks.push(vor('zumstellung', last, '2026-10-25T23:30', '2026-10-25T23:45'));
     pl.tasks.push(vor('znach', gw[0], '2026-10-26T10:00', '2026-10-26T11:00'));
-    const repo = m.createRepo(window.localStorage);
-    repo.save(pl);
-    repo.setActive(pl.project.id);   // sonst lädt ?plan=leer ein anderes «erstes» Projekt
+    const id = await ctx.planDazu(pl);   // auf den Server; als aktives Projekt öffnen, sonst lädt ?plan=leer ein anderes
+    await page.evaluate((i) => localStorage.setItem('bzp_active', i), id);
     return { id: last.id, n: gw.length };
-  }, ktText);
+  })();
   await page.goto(BASE + '/index.html?plan=leer&ansicht=bau');
   await page.waitForSelector('.bz-t-major', { timeout: 20000 });
   await page.waitForTimeout(600);
@@ -2846,15 +2736,10 @@ console.log('\nZEITUMSTELLUNG');
   });
   await check('«+ Phase» vor der Zeitumstellung endet einen KALENDERtag später (24.10. 18:00 → 25.10. 18:00, nicht 17:00)', async () => {
     // Alle fünf Arten belegt → «+ Phase» nimmt «Aufbau»; dessen letzte Phase endet am 24.10. um 18:00.
-    await page.evaluate(async () => {
-      const m = await import('/js/persistence.js');
-      const repo = m.createRepo(window.localStorage);
-      const pl = repo.load(repo.getActive());
+    await planErsetzen(ctx, page, (pl) => {
       const arten = ['planung', 'vorbereitung', 'aufbau', 'show', 'abbau'];
       pl.phases = arten.map((art, i) => ({ id: 'zp' + i, art, start: '2026-10-23T0' + i + ':00', end: art === 'aufbau' ? '2026-10-24T18:00' : '2026-10-23T0' + i + ':30' }));
-      repo.save(pl);
-    });
-    await page.goto(BASE + '/index.html?plan=leer&ansicht=bau');
+    }, BASE + '/index.html?plan=leer&ansicht=bau');
     await page.waitForSelector('.bz-t-major', { timeout: 20000 });
     await page.locator('#rail-ein').click();
     await page.locator('[data-ein="phasen"]').click();
@@ -3229,7 +3114,7 @@ await check('Bühnenliste nur mit Bühnen; «+ Bühne» immer; neue Bühne ersch
   return (await gwListe('buehne').isVisible()) ? '⌘Z blendet die Bühnenliste nicht aus' : true;
 });
 
-await check('Projektmenü in der Kopfzeile: genau fünf Einträge, alte Knöpfe weg', async () => {
+await check('Projektmenü in der Kopfzeile: genau die sieben Einträge (Produktionsleitung), alte Knöpfe weg', async () => {
   await zumPlan(page);
   for (const id of ['new-proj', 'proj-menu', 'export', 'import', 'ei-res-verwalten', 'ei-typen-verwalten', 'ei-abschnitte-verwalten']) {
     if (await page.locator('#' + id).count()) return '#' + id + ' steht noch dauerhaft im DOM';
@@ -3239,23 +3124,9 @@ await check('Projektmenü in der Kopfzeile: genau fünf Einträge, alte Knöpfe 
   const ids = await page.locator('.mn .mn-i').evaluateAll((l) => l.map((b) => b.id));
   await page.screenshot({ path: join(here, 'shots', 'proj-menue.png') });
   await page.keyboard.press('Escape');
-  return ids.join() === 'new-proj,proj-menu,import,export,sync-oeffnen' ? true : 'Einträge: ' + ids.join();
+  return ids.join() === 'new-proj,proj-menu,import,export,mitglieder-oeffnen,konto,abmelden' ? true : 'Einträge: ' + ids.join();
 });
-await check('Speicherort: «☁ Speicherort…» öffnet #sync-dlg mit Schlüsselfeld; Escape und Klick daneben schließen', async () => {
-  await projektMenue(page, 'sync-oeffnen');
-  await page.waitForTimeout(200);
-  if (!(await page.locator('#sync-dlg').isVisible())) return '#sync-dlg nicht sichtbar';
-  if (!(await page.locator('#sync-dlg #sync-token').isVisible())) return '#sync-token fehlt im Dialog';
-  if (!(await page.locator('#sync-info').textContent()).trim()) return '#sync-info leer (paintSyncInfo nicht gelaufen)';
-  await page.screenshot({ path: join(here, 'shots', 'sync-dlg.png') });
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(150);
-  if (await page.locator('#sync-dlg').isVisible()) return 'Escape schließt nicht';
-  await projektMenue(page, 'sync-oeffnen');
-  await page.mouse.click(5, 5);
-  await page.waitForTimeout(150);
-  return (await page.locator('#sync-dlg').isVisible()) ? 'Klick daneben schließt nicht' : true;
-});
+// Entfallen: «Speicherort» (#sync-dlg, GitHub-Sync) gibt es seit Mehrbenutzer nicht mehr; der Dialog «Mitglieder» steht in verify-mehrbenutzer.
 
 console.log('\nRESSOURCEN-AUSWAHL (res-picker.js)');
 await festivalMitDaten(page, 'Res-Auswahl', { loadIn: '2026-10-05T06:00' });
@@ -3560,7 +3431,7 @@ const neuAnlegen = async (pg, name) => {
   await pg.locator('.dlg-act .btn-p').click();
   await pg.waitForTimeout(900);
 };
-const ctxE = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+const ctxE = await neuerKontext(browser, { timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
 const pe = await ctxE.newPage();
 const fehlerE = [];
 pe.on('pageerror', (e) => fehlerE.push(e.message));
@@ -3631,17 +3502,16 @@ await check('Erstes Einrichten ohne JS-Fehler', async () => (fehlerE.length ? fe
 await ctxE.close();
 {
   const seeden = async (plan, id, live) => {
-    const c = await browser.newContext({ timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
-    await c.addInitScript(([i, text, name, l]) => {
+    const c = await neuerKontext(browser, { timezoneId: ZONE, viewport: { width: 1600, height: 950 } });
+    const pid = await c.planDazu(plan);   // Plan liegt auf dem Server, wird aktives Projekt
+    await c.addInitScript(([i, l]) => {
       try {
-        if (localStorage.getItem('bzp_seeded_' + i) === '1') return;
-        localStorage.setItem('bzp_seeded_' + i, '1');
-        localStorage.setItem('bzp_p_' + i, text);
-        localStorage.setItem('bzp_projects', JSON.stringify([{ id: i, name, venue: '', modified: new Date().toISOString(), remoteSha: null, dirty: false }]));
+        if (localStorage.getItem('bzp_seeded_plan') === '1') return;
+        localStorage.setItem('bzp_seeded_plan', '1');
         localStorage.setItem('bzp_active', i);
         if (l) localStorage.setItem('bzp_live', '1');
       } catch { /* */ }
-    }, [id, JSON.stringify(plan), plan.project.name, live]);
+    }, [pid, live]);
     const p = await c.newPage();
     await p.goto(BASE + '/index.html?plan=leer');
     await p.waitForTimeout(1500);
@@ -3815,7 +3685,9 @@ await check('Picker: Tab auf einen Eintrag, Enter wählt den fokussierten (nicht
 if (errors.length) { console.log('\n  ✗ Fehler auf der Seite:'); errors.slice(0, 8).forEach((e) => console.log('      ' + e)); problems += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
 
-await browser.close();
-server.close();
+} finally {
+  await browser.close().catch(() => {}); server.close();
+  for (const st of stops) await st().catch(() => {});
+}
 console.log(problems ? `\n${problems} Problem(e).\n` : `\nAlle Prüfungen bestanden${skipped ? `, ${skipped} übersprungen` : ''}.\n`);
 process.exit(problems ? 1 : 0);

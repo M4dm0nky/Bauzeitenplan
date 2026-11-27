@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anmelden — CallBoard</title>
+<link rel="icon" type="image/svg+xml" href="assets/callboard-favicon.svg?v=0.25.1">
+
+<script>
+  // Hell/Dunkel VOR dem CSS festlegen (gleicher Schlüssel wie index.html), sonst blitzt es auf.
+  try {
+    var _m = localStorage.getItem('bzp_mode');
+    if (_m === 'light' || _m === 'dark') document.documentElement.dataset.theme = _m;
+  } catch (e) {}
+</script>
+
+<link rel="stylesheet" href="styles/base.css?v=0.25.1">
+<link rel="stylesheet" href="styles/themes/callboard.css?v=0.25.1" id="theme-css" data-theme-name="callboard">
+<link rel="stylesheet" href="styles/login.css?v=0.25.1">
+</head>
+<body class="lg-body">
+
+<main class="lg-karte" aria-labelledby="lg-titel">
+  <div class="lg-marke">
+    <svg viewBox="0 0 56 56" fill="none" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" width="44" height="44" role="img" aria-label="CallBoard">
+      <path d="M28 3 L49 14 L49 42 L28 53 L7 42 L7 14 Z" stroke="currentColor"/>
+      <rect x="23.5" y="13" width="9" height="5.5" rx="1.4" stroke="currentColor"/>
+      <rect x="17" y="17" width="22" height="26" rx="2.2" stroke="currentColor"/>
+      <circle cx="28" cy="30.5" r="8" stroke="currentColor"/>
+    </svg>
+    <span class="lg-name">CallBoard</span>
+  </div>
+
+  <h1 id="lg-titel" class="lg-titel"></h1>
+  <p id="lg-sub" class="lg-sub"></p>
+
+  <p id="lg-hinweis" class="lg-hinweis" role="alert" hidden></p>
+
+  <!-- Anmelden -->
+  <form id="f-anmelden" class="lg-form" novalidate hidden>
+    <label class="lg-feld"><span class="lg-lab"><svg class="lg-ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>E-Mail</span>
+      <input id="a-email" type="email" autocomplete="username" required></label>
+    <label class="lg-feld"><span class="lg-lab"><svg class="lg-ico" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Passwort</span>
+      <input id="a-pw" type="password" autocomplete="current-password" required></label>
+    <button class="lg-knopf" type="submit"><svg class="lg-ico" viewBox="0 0 24 24"><path d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5"/><path d="M4 12h11"/><path d="M11 8l4 4-4 4"/></svg><span id="a-knopf">Anmelden</span></button>
+    <button class="lg-link" type="button" id="a-vergessen">Passwort vergessen?</button>
+    <button class="lg-link" type="button" id="a-einl-zurueck" hidden>Ich habe noch kein Konto</button>
+  </form>
+
+  <!-- Passwort vergessen -->
+  <form id="f-vergessen" class="lg-form" novalidate hidden>
+    <label class="lg-feld"><span class="lg-lab"><svg class="lg-ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>E-Mail</span>
+      <input id="v-email" type="email" autocomplete="username" required></label>
+    <button class="lg-knopf" type="submit"><svg class="lg-ico" viewBox="0 0 24 24"><path d="M4 12l16-7-6 16-3-7z"/></svg>Link senden</button>
+    <button class="lg-link" type="button" id="v-zurueck">Zurück zur Anmeldung</button>
+  </form>
+
+  <!-- Einladung annehmen (neues Konto) -->
+  <form id="f-einladung" class="lg-form" novalidate hidden>
+    <label class="lg-feld"><span class="lg-lab"><svg class="lg-ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1-4 4-6 8-6s7 2 8 6"/></svg>Dein Name</span>
+      <input id="e-name" type="text" autocomplete="name" required></label>
+    <label class="lg-feld"><span class="lg-lab"><svg class="lg-ico" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Passwort (mindestens 10 Zeichen)</span>
+      <input id="e-pw" type="password" autocomplete="new-password" required></label>
+    <label class="lg-feld"><span class="lg-lab"><svg class="lg-ico" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Passwort wiederholen</span>
+      <input id="e-pw2" type="password" autocomplete="new-password" required></label>
+    <button class="lg-knopf" type="submit"><svg class="lg-ico" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Einladung annehmen</button>
+    <button class="lg-link" type="button" id="e-konto">Ich habe schon ein Konto</button>
+  </form>
+
+  <!-- Neues Passwort (Link aus der Mail) -->
+  <form id="f-reset" class="lg-form" novalidate hidden>
+    <label class="lg-feld"><span class="lg-lab"><svg class="lg-ico" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Neues Passwort (mindestens 10 Zeichen)</span>
+      <input id="r-pw" type="password" autocomplete="new-password" required></label>
+    <label class="lg-feld"><span class="lg-lab"><svg class="lg-ico" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Passwort wiederholen</span>
+      <input id="r-pw2" type="password" autocomplete="new-password" required></label>
+    <button class="lg-knopf" type="submit"><svg class="lg-ico" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Passwort speichern</button>
+  </form>
+
+  <!-- nach erfolgreichem Zurücksetzen -->
+  <div id="f-fertig" class="lg-form" hidden>
+    <button class="lg-knopf" type="button" id="z-anmelden"><svg class="lg-ico" viewBox="0 0 24 24"><path d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5"/><path d="M4 12h11"/><path d="M11 8l4 4-4 4"/></svg>Zur Anmeldung</button>
+  </div>
+</main>
+
+<script type="module" src="js/login.js?v=0.25.1"></script>
+</body>
+</html>

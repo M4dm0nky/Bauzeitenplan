@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mustFirefox, chromiumExe } from './browsers.mjs';
 import { createServer } from 'node:http';
-import { FIXTURES } from './plan-fixture.mjs';
+import { FIXTURES, planLaden } from './plan-fixture.mjs';
 const here = dirname(fileURLToPath(import.meta.url)); const root = join(here, '..');
 mkdirSync(join(here, 'shots'), { recursive: true });
 const exe = mustFirefox();
@@ -19,15 +19,19 @@ const server = createServer((q, s) => {
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const b = await firefox.launch({ executablePath: exe });
+let stopPb = async () => {};
+let bad = 0;
+try {
 // Uhr auf den Aufbautag stellen, damit die Ansicht sinnvoll steht
 const ctx = await b.newContext({ viewport: { width: 1600, height: 950 } });
+// Angemeldet, aber ohne Plan: der Import läuft über den Server-Weg (Import-Knopf → planAnlegen)
+stopPb = (await planLaden(ctx, null, { frisch: true })).stop;
 const p = await ctx.newPage();
 await p.clock.install({ time: new Date('2026-07-17T09:40:00') });
 const errors = [];
 p.on('pageerror', (e) => errors.push('JS: ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
-let bad = 0;
 const zoomWahl = async (pg, z) => { await pg.click('#zoom-stufe'); await pg.locator('.mn .mn-i', { hasText: z[0].toUpperCase() + z.slice(1) }).click(); };
 const check = async (name, fn) => {
   let r; try { r = await fn(); } catch (e) { r = 'Ausnahme: ' + e.message; }
@@ -129,6 +133,9 @@ await p.screenshot({ path: join(here, 'shots', 'amk-abbau.png') });
 
 if (errors.length) { console.log('\n  ✗ Fehler:'); errors.slice(0, 5).forEach((e) => console.log('      ' + e)); bad += errors.length; }
 else console.log('\n  ✓ keine JS-Fehler');
-await b.close(); server.close();
+} finally {
+  await b.close().catch(() => {}); server.close();
+  await stopPb().catch(() => {});
+}
 console.log(bad ? `\n${bad} Problem(e).\n` : '\nAlle Prüfungen bestanden.\n');
 process.exit(bad ? 1 : 0);

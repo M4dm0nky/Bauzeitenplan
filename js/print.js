@@ -87,10 +87,11 @@ const wahl = { ebene: 'bau', abschnitt: 'alle', gewerke: new Set(), von: null, b
 
 async function ladePlan() {
   const repo = createRepo(window.localStorage);
+  // Nur Kopien von Server-Plänen: ein alter lokaler Plan (nie auf dem Server) ist kein Druckstand.
+  const liste = repo.listServer();
   const aktiv = repo.getActive();
-  const pl = aktiv && repo.load(aktiv);
+  const pl = aktiv && liste.some((x) => x.id === aktiv) && repo.load(aktiv);
   if (pl) return pl;
-  const liste = repo.list();
   if (liste.length) return repo.load(liste[0].id);
   throw new Error('Kein Projekt in diesem Browser. Öffne zuerst die App.');
 }
