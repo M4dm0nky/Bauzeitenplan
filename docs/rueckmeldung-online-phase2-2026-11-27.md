@@ -1,6 +1,6 @@
 # Rückmeldung: Bauzeitenplan online, Phase 2 – Teil A auf TEST und LIVE, Teil B
 
-**An:** Marco · **Von:** Server-Admin (Robs) · **Stand:** 2026-11-27, 15:15 Uhr
+**An:** Marco · **Von:** Server-Admin (Robs) · **Stand:** 2026-11-27, 18:10 Uhr
 **Bezug:** [`admin-auftrag-online-phase2.md`](admin-auftrag-online-phase2.md) (TEST nach Stand `22d18d6` auf
 Branch `online`, LIVE nach Stand `main` `3e9f886`)
 
@@ -12,6 +12,9 @@ dein «`live` ist gepusht».
 **Nachtrag 14:35 Uhr – Teil B ist umgestellt.** `callboard.nyxlightwork.de` liefert seit 14:27 Uhr Version 1.0.0
 aus Branch `live` (`416400e`) aus. Alle Messungen aus dem Auftrag sind grün. Für das Auto-Deploy fehlt nur noch
 der Webhook in deinem Repo, siehe [Teil B](#teil-b--coolify-app-umgestellt).
+
+**Nachtrag 18:10 Uhr – Webhook läuft, für die Mailvorlagen brauche ich drei Dinge von dir.** Siehe
+[den Nachtrag unten](#nachtrag-1810-uhr--webhook-läuft-mailvorlagen-warten-auf-dich).
 
 ## Ergebnis
 
@@ -59,6 +62,53 @@ Kontrollaufrufe an `/api/bzp/einladung` (400, gewollt): zwei auf TEST, zwei auf 
 **CORS** ist unverändert. Auf TEST wird `https://m4dm0nky.github.io` gespiegelt, auf LIVE
 `https://callboard.nyxlightwork.de`. Eine fremde Origin bekommt keinen Header. Das gilt jetzt auch für die
 neuen Collections, gemessen an `plaene`.
+
+## Nachtrag 18:10 Uhr – Webhook läuft, Mailvorlagen warten auf dich
+
+### Webhook: funktioniert
+
+Danke, dass du den Webhook angelegt hast. Dein Push `56ff17d` (Version 1.0.1) auf `live` wurde um 17:30 Uhr
+automatisch gebaut und ausgerollt, ohne dass ich etwas tun musste. Coolify führt ihn als Webhook-Deploy. Danach
+habe ich die Seite nachgemessen:
+
+| Prüfung | Ergebnis |
+|---|---|
+| `/`, `/healthz`, `/login.html` | 200 ☑ |
+| `/docs/`, `/tools/…`, `/pocketbase/`, `/.git/config`, `/Dockerfile` | 404 ☑ |
+| Cache-Header (`/` `no-cache`, `sw.js` `no-store`) | unverändert ☑ |
+| `js/version.js` | `1.0.1` ☑ |
+| nginx | 1.30.8 aus `nginx:stable-alpine` ☑. Mein Hinweis zu 1.27 weiter unten ist damit erledigt. |
+
+### Mailvorlagen (Nachtrag im Auftrag, Issue #14): noch nicht eingespielt
+
+Den Nachtrag «Mailvorlagen» im Auftrag habe ich gelesen, die Migration und den geänderten Hook auch. Beide
+Instanzen laufen noch mit der Phase-2-Fassung (`main.pb.js` `969d7062…`). Bevor ich einspiele, brauche ich drei
+Dinge von dir:
+
+1. **Die Prüfsummen.** Im Auftrag steht, dass sie im Release-Auftrag kommen, den gibt es aber noch nicht. Auf
+   `main` (`56ff17d`) messe ich:
+
+   ```
+   2082cf5eee85c3e0c7ccd4b89f2246c7d82dd718d471e5f5d3a62f4a3d0717c4  1700000005_mailvorlagen.js
+   f485241b518304edeb77b5d8b59ee30a12623163b0f7978aed0714a41a90c7c8  main.pb.js
+   ```
+
+   `hilfen.js` ist unverändert (`218fe878…`), die kopiere ich nicht neu. Wenn das deine Stände sind, reicht ein
+   kurzes «passt», ein eigener Release-Auftrag ist dann nicht nötig. Wenn noch etwas nachkommt, schick mir bitte
+   die endgültigen Summen.
+2. **Dein Zeichen, wann und wo.** Mein Vorschlag: erst TEST, dann gleich danach LIVE. Der Teil im Frontend
+   (`login.html?verify=`) ist mit 1.0.1 schon live, deshalb muss LIVE nicht warten. Wenn du TEST erst selbst
+   ansehen willst, sag Bescheid, dann spiele ich LIVE erst nach deiner Freigabe ein.
+3. **Kurz zur Reset-Testmail von heute Nachmittag:** Ist sie angekommen? Schau bitte auch im Spam nach.
+
+**So spiele ich es ein**, wie bei Teil A:
+- sha-Gate vor dem Kopieren und ein Backup beider Datenbanken in einen eigenen Ordner;
+- Migration per `docker cp`, dann `main.pb.js` ins Volume, dann `docker restart`;
+- Wirkung mit `verify-pb-regeln --gegen` prüfen;
+- auf LIVE zusätzlich eine Test-Bestätigungsmail schicken und prüfen, dass der Link auf `login.html?verify=`
+  zeigt und nicht mehr auf `/_/`.
+
+Das Ergebnis schreibe ich wieder hier hinein.
 
 ## Nachtrag 15:15 Uhr – Mailversand LIVE läuft
 
@@ -148,7 +198,7 @@ angestoßen (14:30 Uhr, als Webhook-Deploy erkannt). Beim Umschalten fiel dabei 
 eine Sekunde lang. Nach dem Anlegen zeigt GitHub unter «Recent Deliveries» einen Ping. Ein Ping baut noch
 nicht neu, das macht erst dein nächster Push auf `live`.
 
-### Ein Hinweis zum Dockerfile (nicht dringend)
+### Ein Hinweis zum Dockerfile (erledigt mit 1.0.1)
 
 `FROM nginx:1.27-alpine` ist eine **abgeschlossene** nginx-Linie. Das Image ist 1.27.5 und bekommt keine
 Sicherheitsupdates mehr. Hier werden nur statische Dateien ausgeliefert, deshalb ist das kein akutes Problem.
@@ -193,11 +243,10 @@ App deployte nicht automatisch und hat deinen Merge also nicht mitgenommen.
 
 ## Offen
 
-1. **Webhook für das Auto-Deploy** in GitHub anlegen (siehe Teil B). Das Secret kommt direkt von mir. Bis dahin
-   deployt ein Push auf `live` nicht von selbst, sag mir dann Bescheid.
+1. **Mailvorlagen:** Prüfsummen bestätigen und Zeichen geben (siehe Nachtrag 18:10 Uhr). Der Webhook läuft.
 2. **Teil C** (erstes Superadmin-Konto mit `setup.mjs`): dein Teil, ab sofort auf TEST und LIVE möglich.
 3. **Mailversand LIVE:** läuft (siehe Nachtrag oben). Offen ist nur deine Bestätigung, dass die Testmail
-   angekommen ist, und bei Bedarf die Vorlage «E-Mail bestätigen».
+   angekommen ist. Die Vorlage «E-Mail bestätigen» kommt mit den Mailvorlagen.
 4. **Backup-Kopie außerhalb des Servers** fehlt weiterhin.
 
 ## Rückweg
