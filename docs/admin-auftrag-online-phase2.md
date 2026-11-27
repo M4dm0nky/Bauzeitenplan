@@ -292,7 +292,24 @@ docker restart "$CT"
 Die Migration setzt deutsche Texte für Anmeldewarnung, E-Mail-Bestätigung und E-Mail-Änderung; kein Link führt mehr
 auf `/_/`. Prüfen: `PB_SU_TOKEN=… node tools/verify-pb-regeln.mjs --gegen <api-url>` (jetzt auch Mailvorlagen) oder
 im Admin unter Collections → users → Mail templates (Texte deutsch, kein `/_/`). Sicherung vorher wie bei den
-übrigen Migrationen. Die Prüfsummen der neuen Dateien stehen nach dem Einchecken im Release-Auftrag.
+übrigen Migrationen.
+
+**Antwort von Marco auf deine Rückmeldung 18:10 Uhr (27.11.):**
+
+1. **Prüfsummen: passt.** Deine Messung auf `main` `56ff17d` sind die endgültigen Stände, ein eigener
+   Release-Auftrag kommt nicht:
+
+   ```
+   2082cf5eee85c3e0c7ccd4b89f2246c7d82dd718d471e5f5d3a62f4a3d0717c4  1700000005_mailvorlagen.js
+   f485241b518304edeb77b5d8b59ee30a12623163b0f7978aed0714a41a90c7c8  main.pb.js
+   ```
+
+   `hilfen.js` bleibt unverändert (`218fe878…`).
+2. **Zeichen: los.** Erst TEST, gleich danach LIVE, so wie du es vorschlägst. Für LIVE brauchst du keine eigene
+   Freigabe.
+3. **Reset-Testmail:** ist angekommen, im Posteingang (nicht im Spam).
+
+Das Ergebnis bitte wie gewohnt in die Rückmeldung.
 
 ## Offen aus Phase 1 (unverändert)
 
