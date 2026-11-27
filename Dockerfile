@@ -3,7 +3,7 @@
 # Allowlist: NUR die ausgelieferten Dateien kommen ins Image (kein docs/, tools/, tests/, pocketbase/,
 # .superpowers/, .claude/). `.dockerignore` sperrt zusätzlich alles, was hier nicht kopiert wird;
 # `tests/run.mjs` prüft beides gegen HUELLE in sw.js.
-FROM nginx:1.27-alpine
+FROM nginx:stable-alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY index.html print.html login.html sw.js /usr/share/nginx/html/

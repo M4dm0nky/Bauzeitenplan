@@ -3,6 +3,12 @@
 Neueste Version oben. Gepflegt beim Versionswechsel (`node tools/version.mjs`),
 nicht in `CLAUDE.md` — dort stehen Anweisungen, hier steht Vergangenheit.
 
+## Unveröffentlicht
+
+- **Mailvorlagen (Issue #14):** Migration `1700000005_mailvorlagen.js`: Anmeldewarnung, E-Mail-Bestätigung und E-Mail-Änderung auf Deutsch; die Bestätigung verweist auf `login.html?verify=…` (neu: die Anmeldeseite bestätigt die Adresse per `confirm-verification`), die Änderungsmail hat keinen Link (Änderung ist gesperrt). Keine Vorlage der `users` führt mehr auf `/_/`. Der Hook entfernt `//login.html` jetzt auch in Bestätigungs- und Warnmail. Prüfungen in `verify-pb-regeln` und `verify-mehrbenutzer`. Migration und Hook müssen auf TEST und LIVE eingespielt werden (`docs/admin-auftrag-online-phase2.md`, Nachtrag).
+- **Dockerfile (Issue #12):** Basis `nginx:stable-alpine` statt fester Linie `1.27`; gesperrt in `tests/run.mjs`.
+- **Prüfskripte (Issue #13):** feste Pausen in `verify-edit` («DAUERHAFTIGKEIT») und `verify-mehrbenutzer` («Projektdialog sichtbar») durch Warten auf den Zustand ersetzt.
+
 ## 1.0.0 — 2026-11-27 — Online und Mehrbenutzer
 
 - **Online und Mehrbenutzer:** Die App läuft gegen PocketBase 0.40.6 (`pocketbase/`: Migrationen, Hook, `schema.json`). Anmeldung über `login.html` (Anmelden, Passwort vergessen, Einladung annehmen), Rollen je Plan (Superadmin, Besitzer, Produktionsleitung, Bearbeiter, Gewerkeleiter, Betrachter), Änderungen anderer erscheinen live (Realtime), gesendet wird mit Revisionsprüfung (`rev`), Konflikte fragen nach («von jemand anderem geändert»). Undo nimmt nur die eigenen Schritte zurück (patch-basiert, `js/aenderungen.js`). Neu: `js/pb.js`, `js/server.js`, `js/rechte.js`, `js/konflikt.js`, `js/login.js`, `login.html`.

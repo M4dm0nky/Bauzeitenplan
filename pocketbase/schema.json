@@ -172,8 +172,8 @@
     "authAlert": {
       "enabled": true,
       "emailTemplate": {
-        "subject": "Login from a new location",
-        "body": "<p>Hello,</p>\n<p>We noticed a login to your {APP_NAME} account from a new location:</p>\n<p><em>{ALERT_INFO}</em></p>\n<p><strong>If this wasn't you, you should immediately change your {APP_NAME} account password to revoke access from all other locations.</strong></p>\n<p>If this was you, you may disregard this email.</p>\n<p>\n  Thanks,<br/>\n  {APP_NAME} team\n</p>"
+        "subject": "Anmeldung von einem neuen Gerät",
+        "body": "<p>Hallo,</p><p>für dein Konto im Bauzeitenplan wurde eine Anmeldung von einem neuen Gerät festgestellt:</p><p><em>{ALERT_INFO}</em></p><p>Wenn du das nicht warst, ändere sofort dein Passwort: Öffne <a href=\"{APP_URL}/login.html\" target=\"_blank\" rel=\"noopener\">{APP_URL}/login.html</a> und wähle «Passwort vergessen».</p><p>Wenn du das warst, kannst du diese Mail ignorieren.</p>"
       }
     },
     "oauth2": {
@@ -222,16 +222,16 @@
       "duration": 180
     },
     "verificationTemplate": {
-      "subject": "Verify your {APP_NAME} email",
-      "body": "<p>Hello,</p>\n<p>Thank you for joining us at {APP_NAME}.</p>\n<p>Click on the button below to verify your email address.</p>\n<p>\n  <a class=\"btn\" href=\"{APP_URL}/_/#/auth/confirm-verification/{TOKEN}\" target=\"_blank\" rel=\"noopener\">Verify</a>\n</p>\n<p><i>If you didn't recently register, please ignore this email.</i></p>\n<p>\n  Thanks,<br/>\n  {APP_NAME} team\n</p>"
+      "subject": "E-Mail-Adresse für den Bauzeitenplan bestätigen",
+      "body": "<p>Hallo,</p><p>bitte bestätige deine E-Mail-Adresse mit einem Klick auf den folgenden Link:</p><p><a href=\"{APP_URL}/login.html?verify={TOKEN}\" target=\"_blank\" rel=\"noopener\">E-Mail-Adresse bestätigen</a></p><p>Wenn du dich nicht registriert hast, kannst du diese Mail ignorieren.</p>"
     },
     "resetPasswordTemplate": {
       "subject": "Passwort für den Bauzeitenplan zurücksetzen",
       "body": "<p>Hallo,</p><p>zum Zurücksetzen deines Passworts klicke auf den folgenden Link:</p><p><a href=\"{APP_URL}/login.html?reset={TOKEN}\" target=\"_blank\" rel=\"noopener\">Neues Passwort festlegen</a></p><p>Wenn du das nicht angefordert hast, kannst du diese Mail ignorieren.</p>"
     },
     "confirmEmailChangeTemplate": {
-      "subject": "Confirm your {APP_NAME} new email address",
-      "body": "<p>Hello,</p>\n<p>Click on the button below to confirm your new email address.</p>\n<p>\n  <a class=\"btn\" href=\"{APP_URL}/_/#/auth/confirm-email-change/{TOKEN}\" target=\"_blank\" rel=\"noopener\">Confirm new email</a>\n</p>\n<p><i>If you didn't ask to change your email address, please ignore this email.</i></p>\n<p>\n  Thanks,<br/>\n  {APP_NAME} team\n</p>"
+      "subject": "E-Mail-Adresse im Bauzeitenplan ändern",
+      "body": "<p>Hallo,</p><p>die E-Mail-Adresse lässt sich im Bauzeitenplan nicht selbst ändern. Bitte wende dich an die Verwaltung.</p><p>Wenn du das nicht angefordert hast, kannst du diese Mail ignorieren.</p>"
     }
   },
   {

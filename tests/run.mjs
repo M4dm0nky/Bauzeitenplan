@@ -548,6 +548,12 @@ check('Docker-Image (Dockerfile + .dockerignore): genau die ausgelieferten Datei
   return r.length ? r.join(' | ') : true;
 });
 
+check('Dockerfile: Basis ist nginx:stable-alpine (keine feste Minor-Linie, bekommt Sicherheitsfixes)', () => {
+  const from = readFileSync(join(root, 'Dockerfile'), 'utf8').split('\n').filter((z) => /^FROM\s/.test(z));
+  if (from.length !== 1) return 'genau eine FROM-Zeile erwartet, gefunden: ' + from.length;
+  return /^FROM\s+nginx:stable-alpine\s*$/.test(from[0]) ? true : 'Basis muss nginx:stable-alpine sein, ist: ' + from[0];
+});
+
 check('nginx.conf: sw.js ohne HTTP-Cache, gzip an, kein SPA-Fallback, Health-Check', () => {
   const n = readFileSync(join(root, 'nginx.conf'), 'utf8');
   const r = [];

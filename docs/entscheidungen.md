@@ -533,7 +533,7 @@ Spec: `docs/superpowers/specs/2026-11-23-online-mehrbenutzer-design.md` (freigeg
 - **E-6 CORS** macht Traefik (Admin, Phase 1); lokal `serve --origins`. Kein CORS im Hook (Traefik hat ohnehin das letzte Wort).
 - **E-7 Undo patch-basiert** für alle Fälle (nicht nur online): ein Undo-Eintrag ist die Änderungsliste des Befehls; Undo wendet ihre Umkehrung auf den aktuellen Stand an. Weicht ein betroffener Datensatz inzwischen ab (fremde Änderung), liefert `undo()` `{ok:false, konflikt:[…]}` und die App fragt per `askDialog`.
 - **E-8 Einladung:** Datensatz `einladungen` mit `token` (32 Zeichen, vom Hook erzeugt), `ablauf` +14 Tage. Hook-Route `POST /api/bzp/einladung` (`{token, name, passwort}` ohne Konto, oder angemeldet nur `{token}`) legt Konto/Mitgliedschaft an und löscht die Einladung. Existiert das Konto beim Einladen schon, legt der Hook sofort die Mitgliedschaft an statt einer Einladung. Mail nur, wenn PocketBase SMTP hat (Live); sonst gibt die Antwort den Link zurück (Test).
-- **E-9 Seiten:** `login.html` (Anmelden, Passwort vergessen, Einladung annehmen, Passwort neu — per Query `?einladung=`/`?reset=`). Mitglieder-Verwaltung als Dialog in der App, Superadmin-Verwaltung als Dialog in der App (kein `admin.html`).
+- **E-9 Seiten:** `login.html` (Anmelden, Passwort vergessen, Einladung annehmen, Passwort neu — per Query `?einladung=`/`?reset=`; später `?verify=` für die E-Mail-Bestätigung). Mitglieder-Verwaltung als Dialog in der App, Superadmin-Verwaltung als Dialog in der App (kein `admin.html`).
 - **E-10 Rollen-Info** für den Client: `rolleIn(plan, user, mitglieder)` → `{rolle:'superadmin'|'besitzer'|'produktionsleitung'|'bearbeiter'|'gewerkeleiter'|'betrachter', gewerke:[]}`.
 
 ### Entscheidungen aus der Umsetzung

@@ -2,8 +2,8 @@
 
 Server-Teil des Bauzeitenplans (Branch `online`): PocketBase **0.40.6**.
 
-- `pb_migrations/` — Schema und API-Regeln als JS-Migration (laufen beim Start automatisch).
-- `pb_hooks/` — Server-Logik (rev, Rollen, Konten, Einladung).
+- `pb_migrations/` — Schema und API-Regeln als JS-Migration (laufen beim Start automatisch): `1700000001_schema`, `…02_reset_mail`, `…03_ratelimits`, `…04_plan_loeschen`, `…05_mailvorlagen` (deutsche Konto-Mails, Link `login.html?verify=`, kein `/_/`).
+- `pb_hooks/` — Server-Logik (rev, Rollen, Konten, Einladung, Konto-Mails ohne `//` im Link).
 - `setup.mjs` — erstes Superadmin-Konto der App anlegen (macht Marco selbst, idempotent, `--trocken` schreibt nichts). Zugang aus `pocketbase/pb-admin.local.json` (gitignored) oder Umgebungsvariablen, nie im Repo.
 - `schema.json` — lesbare Momentaufnahme der Collections nach allen Migrationen (`node tools/pb-schema-export.mjs`, `--pruefen` vergleicht). Maßgeblich bleiben die Migrationen; Rate Limits und Einstellungen sind darin nicht enthalten.
 - Einspielen auf Test/Live (nur Admin): `docs/admin-auftrag-online-phase2.md`.

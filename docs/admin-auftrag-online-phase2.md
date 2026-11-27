@@ -279,6 +279,21 @@ Marco hat am 27.11. entschieden: **PocketBase-Vorgabe 7 Tage bleibt.** Auf TEST 
 (Der Monitor erneuert sein Token selbst alle 6 Stunden, solange er läuft; wer länger als 7 Tage nicht in der App
 war, meldet sich neu an.)
 
+## Nachtrag: Mailvorlagen (Release-Paket, Issue #14)
+
+Zwei Dateien kommen zusätzlich auf TEST und LIVE (Vorgehen wie in Schritt 4 oben, derselbe Container `$CT`):
+
+```bash
+docker cp 1700000005_mailvorlagen.js "$CT":/app/pb_migrations/
+cp main.pb.js "$HOOKS/"        # neue Fassung: bereinigt «//login.html» auch in Bestätigungs- und Warnmail
+docker restart "$CT"
+```
+
+Die Migration setzt deutsche Texte für Anmeldewarnung, E-Mail-Bestätigung und E-Mail-Änderung; kein Link führt mehr
+auf `/_/`. Prüfen: `PB_SU_TOKEN=… node tools/verify-pb-regeln.mjs --gegen <api-url>` (jetzt auch Mailvorlagen) oder
+im Admin unter Collections → users → Mail templates (Texte deutsch, kein `/_/`). Sicherung vorher wie bei den
+übrigen Migrationen. Die Prüfsummen der neuen Dateien stehen nach dem Einchecken im Release-Auftrag.
+
 ## Offen aus Phase 1 (unverändert)
 
 1. **Mailversand Live** (Resend, Variante A): bis dahin geht auf Live kein «Passwort vergessen». Einladungen

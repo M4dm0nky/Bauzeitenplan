@@ -733,6 +733,10 @@ async function RATELIMIT(pb, { smtp } = {}) {
     ok(danach.ok && isDeepStrictEqual(danach.state, staende[6]), 'alle sechs Änderungen stehen auf dem Server (deepEqual)');
     ok(sp.offen.length === 0, 'Warteschlange leer');
 
+    // 3a) Mailvorlagen der Konten (Migration 1700000005)
+    const uc = await pb.su('GET', '/api/collections/users');
+    if (ok(uc.ok, 'users-Collection per Superuser lesbar')) pruefeVorlagen(uc.body);
+
     // 3) Reset-Mail: appURL endet auf «/» → Link ohne «//login.html»
     if (smtp) {
       const r = await pb.su('PATCH', '/api/settings', { smtp: { enabled: true, host: '127.0.0.1', port: smtp.port, tls: false, username: '', password: '' }, meta: { senderAddress: 'bzp@bzp.test', senderName: 'BZP' } });
@@ -745,6 +749,19 @@ async function RATELIMIT(pb, { smtp } = {}) {
       const m = mail.match(/href="?(http[^"\s>]*login\.html\?reset=[^"\s>]+)/);
       ok(!!m && m[1].startsWith('http://localhost:8080/login.html?reset='), 'Reset-Link = appURL + login.html (ein Schrägstrich)', m ? m[1] : mail.slice(0, 300));
       ok(!/[^:]\/\/login\.html/.test(mail), 'Mail enthält nirgends «//login.html»');
+      // Verifizierungs-Mail: gezielt die neue Mail nach der Reset-Mail lesen
+      // (kontoAnlegen setzt verified=true, dann sendet PocketBase nichts: neues Konto auf false stellen)
+      const vk = await kontoAnlegen(pb, { email: 'unbestaetigt@bzp.test', name: 'u', passwort: PW });
+      ok((await pb.su('PATCH', `/api/collections/users/records/${vk.id}`, { verified: false })).ok, 'Konto auf verified=false gestellt');
+      const vorher = smtp.mails.length;
+      const vanf = await pbA.post('/api/collections/users/request-verification', { email: 'unbestaetigt@bzp.test' });
+      ok(vanf.ok, 'request-verification');
+      const bis2 = Date.now() + 10000;
+      while (smtp.mails.length <= vorher && Date.now() < bis2) await warte(100);
+      const vmail = qp(smtp.mails[vorher] || '');
+      const vm = vmail.match(/href="?(http[^"\s>]*login\.html\?verify=[^"\s>]+)/);
+      ok(!!vm && vm[1].startsWith('http://localhost:8080/login.html?verify='), 'Verifizierungs-Link = appURL + login.html?verify= (ein Schrägstrich)', vm ? vm[1] : vmail.slice(0, 300));
+      ok(!/[^:]\/\/login\.html/.test(vmail) && !/\/_\//.test(vmail), 'Verifizierungs-Mail: kein «//login.html», kein «/_/»');
     }
 
     // 4) Rot-Nachweis: ohne die Migration (create-Regel auf dem PB-Standard 20 je 5 s) scheitert AMK
@@ -776,6 +793,22 @@ async function RATELIMIT_AUS() {
   } finally { await pb.stop(); }
 }
 
+// Mailvorlagen der Konten (Migration 1700000005): deutsch, kein Link auf die PocketBase-Oberfläche (/_/).
+// `u` = Collection `users` (GET /api/collections/users als Superuser).
+function pruefeVorlagen(u) {
+  const t = { authAlert: u.authAlert?.emailTemplate || {}, verification: u.verificationTemplate || {}, confirmEmailChange: u.confirmEmailChangeTemplate || {} };
+  for (const [n, v] of Object.entries(t)) {
+    ok(/Hallo/.test(v.body || '') && !/Hello/.test(v.body || '') && !/team/i.test(v.body || ''), `Vorlage ${n}: Text deutsch (Hallo, kein «Hello»/«team»)`, (v.body || '').slice(0, 80));
+    ok(!!v.subject && !/\b(Verify|Confirm|Login from)\b/.test(v.subject), `Vorlage ${n}: Betreff deutsch`, v.subject);
+  }
+  ok(u.authAlert?.enabled === true, 'authAlert bleibt eingeschaltet');
+  ok(/\{ALERT_INFO\}/.test(t.authAlert.body || '') && /login\.html/.test(t.authAlert.body || ''), 'authAlert: enthält {ALERT_INFO} und Link auf login.html');
+  const alle = JSON.stringify([u.authAlert, u.otp, u.verificationTemplate, u.resetPasswordTemplate, u.confirmEmailChangeTemplate]);
+  ok(!/\/_\//.test(alle), 'keine Vorlage der users enthält «/_/» (PocketBase-Oberfläche)');
+  ok(/\{APP_URL\}\/login\.html\?verify=\{TOKEN\}/.test(t.verification.body || ''), 'verification: Link = {APP_URL}/login.html?verify={TOKEN}');
+  ok(!/href/.test(t.confirmEmailChange.body || ''), 'confirmEmailChange: kein Link (E-Mail-Änderung ist gesperrt)');
+}
+
 // ── Lesemodus gegen eine laufende Instanz (Admin-Auftrag Phase 2) ───────────────────────────────────
 // Schreibt nie etwas: nur GET und EIN anonymer POST an die Hook-Route mit leerem Body (wird abgelehnt).
 const GEGEN_COLS = ['plaene', 'mitglieder', 'einladungen', ...COLS];
@@ -802,6 +835,8 @@ export async function GEGEN(url, { suToken = '' } = {}) {
     ok(rl.enabled === true, 'Rate Limiting ist an (Einstellung des Admins, die Migration fasst es nicht an)');
     const url2 = s.body.meta?.appURL || '';
     ok(/^https?:\/\/.+\/$/.test(url2), 'Application URL gesetzt, mit Schrägstrich am Ende', url2);
+    const uc = await api(pb, suToken, 'GET', '/api/collections/users');
+    if (ok(uc.status === 200, 'users-Collection lesbar (Mailvorlagen)', `Status ${uc.status}`)) pruefeVorlagen(uc.body);
   } else {
     console.log('· ohne PB_SU_TOKEN: Einstellungen (Rate Limits, Application URL) nicht geprüft');
   }

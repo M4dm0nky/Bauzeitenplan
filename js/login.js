@@ -1,8 +1,9 @@
 // ── Anmeldeseite (login.html) ────────────────────────────────────────────────
-// Vier Abläufe auf einer Seite, gewählt über die Adresse:
+// Fünf Abläufe auf einer Seite, gewählt über die Adresse:
 //   (ohne)        Anmelden · «Passwort vergessen»
 //   ?einladung=T  Name + Passwort (2×) → POST /api/bzp/einladung → angemeldet; oder mit vorhandenem Konto
 //   ?reset=T      neues Passwort (2×) → confirm-password-reset
+//   ?verify=T     E-Mail-Adresse bestätigen (Link aus der Mail) → confirm-verification, sofort beim Laden
 // Kein SDK, kein alert/confirm/prompt: Rückmeldungen stehen im Hinweisfeld (#lg-hinweis).
 import { createPb, apiBasis } from './pb.js';
 
@@ -32,9 +33,10 @@ const TEXTE = {
   einladung: ['Einladung annehmen', 'Lege dein Konto an, um dem Plan beizutreten.'],
   reset: ['Neues Passwort', 'Wähle ein neues Passwort für dein Konto.'],
   fertig: ['Passwort geändert', ''],
+  bestaetigt: ['E-Mail-Adresse', ''],
 };
 function zeige(modus, meldung) {
-  const form = { anmelden: 'f-anmelden', konto: 'f-anmelden', vergessen: 'f-vergessen', einladung: 'f-einladung', reset: 'f-reset', fertig: 'f-fertig' }[modus];
+  const form = { anmelden: 'f-anmelden', konto: 'f-anmelden', vergessen: 'f-vergessen', einladung: 'f-einladung', reset: 'f-reset', fertig: 'f-fertig', bestaetigt: 'f-fertig' }[modus];
   for (const f of FORMS) $(f).hidden = f !== form;
   $('lg-titel').textContent = TEXTE[modus][0];
   $('lg-sub').textContent = TEXTE[modus][1];
@@ -134,5 +136,13 @@ $('f-reset').addEventListener('submit', (ev) => {
 });
 $('z-anmelden').addEventListener('click', () => { location.replace('login.html' + (q.get('api') ? '?api=' + encodeURIComponent(q.get('api')) : '')); });
 
+// ── E-Mail bestätigen (Link aus der Mail): läuft sofort beim Laden ──
+async function bestaetigen() {
+  const r = await pb.post('/api/collections/users/confirm-verification', { token: q.get('verify') });
+  if (r.ok) return zeige('bestaetigt', { text: 'Deine E-Mail-Adresse ist bestätigt.', art: 'ok' });
+  zeige('bestaetigt', { text: r.code === 'netz' ? 'Keine Verbindung zum Server.' : r.code === 'limit' ? LIMIT_TEXT : 'Der Link ist ungültig oder abgelaufen.' });
+}
+
 // ── Start ──
-zeige(q.get('reset') ? 'reset' : q.get('einladung') ? 'einladung' : 'anmelden');
+if (q.get('verify')) bestaetigen();
+else zeige(q.get('reset') ? 'reset' : q.get('einladung') ? 'einladung' : 'anmelden');

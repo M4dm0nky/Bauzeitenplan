@@ -264,9 +264,11 @@ await page.waitForTimeout(400);
 
 console.log('\nDAUERHAFTIGKEIT');
 await check('nach Neuladen ist das Projekt noch da', async () => {
-  await page.waitForTimeout(1200);
+  // Auf Zustand warten statt auf die Uhr (Issue #13): erst alles beim Server, dann neu laden, dann Plan wieder im Kopf.
+  await page.locator('#sync-state[data-state="ok"]').waitFor({ timeout: 30000 });
   await page.reload();
-  await page.waitForTimeout(1000);
+  await page.locator('#proj-name', { hasText: 'Testprojekt Halle 7' }).waitFor({ timeout: 30000 }).catch(() => {});
+  await page.locator('.bz-bar').first().waitFor({ timeout: 30000 }).catch(() => {});
   const n = await page.locator('#proj-name').textContent();
   return n === 'Testprojekt Halle 7' ? true : 'Name nach Reload: ' + n;
 });

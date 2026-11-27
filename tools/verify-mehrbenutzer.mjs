@@ -91,8 +91,10 @@ async function ANMELDUNG({ pb, base, browser, smtp }) {
     ok(new URL(page.url()).searchParams.get('api') === pb.url, '?api= wird an index.html weitergereicht', page.url());
     const a = JSON.parse(await auth(page) || 'null');
     ok(!!a?.token && a.record?.id === konto.id, 'bzp_auth gespeichert (Token + Konto)');
-    await page.locator('#dlg .dlg-box').waitFor({ timeout: 10000 });
-    ok(await page.locator('#dlg .dlg-h', { hasText: 'Bauzeitenplan' }).isVisible(), 'Projektdialog sichtbar');
+    // Auf den Dialogkopf selbst warten (Issue #13): unter Last steht die Box vor ihrem Inhalt.
+    const dlgKopf = page.locator('#dlg .dlg-h', { hasText: 'Bauzeitenplan' });
+    await dlgKopf.waitFor({ timeout: 30000 }).catch(() => {});
+    ok(await dlgKopf.isVisible(), 'Projektdialog sichtbar');
     await ctx.close();
   }
   // 3) Passwort vergessen: gleicher Text für bekannte und unbekannte Adresse
@@ -217,6 +219,29 @@ async function ANMELDUNG({ pb, base, browser, smtp }) {
     await page.fill('#r-pw', neuesPw); await page.fill('#r-pw2', neuesPw); await page.click('#f-reset button[type=submit]');
     await hinweis(page).waitFor({ timeout: 8000 });
     ok(/ungültig oder abgelaufen/.test(await text(page)) && (await hinweis(page).getAttribute('data-art')) === 'fehler', 'benutzter/ungültiger Reset-Link → Hinweis (fehler)', await text(page));
+    await ctx.close();
+  }
+  // 7b) E-Mail bestätigen mit dem Token aus der echten Mail (?verify=)
+  {
+    // kontoAnlegen setzt verified=true (dann sendet PocketBase nichts): eigenes Konto auf false stellen
+    const k = await kontoAnlegen(pb, { email: 'carla@bzp.test', name: 'Carla', passwort: pw() });
+    ok((await pb.su('PATCH', `/api/collections/users/records/${k.id}`, { verified: false })).ok, 'Konto auf verified=false gestellt');
+    const vorher = smtp.mails.length;
+    const anf = await fetch(pb.url + '/api/collections/users/request-verification', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'carla@bzp.test' }) });
+    ok(anf.status === 204, 'request-verification angenommen', String(anf.status));
+    const bis = Date.now() + 10000;
+    while (smtp.mails.length <= vorher && Date.now() < bis) await new Promise((x) => setTimeout(x, 100));
+    const m = qp(smtp.mails[vorher] || '').match(/login\.html\?verify=([A-Za-z0-9._-]+)/);
+    ok(!!m, 'Mail enthält Link auf login.html?verify=…');
+    const { ctx, page } = await neu();
+    await page.goto(seite('&verify=' + (m ? m[1] : 'x')));
+    await page.locator('#f-fertig').waitFor({ state: 'visible', timeout: 8000 });
+    ok(/E-Mail-Adresse ist bestätigt/.test(await text(page)) && (await hinweis(page).getAttribute('data-art')) === 'ok', '?verify= (gültig) → «E-Mail-Adresse ist bestätigt» (ok)', await text(page));
+    ok((await pb.su('GET', `/api/collections/users/records/${k.id}`)).body.verified === true, 'verified am Konto ist true');
+    await page.goto(seite('&verify=x'));
+    await hinweis(page).waitFor({ timeout: 8000 });
+    ok(/ungültig oder abgelaufen/.test(await text(page)) && (await hinweis(page).getAttribute('data-art')) === 'fehler', '?verify=x (ungültig) → Hinweis (fehler)', await text(page));
+    await page.screenshot({ path: join(shots, 'login-verify-fehler.png') });
     await ctx.close();
   }
   // 8) Hell: die Seite lädt und der Kontrast der Karte stimmt grob (Text ≠ Grund)

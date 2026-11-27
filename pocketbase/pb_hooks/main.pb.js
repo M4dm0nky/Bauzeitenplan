@@ -145,10 +145,18 @@ routerAdd("POST", "/api/bzp/einladung", (e) => {
   return e.json(200, { ok: true, plan_id: planId, rolle: inv.getString("rolle"), email: email });
 });
 
-// ── Passwort-zurücksetzen-Mail: kein doppelter Schrägstrich im Link ─────────
+// ── Konto-Mails (Reset, Bestätigung, Anmeldewarnung): kein doppelter Schrägstrich im Link ─────────
 // meta.appURL kann mit «/» enden (https://…/Bauzeitenplan/): aus {APP_URL}/login.html wird dann `//login.html`.
 // Nur der Pfad hinter dem Host wird bereinigt, «https://» bleibt.
 onMailerRecordPasswordResetSend((e) => {
+  e.message.html = String(e.message.html || "").replace(/([^:\s"'=])\/\/login\.html/g, "$1/login.html");
+  e.next();
+}, "users");
+onMailerRecordVerificationSend((e) => {
+  e.message.html = String(e.message.html || "").replace(/([^:\s"'=])\/\/login\.html/g, "$1/login.html");
+  e.next();
+}, "users");
+onMailerRecordAuthAlertSend((e) => {
   e.message.html = String(e.message.html || "").replace(/([^:\s"'=])\/\/login\.html/g, "$1/login.html");
   e.next();
 }, "users");
