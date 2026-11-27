@@ -111,22 +111,32 @@ obwohl dort keine Backups laufen, damit der Rückweg überall derselbe ist):
 
 ```bash
 DATA=/var/lib/docker/volumes/${UUID}_pocketbase-data/_data
-mkdir -p /root/backups/bauzeitenplan-pb
-sqlite3 "$DATA/data.db" ".backup '/root/backups/bauzeitenplan-pb/vor-phase2-${UUID}-$(date +%F-%H%M).db'"
-sqlite3 "/root/backups/bauzeitenplan-pb/vor-phase2-${UUID}-"*.db "PRAGMA integrity_check;"   # erwartet: ok
+# eigener Ordner, NICHT im rotierenden Live-Backup-Ordner (dort räumt die Tagessicherung nach 7 Tagen auf)
+BK=/root/backups/bauzeitenplan-pb-phase2-$(date +%F-%H%M)
+mkdir -p "$BK"
+sqlite3 "$DATA/data.db"      ".backup '$BK/data.db'"
+sqlite3 "$DATA/auxiliary.db" ".backup '$BK/auxiliary.db'"
+sqlite3 "$BK/data.db" "PRAGMA integrity_check;"        # erwartet: ok
+sqlite3 "$BK/auxiliary.db" "PRAGMA integrity_check;"   # erwartet: ok
 ```
+
+(So auf TEST am 27.11. gemacht, Rückmeldung Robs: dort zusätzlich Einstellungen vorher/nachher und die
+Collection-Liste im selben Ordner abgelegt — gern beibehalten.)
 
 **4. Kopieren** (Hooks ins Hooks-Volume, Migrationen in den Container) und **Neustart**:
 
 ```bash
 HOOKS=/var/lib/docker/volumes/${UUID}_pocketbase-hooks/_data
 cd /tmp/bzp-phase2
-cp main.pb.js hilfen.js "$HOOKS/"
 docker exec "$CT" mkdir -p /app/pb_migrations
 docker cp 1700000001_schema.js     "$CT":/app/pb_migrations/
 docker cp 1700000002_reset_mail.js "$CT":/app/pb_migrations/
 docker cp 1700000003_ratelimits.js "$CT":/app/pb_migrations/
 docker cp 1700000004_plan_loeschen.js "$CT":/app/pb_migrations/
+# Reihenfolge: ERST hilfen.js, DANN main.pb.js — PocketBase überwacht das Hooks-Verzeichnis und startet sich
+# beim Kopieren von main.pb.js selbst neu; hilfen.js muss dann schon da sein.
+cp hilfen.js "$HOOKS/"
+cp main.pb.js "$HOOKS/"
 docker restart "$CT"
 sleep 8
 docker logs --tail 40 "$CT"       # keine Fehlerzeile zu Migration oder Hook
@@ -235,8 +245,13 @@ Dein Zugriff ist dafür nicht nötig, und es gehen **keine Passwörter** über d
 ## Was du **nicht** anfassen sollst
 
 - Application URL, Rate Limiting (an), User-IP-Proxy-Header (`X-Forwarded-For`, **rechter** Eintrag, nicht auf
-  «leftmost» stellen), CORS-Datei, Backups, Mail-Einstellungen. Die einzige Änderung an den Einstellungen
-  ist die Migration `1700000003` (Rate Limit); `1700000004` ändert nur die Löschregel von `plaene`.
+  «leftmost» stellen), CORS-Datei, Backups, Mail-Einstellungen. Änderungen an den Einstellungen kommen nur
+  aus den Migrationen: `1700000001` schaltet die **Batch-API** ein (`batch.enabled` an, `maxRequests` 2000,
+  `timeout` 30 s — nötig für die App), `1700000003` hebt `*:create` auf 2000/5 s; `1700000004` ändert nur
+  die Löschregel von `plaene`. Auf TEST am 27.11. genau so gemessen (Diff vorher/nachher).
+- **Migrationsdateien liegen nur im Container**, nicht im Volume: Nach einem Recreate/Redeploy ist
+  `/app/pb_migrations` leer — das ist in Ordnung, `_migrations` führt sie als angewendet. Jede **künftige**
+  Migration muss wieder per `docker cp` hinein.
 - Keine Collections oder Regeln von Hand in `/_/` ändern: Sie würden beim nächsten Redeploy oder bei einer
   Migration überschrieben, und die Regeln sind die erste Sicherheitsschranke.
 - Der Crewplaner bleibt unberührt.
