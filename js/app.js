@@ -1549,8 +1549,10 @@ function dateiLaden(text, name) {
 const LIMIT_TEXT = 'Der Server ist gerade ausgelastet oder gestört. Bitte in ein paar Sekunden nochmal versuchen.';
 const KEIN_ANLEGEN = 'Neue Projekte legen nur Produktionsleitung und Superadmin an.';
 
-// Neuen Plan auf dem Server anlegen und öffnen. true = offen.
-async function planNeu(plan) {
+// Neuen Plan auf dem Server anlegen und öffnen. Anlegen und Öffnen sind getrennt:
+// → false (nichts angelegt, Fehler gemeldet) | { planId, geoeffnet } (angelegt; geoeffnet=false: Öffnen abgebrochen oder gescheitert,
+// der Plan liegt trotzdem auf dem Server). `nachAnlegen()` läuft sofort nach dem bestätigten Anlegen, vor dem Öffnen.
+async function planNeu(plan, { nachAnlegen } = {}) {
   if (!darfPlanAnlegen(pb.auth?.record)) { toast(KEIN_ANLEGEN, 'bad'); return false; }
   const r = await createServerPlan({ pb, planId: null }).planAnlegen(plan);
   if (!r.ok) {
@@ -1560,7 +1562,8 @@ async function planNeu(plan) {
     else toast(r.offline ? 'Keine Verbindung – der Plan wurde nicht angelegt.' : r.limit ? 'Der Server ist gerade ausgelastet – der Plan wurde nicht angelegt. Bitte gleich nochmal versuchen.' : 'Der Plan konnte nicht angelegt werden: ' + (r.fehler?.message || r.message || 'Fehler'), 'bad', 8000);
     return false;
   }
-  return open(r.planId);
+  if (nachAnlegen) nachAnlegen();
+  return { planId: r.planId, geoeffnet: await open(r.planId) };
 }
 
 async function doImport(e) {
@@ -1573,7 +1576,9 @@ async function doImport(e) {
   catch (err) { return toast('Die Datei lässt sich nicht lesen: ' + ((err && err.message) || err), 'bad', 8000); }
   if (r.ok === false) return toast(r.error, 'bad', 8000);
   if (r.hinweis) toast(r.hinweis, 'bad', 8000);
-  if (!(await planNeu(r.plan))) return;
+  const n = await planNeu(r.plan);
+  if (!n) return;
+  if (!n.geoeffnet) return toast('«' + r.plan.project.name + '» importiert – unter Projekte zu finden', 'bad', 8000);
   $('dlg').hidden = true;      // sonst bleibt der Anlege-Dialog über allem liegen
   toast('«' + r.plan.project.name + '» importiert');
 }
@@ -1586,7 +1591,13 @@ function altPlan(id) {
   const r = deserialize(serialize(roh));
   return r.ok === false ? { error: r.error } : r;
 }
+let altLaeuft = false;   // nur EINE Übernahme gleichzeitig (mehrere Zeilen, planAnlegen ist ohnehin seriell)
 async function altUebernehmen(id) {
+  if (altLaeuft) return false;
+  altLaeuft = true;
+  try { return await altUebernehmenLos(id); } finally { altLaeuft = false; }
+}
+async function altUebernehmenLos(id) {
   if (!darfPlanAnlegen(pb.auth?.record)) { toast(KEIN_ANLEGEN, 'bad'); return false; }
   const r = altPlan(id);
   if (r.error) { toast('Der Plan lässt sich nicht übernehmen: ' + r.error, 'bad', 8000); return false; }
@@ -1595,11 +1606,16 @@ async function altUebernehmen(id) {
       buttons: [{ label: 'Abbrechen', value: false, primary: true }, { label: 'Übernehmen', value: true }] });
     if (!w) return false;
   }
-  if (!(await planNeu(r.plan))) return false;   // meldet seine Fehler selbst; der lokale Plan bleibt
-  const e = repo.remove(id);
-  if (!e.ok) toast(e.error, 'bad', 8000);
-  toast('«' + r.plan.project.name + '» auf den Server übernommen');
-  return true;
+  // Sobald der Server den Plan bestätigt hat, geht der lokale Eintrag weg (VOR dem Öffnen): ein abgebrochenes Öffnen
+  // darf keinen Doppelgänger erzeugen. Scheitert schon das Anlegen, bleibt er stehen (planNeu meldet den Fehler).
+  let entf = null;
+  const n = await planNeu(r.plan, { nachAnlegen: () => { entf = repo.remove(id); } });
+  if (!n) return false;
+  const name = '«' + r.plan.project.name + '»';
+  if (entf && !entf.ok) toast(name + ': Auf dem Server angelegt; lokaler Eintrag konnte nicht entfernt werden', 'bad', 8000);
+  else if (!n.geoeffnet) toast(name + ' auf den Server übernommen – unter Projekte zu finden', 'bad', 8000);
+  else toast(name + ' auf den Server übernommen');
+  return n.geoeffnet;
 }
 function altExportieren(id) {
   const r = altPlan(id);
@@ -1692,7 +1708,7 @@ async function showProjectDialog({ firstRun = false } = {}) {
       const exp = el('button', 'btn alt-exp', '⬇ Exportieren');
       if (!plan) { ueb.disabled = true; ueb.title = 'Der Plan lässt sich nicht lesen.'; exp.disabled = true; }
       else if (!darfAnlegen) { ueb.disabled = true; ueb.title = 'Nur die Produktionsleitung kann Pläne anlegen'; }
-      ueb.onclick = async () => { ueb.disabled = true; try { if (await altUebernehmen(a.id)) close(); } finally { ueb.disabled = !darfAnlegen; } };
+      ueb.onclick = async () => { ueb.disabled = true; try { if (await altUebernehmen(a.id)) close(); else if (!repo.listAlt().some((x) => x.id === a.id)) showProjectDialog({ firstRun: firstRun || !store }); } finally { ueb.disabled = !darfAnlegen; } };
       exp.onclick = () => altExportieren(a.id);
       row.append(info, ueb, exp);
       sec.append(row);
@@ -1750,7 +1766,7 @@ async function showProjectDialog({ firstRun = false } = {}) {
     const bisEnde = new Date(bisIn.value + 'T00:00'); bisEnde.setDate(bisEnde.getDate() + 1);
     const neu = planFromTemplate(chosen, { name: nameIn.value.trim(), venue: venueIn.value.trim(), von: vonIn.value + 'T00:00', bis: local(bisEnde) });
     neu.project.eingerichtet = false;     // nur hier: «Neu» führt einmal durch die Schritte
-    if (await planNeu(neu)) { close(); openEinrichten('projekt', { erst: true }); }
+    if ((await planNeu(neu))?.geoeffnet) { close(); openEinrichten('projekt', { erst: true }); }
   };
   const imp = el('button', 'btn', 'JSON importieren');
   imp.id = 'neu-import';

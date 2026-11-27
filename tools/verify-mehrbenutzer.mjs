@@ -731,6 +731,35 @@ async function ALTE_PLAENE({ pb, base, browser }) {
     await P.page.locator('.dlg-open').first().waitFor();
     ok(await P.page.locator('#alt-plaene').count() === 0, 'Projektdialog: Abschnitt verschwunden');
 
+    // 3b. Übernahme gelingt, das Öffnen scheitert (nach dem Anlegen kein Lesen mehr): kein Doppelgänger, Eintrag weg, ein Plan
+    const Q = await nutzer(browser, pb, 'pl@bzp.test', PW); ctxs.push(Q.ctx);
+    await seed(Q.ctx);
+    await Q.ctx.addInitScript(() => { const f = window.fetch.bind(window); window.__nachBatch = false;
+      window.fetch = (u, o) => { const url = String(u && u.url || u);
+        if (window.__nachBatch && /\/api\/collections\//.test(url)) return Promise.reject(new TypeError('NetworkError'));
+        const r = f(u, o); if (/\/api\/batch/.test(url)) r.then(() => { window.__nachBatch = true; }, () => {}); return r; }; });
+    await Q.page.goto(appUrl(base, pb));
+    await Q.page.locator('#alt-plaene').waitFor({ timeout: 15000 });
+    const n0 = (await pb.su('GET', '/api/collections/plaene/records')).body.items.length;
+    await Q.page.locator(`#alt-plaene .alt-zeile[data-alt-id="${altId}"] .alt-ueb`).click();
+    await dlgKnopf(Q.page, 'OK').waitFor({ timeout: 25000 });   // «Nicht geöffnet»: das Laden scheitert
+    await dlgKnopf(Q.page, 'OK').click();
+    ok(await toastBis(Q.page, /auf den Server übernommen – unter Projekte/, 8000), 'Öffnen gescheitert: Toast «unter Projekte zu finden»');
+    ok((await pb.su('GET', '/api/collections/plaene/records')).body.items.length === n0 + 1, 'Öffnen gescheitert: genau ein neuer Plan auf dem Server');
+    l = await ls(Q.page);
+    ok(!l.keys.includes('bzp_p_' + altId) && !l.idx.some((x) => x.id === altId), 'Öffnen gescheitert: lokaler Eintrag trotzdem entfernt (kein Doppelgänger bei Wiederholung)');
+    await Q.page.evaluate(() => { window.__nachBatch = false; });
+    await Q.page.goto(appUrl(base, pb));
+    await Q.page.locator('.dlg-open').first().waitFor({ timeout: 15000 });
+    ok(await Q.page.locator('#alt-plaene').count() === 0, 'Öffnen gescheitert: Abschnitt weg, der Plan steht unter «Öffnen»');
+    // Für 4b: ein Kontext, der vor dem Ausfall geladen hat
+    const A = await nutzer(browser, pb, 'pl@bzp.test', PW); ctxs.push(A.ctx);
+    await A.ctx.addInitScript(([id, plan, name]) => { try { localStorage.setItem('bzp_p_' + id, plan);
+      localStorage.setItem('bzp_projects', JSON.stringify([{ id, name, venue: 'Outdoor', modified: new Date().toISOString(), remoteSha: null, dirty: false }])); } catch (e) { /* egal */ } },
+      [altId, JSON.stringify(ALT), ALT.project.name]);
+    await A.page.goto(appUrl(base, pb));
+    await A.page.locator('#alt-plaene').waitFor({ timeout: 15000 });
+
     // 4. Ohne Recht zum Anlegen: Übernehmen gesperrt (mit Grund), Exportieren bleibt. Ein alter Plan ist nie die Offline-Kopie:
     //    der Live-Monitor ohne Server-Plan öffnet ihn nicht, sondern zeigt den Dialog.
     const B = await nutzer(browser, pb, 'bearb@bzp.test', PW, { live: true }); ctxs.push(B.ctx);
@@ -747,6 +776,12 @@ async function ALTE_PLAENE({ pb, base, browser }) {
     await warte(3000);
     ok(await markeText(B.page) === null && !(await B.page.evaluate(() => document.body.classList.contains('nur-ansicht'))), 'ohne Netz: kein «Offline – nur Ansicht» mit dem alten Plan', await markeText(B.page));
     ok(!(await B.page.locator('#proj-name').textContent() || '').includes(ALT.project.name), 'ohne Netz: der alte Plan wird nicht als Kopie angezeigt');
+    // 4b. Übernehmen ohne Verbindung scheitert: der alte Plan bleibt in localStorage und im Abschnitt
+    await A.page.locator(`#alt-plaene .alt-zeile[data-alt-id="${altId}"] .alt-ueb`).click();
+    ok(await toastBis(A.page, /Keine Verbindung/, 15000), 'Übernehmen ohne Netz: Fehlermeldung');
+    l = await ls(A.page);
+    ok(l.keys.includes('bzp_p_' + altId) && l.idx.some((x) => x.id === altId), 'Übernehmen ohne Netz: alter Plan liegt noch in localStorage');
+    ok(await A.page.locator(`#alt-plaene .alt-zeile[data-alt-id="${altId}"]`).count() === 1, 'Übernehmen ohne Netz: Abschnitt steht noch');
   } finally { for (const c of ctxs) await c.close().catch(() => {}); }
 }
 
