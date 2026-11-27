@@ -40,11 +40,19 @@ Live-Verbindung (der Server trennt nach 5 Minuten Ruhe) zählt erst nach 10 s al
 offline. Auch ein Start ohne Netz (oder bei gestörtem Server) zeigt die lokale
 Kopie, sofern es eine gibt. Der **Live-Monitor** (Live-Modus mit aktivem Projekt)
 öffnet ohne Dialog und zeigt bei abgelaufener Anmeldung die lokale Kopie weiter.
-Meldest du dich selbst ab, löscht die App die lokalen Kopien, auch in einem zweiten
+Meldest du dich selbst ab, löscht die App die lokalen Kopien der Server-Pläne, auch in einem zweiten
 Tab desselben Browsers. Ein Fehler des Servers (5xx, 429, kein JSON) nimmt
 Änderungen nie zurück: sie bleiben offen und gehen später raus. Löschen darf einen
 Plan nur der Besitzer oder der Superadmin. **`print.html` liest diese lokale Kopie** — vor dem Drucken also
 die App einmal öffnen.
+
+**Umstieg von der bisherigen Version:** Pläne, die die frühere Fassung nur in diesem
+Browser gespeichert hat, gehen nicht verloren. Abmelden löscht sie nicht. Nach der
+Anmeldung zeigt der Projektdialog sie im Abschnitt «Pläne aus der bisherigen Version
+(nur in diesem Browser)» mit Name, Ort und Zeitraum. «Auf den Server übernehmen» legt den
+Plan wie ein Import neu an (neue Plan-ID, nur Produktionsleitung und Superadmin) und
+entfernt den lokalen Eintrag erst, wenn der Server ihn angenommen hat; «Exportieren» speichert
+eine JSON-Sicherung.
 
 **Test und Live:** Der Hostname wählt die Instanz — `callboard.nyxlightwork.de`
 nutzt die Live-API, alles andere (GitHub Pages, `localhost`) die Test-API; auf

@@ -48,6 +48,8 @@ const neuerKontext = async (br, opt) => {
 // Der Plan lebt auf dem Server: eine Fassung, die ein Test VOR dem Laden verändert braucht, geht über den Server-Weg.
 // Lokale Kopie lesen → in Node ändern (`aendern(plan)`) → als neuen Plan für das Konto anlegen → aktiv setzen → neu laden.
 const planErsetzen = async (c, pg, aendern, url = null) => {
+  // Der Import läuft asynchron (Server-Batch): unter Last steht die lokale Kopie erst später da als die feste Pause davor.
+  await pg.waitForFunction(() => !!localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active')), null, { timeout: 30000 });
   const pl = await pg.evaluate(() => JSON.parse(localStorage.getItem('bzp_p_' + localStorage.getItem('bzp_active'))));
   const r = aendern(pl);
   const id = await c.planDazu(pl);

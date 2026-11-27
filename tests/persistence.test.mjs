@@ -1,4 +1,4 @@
-import { createRepo, serialize, deserialize, migrate, SCHEMA_VERSION } from '../js/persistence.js';
+import { createRepo, istServerKopie, serialize, deserialize, migrate, SCHEMA_VERSION } from '../js/persistence.js';
 import { createStore } from '../js/store.js';
 import { spanFehler } from '../js/schedule.js';
 import assert from 'node:assert/strict';
@@ -144,6 +144,41 @@ test('gelöschtes Projekt bleibt nicht als aktiv stehen', () => {
   r.setActive('p1');
   r.remove('p1');
   assert.equal(r.getActive(), null);
+});
+
+console.log('\nServer-Kopie oder alter lokaler Plan');
+test('ein Plan aus der alten Fassung (Index ohne Marke) ist ein alter Plan, keine Server-Kopie', () => {
+  const sp = fakeStorage();
+  // so legte die bisherige Fassung ihn ab: Plan + Indexeintrag mit Sync-Feldern, ohne `server`
+  const alt = plan('Alt'); alt.project.id = 'alt1';
+  sp.setItem('bzp_p_alt1', JSON.stringify(alt));
+  sp.setItem('bzp_projects', JSON.stringify([{ id: 'alt1', name: 'Alt', venue: '', modified: '2026-01-01T00:00:00Z', remoteSha: null, dirty: false }]));
+  const r = createRepo(sp);
+  assert.deepEqual(r.listAlt().map((x) => x.id), ['alt1']);
+  assert.deepEqual(r.listServer(), []);
+});
+test('save mit server:true markiert die Kopie, ein späteres Speichern ohne Option behält die Marke', () => {
+  const r = createRepo(fakeStorage());
+  r.save(plan('S'), { server: true });
+  assert.equal(istServerKopie(r.list()[0]), true);
+  r.save({ ...plan('S'), tasks: [] });
+  assert.equal(r.listServer().length, 1);
+  assert.equal(r.listAlt().length, 0);
+});
+test('alte und Server-Pläne bleiben getrennt; remove der Server-Kopien lässt den alten Plan stehen', () => {
+  const r = createRepo(fakeStorage());
+  const a = plan('Alt'); a.project.id = 'alt';
+  const s = plan('Srv'); s.project.id = 'srv';
+  r.save(a); r.save(s, { server: true });
+  for (const x of r.listServer()) r.remove(x.id);
+  assert.deepEqual(r.list().map((x) => x.id), ['alt']);
+  assert.ok(r.load('alt'));
+});
+test('istServerKopie: nur true zählt', () => {
+  assert.equal(istServerKopie(undefined), false);
+  assert.equal(istServerKopie({ id: 'x' }), false);
+  assert.equal(istServerKopie({ id: 'x', server: 'ja' }), false);
+  assert.equal(istServerKopie({ id: 'x', server: true }), true);
 });
 
 console.log('\nRobustheit — kaputte Daten dürfen die App nicht töten');

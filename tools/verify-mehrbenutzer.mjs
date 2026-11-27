@@ -1,5 +1,5 @@
 // Mehrbenutzer-Prüfung im echten Browser (Firefox) gegen eine lokale PocketBase.
-//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG|ZWEI_NUTZER|IMPORT|OFFLINE|MONITOR|MONITOR_ABGELAUFEN|ABMELDEN|MITGLIEDER|VERWALTUNG|FIXRUNDE|SAMMELVORGANG|UNDO_BEDARF|START_OFFLINE|ZWEI_TABS|DAUERHAFT_5XX]
+//   node tools/verify-mehrbenutzer.mjs [--nur ANMELDUNG|ZWEI_NUTZER|IMPORT|OFFLINE|MONITOR|MONITOR_ABGELAUFEN|ABMELDEN|ALTE_PLAENE|MITGLIEDER|VERWALTUNG|FIXRUNDE|SAMMELVORGANG|UNDO_BEDARF|START_OFFLINE|ZWEI_TABS|DAUERHAFT_5XX]
 // ANMELDUNG: login.html — falsches/richtiges Passwort, «Passwort vergessen», Einladung (neues Konto,
 // vorhandenes Konto, ungültig), Passwort zurücksetzen (Mail über einen kleinen lokalen SMTP-Empfänger).
 // Task 11 ergänzt weitere Abschnitte in ABSCHNITTE. Alle Passwörter entstehen zur Laufzeit.
@@ -658,6 +658,98 @@ async function ABMELDEN({ pb, base, browser }) {
   } finally { await P.ctx.close().catch(() => {}); }
 }
 
+// ── ALTE_PLAENE: Pläne der bisherigen Fassung (nur im Browser) schützen und zum Hochladen anbieten ──
+// Sie liegen im alten Format im localStorage (Plan + Indexeintrag ohne Marke `server`). Manuelles Abmelden löscht nur
+// Kopien von Server-Plänen; der Projektdialog bietet «Auf den Server übernehmen» und «Exportieren» an.
+async function ALTE_PLAENE({ pb, base, browser }) {
+  console.log('— ALTE PLÄNE');
+  const PW = pw();
+  const serverPlan = await planAnlegenFuer(pb, PW);           // pl: ein echter Server-Plan (Klassentreffen)
+  await kontoAnlegen(pb, { email: 'bearb@bzp.test', name: 'Ben', passwort: PW });
+  const ALT = fixturePlan('amk-singleshow');
+  const altId = ALT.project.id;
+  const seed = (ctx) => ctx.addInitScript(([id, plan, name]) => {
+    try {   // genau einmal je Kontext, so wie die bisherige Fassung ihn ablegte (kein `server` im Index)
+      if (localStorage.getItem('bzp_alt_seed')) return;
+      localStorage.setItem('bzp_alt_seed', '1');
+      localStorage.setItem('bzp_p_' + id, plan);
+      localStorage.setItem('bzp_projects', JSON.stringify([{ id, name, venue: 'Outdoor', modified: new Date().toISOString(), remoteSha: null, dirty: false }]));
+    } catch (e) { /* egal */ }
+  }, [altId, JSON.stringify(ALT), ALT.project.name]);
+  const ls = (page) => page.evaluate(() => ({ keys: Object.keys(localStorage), idx: JSON.parse(localStorage.getItem('bzp_projects') || '[]') }));
+  const ctxs = [];
+  try {
+    // 1. Anmelden: der alte Plan steht im eigenen Abschnitt, daneben der Server-Plan unter «Öffnen»
+    const P = await nutzer(browser, pb, 'pl@bzp.test', PW); ctxs.push(P.ctx);
+    await seed(P.ctx);
+    await P.page.goto(appUrl(base, pb));
+    await P.page.locator('.dlg-open').first().waitFor({ timeout: 15000 });
+    const zeile = P.page.locator(`#alt-plaene .alt-zeile[data-alt-id="${altId}"]`);
+    ok(await zeile.count() === 1 && (await zeile.textContent()).includes(ALT.project.name), 'alter Plan steht im Abschnitt «Pläne aus der bisherigen Version»');
+    ok(/nur in diesem Browser/.test(await P.page.locator('#alt-plaene .dlg-h3').textContent()), 'Überschrift nennt «nur in diesem Browser»');
+    ok(/Outdoor/.test(await zeile.textContent()) && /2026/.test(await zeile.textContent()), 'Zeile zeigt Ort und Zeitraum', (await zeile.textContent()));
+    ok(await zeile.locator('.alt-ueb').isEnabled() && await zeile.locator('.alt-exp').isEnabled(), 'pl: Übernehmen und Exportieren aktiv');
+    await P.page.screenshot({ path: join(shots, 'mehrbenutzer-alte-plaene.png') });
+    // Exportieren: JSON-Sicherung ohne Token, der Plan bleibt lokal
+    const dl = P.page.waitForEvent('download');
+    await zeile.locator('.alt-exp').click();
+    const txt = readFileSync(await (await dl).path(), 'utf8');
+    ok(JSON.parse(txt).project.name === ALT.project.name && !/"token"/.test(txt), 'Exportieren: JSON-Sicherung des alten Plans');
+    ok((await ls(P.page)).keys.includes('bzp_p_' + altId), 'Exportieren lässt den Plan stehen');
+    // 2. Server-Plan öffnen (es entsteht die Server-Kopie), dann manuell abmelden
+    await P.page.locator(`.dlg-open[data-plan-id="${serverPlan}"]`).click();
+    await P.page.waitForFunction(() => (document.getElementById('proj-name')?.textContent || '').trim().length > 1, null, { timeout: 15000 });
+    await warte(1200);
+    let l = await ls(P.page);
+    ok(l.idx.find((x) => x.id === serverPlan)?.server === true && !l.idx.find((x) => x.id === altId)?.server, 'Index: Server-Kopie markiert, alter Plan nicht');
+    await P.page.locator('#proj-knopf').click(); await P.page.locator('.mn #abmelden').click();
+    await P.page.waitForURL(/login\.html/, { timeout: 10000 });
+    await warte(1500);
+    l = await ls(P.page);
+    ok(!l.keys.includes('bzp_p_' + serverPlan) && !l.idx.some((x) => x.id === serverPlan), 'Abmelden: Server-Kopie weg');
+    ok(l.keys.includes('bzp_p_' + altId) && l.idx.some((x) => x.id === altId), 'Abmelden: alter lokaler Plan ist noch da');
+    ok(l.keys.includes('bzp_auth') === false, 'Abmelden: Token weg');
+    // 3. Erneut anmelden: noch im Abschnitt; Übernehmen → liegt auf dem Server, lokal weg
+    const a = await anmeldenRoh(pb.url, 'pl@bzp.test', PW);
+    await P.page.evaluate((v) => localStorage.setItem('bzp_auth', v), JSON.stringify({ token: a.token, record: a.record }));
+    await P.page.goto(appUrl(base, pb));
+    await P.page.locator('#alt-plaene').waitFor({ timeout: 15000 });
+    const vorher = (await pb.su('GET', '/api/collections/plaene/records')).body.items.length;
+    await P.page.locator(`#alt-plaene .alt-zeile[data-alt-id="${altId}"] .alt-ueb`).click();
+    await P.page.waitForFunction((n) => (document.getElementById('proj-name')?.textContent || '').includes(n), ALT.project.name, { timeout: 25000 });
+    const plaene = (await pb.su('GET', '/api/collections/plaene/records')).body.items;
+    ok(plaene.length === vorher + 1, 'Server: ein Plan mehr', vorher + ' → ' + plaene.length);
+    const neu = plaene.find((x) => x.plan_id !== serverPlan);
+    ok(!!neu && neu.plan_id !== altId, 'Server: neue plan_id (nicht die alte lokale)', neu?.plan_id);
+    const vg = await pb.su('GET', `/api/collections/vorgaenge/records?perPage=1&filter=${encodeURIComponent(`plan_id="${neu?.plan_id}"`)}`);
+    ok((vg.body.totalItems || 0) === ALT.tasks.length, 'Server: alle Vorgänge des alten Plans angekommen', `${vg.body.totalItems} von ${ALT.tasks.length}`);
+    await warte(1200);
+    l = await ls(P.page);
+    ok(!l.keys.includes('bzp_p_' + altId) && !l.idx.some((x) => x.id === altId), 'lokal: alter Eintrag nach bestätigtem Erfolg entfernt');
+    ok(l.idx.find((x) => x.id === neu.plan_id)?.server === true, 'lokal: die neue Kopie ist als Server-Kopie markiert');
+    await P.page.locator('#proj-knopf').click(); await P.page.locator('.mn #proj-menu').click();
+    await P.page.locator('.dlg-open').first().waitFor();
+    ok(await P.page.locator('#alt-plaene').count() === 0, 'Projektdialog: Abschnitt verschwunden');
+
+    // 4. Ohne Recht zum Anlegen: Übernehmen gesperrt (mit Grund), Exportieren bleibt. Ein alter Plan ist nie die Offline-Kopie:
+    //    der Live-Monitor ohne Server-Plan öffnet ihn nicht, sondern zeigt den Dialog.
+    const B = await nutzer(browser, pb, 'bearb@bzp.test', PW, { live: true }); ctxs.push(B.ctx);
+    await seed(B.ctx);
+    await B.page.goto(appUrl(base, pb, '&plan=leer'));
+    await B.page.locator('#alt-plaene').waitFor({ timeout: 15000 });
+    const bz = B.page.locator(`#alt-plaene .alt-zeile[data-alt-id="${altId}"]`);
+    ok(await bz.locator('.alt-ueb').isDisabled() && /Produktionsleitung/.test(await bz.locator('.alt-ueb').getAttribute('title')), 'bearb: Übernehmen gesperrt, Grund im title');
+    ok(await bz.locator('.alt-exp').isEnabled(), 'bearb: Exportieren bleibt');
+    ok((await B.page.locator('#proj-name').textContent() || '').trim().length <= 1, 'Live-Monitor: der alte Plan wird nicht als Offline-Kopie geöffnet');
+    // Ohne Netz (Server aus) und ohne Server-Kopie: der alte Plan erscheint nie als «Offline – nur Ansicht»
+    await pb.stop();
+    await B.page.goto(appUrl(base, pb, '&plan=leer'));
+    await warte(3000);
+    ok(await markeText(B.page) === null && !(await B.page.evaluate(() => document.body.classList.contains('nur-ansicht'))), 'ohne Netz: kein «Offline – nur Ansicht» mit dem alten Plan', await markeText(B.page));
+    ok(!(await B.page.locator('#proj-name').textContent() || '').includes(ALT.project.name), 'ohne Netz: der alte Plan wird nicht als Kopie angezeigt');
+  } finally { for (const c of ctxs) await c.close().catch(() => {}); }
+}
+
 // ── MITGLIEDER / VERWALTUNG (Task 11) ─────────────────────────────────────────
 const toastText = (page) => page.evaluate(() => { const t = document.getElementById('toast'); return t && !t.hidden ? t.textContent : null; });
 const toastBis = async (page, re, ms = 6000) => { try { await page.waitForFunction((r) => { const t = document.getElementById('toast'); return t && !t.hidden && new RegExp(r).test(t.textContent); }, re.source, { timeout: ms }); return true; } catch { return false; } };
@@ -1091,7 +1183,7 @@ async function DAUERHAFT_5XX({ pb, base, browser }) {
   } finally { await P.ctx.close().catch(() => {}); }
 }
 
-const ABSCHNITTE = { ANMELDUNG, ZWEI_NUTZER, IMPORT, OFFLINE, MONITOR, MONITOR_ABGELAUFEN, ABMELDEN, MITGLIEDER, VERWALTUNG, FIXRUNDE, SAMMELVORGANG, UNDO_BEDARF, START_OFFLINE, ZWEI_TABS, DAUERHAFT_5XX };
+const ABSCHNITTE = { ANMELDUNG, ZWEI_NUTZER, IMPORT, OFFLINE, MONITOR, MONITOR_ABGELAUFEN, ABMELDEN, ALTE_PLAENE, MITGLIEDER, VERWALTUNG, FIXRUNDE, SAMMELVORGANG, UNDO_BEDARF, START_OFFLINE, ZWEI_TABS, DAUERHAFT_5XX };
 const i = process.argv.indexOf('--nur');
 const nur = i > 0 ? (process.argv[i + 1] || '').toUpperCase().replace(' ', '_') : null;
 if (nur && !ABSCHNITTE[nur]) { console.error('Unbekannter Abschnitt: ' + nur + ' (' + Object.keys(ABSCHNITTE).join(', ') + ')'); process.exit(2); }

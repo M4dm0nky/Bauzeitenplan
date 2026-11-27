@@ -461,3 +461,8 @@ kbd { font: inherit; border: 1px solid var(--rule-2); background: var(--panel2);
 .mg-weg { background: var(--panel); border: 1px solid var(--rule); color: var(--ink); }
 .mg-weg:hover:not(:disabled) { background: var(--crit); border-color: var(--crit); color: #fff; }
 .mg-fehler { color: var(--crit); }
+
+/* Alte lokale Pläne im Projektdialog: gelb = «braucht eine Entscheidung», nicht Fehler */
+.alt-sec { background: var(--panel2); border: 1px solid var(--rule); border-left: 4px solid #d9a21b; }
+.alt-zeile { border-top: 1px solid var(--rule); padding-top: 8px; }
+.alt-ueb:disabled, .alt-exp:disabled { opacity: .55; cursor: not-allowed; }

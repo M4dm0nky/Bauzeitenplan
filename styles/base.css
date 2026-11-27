@@ -563,6 +563,11 @@ body.nur-ansicht .bz-bar, body.nur-ansicht .bz-ms { cursor: default; }
 .dlg-open-n { display: block; }
 .dlg-open-m { display: block; }
 .dlg-del { border: 0; font: inherit; cursor: pointer; padding: 0 12px; }
+.alt-sec { margin-top: 18px; padding: 4px 12px 12px; }
+.alt-sec .dlg-h3 { margin-top: 8px; }
+.alt-zeile { align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.alt-info { flex: 1 1 200px; min-width: 0; }
+.alt-ueb, .alt-exp { white-space: nowrap; }
 .dlg-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .dlg-f { display: flex; flex-direction: column; gap: 3px; }
 .dlg-f:first-child, .dlg-f:nth-child(2) { grid-column: 1 / -1; }

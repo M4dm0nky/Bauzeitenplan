@@ -25,7 +25,7 @@ import { openMenu } from './menu.js';
 import { liveStats, runningAt, nextUp, offeneVerspaetungen, verschoben, versatzText } from './live.js';
 import { sichtGewerke, sichtTasks, typHinweis, programmTage, buehnenIds, abschnittOf, amTag } from './ebene.js';
 import { toMin, toDate, ohneTermin } from './schedule.js';
-import { isoWeek } from './timeaxis.js';
+import { isoWeek, planSpanne } from './timeaxis.js';
 import { $, el, escapeHtml } from './dom.js';
 import { VERSION } from './version.js';
 import { createPhasenEditor } from './phasen-editor.js';
@@ -143,7 +143,7 @@ async function frageAbgelaufen(n) {
   });
   abgelaufenFrage = false;
   if (abgelaufenEntscheid(wahl) === 'kopie' && store) {
-    repo.save(store.state);      // die ungesendeten Änderungen stehen im Store: in die lokale Kopie
+    repo.save(store.state, { server: true });      // die ungesendeten Änderungen stehen im Store: in die lokale Kopie
     if (zeigeKopie('abgemeldet')) return;
   }
   zuLoginLaeuft = true;
@@ -152,7 +152,9 @@ async function frageAbgelaufen(n) {
 
 // Netz weg oder Server vorübergehend gestört (429/5xx/Nicht-JSON)? Dann gilt «ohne Verbindung»: die lokale Kopie.
 const keinServer = (r) => !!(r && (r.offline || r.limit));
-const kopieDa = () => { const id = repo.getActive() || repo.list()[0]?.id; return !!(id && repo.load(id)); };
+// Offline-Kopie und Live-Monitor kennen nur Kopien von SERVER-Plänen; ein alter lokaler Plan (aus der Fassung ohne Server) zählt nie.
+const kopieId = () => { const k = repo.listServer(); const a = repo.getActive(); return (k.find((x) => x.id === a) || k[0])?.id; };
+const kopieDa = () => { const id = kopieId(); return !!(id && repo.load(id)); };
 async function boot() {
   if (!pb.istAngemeldet) { zuLogin(); return; }
   const live = lsLies('bzp_live') === '1';
@@ -630,7 +632,7 @@ function felderSperren(an) {
 // Kein Server (Start ohne Netz, Anmeldung abgelaufen): die lokale Kopie ansehen. true = sie steht.
 function zeigeKopie(grund) {
   if (!store) {
-    const id = repo.getActive() || repo.list()[0]?.id;
+    const id = kopieId();
     const plan = id ? repo.load(id) : null;
     if (!plan) return false;
     schliesseServer();
@@ -971,7 +973,7 @@ function kopieSpaeter() { clearTimeout(kopieTimer); kopieTimer = setTimeout(kopi
 function kopieSchreiben() {
   clearTimeout(kopieTimer); kopieTimer = null;
   if (!store || !server || kopieAus) return;
-  const r = repo.save(store.state);
+  const r = repo.save(store.state, { server: true });
   if (!r.ok && !kopieGemeldet) { kopieGemeldet = true; toast('Die lokale Kopie (für den Druck) ließ sich nicht speichern: ' + r.error, 'bad', 8000); }
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && kopieTimer) kopieSchreiben(); });
@@ -1533,11 +1535,12 @@ function addGewerk(anker, art) {
 // ── Export / Import ─────────────────────────────────────────────────────────
 // Export = JSON-Sicherung des Plans (nie ein Token). Import legt einen NEUEN Plan auf dem
 // Server an (neue plan_id, Spec 15); wer ihn sehen darf, entscheidet die Mitgliederliste.
-function doExport() {
-  const blob = new Blob([serialize(store.state)], { type: 'application/json' });
+function doExport() { dateiLaden(serialize(store.state), store.state.project.name); }
+function dateiLaden(text, name) {
+  const blob = new Blob([text], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = store.state.project.name.replace(/[^\w\-]+/g, '-').toLowerCase() + '-bauzeitenplan.json';
+  a.download = name.replace(/[^\w\-]+/g, '-').toLowerCase() + '-bauzeitenplan.json';
   a.click();
   URL.revokeObjectURL(a.href);
   toast('Exportiert');
@@ -1552,6 +1555,7 @@ async function planNeu(plan) {
   const r = await createServerPlan({ pb, planId: null }).planAnlegen(plan);
   if (!r.ok) {
     if (r.abgemeldet) zuLogin();
+    else if (r.offenVorhanden) toast('Im geöffneten Plan sind noch ungesendete Änderungen. Bitte warten, bis sie gesendet sind, und es dann nochmal versuchen.', 'bad', 8000);
     else if (r.zuGross) await askDialog({ title: 'Plan zu groß', message: ['Dieser Plan hat zu viele Einträge für einen Schritt und wurde nicht angelegt.'], buttons: [{ label: 'OK', value: true, primary: true }] });
     else toast(r.offline ? 'Keine Verbindung – der Plan wurde nicht angelegt.' : r.limit ? 'Der Server ist gerade ausgelastet – der Plan wurde nicht angelegt. Bitte gleich nochmal versuchen.' : 'Der Plan konnte nicht angelegt werden: ' + (r.fehler?.message || r.message || 'Fehler'), 'bad', 8000);
     return false;
@@ -1573,6 +1577,40 @@ async function doImport(e) {
   $('dlg').hidden = true;      // sonst bleibt der Anlege-Dialog über allem liegen
   toast('«' + r.plan.project.name + '» importiert');
 }
+
+// Alter lokaler Plan (nur im Browser): derselbe Weg wie der Import (deserialize → planNeu = neue plan_id, Recht, Limits).
+// Erst nach bestätigtem Erfolg verschwindet der lokale Eintrag; scheitert etwas, bleibt er stehen. true = übernommen und offen.
+function altPlan(id) {
+  const roh = repo.load(id);
+  if (!roh) return { error: 'Der Plan lässt sich nicht lesen.' };
+  const r = deserialize(serialize(roh));
+  return r.ok === false ? { error: r.error } : r;
+}
+async function altUebernehmen(id) {
+  if (!darfPlanAnlegen(pb.auth?.record)) { toast(KEIN_ANLEGEN, 'bad'); return false; }
+  const r = altPlan(id);
+  if (r.error) { toast('Der Plan lässt sich nicht übernehmen: ' + r.error, 'bad', 8000); return false; }
+  if (r.hinweis) {
+    const w = await askDialog({ title: 'Plan wird angepasst', message: [r.hinweis, 'Trotzdem auf den Server übernehmen? Exportiere vorher, wenn du die ursprüngliche Fassung behalten willst.'],
+      buttons: [{ label: 'Abbrechen', value: false, primary: true }, { label: 'Übernehmen', value: true }] });
+    if (!w) return false;
+  }
+  if (!(await planNeu(r.plan))) return false;   // meldet seine Fehler selbst; der lokale Plan bleibt
+  const e = repo.remove(id);
+  if (!e.ok) toast(e.error, 'bad', 8000);
+  toast('«' + r.plan.project.name + '» auf den Server übernommen');
+  return true;
+}
+function altExportieren(id) {
+  const r = altPlan(id);
+  if (r.error) return toast('Export nicht möglich: ' + r.error, 'bad', 8000);
+  dateiLaden(serialize(r.plan), r.plan.project.name);
+}
+const zeitraumText = (plan) => {
+  const { von, bis } = planSpanne(plan);
+  const f = (m, mitJahr) => toDate(m).toLocaleDateString('de-DE', mitJahr ? { day: '2-digit', month: '2-digit', year: 'numeric' } : { day: '2-digit', month: '2-digit' });
+  return Number.isFinite(von) && Number.isFinite(bis) ? `${f(von)}–${f(bis, true)}` : '';
+};
 
 // ── Projektdialog ───────────────────────────────────────────────────────────
 // Rolle immer als Symbol + Text (nie Farbe allein).
@@ -1634,6 +1672,32 @@ async function showProjectDialog({ firstRun = false } = {}) {
       ul.append(row);
     }
     box.append(ul);
+  }
+
+  // Alte lokale Pläne (nur in diesem Browser, nie auf dem Server)
+  const alte = repo.listAlt();
+  if (alte.length) {
+    const sec = el('div', 'alt-sec');
+    sec.id = 'alt-plaene';
+    sec.append(el('h3', 'dlg-h3', '📦 Pläne aus der bisherigen Version (nur in diesem Browser)'));
+    sec.append(el('p', 'dlg-sub', 'Diese Pläne liegen nicht auf dem Server. Übernimm sie, damit sie dort liegen und andere sie sehen können, oder exportiere eine Sicherung. Abmelden löscht sie nicht.'));
+    for (const a of alte) {
+      const plan = repo.load(a.id);
+      const row = el('div', 'dlg-row alt-zeile');
+      row.dataset.altId = a.id;
+      const info = el('div', 'alt-info');
+      info.append(el('span', 'dlg-open-n alt-name', a.name || '(ohne Namen)'),
+        el('span', 'dlg-open-m', [a.venue, plan ? zeitraumText(plan) : '⚠ nicht lesbar'].filter(Boolean).join(' · ')));
+      const ueb = el('button', 'btn btn-p alt-ueb', '⬆ Auf den Server übernehmen');
+      const exp = el('button', 'btn alt-exp', '⬇ Exportieren');
+      if (!plan) { ueb.disabled = true; ueb.title = 'Der Plan lässt sich nicht lesen.'; exp.disabled = true; }
+      else if (!darfAnlegen) { ueb.disabled = true; ueb.title = 'Nur die Produktionsleitung kann Pläne anlegen'; }
+      ueb.onclick = async () => { ueb.disabled = true; try { if (await altUebernehmen(a.id)) close(); } finally { ueb.disabled = !darfAnlegen; } };
+      exp.onclick = () => altExportieren(a.id);
+      row.append(info, ueb, exp);
+      sec.append(row);
+    }
+    box.append(sec);
   }
 
   // Neu anlegen
@@ -2069,8 +2133,9 @@ function main() {
   // neu aufbauen kann: sie trägt sonst bis zum nächsten Verbinden das alte Token.
   pb = createPb({ basis: apiBasis(), autostart: false });
   pb.on('abgemeldet', (e) => {
-    // Manuelles Abmelden räumt die lokalen Kopien weg (geteilter Rechner); abgelaufen (401) lässt sie stehen.
-    if (e?.grund === 'manuell') { kopieAus = true; for (const x of repo.list()) repo.remove(x.id); }
+    // Manuelles Abmelden räumt die lokalen Kopien der SERVER-Pläne weg (geteilter Rechner); abgelaufen (401) lässt sie stehen.
+    // Alte lokale Pläne (nie auf dem Server) bleiben: sonst gingen sie still verloren.
+    if (e?.grund === 'manuell') { kopieAus = true; for (const x of repo.listServer()) repo.remove(x.id); }
     zuLogin(e?.grund);
   });
   // PocketBase schließt die Realtime-Verbindung nach 300 s Ruhe (gemessen, 0.40.6); der Browser baut sie nach

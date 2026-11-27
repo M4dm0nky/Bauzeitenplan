@@ -333,7 +333,9 @@ check('jedes Theme gestaltet alle Bausteine der Engine', () => {
     // Bedarfsstatus (⏳ ✓ ✕) und der Bereich «Offene Bedarfe».
     'res-st-angefragt', 'res-st-bestaetigt', 'res-st-abgelehnt', 'bd-offen',
     // Mitglieder- und Verwaltungsdialog: Zeile, Feld, Entfernen, Fehlerhinweis, Gewerk-Chip.
-    'mg-zeile', 'mg-feld', 'mg-weg', 'mg-fehler', 'mg-chip'];
+    'mg-zeile', 'mg-feld', 'mg-weg', 'mg-fehler', 'mg-chip',
+    // Alte lokale Pläne im Projektdialog (Abschnitt, Zeile, Knöpfe)
+    'alt-sec', 'alt-zeile', 'alt-ueb', 'alt-exp'];
   const bad = [];
   for (const f of readdirSync(join(root, 'styles/themes'))) {
     const s = readFileSync(join(root, 'styles/themes', f), 'utf8');

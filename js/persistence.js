@@ -286,6 +286,9 @@ export function migrate(plan) {
 
 // ── Ablage ──────────────────────────────────────────────────────────────────
 
+/** Ist dieser Index-Eintrag die lokale Kopie eines Server-Plans? (Marke `server`, vom Speichern der Kopie gesetzt.) */
+export const istServerKopie = (eintrag) => !!eintrag && eintrag.server === true;
+
 export function createRepo(storage) {
   const readIndex = () => {
     const idx = readJSON(storage, K_INDEX, []);
@@ -305,14 +308,19 @@ export function createRepo(storage) {
       return migrate(raw);
     },
 
-    save(plan, { remoteSha } = {}) {
+    /** Nur die Kopien von Server-Plänen (`server: true` im Index). Alles andere ist ein alter lokaler Plan
+     *  aus der Fassung ohne Server: der gehört dem Nutzer und wird nie ungefragt gelöscht. */
+    listServer() { return this.list().filter(istServerKopie); },
+    listAlt() { return this.list().filter((x) => !istServerKopie(x)); },
+
+    save(plan, { remoteSha, server } = {}) {
       const id = plan.project.id;
       const neu = JSON.stringify(plan);
       // Gleicher Inhalt wie schon gespeichert und ohne neue remoteSha: nichts ist
       // passiert — kein dirty, sonst laden zwei Geräte einander endlos hoch
       // (open() speichert jedes Projekt, auch ein eben heruntergeladenes).
       if (typeof remoteSha !== 'string' && lies(storage, K_PLAN(id)) === neu
-          && readIndex().some((x) => x.id === id)) return { ok: true };
+          && readIndex().some((x) => x.id === id && (!server || x.server === true))) return { ok: true };
       try {
         storage.setItem(K_PLAN(id), neu);
       } catch (e) {
@@ -327,6 +335,7 @@ export function createRepo(storage) {
       idx.push({
         ...alt, id, name: plan.project.name, venue: plan.project.venue || '',
         modified: new Date().toISOString(),
+        server: server === true || alt.server === true,   // einmal Server-Kopie, immer Server-Kopie
         remoteSha: mitSha ? remoteSha : (alt.remoteSha ?? null),
         dirty: !mitSha,
       });
