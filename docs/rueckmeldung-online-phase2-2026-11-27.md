@@ -1,6 +1,6 @@
 # Rückmeldung: Bauzeitenplan online, Phase 2 – Teil A auf TEST und LIVE, Teil B
 
-**An:** Marco · **Von:** Server-Admin (Robs) · **Stand:** 2026-11-27, 14:35 Uhr
+**An:** Marco · **Von:** Server-Admin (Robs) · **Stand:** 2026-11-27, 15:15 Uhr
 **Bezug:** [`admin-auftrag-online-phase2.md`](admin-auftrag-online-phase2.md) (TEST nach Stand `22d18d6` auf
 Branch `online`, LIVE nach Stand `main` `3e9f886`)
 
@@ -59,6 +59,36 @@ Kontrollaufrufe an `/api/bzp/einladung` (400, gewollt): zwei auf TEST, zwei auf 
 **CORS** ist unverändert. Auf TEST wird `https://m4dm0nky.github.io` gespiegelt, auf LIVE
 `https://callboard.nyxlightwork.de`. Eine fremde Origin bekommt keinen Header. Das gilt jetzt auch für die
 neuen Collections, gemessen an `plaene`.
+
+## Nachtrag 15:15 Uhr – Mailversand LIVE läuft
+
+Resend hat die Domain `callboard.nyxlightwork.de` bestätigt. LIVE verschickt jetzt Mails über Resend,
+Absender `Bauzeitenplan <no-reply@callboard.nyxlightwork.de>`. **«Passwort vergessen» funktioniert damit auf LIVE.**
+Auf TEST bleibt Mail wie vereinbart aus.
+
+**Die Testmail an dich** (Vorlage «Passwort zurücksetzen») ging um 15:11 Uhr raus. Bitte schau einmal, ob sie
+im Posteingang angekommen ist und nicht im Spam. Der Link darin gehört zu einem Testkonto, das es nicht gibt,
+ein Klick setzt also nichts zurück.
+
+Gemessen an zwei Testmails an ein eigenes Postfach:
+
+| Prüfung | Ergebnis |
+|---|---|
+| Zustellung | nach etwa 5–15 s, über Amazon SES eu-west-1 |
+| SPF / DKIM / DMARC | alle drei bestanden. DKIM ist mit `d=callboard.nyxlightwork.de` signiert, also zum Absender passend |
+| Spam-Bewertung (Rspamd) | −2,70 und −2,90 von 11 → Posteingang |
+| «Passwort zurücksetzen» | deutscher Betreff aus deiner Migration `1700000002`, Link `https://callboard.nyxlightwork.de/login.html?reset=…` ✓ |
+
+**Ein Fund für dich, nicht dringend:** Die Vorlage **«E-Mail bestätigen»** (`users` → Verification) ist noch die
+Vorgabe von PocketBase. Ihr Link zeigt auf `https://callboard.nyxlightwork.de//_/#/auth/confirm-verification/…`, also auf
+die Admin-Oberfläche von PocketBase unter der Adresse der App. Dort gibt es `/_/` nicht (404). Wenn die App
+Bestätigungsmails verschickt oder das künftig soll, braucht diese Vorlage eine eigene Migration wie die
+Reset-Mail. Die Vorlagen «E-Mail ändern» (Email change) und «Anmeldung von neuem Gerät» (Login alert)
+dürften genauso aussehen. Wenn die App keine dieser Mails nutzt, ist nichts zu tun.
+
+**DNS, falls du bei Resend nachsiehst:** Resend hat beim Einrichten auf ein neues Verfahren umgestellt. Statt MX
+und TXT direkt bei uns stehen jetzt zwei CNAMEs auf Resends Server (`send.callboard` und `rsend.callboard`).
+DKIM-Eintrag und DMARC (`p=none`) sind gleich geblieben.
 
 ## Teil B – Coolify-App umgestellt
 
@@ -166,10 +196,8 @@ App deployte nicht automatisch und hat deinen Merge also nicht mitgenommen.
 1. **Webhook für das Auto-Deploy** in GitHub anlegen (siehe Teil B). Das Secret kommt direkt von mir. Bis dahin
    deployt ein Push auf `live` nicht von selbst, sag mir dann Bescheid.
 2. **Teil C** (erstes Superadmin-Konto mit `setup.mjs`): dein Teil, ab sofort auf TEST und LIVE möglich.
-3. **Mailversand LIVE:** Die DNS-Einträge für Resend stehen, und SMTP ist in der LIVE-Instanz eingetragen
-   (Absender `no-reply@callboard.nyxlightwork.de`). Resend hat die Domain aber noch nicht als «Verified»
-   bestätigt. Bis dahin lehnt Resend den Versand ab, «Passwort vergessen» funktioniert also noch nicht.
-   Sobald die Domain verifiziert ist, schicke ich dir eine Testmail.
+3. **Mailversand LIVE:** läuft (siehe Nachtrag oben). Offen ist nur deine Bestätigung, dass die Testmail
+   angekommen ist, und bei Bedarf die Vorlage «E-Mail bestätigen».
 4. **Backup-Kopie außerhalb des Servers** fehlt weiterhin.
 
 ## Rückweg
