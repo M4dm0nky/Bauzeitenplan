@@ -1,6 +1,6 @@
 # Rückmeldung: Bauzeitenplan online, Phase 2 – Teil A auf TEST und LIVE, Teil B
 
-**An:** Marco · **Von:** Server-Admin (Robs) · **Stand:** 2026-11-27, 18:10 Uhr
+**An:** Marco · **Von:** Server-Admin (Robs) · **Stand:** 2026-11-27, 19:10 Uhr
 **Bezug:** [`admin-auftrag-online-phase2.md`](admin-auftrag-online-phase2.md) (TEST nach Stand `22d18d6` auf
 Branch `online`, LIVE nach Stand `main` `3e9f886`)
 
@@ -15,6 +15,9 @@ der Webhook in deinem Repo, siehe [Teil B](#teil-b--coolify-app-umgestellt).
 
 **Nachtrag 18:10 Uhr – Webhook läuft, für die Mailvorlagen brauche ich drei Dinge von dir.** Siehe
 [den Nachtrag unten](#nachtrag-1810-uhr--webhook-läuft-mailvorlagen-warten-auf-dich).
+
+**Nachtrag 19:10 Uhr – Mailvorlagen laufen auf TEST und LIVE.** Siehe
+[den Nachtrag unten](#nachtrag-1910-uhr--mailvorlagen-auf-test-und-live-eingespielt).
 
 ## Ergebnis
 
@@ -62,6 +65,63 @@ Kontrollaufrufe an `/api/bzp/einladung` (400, gewollt): zwei auf TEST, zwei auf 
 **CORS** ist unverändert. Auf TEST wird `https://m4dm0nky.github.io` gespiegelt, auf LIVE
 `https://callboard.nyxlightwork.de`. Eine fremde Origin bekommt keinen Header. Das gilt jetzt auch für die
 neuen Collections, gemessen an `plaene`.
+
+## Nachtrag 19:10 Uhr – Mailvorlagen auf TEST und LIVE eingespielt
+
+Danke für die schnelle Antwort. Ich habe nach deinem Nachtrag im Auftrag eingespielt (Stand `595cf43`), erst
+TEST um 19:02 Uhr, dann LIVE um 19:03 Uhr. Auf beiden Instanzen lief derselbe Ablauf:
+
+1. Beide Dateien frisch von GitHub geladen, sha-Gate 2/2, einmal nach dem Download und einmal direkt vor dem
+   Kopieren. `hilfen.js` habe ich nicht angefasst.
+2. Gate vorher: `main.pb.js` muss die Phase-2-Fassung `969d7062…` sein, und `1700000005` darf noch nicht
+   angewendet sein. Beides war so.
+3. Backup beider Datenbanken plus der alten `main.pb.js`, `integrity_check` ok, eigener Ordner.
+4. `docker cp 1700000005_mailvorlagen.js`, dann `cp main.pb.js` ins Hooks-Volume, dann `docker restart`.
+   Nach 8 s healthy, `RestartCount` 0.
+
+| Prüfung | TEST | LIVE |
+|---|---|---|
+| `main.pb.js` im Volume | `f485241b…` ☑ | `f485241b…` ☑ |
+| `_migrations` | `1700000005` angewendet ☑ | `1700000005` angewendet ☑ |
+| `/api/health`, `plaene`, Hook-Route | 200 / 200 / 400, wie vorher ☑ | 200 / 200 / 400, wie vorher ☑ |
+| `verify-pb-regeln --gegen` **mit** Superuser-Token | **27/27** ☑ | **27/27** ☑ |
+| Laufzeitfehler in `_logs` seit dem Start | keine ☑ | keine ☑ |
+| Superuser / Konten | 1 / 1, unverändert | 1 / 2, unverändert |
+
+Die beiden Einträge mit Level 8 in `_logs` sind meine eigenen Kontrollaufrufe an die Hook-Route, vorher und
+nachher, jeweils mit «Einladung unbekannt oder schon verwendet.». Das ist das erwartete 400, kein Fehler.
+
+**Vorlagen vorher und nachher** (aus der Datenbank gelesen, auf beiden Instanzen gleich):
+
+| Vorlage | vorher | nachher |
+|---|---|---|
+| Anmeldewarnung | `Login from a new location` | «Anmeldung von einem neuen Gerät», bleibt eingeschaltet |
+| E-Mail bestätigen | `Verify your {APP_NAME} email`, Link auf `/_/` | «E-Mail-Adresse für den Bauzeitenplan bestätigen», Link `{APP_URL}/login.html?verify={TOKEN}` |
+| E-Mail ändern | `Confirm your {APP_NAME} new email address`, Link auf `/_/` | «E-Mail-Adresse im Bauzeitenplan ändern», ohne Link |
+| Passwort zurücksetzen | deutsch (seit Phase 2) | unverändert |
+
+**Echte Testmail auf LIVE:** Vorlage «E-Mail bestätigen» über Resend an ein eigenes Postfach geschickt.
+
+- Betreff «E-Mail-Adresse für den Bauzeitenplan bestätigen», Absender `Bauzeitenplan <no-reply@callboard.nyxlightwork.de>`.
+- Link: `https://callboard.nyxlightwork.de/login.html?verify=…`, mit einem Schrägstrich, ohne `/_/`.
+- SPF, DKIM und DMARC bestanden, Spam-Wert −2,70, Posteingang.
+
+Den Link habe ich nicht angeklickt: Die Testmail von PocketBase enthält ein Token für einen Platzhalter, kein
+echtes Konto. Ob `login.html?verify=` die Adresse wirklich bestätigt, prüfst du am besten mit einem echten,
+unbestätigten Konto.
+
+Für die Prüfung mit Token habe ich mir je Instanz für etwa eine Minute einen **temporären Superuser** angelegt
+und ihn danach wieder gelöscht. Übrig ist auf beiden nur dein Konto. In `_logs` siehst du die Anmeldung, die
+zwei Lesezugriffe und auf LIVE den Mailversand. Das war ich. Auf TEST ging keine Mail raus, dort bleibt Mail aus.
+
+**Backups:** TEST `/root/backups/bauzeitenplan-pb-mailvorlagen-test-2026-11-27-1902/`, LIVE
+`/root/backups/bauzeitenplan-pb-mailvorlagen-live-2026-11-27-1903/`, mit beiden Datenbanken, der alten
+`main.pb.js`, den Prüfsummen und den Messungen vorher und nachher.
+
+**Rückweg:** alte `main.pb.js` aus dem Backup-Ordner ins Hooks-Volume kopieren, dann `docker restart`. Die
+Vorlagen setzt das nicht zurück (die Migration hat absichtlich keinen Rückweg). Das ginge nur über die Vorlagen im
+Admin oder durch Zurückspielen der Datenbanken. Auf LIVE liegen inzwischen zwei Konten, ein Zurückspielen würde
+also alles verwerfen, was seit 19:03 Uhr geschrieben wurde.
 
 ## Nachtrag 18:10 Uhr – Webhook läuft, Mailvorlagen warten auf dich
 
@@ -243,10 +303,11 @@ App deployte nicht automatisch und hat deinen Merge also nicht mitgenommen.
 
 ## Offen
 
-1. **Mailvorlagen:** Prüfsummen bestätigen und Zeichen geben (siehe Nachtrag 18:10 Uhr). Der Webhook läuft.
+1. **Mailvorlagen:** eingespielt (siehe Nachtrag 19:10 Uhr). Offen ist nur deine Probe von `login.html?verify=`
+   mit einem echten, unbestätigten Konto.
 2. **Teil C** (erstes Superadmin-Konto mit `setup.mjs`): dein Teil, ab sofort auf TEST und LIVE möglich.
-3. **Mailversand LIVE:** läuft (siehe Nachtrag oben). Offen ist nur deine Bestätigung, dass die Testmail
-   angekommen ist. Die Vorlage «E-Mail bestätigen» kommt mit den Mailvorlagen.
+3. **Mailversand LIVE:** erledigt. Er läuft, deine Reset-Testmail ist angekommen, und die Vorlagen sind seit
+   19:03 Uhr deutsch.
 4. **Backup-Kopie außerhalb des Servers** fehlt weiterhin.
 
 ## Rückweg
